@@ -1,0 +1,315 @@
+sport,ymd,event_name,home,away,home_score,away_score
+nba,20251230,Philadelphia 76ers at Memphis Grizzlies,Memphis Grizzlies,Philadelphia 76ers,136,139
+nba,20251230,Boston Celtics at Utah Jazz,Utah Jazz,Boston Celtics,119,129
+nba,20251230,Detroit Pistons at Los Angeles Lakers,Los Angeles Lakers,Detroit Pistons,106,128
+nba,20251230,Sacramento Kings at LA Clippers,LA Clippers,Sacramento Kings,131,90
+nba,20251231,Golden State Warriors at Charlotte Hornets,Charlotte Hornets,Golden State Warriors,125,132
+nba,20251231,Minnesota Timberwolves at Atlanta Hawks,Atlanta Hawks,Minnesota Timberwolves,126,102
+nba,20251231,Orlando Magic at Indiana Pacers,Indiana Pacers,Orlando Magic,110,112
+nba,20251231,Phoenix Suns at Cleveland Cavaliers,Cleveland Cavaliers,Phoenix Suns,129,113
+nba,20251231,New Orleans Pelicans at Chicago Bulls,Chicago Bulls,New Orleans Pelicans,134,118
+nba,20251231,New York Knicks at San Antonio Spurs,San Antonio Spurs,New York Knicks,134,132
+nba,20251231,Denver Nuggets at Toronto Raptors,Toronto Raptors,Denver Nuggets,103,106
+nba,20251231,Washington Wizards at Milwaukee Bucks,Milwaukee Bucks,Washington Wizards,113,114
+nba,20251231,Portland Trail Blazers at Oklahoma City Thunder,Oklahoma City Thunder,Portland Trail Blazers,124,95
+ncaab,20251230,Gonzaga Bulldogs at San Diego Toreros,San Diego Toreros,Gonzaga Bulldogs,93,99
+ncaab,20251230,Florida State Seminoles at North Carolina Tar Heels,North Carolina Tar Heels,Florida State Seminoles,79,66
+ncaab,20251230,New Hampshire Wildcats at Nebraska Cornhuskers,Nebraska Cornhuskers,New Hampshire Wildcats,86,55
+ncaab,20251230,Louisville Cardinals at California Golden Bears,California Golden Bears,Louisville Cardinals,70,90
+ncaab,20251230,South Carolina State Bulldogs at Tennessee Volunteers,Tennessee Volunteers,South Carolina State Bulldogs,105,54
+ncaab,20251231,UConn Huskies at Xavier Musketeers,Xavier Musketeers,UConn Huskies,67,90
+ncaab,20251231,Georgia Tech Yellow Jackets at Duke Blue Devils,Duke Blue Devils,Georgia Tech Yellow Jackets,85,79
+ncaab,20251231,Virginia Cavaliers at Virginia Tech Hokies,Virginia Tech Hokies,Virginia Cavaliers,95,85
+ncaaf,20251230,Miami Hurricanes at Ohio State Buckeyes,Ohio State Buckeyes,Miami Hurricanes,14,24
+ncaaf,20251230,Michigan Wolverines at Texas Longhorns,Texas Longhorns,Michigan Wolverines,41,27
+ncaaf,20251230,Iowa Hawkeyes at Vanderbilt Commodores,Vanderbilt Commodores,Iowa Hawkeyes,27,34
+ncaaf,20251230,Nebraska Cornhuskers at Utah Utes,Utah Utes,Nebraska Cornhuskers,44,22
+ncaaf,20251230,Arizona State Sun Devils at Duke Blue Devils,Duke Blue Devils,Arizona State Sun Devils,42,39
+ncaaf,20251230,South Carolina State Bulldogs at Prairie View A&M Panthers,Prairie View A&M Panthers,South Carolina State Bulldogs,38,40
+ncaaf,20251230,Army Black Knights at Navy Midshipmen,Navy Midshipmen,Army Black Knights,17,16
+ncaaf,20251230,Boise State Broncos at Washington Huskies,Washington Huskies,Boise State Broncos,38,10
+ncaaf,20251230,Troy Trojans at Jacksonville State Gamecocks,Jacksonville State Gamecocks,Troy Trojans,17,13
+ncaaf,20251230,Old Dominion Monarchs at South Florida Bulls,South Florida Bulls,Old Dominion Monarchs,10,24
+ncaaf,20251230,Louisiana Ragin' Cajuns at Delaware Blue Hens,Delaware Blue Hens,Louisiana Ragin' Cajuns,20,13
+ncaaf,20251230,Missouri State Bears at Arkansas State Red Wolves,Arkansas State Red Wolves,Missouri State Bears,34,28
+ncaaf,20251230,Alabama Crimson Tide at Oklahoma Sooners,Oklahoma Sooners,Alabama Crimson Tide,24,34
+ncaaf,20251230,Kennesaw State Owls at Western Michigan Broncos,Western Michigan Broncos,Kennesaw State Owls,41,6
+ncaaf,20251230,Memphis Tigers at NC State Wolfpack,NC State Wolfpack,Memphis Tigers,31,7
+ncaaf,20251230,James Madison Dukes at Oregon Ducks,Oregon Ducks,James Madison Dukes,51,34
+ncaaf,20251230,Tulane Green Wave at Ole Miss Rebels,Ole Miss Rebels,Tulane Green Wave,41,10
+ncaaf,20251230,Miami Hurricanes at Texas A&M Aggies,Texas A&M Aggies,Miami Hurricanes,3,10
+ncaaf,20251230,Montana Grizzlies at Montana State Bobcats,Montana State Bobcats,Montana Grizzlies,48,23
+ncaaf,20251230,Illinois State Redbirds at Villanova Wildcats,Villanova Wildcats,Illinois State Redbirds,14,30
+ncaaf,20251230,Washington State Cougars at Utah State Aggies,Utah State Aggies,Washington State Cougars,21,34
+ncaaf,20251230,Toledo Rockets at Louisville Cardinals,Louisville Cardinals,Toledo Rockets,27,22
+ncaaf,20251230,Western Kentucky Hilltoppers at Southern Miss Golden Eagles,Southern Miss Golden Eagles,Western Kentucky Hilltoppers,16,27
+ncaaf,20251230,UNLV Rebels at Ohio Bobcats,Ohio Bobcats,UNLV Rebels,17,10
+ncaaf,20251230,California Golden Bears at Hawai'i Rainbow Warriors,Hawai'i Rainbow Warriors,California Golden Bears,35,31
+ncaaf,20251230,Central Michigan Chippewas at Northwestern Wildcats,Northwestern Wildcats,Central Michigan Chippewas,34,7
+ncaaf,20251230,New Mexico Lobos at Minnesota Golden Gophers,Minnesota Golden Gophers,New Mexico Lobos,20,17
+ncaaf,20251230,Florida International Panthers at UTSA Roadrunners,UTSA Roadrunners,Florida International Panthers,57,20
+ncaaf,20251230,Georgia Tech Yellow Jackets at BYU Cougars,BYU Cougars,Georgia Tech Yellow Jackets,25,21
+ncaaf,20251230,Virginia Cavaliers at Missouri Tigers,Missouri Tigers,Virginia Cavaliers,7,13
+ncaaf,20251230,LSU Tigers at Houston Cougars,Houston Cougars,LSU Tigers,38,35
+ncaaf,20251230,North Texas Mean Green at San Diego State Aztecs,San Diego State Aztecs,North Texas Mean Green,47,49
+ncaaf,20251230,Pittsburgh Panthers at East Carolina Pirates,East Carolina Pirates,Pittsburgh Panthers,23,17
+ncaaf,20251230,Penn State Nittany Lions at Clemson Tigers,Clemson Tigers,Penn State Nittany Lions,10,22
+ncaaf,20251230,UConn Huskies at Army Black Knights,Army Black Knights,UConn Huskies,41,16
+ncaaf,20251230,Miami (OH) RedHawks at Fresno State Bulldogs,Fresno State Bulldogs,Miami (OH) RedHawks,18,3
+ncaaf,20251230,Georgia Southern Eagles at App State Mountaineers,App State Mountaineers,Georgia Southern Eagles,10,29
+ncaaf,20251230,USC Trojans at TCU Horned Frogs,TCU Horned Frogs,USC Trojans,30,27
+ncaaf,20251230,Coastal Carolina Chanticleers at Louisiana Tech Bulldogs,Louisiana Tech Bulldogs,Coastal Carolina Chanticleers,23,14
+ncaaf,20251230,Tennessee Volunteers at Illinois Fighting Illini,Illinois Fighting Illini,Tennessee Volunteers,30,28
+ncaaf,20251231,Miami Hurricanes at Ohio State Buckeyes,Ohio State Buckeyes,Miami Hurricanes,14,24
+ncaaf,20251231,Michigan Wolverines at Texas Longhorns,Texas Longhorns,Michigan Wolverines,41,27
+ncaaf,20251231,Iowa Hawkeyes at Vanderbilt Commodores,Vanderbilt Commodores,Iowa Hawkeyes,27,34
+ncaaf,20251231,Nebraska Cornhuskers at Utah Utes,Utah Utes,Nebraska Cornhuskers,44,22
+ncaaf,20251231,Arizona State Sun Devils at Duke Blue Devils,Duke Blue Devils,Arizona State Sun Devils,42,39
+ncaaf,20251231,South Carolina State Bulldogs at Prairie View A&M Panthers,Prairie View A&M Panthers,South Carolina State Bulldogs,38,40
+ncaaf,20251231,Army Black Knights at Navy Midshipmen,Navy Midshipmen,Army Black Knights,17,16
+ncaaf,20251231,Boise State Broncos at Washington Huskies,Washington Huskies,Boise State Broncos,38,10
+ncaaf,20251231,Troy Trojans at Jacksonville State Gamecocks,Jacksonville State Gamecocks,Troy Trojans,17,13
+ncaaf,20251231,Old Dominion Monarchs at South Florida Bulls,South Florida Bulls,Old Dominion Monarchs,10,24
+ncaaf,20251231,Louisiana Ragin' Cajuns at Delaware Blue Hens,Delaware Blue Hens,Louisiana Ragin' Cajuns,20,13
+ncaaf,20251231,Missouri State Bears at Arkansas State Red Wolves,Arkansas State Red Wolves,Missouri State Bears,34,28
+ncaaf,20251231,Alabama Crimson Tide at Oklahoma Sooners,Oklahoma Sooners,Alabama Crimson Tide,24,34
+ncaaf,20251231,Kennesaw State Owls at Western Michigan Broncos,Western Michigan Broncos,Kennesaw State Owls,41,6
+ncaaf,20251231,Memphis Tigers at NC State Wolfpack,NC State Wolfpack,Memphis Tigers,31,7
+ncaaf,20251231,James Madison Dukes at Oregon Ducks,Oregon Ducks,James Madison Dukes,51,34
+ncaaf,20251231,Tulane Green Wave at Ole Miss Rebels,Ole Miss Rebels,Tulane Green Wave,41,10
+ncaaf,20251231,Miami Hurricanes at Texas A&M Aggies,Texas A&M Aggies,Miami Hurricanes,3,10
+ncaaf,20251231,Montana Grizzlies at Montana State Bobcats,Montana State Bobcats,Montana Grizzlies,48,23
+ncaaf,20251231,Illinois State Redbirds at Villanova Wildcats,Villanova Wildcats,Illinois State Redbirds,14,30
+ncaaf,20251231,Washington State Cougars at Utah State Aggies,Utah State Aggies,Washington State Cougars,21,34
+ncaaf,20251231,Toledo Rockets at Louisville Cardinals,Louisville Cardinals,Toledo Rockets,27,22
+ncaaf,20251231,Western Kentucky Hilltoppers at Southern Miss Golden Eagles,Southern Miss Golden Eagles,Western Kentucky Hilltoppers,16,27
+ncaaf,20251231,UNLV Rebels at Ohio Bobcats,Ohio Bobcats,UNLV Rebels,17,10
+ncaaf,20251231,California Golden Bears at Hawai'i Rainbow Warriors,Hawai'i Rainbow Warriors,California Golden Bears,35,31
+ncaaf,20251231,Central Michigan Chippewas at Northwestern Wildcats,Northwestern Wildcats,Central Michigan Chippewas,34,7
+ncaaf,20251231,New Mexico Lobos at Minnesota Golden Gophers,Minnesota Golden Gophers,New Mexico Lobos,20,17
+ncaaf,20251231,Florida International Panthers at UTSA Roadrunners,UTSA Roadrunners,Florida International Panthers,57,20
+ncaaf,20251231,Georgia Tech Yellow Jackets at BYU Cougars,BYU Cougars,Georgia Tech Yellow Jackets,25,21
+ncaaf,20251231,Virginia Cavaliers at Missouri Tigers,Missouri Tigers,Virginia Cavaliers,7,13
+ncaaf,20251231,LSU Tigers at Houston Cougars,Houston Cougars,LSU Tigers,38,35
+ncaaf,20251231,North Texas Mean Green at San Diego State Aztecs,San Diego State Aztecs,North Texas Mean Green,47,49
+ncaaf,20251231,Pittsburgh Panthers at East Carolina Pirates,East Carolina Pirates,Pittsburgh Panthers,23,17
+ncaaf,20251231,Penn State Nittany Lions at Clemson Tigers,Clemson Tigers,Penn State Nittany Lions,10,22
+ncaaf,20251231,UConn Huskies at Army Black Knights,Army Black Knights,UConn Huskies,41,16
+ncaaf,20251231,Miami (OH) RedHawks at Fresno State Bulldogs,Fresno State Bulldogs,Miami (OH) RedHawks,18,3
+ncaaf,20251231,Georgia Southern Eagles at App State Mountaineers,App State Mountaineers,Georgia Southern Eagles,10,29
+ncaaf,20251231,USC Trojans at TCU Horned Frogs,TCU Horned Frogs,USC Trojans,30,27
+ncaaf,20251231,Coastal Carolina Chanticleers at Louisiana Tech Bulldogs,Louisiana Tech Bulldogs,Coastal Carolina Chanticleers,23,14
+ncaaf,20251231,Tennessee Volunteers at Illinois Fighting Illini,Illinois Fighting Illini,Tennessee Volunteers,30,28
+ncaaf,20260101,Miami Hurricanes at Ohio State Buckeyes,Ohio State Buckeyes,Miami Hurricanes,14,24
+ncaaf,20260101,Michigan Wolverines at Texas Longhorns,Texas Longhorns,Michigan Wolverines,41,27
+ncaaf,20260101,Iowa Hawkeyes at Vanderbilt Commodores,Vanderbilt Commodores,Iowa Hawkeyes,27,34
+ncaaf,20260101,Nebraska Cornhuskers at Utah Utes,Utah Utes,Nebraska Cornhuskers,44,22
+ncaaf,20260101,Arizona State Sun Devils at Duke Blue Devils,Duke Blue Devils,Arizona State Sun Devils,42,39
+ncaaf,20260101,South Carolina State Bulldogs at Prairie View A&M Panthers,Prairie View A&M Panthers,South Carolina State Bulldogs,38,40
+ncaaf,20260101,Army Black Knights at Navy Midshipmen,Navy Midshipmen,Army Black Knights,17,16
+ncaaf,20260101,Boise State Broncos at Washington Huskies,Washington Huskies,Boise State Broncos,38,10
+ncaaf,20260101,Troy Trojans at Jacksonville State Gamecocks,Jacksonville State Gamecocks,Troy Trojans,17,13
+ncaaf,20260101,Old Dominion Monarchs at South Florida Bulls,South Florida Bulls,Old Dominion Monarchs,10,24
+ncaaf,20260101,Louisiana Ragin' Cajuns at Delaware Blue Hens,Delaware Blue Hens,Louisiana Ragin' Cajuns,20,13
+ncaaf,20260101,Missouri State Bears at Arkansas State Red Wolves,Arkansas State Red Wolves,Missouri State Bears,34,28
+ncaaf,20260101,Alabama Crimson Tide at Oklahoma Sooners,Oklahoma Sooners,Alabama Crimson Tide,24,34
+ncaaf,20260101,Kennesaw State Owls at Western Michigan Broncos,Western Michigan Broncos,Kennesaw State Owls,41,6
+ncaaf,20260101,Memphis Tigers at NC State Wolfpack,NC State Wolfpack,Memphis Tigers,31,7
+ncaaf,20260101,James Madison Dukes at Oregon Ducks,Oregon Ducks,James Madison Dukes,51,34
+ncaaf,20260101,Tulane Green Wave at Ole Miss Rebels,Ole Miss Rebels,Tulane Green Wave,41,10
+ncaaf,20260101,Miami Hurricanes at Texas A&M Aggies,Texas A&M Aggies,Miami Hurricanes,3,10
+ncaaf,20260101,Montana Grizzlies at Montana State Bobcats,Montana State Bobcats,Montana Grizzlies,48,23
+ncaaf,20260101,Illinois State Redbirds at Villanova Wildcats,Villanova Wildcats,Illinois State Redbirds,14,30
+ncaaf,20260101,Washington State Cougars at Utah State Aggies,Utah State Aggies,Washington State Cougars,21,34
+ncaaf,20260101,Toledo Rockets at Louisville Cardinals,Louisville Cardinals,Toledo Rockets,27,22
+ncaaf,20260101,Western Kentucky Hilltoppers at Southern Miss Golden Eagles,Southern Miss Golden Eagles,Western Kentucky Hilltoppers,16,27
+ncaaf,20260101,UNLV Rebels at Ohio Bobcats,Ohio Bobcats,UNLV Rebels,17,10
+ncaaf,20260101,California Golden Bears at Hawai'i Rainbow Warriors,Hawai'i Rainbow Warriors,California Golden Bears,35,31
+ncaaf,20260101,Central Michigan Chippewas at Northwestern Wildcats,Northwestern Wildcats,Central Michigan Chippewas,34,7
+ncaaf,20260101,New Mexico Lobos at Minnesota Golden Gophers,Minnesota Golden Gophers,New Mexico Lobos,20,17
+ncaaf,20260101,Florida International Panthers at UTSA Roadrunners,UTSA Roadrunners,Florida International Panthers,57,20
+ncaaf,20260101,Georgia Tech Yellow Jackets at BYU Cougars,BYU Cougars,Georgia Tech Yellow Jackets,25,21
+ncaaf,20260101,Virginia Cavaliers at Missouri Tigers,Missouri Tigers,Virginia Cavaliers,7,13
+ncaaf,20260101,LSU Tigers at Houston Cougars,Houston Cougars,LSU Tigers,38,35
+ncaaf,20260101,North Texas Mean Green at San Diego State Aztecs,San Diego State Aztecs,North Texas Mean Green,47,49
+ncaaf,20260101,Pittsburgh Panthers at East Carolina Pirates,East Carolina Pirates,Pittsburgh Panthers,23,17
+ncaaf,20260101,Penn State Nittany Lions at Clemson Tigers,Clemson Tigers,Penn State Nittany Lions,10,22
+ncaaf,20260101,UConn Huskies at Army Black Knights,Army Black Knights,UConn Huskies,41,16
+ncaaf,20260101,Miami (OH) RedHawks at Fresno State Bulldogs,Fresno State Bulldogs,Miami (OH) RedHawks,18,3
+ncaaf,20260101,Georgia Southern Eagles at App State Mountaineers,App State Mountaineers,Georgia Southern Eagles,10,29
+ncaaf,20260101,USC Trojans at TCU Horned Frogs,TCU Horned Frogs,USC Trojans,30,27
+ncaaf,20260101,Coastal Carolina Chanticleers at Louisiana Tech Bulldogs,Louisiana Tech Bulldogs,Coastal Carolina Chanticleers,23,14
+ncaaf,20260101,Tennessee Volunteers at Illinois Fighting Illini,Illinois Fighting Illini,Tennessee Volunteers,30,28
+ncaaf,20260102,Miami Hurricanes at Ohio State Buckeyes,Ohio State Buckeyes,Miami Hurricanes,14,24
+ncaaf,20260102,Michigan Wolverines at Texas Longhorns,Texas Longhorns,Michigan Wolverines,41,27
+ncaaf,20260102,Iowa Hawkeyes at Vanderbilt Commodores,Vanderbilt Commodores,Iowa Hawkeyes,27,34
+ncaaf,20260102,Nebraska Cornhuskers at Utah Utes,Utah Utes,Nebraska Cornhuskers,44,22
+ncaaf,20260102,Arizona State Sun Devils at Duke Blue Devils,Duke Blue Devils,Arizona State Sun Devils,42,39
+ncaaf,20260102,South Carolina State Bulldogs at Prairie View A&M Panthers,Prairie View A&M Panthers,South Carolina State Bulldogs,38,40
+ncaaf,20260102,Army Black Knights at Navy Midshipmen,Navy Midshipmen,Army Black Knights,17,16
+ncaaf,20260102,Boise State Broncos at Washington Huskies,Washington Huskies,Boise State Broncos,38,10
+ncaaf,20260102,Troy Trojans at Jacksonville State Gamecocks,Jacksonville State Gamecocks,Troy Trojans,17,13
+ncaaf,20260102,Old Dominion Monarchs at South Florida Bulls,South Florida Bulls,Old Dominion Monarchs,10,24
+ncaaf,20260102,Louisiana Ragin' Cajuns at Delaware Blue Hens,Delaware Blue Hens,Louisiana Ragin' Cajuns,20,13
+ncaaf,20260102,Missouri State Bears at Arkansas State Red Wolves,Arkansas State Red Wolves,Missouri State Bears,34,28
+ncaaf,20260102,Alabama Crimson Tide at Oklahoma Sooners,Oklahoma Sooners,Alabama Crimson Tide,24,34
+ncaaf,20260102,Kennesaw State Owls at Western Michigan Broncos,Western Michigan Broncos,Kennesaw State Owls,41,6
+ncaaf,20260102,Memphis Tigers at NC State Wolfpack,NC State Wolfpack,Memphis Tigers,31,7
+ncaaf,20260102,James Madison Dukes at Oregon Ducks,Oregon Ducks,James Madison Dukes,51,34
+ncaaf,20260102,Tulane Green Wave at Ole Miss Rebels,Ole Miss Rebels,Tulane Green Wave,41,10
+ncaaf,20260102,Miami Hurricanes at Texas A&M Aggies,Texas A&M Aggies,Miami Hurricanes,3,10
+ncaaf,20260102,Montana Grizzlies at Montana State Bobcats,Montana State Bobcats,Montana Grizzlies,48,23
+ncaaf,20260102,Illinois State Redbirds at Villanova Wildcats,Villanova Wildcats,Illinois State Redbirds,14,30
+ncaaf,20260102,Washington State Cougars at Utah State Aggies,Utah State Aggies,Washington State Cougars,21,34
+ncaaf,20260102,Toledo Rockets at Louisville Cardinals,Louisville Cardinals,Toledo Rockets,27,22
+ncaaf,20260102,Western Kentucky Hilltoppers at Southern Miss Golden Eagles,Southern Miss Golden Eagles,Western Kentucky Hilltoppers,16,27
+ncaaf,20260102,UNLV Rebels at Ohio Bobcats,Ohio Bobcats,UNLV Rebels,17,10
+ncaaf,20260102,California Golden Bears at Hawai'i Rainbow Warriors,Hawai'i Rainbow Warriors,California Golden Bears,35,31
+ncaaf,20260102,Central Michigan Chippewas at Northwestern Wildcats,Northwestern Wildcats,Central Michigan Chippewas,34,7
+ncaaf,20260102,New Mexico Lobos at Minnesota Golden Gophers,Minnesota Golden Gophers,New Mexico Lobos,20,17
+ncaaf,20260102,Florida International Panthers at UTSA Roadrunners,UTSA Roadrunners,Florida International Panthers,57,20
+ncaaf,20260102,Georgia Tech Yellow Jackets at BYU Cougars,BYU Cougars,Georgia Tech Yellow Jackets,25,21
+ncaaf,20260102,Virginia Cavaliers at Missouri Tigers,Missouri Tigers,Virginia Cavaliers,7,13
+ncaaf,20260102,LSU Tigers at Houston Cougars,Houston Cougars,LSU Tigers,38,35
+ncaaf,20260102,North Texas Mean Green at San Diego State Aztecs,San Diego State Aztecs,North Texas Mean Green,47,49
+ncaaf,20260102,Pittsburgh Panthers at East Carolina Pirates,East Carolina Pirates,Pittsburgh Panthers,23,17
+ncaaf,20260102,Penn State Nittany Lions at Clemson Tigers,Clemson Tigers,Penn State Nittany Lions,10,22
+ncaaf,20260102,UConn Huskies at Army Black Knights,Army Black Knights,UConn Huskies,41,16
+ncaaf,20260102,Miami (OH) RedHawks at Fresno State Bulldogs,Fresno State Bulldogs,Miami (OH) RedHawks,18,3
+ncaaf,20260102,Georgia Southern Eagles at App State Mountaineers,App State Mountaineers,Georgia Southern Eagles,10,29
+ncaaf,20260102,USC Trojans at TCU Horned Frogs,TCU Horned Frogs,USC Trojans,30,27
+ncaaf,20260102,Coastal Carolina Chanticleers at Louisiana Tech Bulldogs,Louisiana Tech Bulldogs,Coastal Carolina Chanticleers,23,14
+ncaaf,20260102,Tennessee Volunteers at Illinois Fighting Illini,Illinois Fighting Illini,Tennessee Volunteers,30,28
+ncaaf,20260103,Miami Hurricanes at Ohio State Buckeyes,Ohio State Buckeyes,Miami Hurricanes,14,24
+ncaaf,20260103,Michigan Wolverines at Texas Longhorns,Texas Longhorns,Michigan Wolverines,41,27
+ncaaf,20260103,Iowa Hawkeyes at Vanderbilt Commodores,Vanderbilt Commodores,Iowa Hawkeyes,27,34
+ncaaf,20260103,Nebraska Cornhuskers at Utah Utes,Utah Utes,Nebraska Cornhuskers,44,22
+ncaaf,20260103,Arizona State Sun Devils at Duke Blue Devils,Duke Blue Devils,Arizona State Sun Devils,42,39
+ncaaf,20260103,South Carolina State Bulldogs at Prairie View A&M Panthers,Prairie View A&M Panthers,South Carolina State Bulldogs,38,40
+ncaaf,20260103,Army Black Knights at Navy Midshipmen,Navy Midshipmen,Army Black Knights,17,16
+ncaaf,20260103,Boise State Broncos at Washington Huskies,Washington Huskies,Boise State Broncos,38,10
+ncaaf,20260103,Troy Trojans at Jacksonville State Gamecocks,Jacksonville State Gamecocks,Troy Trojans,17,13
+ncaaf,20260103,Old Dominion Monarchs at South Florida Bulls,South Florida Bulls,Old Dominion Monarchs,10,24
+ncaaf,20260103,Louisiana Ragin' Cajuns at Delaware Blue Hens,Delaware Blue Hens,Louisiana Ragin' Cajuns,20,13
+ncaaf,20260103,Missouri State Bears at Arkansas State Red Wolves,Arkansas State Red Wolves,Missouri State Bears,34,28
+ncaaf,20260103,Alabama Crimson Tide at Oklahoma Sooners,Oklahoma Sooners,Alabama Crimson Tide,24,34
+ncaaf,20260103,Kennesaw State Owls at Western Michigan Broncos,Western Michigan Broncos,Kennesaw State Owls,41,6
+ncaaf,20260103,Memphis Tigers at NC State Wolfpack,NC State Wolfpack,Memphis Tigers,31,7
+ncaaf,20260103,James Madison Dukes at Oregon Ducks,Oregon Ducks,James Madison Dukes,51,34
+ncaaf,20260103,Tulane Green Wave at Ole Miss Rebels,Ole Miss Rebels,Tulane Green Wave,41,10
+ncaaf,20260103,Miami Hurricanes at Texas A&M Aggies,Texas A&M Aggies,Miami Hurricanes,3,10
+ncaaf,20260103,Montana Grizzlies at Montana State Bobcats,Montana State Bobcats,Montana Grizzlies,48,23
+ncaaf,20260103,Illinois State Redbirds at Villanova Wildcats,Villanova Wildcats,Illinois State Redbirds,14,30
+ncaaf,20260103,Washington State Cougars at Utah State Aggies,Utah State Aggies,Washington State Cougars,21,34
+ncaaf,20260103,Toledo Rockets at Louisville Cardinals,Louisville Cardinals,Toledo Rockets,27,22
+ncaaf,20260103,Western Kentucky Hilltoppers at Southern Miss Golden Eagles,Southern Miss Golden Eagles,Western Kentucky Hilltoppers,16,27
+ncaaf,20260103,UNLV Rebels at Ohio Bobcats,Ohio Bobcats,UNLV Rebels,17,10
+ncaaf,20260103,California Golden Bears at Hawai'i Rainbow Warriors,Hawai'i Rainbow Warriors,California Golden Bears,35,31
+ncaaf,20260103,Central Michigan Chippewas at Northwestern Wildcats,Northwestern Wildcats,Central Michigan Chippewas,34,7
+ncaaf,20260103,New Mexico Lobos at Minnesota Golden Gophers,Minnesota Golden Gophers,New Mexico Lobos,20,17
+ncaaf,20260103,Florida International Panthers at UTSA Roadrunners,UTSA Roadrunners,Florida International Panthers,57,20
+ncaaf,20260103,Georgia Tech Yellow Jackets at BYU Cougars,BYU Cougars,Georgia Tech Yellow Jackets,25,21
+ncaaf,20260103,Virginia Cavaliers at Missouri Tigers,Missouri Tigers,Virginia Cavaliers,7,13
+ncaaf,20260103,LSU Tigers at Houston Cougars,Houston Cougars,LSU Tigers,38,35
+ncaaf,20260103,North Texas Mean Green at San Diego State Aztecs,San Diego State Aztecs,North Texas Mean Green,47,49
+ncaaf,20260103,Pittsburgh Panthers at East Carolina Pirates,East Carolina Pirates,Pittsburgh Panthers,23,17
+ncaaf,20260103,Penn State Nittany Lions at Clemson Tigers,Clemson Tigers,Penn State Nittany Lions,10,22
+ncaaf,20260103,UConn Huskies at Army Black Knights,Army Black Knights,UConn Huskies,41,16
+ncaaf,20260103,Miami (OH) RedHawks at Fresno State Bulldogs,Fresno State Bulldogs,Miami (OH) RedHawks,18,3
+ncaaf,20260103,Georgia Southern Eagles at App State Mountaineers,App State Mountaineers,Georgia Southern Eagles,10,29
+ncaaf,20260103,USC Trojans at TCU Horned Frogs,TCU Horned Frogs,USC Trojans,30,27
+ncaaf,20260103,Coastal Carolina Chanticleers at Louisiana Tech Bulldogs,Louisiana Tech Bulldogs,Coastal Carolina Chanticleers,23,14
+ncaaf,20260103,Tennessee Volunteers at Illinois Fighting Illini,Illinois Fighting Illini,Tennessee Volunteers,30,28
+ncaaf,20260104,Miami Hurricanes at Ohio State Buckeyes,Ohio State Buckeyes,Miami Hurricanes,14,24
+ncaaf,20260104,Michigan Wolverines at Texas Longhorns,Texas Longhorns,Michigan Wolverines,41,27
+ncaaf,20260104,Iowa Hawkeyes at Vanderbilt Commodores,Vanderbilt Commodores,Iowa Hawkeyes,27,34
+ncaaf,20260104,Nebraska Cornhuskers at Utah Utes,Utah Utes,Nebraska Cornhuskers,44,22
+ncaaf,20260104,Arizona State Sun Devils at Duke Blue Devils,Duke Blue Devils,Arizona State Sun Devils,42,39
+ncaaf,20260104,South Carolina State Bulldogs at Prairie View A&M Panthers,Prairie View A&M Panthers,South Carolina State Bulldogs,38,40
+ncaaf,20260104,Army Black Knights at Navy Midshipmen,Navy Midshipmen,Army Black Knights,17,16
+ncaaf,20260104,Boise State Broncos at Washington Huskies,Washington Huskies,Boise State Broncos,38,10
+ncaaf,20260104,Troy Trojans at Jacksonville State Gamecocks,Jacksonville State Gamecocks,Troy Trojans,17,13
+ncaaf,20260104,Old Dominion Monarchs at South Florida Bulls,South Florida Bulls,Old Dominion Monarchs,10,24
+ncaaf,20260104,Louisiana Ragin' Cajuns at Delaware Blue Hens,Delaware Blue Hens,Louisiana Ragin' Cajuns,20,13
+ncaaf,20260104,Missouri State Bears at Arkansas State Red Wolves,Arkansas State Red Wolves,Missouri State Bears,34,28
+ncaaf,20260104,Alabama Crimson Tide at Oklahoma Sooners,Oklahoma Sooners,Alabama Crimson Tide,24,34
+ncaaf,20260104,Kennesaw State Owls at Western Michigan Broncos,Western Michigan Broncos,Kennesaw State Owls,41,6
+ncaaf,20260104,Memphis Tigers at NC State Wolfpack,NC State Wolfpack,Memphis Tigers,31,7
+ncaaf,20260104,James Madison Dukes at Oregon Ducks,Oregon Ducks,James Madison Dukes,51,34
+ncaaf,20260104,Tulane Green Wave at Ole Miss Rebels,Ole Miss Rebels,Tulane Green Wave,41,10
+ncaaf,20260104,Miami Hurricanes at Texas A&M Aggies,Texas A&M Aggies,Miami Hurricanes,3,10
+ncaaf,20260104,Montana Grizzlies at Montana State Bobcats,Montana State Bobcats,Montana Grizzlies,48,23
+ncaaf,20260104,Illinois State Redbirds at Villanova Wildcats,Villanova Wildcats,Illinois State Redbirds,14,30
+ncaaf,20260104,Washington State Cougars at Utah State Aggies,Utah State Aggies,Washington State Cougars,21,34
+ncaaf,20260104,Toledo Rockets at Louisville Cardinals,Louisville Cardinals,Toledo Rockets,27,22
+ncaaf,20260104,Western Kentucky Hilltoppers at Southern Miss Golden Eagles,Southern Miss Golden Eagles,Western Kentucky Hilltoppers,16,27
+ncaaf,20260104,UNLV Rebels at Ohio Bobcats,Ohio Bobcats,UNLV Rebels,17,10
+ncaaf,20260104,California Golden Bears at Hawai'i Rainbow Warriors,Hawai'i Rainbow Warriors,California Golden Bears,35,31
+ncaaf,20260104,Central Michigan Chippewas at Northwestern Wildcats,Northwestern Wildcats,Central Michigan Chippewas,34,7
+ncaaf,20260104,New Mexico Lobos at Minnesota Golden Gophers,Minnesota Golden Gophers,New Mexico Lobos,20,17
+ncaaf,20260104,Florida International Panthers at UTSA Roadrunners,UTSA Roadrunners,Florida International Panthers,57,20
+ncaaf,20260104,Georgia Tech Yellow Jackets at BYU Cougars,BYU Cougars,Georgia Tech Yellow Jackets,25,21
+ncaaf,20260104,Virginia Cavaliers at Missouri Tigers,Missouri Tigers,Virginia Cavaliers,7,13
+ncaaf,20260104,LSU Tigers at Houston Cougars,Houston Cougars,LSU Tigers,38,35
+ncaaf,20260104,North Texas Mean Green at San Diego State Aztecs,San Diego State Aztecs,North Texas Mean Green,47,49
+ncaaf,20260104,Pittsburgh Panthers at East Carolina Pirates,East Carolina Pirates,Pittsburgh Panthers,23,17
+ncaaf,20260104,Penn State Nittany Lions at Clemson Tigers,Clemson Tigers,Penn State Nittany Lions,10,22
+ncaaf,20260104,UConn Huskies at Army Black Knights,Army Black Knights,UConn Huskies,41,16
+ncaaf,20260104,Miami (OH) RedHawks at Fresno State Bulldogs,Fresno State Bulldogs,Miami (OH) RedHawks,18,3
+ncaaf,20260104,Georgia Southern Eagles at App State Mountaineers,App State Mountaineers,Georgia Southern Eagles,10,29
+ncaaf,20260104,USC Trojans at TCU Horned Frogs,TCU Horned Frogs,USC Trojans,30,27
+ncaaf,20260104,Coastal Carolina Chanticleers at Louisiana Tech Bulldogs,Louisiana Tech Bulldogs,Coastal Carolina Chanticleers,23,14
+ncaaf,20260104,Tennessee Volunteers at Illinois Fighting Illini,Illinois Fighting Illini,Tennessee Volunteers,30,28
+ncaaf,20260105,Miami Hurricanes at Ohio State Buckeyes,Ohio State Buckeyes,Miami Hurricanes,14,24
+ncaaf,20260105,Michigan Wolverines at Texas Longhorns,Texas Longhorns,Michigan Wolverines,41,27
+ncaaf,20260105,Iowa Hawkeyes at Vanderbilt Commodores,Vanderbilt Commodores,Iowa Hawkeyes,27,34
+ncaaf,20260105,Nebraska Cornhuskers at Utah Utes,Utah Utes,Nebraska Cornhuskers,44,22
+ncaaf,20260105,Arizona State Sun Devils at Duke Blue Devils,Duke Blue Devils,Arizona State Sun Devils,42,39
+ncaaf,20260105,South Carolina State Bulldogs at Prairie View A&M Panthers,Prairie View A&M Panthers,South Carolina State Bulldogs,38,40
+ncaaf,20260105,Army Black Knights at Navy Midshipmen,Navy Midshipmen,Army Black Knights,17,16
+ncaaf,20260105,Boise State Broncos at Washington Huskies,Washington Huskies,Boise State Broncos,38,10
+ncaaf,20260105,Troy Trojans at Jacksonville State Gamecocks,Jacksonville State Gamecocks,Troy Trojans,17,13
+ncaaf,20260105,Old Dominion Monarchs at South Florida Bulls,South Florida Bulls,Old Dominion Monarchs,10,24
+ncaaf,20260105,Louisiana Ragin' Cajuns at Delaware Blue Hens,Delaware Blue Hens,Louisiana Ragin' Cajuns,20,13
+ncaaf,20260105,Missouri State Bears at Arkansas State Red Wolves,Arkansas State Red Wolves,Missouri State Bears,34,28
+ncaaf,20260105,Alabama Crimson Tide at Oklahoma Sooners,Oklahoma Sooners,Alabama Crimson Tide,24,34
+ncaaf,20260105,Kennesaw State Owls at Western Michigan Broncos,Western Michigan Broncos,Kennesaw State Owls,41,6
+ncaaf,20260105,Memphis Tigers at NC State Wolfpack,NC State Wolfpack,Memphis Tigers,31,7
+ncaaf,20260105,James Madison Dukes at Oregon Ducks,Oregon Ducks,James Madison Dukes,51,34
+ncaaf,20260105,Tulane Green Wave at Ole Miss Rebels,Ole Miss Rebels,Tulane Green Wave,41,10
+ncaaf,20260105,Miami Hurricanes at Texas A&M Aggies,Texas A&M Aggies,Miami Hurricanes,3,10
+ncaaf,20260105,Montana Grizzlies at Montana State Bobcats,Montana State Bobcats,Montana Grizzlies,48,23
+ncaaf,20260105,Illinois State Redbirds at Villanova Wildcats,Villanova Wildcats,Illinois State Redbirds,14,30
+ncaaf,20260105,Washington State Cougars at Utah State Aggies,Utah State Aggies,Washington State Cougars,21,34
+ncaaf,20260105,Toledo Rockets at Louisville Cardinals,Louisville Cardinals,Toledo Rockets,27,22
+ncaaf,20260105,Western Kentucky Hilltoppers at Southern Miss Golden Eagles,Southern Miss Golden Eagles,Western Kentucky Hilltoppers,16,27
+ncaaf,20260105,UNLV Rebels at Ohio Bobcats,Ohio Bobcats,UNLV Rebels,17,10
+ncaaf,20260105,California Golden Bears at Hawai'i Rainbow Warriors,Hawai'i Rainbow Warriors,California Golden Bears,35,31
+ncaaf,20260105,Central Michigan Chippewas at Northwestern Wildcats,Northwestern Wildcats,Central Michigan Chippewas,34,7
+ncaaf,20260105,New Mexico Lobos at Minnesota Golden Gophers,Minnesota Golden Gophers,New Mexico Lobos,20,17
+ncaaf,20260105,Florida International Panthers at UTSA Roadrunners,UTSA Roadrunners,Florida International Panthers,57,20
+ncaaf,20260105,Georgia Tech Yellow Jackets at BYU Cougars,BYU Cougars,Georgia Tech Yellow Jackets,25,21
+ncaaf,20260105,Virginia Cavaliers at Missouri Tigers,Missouri Tigers,Virginia Cavaliers,7,13
+ncaaf,20260105,LSU Tigers at Houston Cougars,Houston Cougars,LSU Tigers,38,35
+ncaaf,20260105,North Texas Mean Green at San Diego State Aztecs,San Diego State Aztecs,North Texas Mean Green,47,49
+ncaaf,20260105,Pittsburgh Panthers at East Carolina Pirates,East Carolina Pirates,Pittsburgh Panthers,23,17
+ncaaf,20260105,Penn State Nittany Lions at Clemson Tigers,Clemson Tigers,Penn State Nittany Lions,10,22
+ncaaf,20260105,UConn Huskies at Army Black Knights,Army Black Knights,UConn Huskies,41,16
+ncaaf,20260105,Miami (OH) RedHawks at Fresno State Bulldogs,Fresno State Bulldogs,Miami (OH) RedHawks,18,3
+ncaaf,20260105,Georgia Southern Eagles at App State Mountaineers,App State Mountaineers,Georgia Southern Eagles,10,29
+ncaaf,20260105,USC Trojans at TCU Horned Frogs,TCU Horned Frogs,USC Trojans,30,27
+ncaaf,20260105,Coastal Carolina Chanticleers at Louisiana Tech Bulldogs,Louisiana Tech Bulldogs,Coastal Carolina Chanticleers,23,14
+ncaaf,20260105,Tennessee Volunteers at Illinois Fighting Illini,Illinois Fighting Illini,Tennessee Volunteers,30,28
+nhl,20251230,New Jersey Devils at Toronto Maple Leafs,Toronto Maple Leafs,New Jersey Devils,4,0
+nhl,20251230,Montreal Canadiens at Florida Panthers,Florida Panthers,Montreal Canadiens,2,3
+nhl,20251230,Carolina Hurricanes at Pittsburgh Penguins,Pittsburgh Penguins,Carolina Hurricanes,5,1
+nhl,20251230,New York Islanders at Chicago Blackhawks,Chicago Blackhawks,New York Islanders,2,3
+nhl,20251230,Philadelphia Flyers at Vancouver Canucks,Vancouver Canucks,Philadelphia Flyers,3,6
+nhl,20251231,New York Rangers at Washington Capitals,Washington Capitals,New York Rangers,6,3
+nhl,20251231,Nashville Predators at Vegas Golden Knights,Vegas Golden Knights,Nashville Predators,2,4
+nhl,20251231,Tampa Bay Lightning at Anaheim Ducks,Anaheim Ducks,Tampa Bay Lightning,3,4
+nhl,20251231,Minnesota Wild at San Jose Sharks,San Jose Sharks,Minnesota Wild,4,3
+nhl,20251231,Winnipeg Jets at Detroit Red Wings,Detroit Red Wings,Winnipeg Jets,2,1
+nhl,20251231,New Jersey Devils at Columbus Blue Jackets,Columbus Blue Jackets,New Jersey Devils,2,3
+nhl,20251231,Buffalo Sabres at Dallas Stars,Dallas Stars,Buffalo Sabres,1,4
+nhl,20251231,St. Louis Blues at Colorado Avalanche,Colorado Avalanche,St. Louis Blues,6,1

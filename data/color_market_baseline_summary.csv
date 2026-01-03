@@ -1,0 +1,4 @@
+market,color,n,wins,losses,pushes,unresolved,decided,win_rate_ex_push
+SPREAD,LIGHT_GREEN,9,2,3,0,0,5,0.4
+SPREAD,RED,4,3,1,0,0,4,0.75
+SPREAD,YELLOW,2,0,0,0,0,0,
