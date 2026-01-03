@@ -1910,49 +1910,52 @@ def build_dashboard():
           .dt.tz_convert("America/New_York")
     )        
 
-    
-# =========================
-# TIMING CONTEXT (ADD-ONLY, DOES NOT TOUCH snapshot timestamps)
-# =========================
-now_ny = pd.Timestamp.now(tz="America/New_York")
+    # =========================
+    # TIMING CONTEXT (ADD-ONLY, DOES NOT TOUCH snapshot timestamps)
+    # =========================
+    now_ny = pd.Timestamp.now(tz="America/New_York")
 
-# minutes_to_kickoff: positive = time until start; negative = already started
-latest["minutes_to_kickoff"] = (
-    (latest["game_time_ny"] - now_ny).dt.total_seconds() / 60.0
-).round(0)
+    # minutes_to_kickoff: positive = time until start; negative = already started
+    latest["minutes_to_kickoff"] = (
+        (latest["game_time_ny"] - now_ny).dt.total_seconds() / 60.0
+    ).round(0)
 
-# If game_time_ny is NaT, minutes_to_kickoff becomes NaN (fine)
-# timing_bucket depends only on sport + minutes_to_kickoff
-def _timing_bucket(sp: str, m2k):
-    try:
-        if pd.isna(m2k):
+    # timing_bucket depends only on sport + minutes_to_kickoff
+    def _timing_bucket(sp: str, m2k):
+        try:
+            if pd.isna(m2k):
+                return "UNKNOWN"
+            m2k = int(m2k)
+            if m2k < 0:
+                return "LIVE"
+            sp = (sp or "").lower()
+            # Conservative defaults (can tune later without touching timestamps)
+            if sp in ("nfl", "ncaaf"):
+                early, mid = 24 * 60, 6 * 60
+            else:
+                early, mid = 12 * 60, 3 * 60
+            if m2k >= early:
+                return "EARLY"
+            if m2k >= mid:
+                return "MID"
+            return "LATE"
+        except Exception:
             return "UNKNOWN"
-        m2k = int(m2k)
-        if m2k < 0:
-            return "LIVE"
-        sp = (sp or "").lower()
-        # Conservative defaults (can tune later without touching timestamps)
-        if sp in ("nfl", "ncaaf"):
-            early, mid = 24*60, 6*60
-        else:
-            early, mid = 12*60, 3*60
-        if m2k >= early:
-            return "EARLY"
-        if m2k >= mid:
-            return "MID"
-        return "LATE"
-    except Exception:
-        return "UNKNOWN"
 
     latest["timing_bucket"] = latest.apply(
-    lambda r: _timing_bucket(r.get("sport", ""), r.get("minutes_to_kickoff")),
-    axis=1
-)
+        lambda r: _timing_bucket(
+            r.get("sport", ""),
+            r.get("minutes_to_kickoff"),
+        ),
+        axis=1,
+    )
 
     latest["color"] = colors
     latest["why"] = explains
+
     for _, r in latest.iterrows():
         log_baseline_signal(r)
+
 
 
 
