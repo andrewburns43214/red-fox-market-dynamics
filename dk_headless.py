@@ -44,9 +44,11 @@ def fetch_rendered_html(url: str, timeout: int = 25) -> str:
     options.add_argument("--window-size=1400,900")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--single-process")
 
     driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
+        service=Service("/usr/bin/chromedriver"),
         options=options
     )
 
