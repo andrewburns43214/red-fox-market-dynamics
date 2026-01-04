@@ -1521,6 +1521,13 @@ def infer_market_type(side_txt: str, line_txt: str) -> str:
 
     return ""
 
+def _color_rank(c):
+    c = (c or "").upper()
+    if c == "DARK_GREEN": return 3
+    if c == "LIGHT_GREEN": return 2
+    if c == "YELLOW": return 1
+    return 0
+
 def build_dashboard():
     ensure_data_dir()
 
@@ -1784,11 +1791,10 @@ def build_dashboard():
         latest["market_pair_check"].value_counts(dropna=False).head(5).to_dict()
     )
 
-
-
     # Classify each row (this is your existing signal logic)
     colors = []
     explains = []
+    scores = []
     ml_green = set()
 
     for _, row in latest.iterrows():
@@ -1804,6 +1810,55 @@ def build_dashboard():
         game = row.get("game")
         side = row.get("side")
         mkt = row.get("market_display")
+                # -----------------------------
+        # Numeric confidence score (0–100), interpretive only
+        # -----------------------------
+        score = 50.0
+
+        mr = str(row.get("market_read") or "").strip()
+        if mr == "Stealth Move":
+            score += 8
+        elif mr == "Freeze Pressure":
+            score += 10
+        elif mr == "Aligned Sharp":
+            score += 6
+        elif mr == "Contradiction":
+            score += 2
+        elif mr == "Public Drift":
+            score -= 10
+
+        try:
+            D = float(row.get("divergence_D")) if pd.notna(row.get("divergence_D")) else 0.0
+        except Exception:
+            D = 0.0
+        score += min(12.0, abs(D) * 0.4)
+
+        try:
+            lm = float(row.get("line_move_open")) if pd.notna(row.get("line_move_open")) else 0.0
+        except Exception:
+            lm = 0.0
+        score += min(8.0, abs(lm) * 2.0)
+
+        if str(row.get("key_number_note") or "").strip():
+            score += 3
+
+        tb = str(row.get("timing_bucket") or "").lower()
+        if tb == "early":
+            score += 2
+        elif tb == "mid":
+            score += 1
+        elif tb == "late":
+            score -= 1
+
+        if color == "DARK_GREEN":
+            score += 6
+        elif color == "LIGHT_GREEN":
+            score += 3
+        elif color == "RED":
+            score -= 6
+
+        score = max(0.0, min(100.0, score))
+
 
         if mkt == "MONEYLINE" and color in ("DARK_GREEN", "LIGHT_GREEN"):
             ml_green.add((game, side))
@@ -1829,6 +1884,8 @@ def build_dashboard():
 
         colors.append(color)
         explains.append(expl)
+        scores.append(score)
+
 
     latest = latest.copy()
 
@@ -1936,7 +1993,7 @@ def build_dashboard():
                 early, mid = 12 * 60, 3 * 60
             if m2k >= early:
                 return "EARLY"
-            if m2k >= mid:
+            if m2k >= mid:  
                 return "MID"
             return "LATE"
         except Exception:
@@ -1952,6 +2009,8 @@ def build_dashboard():
 
     latest["color"] = colors
     latest["why"] = explains
+    latest["confidence_score"] = scores
+
 
     for _, r in latest.iterrows():
         log_baseline_signal(r)
@@ -2024,27 +2083,6 @@ def build_dashboard():
 
         # Compute colspan from the EXACT columns we will render in the table header.
     # This prevents HTML column misalignment when optional columns (time/news/key) are toggled.
-    header_cols = (
-    ["Sport", "Game"]
-    + (["Game Time"] if show_game_time else [])
-    + ["Side", "Market", "Bets % (on Side)", "Money % (on Side)", "Open", "Current"]
-    + (["News?"] if show_news else [])
-    + (["Key # Note"] if show_key_note else [])
-    + [
-        "Price Change (Last)",
-        "Line Change (Last)",
-        "Price Change (Since Open)",
-        "Line Change (Since Open)",
-        "Why",                # existing baseline reason
-        "Market Read",        # NEW
-        "D (Money - Bets)",   # NEW
-        "Market Why",         # NEW (explainable logic)
-    ]
-)
-
-    colspan = len(header_cols)
-
-    print(f"[dash debug] header column count={colspan} show_game_time={show_game_time} show_news={show_news} show_key_note={show_key_note}")
 
 
     # Sort for display: kickoff time first (like the old dashboard), then group by game
@@ -2071,14 +2109,154 @@ def build_dashboard():
     latest = latest.drop(columns=["_mkt_rank"], errors="ignore")
 
 
+    # Ensure no duplicate column labels (can happen after merges)
+    latest = latest.loc[:, ~latest.columns.duplicated()].copy()
+    
+        # -----------------------------
+    # GAME-LEVEL AGGREGATION (interpretive only; no side flipping)
+    # One row per (sport, game_id, market_display)
+    # -----------------------------
+    if "confidence_score" not in latest.columns:
+        latest["confidence_score"] = 50.0
 
+    game_keys = ["sport", "game_id", "market_display"]
 
+    # Ensure numeric
+    latest["_score_num"] = pd.to_numeric(latest["confidence_score"], errors="coerce").fillna(50.0)
+
+    # Favored side = max score within the game+market
+    idx_fav = latest.groupby(game_keys)["_score_num"].idxmax()
+    fav_rows = latest.loc[
+        idx_fav,
+        game_keys + ["game", "sport_label", "side", "_score_num"]
+    ].copy()
+
+    fav_rows = fav_rows.rename(columns={
+        "side": "favored_side",
+        "_score_num": "game_confidence"
+    })
+
+    # Min/Max side scores within each game+market
+    min_rows = latest.groupby(game_keys)["_score_num"].min().reset_index().rename(columns={"_score_num": "min_side_score"})
+    max_rows = latest.groupby(game_keys)["_score_num"].max().reset_index().rename(columns={"_score_num": "max_side_score"})
+
+    game_view = (
+        fav_rows
+        .merge(min_rows, on=game_keys, how="left")
+        .merge(max_rows, on=game_keys, how="left")
+    )
+
+    game_view["net_edge"] = (game_view["max_side_score"] - game_view["min_side_score"]).round(1)
+
+    # Game decision: BET requires strong score + meaningful net edge; otherwise LEAN/NO BET
+    def _game_decision(score, net_edge):
+        try:
+            s = float(score)
+        except Exception:
+            s = 50.0
+        try:
+            ne = float(net_edge)
+        except Exception:
+            ne = 0.0
+
+        if s >= 72 and ne >= 10:
+            return "BET"
+        if s >= 62:
+            return "LEAN"
+        return "NO BET"
+
+    game_view["game_decision"] = game_view.apply(lambda r: _game_decision(r.get("game_confidence", 50), r.get("net_edge", 0)), axis=1)
+    game_view["opp_weak"] = game_view["min_side_score"] <= 35.0
+    game_view["opp_weak_mark"] = game_view["opp_weak"].apply(lambda x: "⚑" if bool(x) else "")
+
+    # Sort for display: sport, game time, market order
+    if "_sort_time" in latest.columns:
+        time_map = (
+            latest.groupby(["sport", "game_id"])["_sort_time"]
+            .min()
+            .reset_index()
+            .rename(columns={"_sort_time": "_game_time"})
+        )
+        game_view = game_view.merge(time_map, on=["sport", "game_id"], how="left")
+    else:
+        game_view["_game_time"] = pd.NaT
+
+    market_order = {"MONEYLINE": 0, "SPREAD": 1, "TOTAL": 2}
+    game_view["_game_mkt_rank"] = game_view["market_display"].map(market_order).fillna(99).astype(int)
+
+    game_view = game_view.sort_values(
+        ["sport_label", "_game_time", "_game_mkt_rank", "game"],
+        na_position="last"
+    ).reset_index(drop=True)
+
+    # -----------------------------
+    # TABLE HEADERS (define BEFORE rows_html is built)
+    # Default view = GAME-LEVEL (one row per game per market)
+    # -----------------------------
+    header_cols = (
+        ["Sport", "Game"]
+        + (["Game Time"] if show_game_time else [])
+        + ["Market", "Game Decision", "Favored Side", "Game Confidence", "Net Edge", "Weak?"]
+    )
+
+    side_header_cols = (
+        ["Sport", "Game"]
+        + (["Game Time"] if show_game_time else [])
+        + ["Side", "Market", "Bets % (on Side)", "Money % (on Side)", "Open", "Current"]
+        + (["News?"] if show_news else [])
+        + (["Key # Note"] if show_key_note else [])
+        + [
+            "Price Change (Last)",
+            "Line Change (Last)",
+            "Price Change (Since Open)",
+            "Line Change (Since Open)",
+            "Why",
+            "Market Read",
+            "D (Money - Bets)",
+            "Market Why",
+            "Score",
+        ]
+    )
+
+    colspan = len(header_cols)
+    side_colspan = len(side_header_cols)
+
+    # -----------------------------
+    # BUILD HTML ROWS
+    # -----------------------------
     rows_html = []
     last_label = None
 
+    # 1) Game summary rows
+    for _, rr in game_view.iterrows():
+        gk = f"{rr.get('sport','')}|{rr.get('game_id','')}|{rr.get('market_display','')}"
+
+        rows_html.append(f"""
+<tr class="game-row" data-gamekey="{gk}">
+  <td colspan="{colspan}">
+    <div class="gwrap">
+      <div class="gleft">
+        <div class="gtitle">{rr.get('sport_label','')} · {rr.get('game','')}</div>
+        <div class="gsub">{rr.get('market_display','')}</div>
+      </div>
+
+      <div class="gright">
+        <span class="pill decision">{rr.get('game_decision','NO BET')}</span>
+        <span class="pill favored">{rr.get('favored_side','')}</span>
+        <span class="pill score">Score {round(rr.get('game_confidence',0),1)}</span>
+        <span class="pill edge">Net {round(rr.get('net_edge',0),1)}</span>
+        <span class="pill weak">{rr.get('opp_weak_mark','')}</span>
+      </div>
+    </div>
+  </td>
+</tr>
+""")
+
+    # 2) Side rows (hidden by default)
     for _, rr in latest.iterrows():
-        if rr["sport_label"] != last_label:
-            last_label = rr["sport_label"]
+        # Sport section header
+        if rr.get("sport_label", "") != last_label:
+            last_label = rr.get("sport_label", "")
             rows_html.append(f"""
 <tr data-header="1">
   <td colspan="{colspan}" style="background:#222;color:#fff;font-weight:bold;font-size:14px;padding:10px;">
@@ -2089,22 +2267,18 @@ def build_dashboard():
 
         st = color_style(rr.get("color", "GREY"))
 
-        # ---- DISPLAY-ONLY SIDE CLEANUP (do NOT affect data) ----
+        # ---- DISPLAY-ONLY SIDE CLEANUP ----
         mkt = rr.get("market_display", "")
         side_disp = rr.get("side", "")
+        parent_gk = f"{rr.get('sport','')}|{rr.get('game_id','')}|{rr.get('market_display','')}"
 
-
-        # For spreads, remove the numeric spread from the side text
-        # Example: "Navy -5.5" -> "Navy"
         if mkt == "SPREAD":
-            import re
             side_disp = re.sub(r"\s[+-]\d+(?:\.\d+)?\s*$", "", str(side_disp)).strip()
 
-        # ---- GAME TIME COLUMN (ALWAYS RENDER TD) ----
+        # ---- GAME TIME COLUMN ----
         time_td = ""
         if show_game_time:
             v = rr.get("game_time_display", "")
-
             if pd.isna(v) or str(v).strip() == "":
                 tny = rr.get("game_time_ny", pd.NaT)
                 if not pd.isna(tny):
@@ -2114,15 +2288,12 @@ def build_dashboard():
                         v = str(tny)
                 else:
                     v = "TBD"
-
             time_td = f"<td>{v}</td>"
 
-
-
-
         rows_html.append(f"""
-<tr style="{st}"
+<tr style="{st}display:none;"
     data-row="1"
+    data-parent="{parent_gk}"
     data-color="{rr.get('color','')}"
     data-sport="{rr.get('sport_label','')}"
     data-market="{rr.get('market_display','')}"
@@ -2131,26 +2302,28 @@ def build_dashboard():
   <td>{rr.get('sport_label','')}</td>
   <td>{rr.get('game','')}</td>
   {time_td}
-    <td>{side_disp}</td>
+  <td>{side_disp}</td>
   <td>{rr.get('market_display','')}</td>
-    <td>{'' if pd.isna(rr.get('bets_pct')) else f"{int(rr['bets_pct'])}% on {side_disp}"}</td>
-    <td>{'' if pd.isna(rr.get('money_pct')) else f"{int(rr['money_pct'])}% on {side_disp}"}</td>
+  <td>{'' if pd.isna(rr.get('bets_pct')) else f"{int(rr['bets_pct'])}% on {side_disp}"}</td>
+  <td>{'' if pd.isna(rr.get('money_pct')) else f"{int(rr['money_pct'])}% on {side_disp}"}</td>
   <td>{'' if pd.isna(rr.get('open_line')) else rr.get('open_line')}</td>
   <td>{'' if pd.isna(rr.get('current_line')) else rr.get('current_line')}</td>
   {f"<td>{'' if pd.isna(rr.get('injury_news')) else rr.get('injury_news')}</td>" if show_news else ""}
   {f"<td>{'' if pd.isna(rr.get('key_number_note')) else rr.get('key_number_note')}</td>" if show_key_note else ""}
-
   <td>{"—" if pd.isna(rr.get("odds_move_prev")) else f"{int(rr['odds_move_prev']):+d}"}</td>
   <td>{"—" if pd.isna(rr.get("line_move_prev")) else f"{rr['line_move_prev']:+.1f}"}</td>
   <td>{"—" if pd.isna(rr.get("odds_move_open")) else f"{int(rr['odds_move_open']):+d}"}</td>
-  <td>{"—" if pd.isna(rr.get("line_move_open")) else f"{rr['line_move_open']:+.1f}"}</td>
-
-    <td>{rr.get('why','')}</td>
+  <td>{"—" if pd.isna(rr.get("line_move_open")) else f"{rr.get('line_move_open'):+.1f}"}</td>
+  <td>{rr.get('why','')}</td>
   <td>{rr.get('market_read','')}</td>
   <td>{"" if pd.isna(rr.get("divergence_D")) else f"{rr.get('divergence_D'):+.1f}"}</td>
   <td>{rr.get('market_why','')}</td>
+  <td>{"" if pd.isna(rr.get("confidence_score")) else f"{float(rr.get('confidence_score')):.1f}"}</td>
 </tr>
 """)
+
+
+
 
 
     # =========================
@@ -2415,7 +2588,7 @@ if (hideHeavyMLDG) {
 </script>
 """
 
-    header_ths = "".join(f"<th>{c}</th>" for c in header_cols)
+    header_ths = "".join(f"<th>{c}</th>" for c in side_header_cols)
     html = f"""<!doctype html>
 <html>
 <head>
