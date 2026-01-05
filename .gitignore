@@ -22,3 +22,8 @@ data/snapshots.csv
 data/signals_ledger.csv
 data/results_ledger.csv
 data/results_resolved.csv
+
+# runtime data (should NOT be versioned)
+data/snapshots.csv
+data/results_resolved.csv
+data/results_*.csv
