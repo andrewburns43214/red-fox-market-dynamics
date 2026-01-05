@@ -1,0 +1,11 @@
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# generated dashboard / rendered html
+data/dashboard.html
+data/dk_rendered_*.html
+
+# local backups
+*.bak.*
