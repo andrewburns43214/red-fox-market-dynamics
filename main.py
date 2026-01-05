@@ -2864,6 +2864,8 @@ def log_baseline_signal(row):
                 "market",
                 "side",
                 "color",
+                  "score_num",
+                  "score_bucket",
             ],
         )
 
@@ -2876,9 +2878,11 @@ def log_baseline_signal(row):
             "sport": row.get("sport"),
             "game_id": row.get("game_id"),
             "game": row.get("game"),
-            "market": row.get("market_display"),
+            "market": row.get("market"),
             "side": row.get("side"),
             "color": row.get("color"),
+            "score_num": "" if score_num is None else score_num,
+            "score_bucket": score_bucket,
         })
 
 def resolve_results_for_baseline():
