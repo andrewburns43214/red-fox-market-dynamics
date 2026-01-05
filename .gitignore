@@ -27,3 +27,6 @@ data/results_resolved.csv
 data/snapshots.csv
 data/results_resolved.csv
 data/results_*.csv
+
+# droplet-only
+html
