@@ -30,3 +30,4 @@ data/results_*.csv
 
 # droplet-only
 html
+data/signals_baseline.csv
