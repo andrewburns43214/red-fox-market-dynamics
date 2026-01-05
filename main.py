@@ -286,7 +286,7 @@ def _norm_game_key(s: str) -> str:
 
     return s
 
-def _espn_kickoff_map_date_range(scoreboard_url_base: str, games: list[str], days: int = 14) -> dict[str, str]:
+def _espn_kickoff_map_date_range(scoreboard_url_base: str, games: list[str], days: int = 5) -> dict[str, str]:
     """
     Returns DK-game-keyed kickoff ISO map by querying ESPN scoreboard across a date range.
     Robust matching across NFL/NBA/NHL/CFB/CBB/MLB.
@@ -530,7 +530,7 @@ def get_espn_kickoff_map(sport: str, games: list[str]) -> dict[str, str]:
 
     try:
         # DK "n7days" spans past week; also want ~2-3 weeks ahead
-        km = _espn_kickoff_map_date_range(base, games, days=21)
+        km = _espn_kickoff_map_date_range(base, games, days=5)
         return km if isinstance(km, dict) else {}
 
     except Exception as e:
@@ -538,7 +538,7 @@ def get_espn_kickoff_map(sport: str, games: list[str]) -> dict[str, str]:
         raise
 
 
-def _espn_finals_map_date_range(scoreboard_url_base: str, games: list[str], days: int = 21) -> dict[str, tuple[int, int]]:
+def _espn_finals_map_date_range(scoreboard_url_base: str, games: list[str], days: int = 5) -> dict[str, tuple[int, int]]:
     """
     Returns DK-game-keyed finals map: "Away @ Home" -> (away_score, home_score)
     Only includes completed/final games.
@@ -629,7 +629,7 @@ def get_espn_finals_map(sport: str, games: list[str]) -> dict[str, tuple[int, in
     if not base or not games:
         return {}
     try:
-        return _espn_finals_map_date_range(base, games, days=21)
+        return _espn_finals_map_date_range(base, games, days=5)
     except Exception as e:
         print(f"[espn] finals fetch failed for {sport}: {e}")
         return {}
