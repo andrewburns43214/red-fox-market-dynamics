@@ -9,3 +9,10 @@ data/dk_rendered_*.html
 
 # local backups
 *.bak.*
+
+# droplet-only junk / markers
+MONEYLINE
+SPREAD
+TOTAL
+?etc?nginx?sites_enabled?redfox
+html/
