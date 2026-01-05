@@ -16,3 +16,9 @@ SPREAD
 TOTAL
 ?etc?nginx?sites_enabled?redfox
 html/
+
+# runtime data (server truth)
+data/snapshots.csv
+data/signals_ledger.csv
+data/results_ledger.csv
+data/results_resolved.csv
