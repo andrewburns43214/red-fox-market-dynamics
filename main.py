@@ -2850,6 +2850,29 @@ def log_baseline_signal(row):
         return
 
 
+
+    # --- model score snapshot for result tracking ---
+    model_score_val = row.get("model_score")
+    if model_score_val is None:
+        model_score_val = row.get("_score_num")
+    if model_score_val is None:
+        model_score_val = row.get("model_score")
+    if model_score_val is None:
+        model_score_val = row.get("score")
+    try:
+        model_score = float(model_score_val) if model_score_val not in (None, "") else None
+    except Exception:
+        model_score = None
+    if model_score is None:
+        model_score_bucket = ""
+    else:
+        model_score_bucket = (
+            "65+" if model_score >= 65 else
+            "60-64" if model_score >= 60 else
+            "55-59" if model_score >= 55 else
+            "50-54"
+        )
+
     file_exists = os.path.exists(BASELINE_FILE)
 
     with open(BASELINE_FILE, "a", newline="", encoding="utf-8") as f:
@@ -2864,8 +2887,8 @@ def log_baseline_signal(row):
                 "market",
                 "side",
                 "color",
-                  "score_num",
-                  "score_bucket",
+                  "model_score",
+                  "model_score_bucket",
             ],
         )
 
@@ -2881,8 +2904,8 @@ def log_baseline_signal(row):
             "market": row.get("market"),
             "side": row.get("side"),
             "color": row.get("color"),
-            "score_num": "" if score_num is None else score_num,
-            "score_bucket": score_bucket,
+            "model_score": "" if score_num is None else score_num,
+            "model_score_bucket": score_bucket,
         })
 
 def resolve_results_for_baseline():
