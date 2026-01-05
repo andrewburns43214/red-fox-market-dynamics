@@ -2852,11 +2852,11 @@ def log_baseline_signal(row):
 
 
     # --- model score snapshot for result tracking ---
-    model_score_val = row.get("model_score")
+    model_score_val = row.get("score_num")
     if model_score_val is None:
         model_score_val = row.get("_score_num")
     if model_score_val is None:
-        model_score_val = row.get("model_score")
+        model_score_val = row.get("score_num")
     if model_score_val is None:
         model_score_val = row.get("score")
     try:
