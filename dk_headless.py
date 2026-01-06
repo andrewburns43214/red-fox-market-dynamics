@@ -41,7 +41,7 @@ def _set_tb_page(url: str, page: int) -> str:
 
 def fetch_rendered_html(url: str, timeout: int = 25) -> str:
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new")
+    options.add_argument("--headless")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1400,900")
     # Windows stability: unique user-data-dir prevents Chrome startup crashes
@@ -382,5 +382,6 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
         "json_records_found": 0,
         "records": all_records,
     }
+
 
 
