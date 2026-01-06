@@ -2082,6 +2082,19 @@ def build_dashboard():
     # Sort for display: kickoff time first (like the old dashboard), then group by game
     if "game_time_iso" in latest.columns:
         latest["_sort_time"] = pd.to_datetime(latest["game_time_iso"], errors="coerce", utc=True)
+
+        # --- Time bucket (prevents TBD from breaking logic) ---
+        now_utc = datetime.now(timezone.utc)
+
+        def _time_bucket(kick):
+            if pd.isna(kick):
+                return "TBD"
+            if kick >= now_utc:
+                return "FUTURE"
+            return "STALE"
+
+        latest["time_bucket"] = latest["_sort_time"].apply(_time_bucket)
+
     
         # --- HARD FILTER: drop stale games (prevents old games lingering on dashboard) ---
         from datetime import datetime, timezone, timedelta
@@ -3142,6 +3155,8 @@ def build_color_baseline_summary():
 
 if __name__ == "__main__":
     main()
+
+
 
 
 
