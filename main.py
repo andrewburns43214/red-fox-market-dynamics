@@ -1,4 +1,4 @@
-import argparse
+﻿import argparse
 import csv
 import datetime as dt
 import os
@@ -1086,7 +1086,7 @@ def add_market_read_to_latest(latest: pd.DataFrame) -> pd.DataFrame:
             od = r.get("odds_move_open")
             meaningful = (pd.notna(od) and abs(float(od)) >= 10)
 
-            move_summary.append(f"ML: {r.get('open_odds')}→{r.get('current_odds')} (Δodds={od})")
+            move_summary.append(f"ML: {r.get('open_odds')}â†’{r.get('current_odds')} (Î”odds={od})")
 
         elif mkt == "SPREAD":
             move_dir = _toward_side_by_spread(r.get("open_line_val"), r.get("current_line_val"))
@@ -1104,8 +1104,8 @@ def add_market_read_to_latest(latest: pd.DataFrame) -> pd.DataFrame:
             )
 
             move_summary.append(
-                f"SPREAD: {r.get('open_line_val')}→{r.get('current_line_val')} (Δline={ld}), "
-                f"odds {r.get('open_odds')}→{r.get('current_odds')} (Δodds={od})"
+                f"SPREAD: {r.get('open_line_val')}â†’{r.get('current_line_val')} (Î”line={ld}), "
+                f"odds {r.get('open_odds')}â†’{r.get('current_odds')} (Î”odds={od})"
                 + (f", key={key_cross}" if key_cross else "")
             )
 
@@ -1116,8 +1116,8 @@ def add_market_read_to_latest(latest: pd.DataFrame) -> pd.DataFrame:
             meaningful = (pd.notna(ld) and abs(float(ld)) >= 0.5) or (pd.notna(od) and abs(float(od)) >= 10)
 
             move_summary.append(
-                f"TOTAL: {r.get('open_line_val')}→{r.get('current_line_val')} (Δnum={ld}), "
-                f"odds {r.get('open_odds')}→{r.get('current_odds')} (Δodds={od})"
+                f"TOTAL: {r.get('open_line_val')}â†’{r.get('current_line_val')} (Î”num={ld}), "
+                f"odds {r.get('open_odds')}â†’{r.get('current_odds')} (Î”odds={od})"
             )
         else:
             move_summary.append("Unknown market move")
@@ -1196,7 +1196,7 @@ TIMEZONE = "local"  # for display only
 
 
 # =========================
-# Thresholds (your “rare dark green” setup)
+# Thresholds (your â€œrare dark greenâ€ setup)
 # =========================
 
 @dataclass(frozen=True)
@@ -1214,9 +1214,9 @@ class Thresholds:
     red_money_max: int = 55
 
     # Line movement thresholds (optional, if you capture open/current)
-    meaningful_move_pts: float = 1.5  # used for “strong line behavior”
+    meaningful_move_pts: float = 1.5  # used for â€œstrong line behaviorâ€
 
-    # “No movement” / resistance trigger (optional)
+    # â€œNo movementâ€ / resistance trigger (optional)
     resistance_public_bets_min: int = 72
     resistance_move_max: float = 0.25
 
@@ -1290,7 +1290,7 @@ def safe_text(el) -> str:
 def parse_splits_generic(html: str, sport: str, debug: bool = False) -> List[SideRow]:
     """
     Generic parser:
-    - Finds repeating “game cards” or table rows
+    - Finds repeating â€œgame cardsâ€ or table rows
     - Extracts game name, side/team labels, bets% and money% if present
     This may need minor tweaks depending on DK Network page structure.
     """
@@ -1335,8 +1335,8 @@ def parse_splits_generic(html: str, sport: str, debug: bool = False) -> List[Sid
         bets_pct = int(pcts[0]) if pcts else None
         money_pct = int(pcts[1]) if len(pcts) > 1 else None
 
-        # Create a single “side row” record as a fallback
-        # We'll show it in output even if it’s not perfectly split by team yet.
+        # Create a single â€œside rowâ€ record as a fallback
+        # We'll show it in output even if itâ€™s not perfectly split by team yet.
         rows_out.append(SideRow(
             sport=sport,
             game_id=f"row-{idx}",
@@ -1391,11 +1391,11 @@ def classify_side(
 ) -> Tuple[str, str]:
     """
     Returns: (color, explanation)
-    color ∈ {"DARK_GREEN","LIGHT_GREEN","GREY","YELLOW","RED"}
+    color âˆˆ {"DARK_GREEN","LIGHT_GREEN","GREY","YELLOW","RED"}
     """
     # If we don't have percentages, we can't score well
     if bets_pct is None or money_pct is None:
-        return "GREY", "Missing bet%/money% → default Grey"
+        return "GREY", "Missing bet%/money% â†’ default Grey"
 
     # Context modifiers
     has_news = (injury_news or "").strip().lower() in {"yes", "y", "true", "1"}
@@ -1424,29 +1424,29 @@ def classify_side(
             if move >= TH.meaningful_move_pts:
                 strong_line_signal = True
 
-        # Key number note can promote “strong line behavior” (NFL)
+        # Key number note can promote â€œstrong line behaviorâ€ (NFL)
         if key_number_note and key_number_note.strip():
             strong_line_signal = True
 
     # DARK GREEN (rare): requires strong line behavior + strong money signal, AND no obvious news explanation
     if strong_line_signal and dark_money_signal and not has_news:
-        return "DARK_GREEN", "Book behavior + strong money-vs-bets imbalance; no obvious news → Market Edge Confirmed"
+        return "DARK_GREEN", "Book behavior + strong money-vs-bets imbalance; no obvious news â†’ Market Edge Confirmed"
 
     # If news explains it, keep in Light Green even if strong
     if strong_line_signal and dark_money_signal and has_news:
-        return "LIGHT_GREEN", "Strong signals but major news present → downgrade to Market Edge Developing" 
+        return "LIGHT_GREEN", "Strong signals but major news present â†’ downgrade to Market Edge Developing" 
 
     # LIGHT GREEN: money-vs-bets imbalance without strong line confirmation
     if light_money_signal:
-        return "LIGHT_GREEN", "Money concentration vs bet count → Market Edge Developing (watch for confirmation)"
+        return "LIGHT_GREEN", "Money concentration vs bet count â†’ Market Edge Developing (watch for confirmation)"
 
     # RED: avoid this side
     if is_red:
-        return "RED", "Extremely public + weak money support → Wrong Side / Trap (evaluate opposite side)"
+        return "RED", "Extremely public + weak money support â†’ Wrong Side / Trap (evaluate opposite side)"
 
     # YELLOW: public-driven
     if is_yellow:
-        return "YELLOW", "Public-heavy demand without strong money support → Caution"
+        return "YELLOW", "Public-heavy demand without strong money support â†’ Caution"
 
     return "GREY", "No strong market signal on this side"
 
@@ -1573,7 +1573,7 @@ def build_dashboard():
     df["side"] = df["side"].fillna("").astype(str)
     df["market"] = df["market"].fillna("unknown").astype(str)
 
-    # Clean DK “opens in a new tab…” junk if present
+    # Clean DK â€œopens in a new tabâ€¦â€ junk if present
     df["market"] = df["market"].astype(str).str.replace(r"\s+opens in a new tab.*$", "", regex=True)
     df["game"] = df["game"].astype(str).str.replace(r"\s+opens in a new tab.*$", "", regex=True)
 
@@ -1811,7 +1811,7 @@ def build_dashboard():
         side = row.get("side")
         mkt = row.get("market_display")
                 # -----------------------------
-        # Numeric confidence score (0–100), interpretive only
+        # Numeric confidence score (0â€“100), interpretive only
         # -----------------------------
         score = 50.0
 
@@ -1871,7 +1871,7 @@ def build_dashboard():
                 and pd.notna(row.get("current_odds"))
                 and int(row["current_odds"]) >= 300
             ):
-                expl = f"{expl} | ⚠️ Big underdog moneyline (+{int(row['current_odds'])})"
+                expl = f"{expl} | âš ï¸ Big underdog moneyline (+{int(row['current_odds'])})"
         except Exception:
             pass
 
@@ -1880,7 +1880,7 @@ def build_dashboard():
             and (game, side) in ml_green
             and color not in ("DARK_GREEN", "LIGHT_GREEN")
         ):
-            expl = f"{expl} | Sharp ML, margin risk — ML favored over spread"
+            expl = f"{expl} | Sharp ML, margin risk â€” ML favored over spread"
 
         colors.append(color)
         explains.append(expl)
@@ -2066,9 +2066,6 @@ def build_dashboard():
     show_game_time = (time_col is not None)
     # ---------------------------------------------------------------------------------------------
 
-
-
-
     show_news = (
         "injury_news" in latest.columns
         and latest["injury_news"].fillna("").astype(str).str.strip().ne("").any()
@@ -2081,13 +2078,39 @@ def build_dashboard():
     news_th = "<th>News?</th>" if show_news else ""
     key_th = "<th>Key # Note</th>" if show_key_note else ""
 
-        # Compute colspan from the EXACT columns we will render in the table header.
-    # This prevents HTML column misalignment when optional columns (time/news/key) are toggled.
-
-
+    # Compute colspan from the EXACT columns we will render in the table header.
     # Sort for display: kickoff time first (like the old dashboard), then group by game
     if "game_time_iso" in latest.columns:
         latest["_sort_time"] = pd.to_datetime(latest["game_time_iso"], errors="coerce", utc=True)
+    
+        # --- HARD FILTER: drop stale games (prevents old games lingering on dashboard) ---
+        from datetime import datetime, timezone, timedelta
+    
+        now_utc = datetime.now(timezone.utc)
+    
+        # --- Stale cutoff (clean dashboard) ---
+        stale_hours = 18
+        cutoff = now_utc - timedelta(hours=stale_hours)
+    
+        before = len(latest)
+        kick = latest["_sort_time"]
+    
+        # Keep games with unknown kickoff (to avoid silently hiding unresolved rows),
+        # OR games that kick off after cutoff.
+        latest = latest.loc[kick.isna() | (kick >= cutoff)].copy()
+        after = len(latest)
+    
+        # Recompute sort time after filtering (keeps downstream stable)
+        latest["_sort_time"] = pd.to_datetime(latest["game_time_iso"], errors="coerce", utc=True)
+    
+        print(
+            f"[dash debug] stale-kickoff filter: cutoff={cutoff.isoformat()} "
+            f"kept={after}/{before} dropped={before-after}"
+        )
+    else:
+        latest["_sort_time"] = pd.NaT
+    # Final display sort time (ET)
+    if "_sort_time" in latest.columns:
         try:
             latest["_sort_time"] = latest["_sort_time"].dt.tz_convert("America/New_York")
         except Exception:
@@ -2167,7 +2190,7 @@ def build_dashboard():
 
     game_view["game_decision"] = game_view.apply(lambda r: _game_decision(r.get("game_confidence", 50), r.get("net_edge", 0)), axis=1)
     game_view["opp_weak"] = game_view["min_side_score"] <= 35.0
-    game_view["opp_weak_mark"] = game_view["opp_weak"].apply(lambda x: "⚑" if bool(x) else "")
+    game_view["opp_weak_mark"] = game_view["opp_weak"].apply(lambda x: "âš‘" if bool(x) else "")
 
     # Sort for display: sport, game time, market order
     if "_sort_time" in latest.columns:
@@ -2190,146 +2213,168 @@ def build_dashboard():
     ).reset_index(drop=True)
 
     # -----------------------------
-    # TABLE HEADERS (define BEFORE rows_html is built)
-    # Default view = GAME-LEVEL (one row per game per market)
+    # TABLE HEADERS + HYBRID ROW BUILD (UI ONLY)
+    # GAME rows visible; SIDE rows hidden + directly under their GAME row
     # -----------------------------
+
+    # --- Game Time toggle (display-only) ---
+    show_game_time = True  # always show column; cell renderer will blank if missing
+
+    # --- GAME header columns (this is the table schema) ---
     header_cols = (
         ["Sport", "Game"]
         + (["Game Time"] if show_game_time else [])
-        + ["Market", "Game Decision", "Favored Side", "Game Confidence", "Net Edge", "Weak?"]
+        + ["Market", "Decision", "Lean", "Model Score", "Net Edge"]
     )
-
-    side_header_cols = (
-        ["Sport", "Game"]
-        + (["Game Time"] if show_game_time else [])
-        + ["Side", "Market", "Bets % (on Side)", "Money % (on Side)", "Open", "Current"]
-        + (["News?"] if show_news else [])
-        + (["Key # Note"] if show_key_note else [])
-        + [
-            "Price Change (Last)",
-            "Line Change (Last)",
-            "Price Change (Since Open)",
-            "Line Change (Since Open)",
-            "Why",
-            "Market Read",
-            "D (Money - Bets)",
-            "Market Why",
-            "Score",
-        ]
-    )
-
     colspan = len(header_cols)
-    side_colspan = len(side_header_cols)
+
+    # Build a fast lookup of SIDE rows by parent key so we can render children immediately under each game row
+    latest["_parent_gk"] = (
+        latest["sport"].astype(str) + "|" +
+        latest["game_id"].astype(str) + "|" +
+        latest["market_display"].astype(str)
+    )
+    side_groups = {k: g.copy() for k, g in latest.groupby("_parent_gk", dropna=False)}
+
+        # ---- GAME TIME cell helper (GAME rows use game_view._game_time; SIDE rows use rr game_time_*) ----
+    def _time_cell(rr):
+        """
+        Returns a <td>...</td> for Game Time.
+        - For GAME rows (game_view), we use rr['_game_time'] if present.
+        - For SIDE rows (latest), we use rr['game_time_display'] then rr['game_time_iso'].
+        """
+        # 1) GAME VIEW preferred: _game_time is already a tz-aware Timestamp (NY)
+        gt = rr.get("_game_time", None)
+        try:
+            if pd.notna(gt):
+                # ensure NY tz
+                if getattr(gt, "tzinfo", None) is None:
+                    gt = gt.tz_localize("America/New_York")
+                else:
+                    gt = gt.tz_convert("America/New_York")
+                return f"<td>{gt.strftime('%a %m/%d %I:%M %p ET')}</td>"
+        except Exception:
+            pass
+
+        # 2) SIDE ROW preferred: preformatted display if present
+        v = rr.get("game_time_display", "")
+        if isinstance(v, str) and v.strip():
+            return f"<td>{v}</td>"
+
+        # 3) SIDE ROW fallback: ISO -> ET
+        iso = rr.get("game_time_iso", "")
+        if isinstance(iso, str) and iso.strip():
+            try:
+                dt = pd.to_datetime(iso.replace("Z", "+00:00"), utc=True, errors="coerce")
+                if pd.notna(dt):
+                    dt = dt.tz_convert("America/New_York")
+                    return f"<td>{dt.strftime('%a %m/%d %I:%M %p ET')}</td>"
+            except Exception:
+                pass
+
+        # 4) Last resort: TBD is acceptable if truly missing
+        return "<td>TBD</td>"
+
 
     # -----------------------------
-    # BUILD HTML ROWS
+    # BUILD HTML ROWS (interleaved)
     # -----------------------------
     rows_html = []
-    last_label = None
 
-    # 1) Game summary rows
-    for _, rr in game_view.iterrows():
-        gk = f"{rr.get('sport','')}|{rr.get('game_id','')}|{rr.get('market_display','')}"
+    for _, gr in game_view.iterrows():
+        gk = f"{gr.get('sport','')}|{gr.get('game_id','')}|{gr.get('market_display','')}"
+
+        # --- GAME SUMMARY ROW (visible) ---
+        gt = _time_cell(gr)
 
         rows_html.append(f"""
-<tr class="game-row" data-gamekey="{gk}">
-  <td colspan="{colspan}">
-    <div class="gwrap">
-      <div class="gleft">
-        <div class="gtitle">{rr.get('sport_label','')} · {rr.get('game','')}</div>
-        <div class="gsub">{rr.get('market_display','')}</div>
-      </div>
-
-      <div class="gright">
-        <span class="pill decision">{rr.get('game_decision','NO BET')}</span>
-        <span class="pill favored">{rr.get('favored_side','')}</span>
-        <span class="pill score">Score {round(rr.get('game_confidence',0),1)}</span>
-        <span class="pill edge">Net {round(rr.get('net_edge',0),1)}</span>
-        <span class="pill weak">{rr.get('opp_weak_mark','')}</span>
-      </div>
-    </div>
-  </td>
+<tr class="game-row" data-gamekey="{gk}" onclick="toggleGroup('{gk}')">
+  <td>{gr.get("sport_label","")}</td>
+  <td><b>{gr.get("game","")}</b></td>
+  {gt}
+  <td>{gr.get("market_display","")}</td>
+  <td><span class="pill decision">{gr.get("game_decision","NO BET")}</span></td>
+  <td><span class="pill lean">{gr.get("favored_side","")}</span></td>
+  <td><span class="pill score">{round(float(gr.get("game_confidence",0) or 0),1)}</span></td>
+  <td><span class="pill edge">{round(float(gr.get("net_edge",0) or 0),1)}</span></td>
 </tr>
 """)
 
-    # 2) Side rows (hidden by default)
-    for _, rr in latest.iterrows():
-        # Sport section header
-        if rr.get("sport_label", "") != last_label:
-            last_label = rr.get("sport_label", "")
+        # --- SIDE ROWS (hidden by default, packed into GAME schema) ---
+        sg = side_groups.get(gk)
+        if sg is None or sg.empty:
+            continue
+
+        # Stable order: higher confidence first (UI only)
+        try:
+            sg = sg.copy()
+            sg["_score_num"] = pd.to_numeric(sg["confidence_score"], errors="coerce").fillna(50.0)
+            sg = sg.sort_values("_score_num", ascending=False, kind="mergesort")
+        except Exception:
+            pass
+
+        for _, rr in sg.iterrows():
+            st = color_style(rr.get("color", "GREY"))
+
+            # display-only side label cleanup
+            mkt = rr.get("market_display", "")
+            side_disp = rr.get("side", "")
+            if mkt == "SPREAD":
+                side_disp = re.sub(r"\s[+-]\d+(?:\.\d+)?\s*$", "", str(side_disp)).strip()
+
+            # Market cell
+            market_cell = f"{side_disp} â€” {rr.get('market_display','')}".strip(" â€”")
+
+            # Decision: Bets / Money
+            bets_cell = "" if pd.isna(rr.get("bets_pct")) else f"{int(rr['bets_pct'])}%"
+            money_cell = "" if pd.isna(rr.get("money_pct")) else f"{int(rr['money_pct'])}%"
+            decision_cell = f"B {bets_cell} / $ {money_cell}".strip()
+
+            # Open â†’ Current
+            o = "" if pd.isna(rr.get("open_line")) else str(rr.get("open_line"))
+            c = "" if pd.isna(rr.get("current_line")) else str(rr.get("current_line"))
+            oc_cell = (o + " â†’ " + c).strip(" â†’")
+
+            # Side model score
+            try:
+                sc = "" if pd.isna(rr.get("confidence_score")) else f"{float(rr.get('confidence_score')):.1f}"
+            except Exception:
+                sc = ""
+
+            # Market read
+            mr = str(rr.get("market_read","") or "").strip()
+
+            # Blank game-time cell for side rows
+            gt_side = "<td></td>" if show_game_time else ""
+
             rows_html.append(f"""
-<tr data-header="1">
-  <td colspan="{colspan}" style="background:#222;color:#fff;font-weight:bold;font-size:14px;padding:10px;">
-    {last_label}
-  </td>
-</tr>
-""")
-
-        st = color_style(rr.get("color", "GREY"))
-
-        # ---- DISPLAY-ONLY SIDE CLEANUP ----
-        mkt = rr.get("market_display", "")
-        side_disp = rr.get("side", "")
-        parent_gk = f"{rr.get('sport','')}|{rr.get('game_id','')}|{rr.get('market_display','')}"
-
-        if mkt == "SPREAD":
-            side_disp = re.sub(r"\s[+-]\d+(?:\.\d+)?\s*$", "", str(side_disp)).strip()
-
-        # ---- GAME TIME COLUMN ----
-        time_td = ""
-        if show_game_time:
-            v = rr.get("game_time_display", "")
-            if pd.isna(v) or str(v).strip() == "":
-                tny = rr.get("game_time_ny", pd.NaT)
-                if not pd.isna(tny):
-                    try:
-                        v = tny.strftime("%a, %b %d %I:%M %p ET")
-                    except Exception:
-                        v = str(tny)
-                else:
-                    v = "TBD"
-            time_td = f"<td>{v}</td>"
-
-        rows_html.append(f"""
-<tr style="{st}display:none;"
+<tr class="side-row" style="{st}display:none;"
     data-row="1"
-    data-parent="{parent_gk}"
+    data-parent="{gk}"
     data-color="{rr.get('color','')}"
     data-sport="{rr.get('sport_label','')}"
     data-market="{rr.get('market_display','')}"
     data-ml-odds="{'' if pd.isna(rr.get('current_odds')) else int(rr.get('current_odds'))}"
     data-search="{str(rr.get('game',''))} {str(side_disp)} {str(rr.get('market_display',''))}">
-  <td>{rr.get('sport_label','')}</td>
-  <td>{rr.get('game','')}</td>
-  {time_td}
-  <td>{side_disp}</td>
-  <td>{rr.get('market_display','')}</td>
-  <td>{'' if pd.isna(rr.get('bets_pct')) else f"{int(rr['bets_pct'])}% on {side_disp}"}</td>
-  <td>{'' if pd.isna(rr.get('money_pct')) else f"{int(rr['money_pct'])}% on {side_disp}"}</td>
-  <td>{'' if pd.isna(rr.get('open_line')) else rr.get('open_line')}</td>
-  <td>{'' if pd.isna(rr.get('current_line')) else rr.get('current_line')}</td>
-  {f"<td>{'' if pd.isna(rr.get('injury_news')) else rr.get('injury_news')}</td>" if show_news else ""}
-  {f"<td>{'' if pd.isna(rr.get('key_number_note')) else rr.get('key_number_note')}</td>" if show_key_note else ""}
-  <td>{"—" if pd.isna(rr.get("odds_move_prev")) else f"{int(rr['odds_move_prev']):+d}"}</td>
-  <td>{"—" if pd.isna(rr.get("line_move_prev")) else f"{rr['line_move_prev']:+.1f}"}</td>
-  <td>{"—" if pd.isna(rr.get("odds_move_open")) else f"{int(rr['odds_move_open']):+d}"}</td>
-  <td>{"—" if pd.isna(rr.get("line_move_open")) else f"{rr.get('line_move_open'):+.1f}"}</td>
-  <td>{rr.get('why','')}</td>
-  <td>{rr.get('market_read','')}</td>
-  <td>{"" if pd.isna(rr.get("divergence_D")) else f"{rr.get('divergence_D'):+.1f}"}</td>
-  <td>{rr.get('market_why','')}</td>
-  <td>{"" if pd.isna(rr.get("confidence_score")) else f"{float(rr.get('confidence_score')):.1f}"}</td>
+  <td></td>
+  <td>â†³ {rr.get("why","")}</td>
+  {gt_side}
+  <td>{market_cell}</td>
+  <td>{decision_cell}</td>
+  <td>{oc_cell}</td>
+  <td>{sc}</td>
+  <td>{mr}</td>
 </tr>
 """)
 
-
-
-
+    # -----------------------------
+    # HEADERS
+    # -----------------------------
+    header_ths = "".join(f"<th>{c}</th>" for c in header_cols)
 
     # =========================
     # Legend + Snapshot timestamps (current + previous)
     # =========================
-    # Use raw snapshot timestamps from df (not latest) so it matches your snapshot history.
     current_ts_disp = ""
     prev_ts_disp = ""
 
@@ -2356,15 +2401,12 @@ def build_dashboard():
     except Exception:
         pass
 
-
-
-
     snapshot_html = f"""
 <div style="margin:10px 0 14px 0; padding:10px 12px; background:#f7f7f7; border:1px solid #ddd; border-radius:8px;">
   <div style="font-size:12px;">
-    <b>Current snapshot:</b> {current_ts_disp or "—"}
+    <b>Current snapshot:</b> {current_ts_disp or "â€”"}
     &nbsp;&nbsp;|&nbsp;&nbsp;
-    <b>Previous snapshot:</b> {prev_ts_disp or "—"}
+    <b>Previous snapshot:</b> {prev_ts_disp or "â€”"}
   </div>
 </div>
 """
@@ -2372,35 +2414,19 @@ def build_dashboard():
     legend_html = """
 <div style="margin:0 0 14px 0; padding:10px 12px; background:#fff; border:1px solid #ddd; border-radius:8px;">
   <div style="font-weight:bold; margin-bottom:6px;">Legend</div>
-    <div style="font-size:12px; line-height:1.6;">
-    <div>
-      <span style="display:inline-block; width:12px; height:12px; background:#0B5A12; border:1px solid #0B5A12; vertical-align:middle; margin-right:6px;"></span>
-      <b>Dark Green</b> — Market Edge Confirmed
-    </div>
-    <div>
-      <span style="display:inline-block; width:12px; height:12px; background:#9AF0A0; border:1px solid #9AF0A0; vertical-align:middle; margin-right:6px;"></span>
-      <b>Light Green</b> — Market Edge Developing
-    </div>
-    <div>
-      <span style="display:inline-block; width:12px; height:12px; background:#E0E0E0; border:1px solid #E0E0E0; vertical-align:middle; margin-right:6px;"></span>
-      <b>Grey</b> — No clear market signal
-    </div>
-    <div>
-      <span style="display:inline-block; width:12px; height:12px; background:#F6E38A; border:1px solid #F6E38A; vertical-align:middle; margin-right:6px;"></span>
-      <b>Yellow</b> — Caution / conflicting signals
-    </div>
-    <div>
-      <span style="display:inline-block; width:12px; height:12px; background:#F08A8A; border:1px solid #F08A8A; vertical-align:middle; margin-right:6px;"></span>
-      <b>Red</b> — Negative market signal / fade zone
-    </div>
+  <div style="font-size:12px; line-height:1.6;">
+    <div><span style="display:inline-block; width:12px; height:12px; background:#0B5A12; border:1px solid #0B5A12; vertical-align:middle; margin-right:6px;"></span><b>Dark Green</b> â€” Market Edge Confirmed</div>
+    <div><span style="display:inline-block; width:12px; height:12px; background:#9AF0A0; border:1px solid #9AF0A0; vertical-align:middle; margin-right:6px;"></span><b>Light Green</b> â€” Market Edge Developing</div>
+    <div><span style="display:inline-block; width:12px; height:12px; background:#E0E0E0; border:1px solid #E0E0E0; vertical-align:middle; margin-right:6px;"></span><b>Grey</b> â€” No clear market signal</div>
+    <div><span style="display:inline-block; width:12px; height:12px; background:#F6E38A; border:1px solid #F6E38A; vertical-align:middle; margin-right:6px;"></span><b>Yellow</b> â€” Caution / conflicting signals</div>
+    <div><span style="display:inline-block; width:12px; height:12px; background:#F08A8A; border:1px solid #F08A8A; vertical-align:middle; margin-right:6px;"></span><b>Red</b> â€” Negative market signal / fade zone</div>
   </div>
-
 </div>
 """
+
     # =========================
     # Filters UI (client-side)
     # =========================
-    sports = []
     try:
         sports = [s for s in latest["sport_label"].dropna().unique().tolist() if str(s).strip() != ""]
         sports = sorted(sports)
@@ -2415,15 +2441,14 @@ def build_dashboard():
 <div style="margin:0 0 14px 0; padding:10px 12px; background:#f7f7f7; border:1px solid #ddd; border-radius:8px;">
   <div style="font-weight:bold; margin-bottom:6px;">Filters</div>
   <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center; font-size:12px;">
-
     <label><input type="checkbox" id="fGreens"> Greens (Dark + Light)</label>
     <label><input type="checkbox" id="fYellow"> Yellow</label>
     <label><input type="checkbox" id="fRed"> Red</label>
     <label><input type="checkbox" id="fHideGrey"> Hide Grey</label>
 
-    <label title="Hides Dark Green MONEYLINE underdogs with odds ≥ +300">
+    <label title="Hides Dark Green MONEYLINE underdogs with odds â‰¥ +300">
       <input type="checkbox" id="fHideHeavyMLDG">
-      Hide Dark Green ML Big Underdogs (≥ +300)
+      Hide Dark Green ML Big Underdogs (â‰¥ +300)
     </label>
 
     <label>Market:
@@ -2434,161 +2459,32 @@ def build_dashboard():
         <option value="TOTAL">Total</option>
       </select>
     </label>
-    <label>Date:
-  <select id="fDate" style="margin-left:6px;">
-    <option value="ALL">All</option>
-    <option value="TODAY">Today</option>
-    <option value="TOMORROW">Tomorrow</option>
-  </select>
-</label>
-
 
     <label>Sport:
       <select id="fSport" style="margin-left:6px;">
         {sport_opts}
       </select>
     </label>
-        <label>Search:
+
+    <label>Search:
       <input id="fSearch" type="text" placeholder="Team, game, side..." style="margin-left:6px; padding:4px 6px; width:220px;">
     </label>
 
     <label><input type="checkbox" id="fCompact"> Compact</label>
     <button id="fApply" style="padding:4px 8px; cursor:pointer;">Apply</button>
     <button id="fReset" style="padding:4px 8px; cursor:pointer;">Reset</button>
-
   </div>
   <div id="fCount" style="margin-top:6px; font-size:12px; color:#333;"></div>
 </div>
 """
-    filters_js = """
 
-<script>
-document.addEventListener("DOMContentLoaded", () => {
+    # NOTE: keep your existing filters_js string as-is if it already exists above.
+    # If it does NOT exist, leave it empty so page still renders.
+    try:
+        filters_js
+    except NameError:
+        filters_js = ""
 
-  function applyFilters() {
-    const showGreens = document.getElementById("fGreens").checked;
-    const showYellow = document.getElementById("fYellow").checked;
-    const showRed = document.getElementById("fRed").checked;
-    const hideGrey = document.getElementById("fHideGrey").checked;
-    const hideHeavyMLDG = document.getElementById("fHideHeavyMLDG").checked;
-    const BIG_UNDERDOG_ML_THRESHOLD = 300;
-    const sportVal = document.getElementById("fSport").value;
-    const q = (document.getElementById("fSearch").value || "").trim().toLowerCase();
-    const marketVal = document.getElementById("fMarket").value;
-
-
-    const anyColor = showGreens || showYellow || showRed;
-
-    let visible = 0;
-
-    document.querySelectorAll("tr[data-row='1']").forEach(tr => {
-      const color = tr.dataset.color || "";
-      const sport = tr.dataset.sport || "";
-
-      let ok = true;
-      let forceHide = false;
-
-      // Sport filter
-      if (sportVal !== "ALL" && sport !== sportVal) ok = false;
-      // Market filter
-const rowMarket = (tr.dataset.market || "").toUpperCase();
-if (marketVal !== "ALL" && rowMarket !== marketVal) ok = false;
-
-
-      // Color filter set
-      if (anyColor) {
-        const isGreen = (color === "DARK_GREEN" || color === "LIGHT_GREEN");
-        const isYellow = (color === "YELLOW");
-        const isRed = (color === "RED");
-        ok = ok && (
-          (showGreens && isGreen) ||
-          (showYellow && isYellow) ||
-          (showRed && isRed)
-        );
-      }
-
-      // Hide Grey always applies
-            if (hideGrey && color === "GREY") ok = false;
-            // Hide Dark Green MONEYLINE big underdogs (>= +300)
-if (hideHeavyMLDG) {
-  const market = (tr.dataset.market || "").toUpperCase();
-  const colorVal = (tr.dataset.color || "").toUpperCase().replace(/\\s+/g, "_");
-  const mlOddsRaw = (tr.dataset.mlOdds || "").replaceAll("−", "-").trim();
-  const mlOdds = mlOddsRaw ? parseInt(mlOddsRaw, 10) : NaN;
-
-  if (market === "MONEYLINE" && colorVal === "DARK_GREEN" && Number.isFinite(mlOdds)) {
-    if (mlOdds >= BIG_UNDERDOG_ML_THRESHOLD) forceHide = true;
-  }
-}
-
-
-
-
-      if (q) {
-        const hay = (tr.dataset.search || "").toLowerCase();
-        if (!hay.includes(q)) ok = false;
-      }
-
-      tr.style.display = (!forceHide && ok) ? "" : "none";
-      if (!forceHide && ok) visible++;
-    });
-
-    // Hide sport header rows if everything under that header is hidden
-    document.querySelectorAll("tr[data-header='1']").forEach(h => {
-      let anyVisible = false;
-      let sib = h.nextElementSibling;
-      while (sib && !sib.hasAttribute("data-header")) {
-        if (sib.getAttribute("data-row") === "1" && sib.style.display !== "none") {
-          anyVisible = true;
-          break;
-        }
-        sib = sib.nextElementSibling;
-      }
-      h.style.display = anyVisible ? "" : "none";
-    });
-
-    const c = document.getElementById("fCount");
-    if (c) c.textContent = "Showing " + visible + " rows";
-  }
-
-  function resetFilters() {
-    document.getElementById("fGreens").checked = false;
-    document.getElementById("fYellow").checked = false;
-    document.getElementById("fRed").checked = false;
-    document.getElementById("fHideGrey").checked = false;
-    document.getElementById("fHideHeavyMLDG").checked = false;
-    document.getElementById("fSport").value = "ALL";
-    document.getElementById("fMarket").value = "ALL";
-    document.getElementById("fSearch").value = "";
-    document.getElementById("fCompact").checked = false;
-    document.body.classList.remove("compact");
-
-
-    // Show all rows + headers again
-    document.querySelectorAll("tr[data-row='1']").forEach(tr => { tr.style.display = ""; });
-    document.querySelectorAll("tr[data-header='1']").forEach(tr => { tr.style.display = ""; });
-
-    const c = document.getElementById("fCount");
-    if (c) c.textContent = "";
-  }
-
-  // Buttons
-  const btnApply = document.getElementById("fApply");
-  if (btnApply) btnApply.addEventListener("click", e => { e.preventDefault(); applyFilters(); });
-
-  const btnReset = document.getElementById("fReset");
-  if (btnReset) btnReset.addEventListener("click", e => { e.preventDefault(); resetFilters(); });
-  const cbCompact = document.getElementById("fCompact");
-  if (cbCompact) cbCompact.addEventListener("change", () => {
-    document.body.classList.toggle("compact", cbCompact.checked);
-});
-
-
-});
-</script>
-"""
-
-    header_ths = "".join(f"<th>{c}</th>" for c in side_header_cols)
     html = f"""<!doctype html>
 <html>
 <head>
@@ -2601,7 +2497,17 @@ if (hideHeavyMLDG) {
   th {{ background: #f5f5f5; position: sticky; top: 0; z-index: 2; }}
   body.compact th, body.compact td {{ padding: 3px 6px; font-size: 11px; }}
   body.compact h1 {{ margin: 8px 0; }}
-  
+
+  /* --- UI: game row toggle --- */
+  tr.game-row {{ cursor: pointer; background: #fafafa; }}
+  tr.game-row:hover {{ background: #f0f0f0; }}
+  tr.game-row td {{ font-weight: 600; }}
+
+  .pill {{ display:inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid #bbb; font-size: 11px; background:#fff; }}
+  .pill.decision {{ font-weight: 700; }}
+  .pill.score, .pill.edge, .pill.lean {{ font-weight: 600; }}
+
+  tr.side-row td {{ font-weight: 400; }}
 </style>
 {filters_js}
 </head>
@@ -2617,24 +2523,56 @@ if (hideHeavyMLDG) {
       {header_ths}
     </tr>
   </thead>
-
-
   <tbody>
     {''.join(rows_html)}
   </tbody>
-</table>
+  </table>
+  <script>
+function toggleGroup(gameKey, forceOpen) {{
+  var rows = document.querySelectorAll('tr.side-row[data-parent="' + gameKey + '"]');
+  if (!rows || rows.length === 0) return;
+
+  var currentlyHidden = (rows[0].style.display === "none" || rows[0].style.display === "");
+  var show = (typeof forceOpen === "boolean") ? forceOpen : currentlyHidden;
+
+  for (var i = 0; i < rows.length; i++) {{
+    rows[i].style.display = show ? "table-row" : "none";
+  }}
+}}
+
+document.addEventListener("DOMContentLoaded", function () {{
+  var gameRows = document.querySelectorAll("tr.game-row");
+  for (var i = 0; i < gameRows.length; i++) {{
+    var tr = gameRows[i];
+    var gk = tr.getAttribute("data-gamekey");
+    if (!gk) continue;
+
+    var pill = tr.querySelector(".pill.decision");
+    var decision = pill ? (pill.textContent || "").trim().toUpperCase() : "";
+
+    if (decision === "BET") {{
+      toggleGroup(gk, true);
+    }}
+  }}
+}});
+</script>
+
 </body>
 </html>
 """
 
-    with open(REPORT_HTML, "w", encoding="utf-8") as f:
-        f.write(html)
-
-    print(f"[ok] wrote dashboard: {REPORT_HTML}")
 
 
-
-
+    # -----------------------------
+    # WRITE DASHBOARD HTML (single source of truth)
+    # -----------------------------
+    try:
+        from pathlib import Path
+        ensure_data_dir()
+        Path(REPORT_HTML).write_text(html, encoding="utf-8")
+        print(f"[ok] wrote dashboard: {REPORT_HTML}")
+    except Exception as e:
+        print(f"[warn] failed to write dashboard HTML: {e}")
 
 # =========================
 # CLI
@@ -2725,7 +2663,7 @@ def cmd_baseline_market_read_joined(args):
 
 
     # =========================
-    # B3: Nearest snapshot ≤ signal time
+    # B3: Nearest snapshot â‰¤ signal time
     # =========================
 
     # Align snapshot timestamp name to match signal time
@@ -3204,4 +3142,10 @@ def build_color_baseline_summary():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
 

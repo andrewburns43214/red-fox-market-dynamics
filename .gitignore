@@ -1,33 +1,12 @@
-# python
 __pycache__/
-*.pyc
-.venv/
+*.py[cod]
 
-# generated dashboard / rendered html
-data/dashboard.html
-data/dk_rendered_*.html
-
-# local backups
-*.bak.*
-
-# droplet-only junk / markers
-MONEYLINE
-SPREAD
-TOTAL
-?etc?nginx?sites_enabled?redfox
-html/
-
-# runtime data (server truth)
+data/*.html
 data/snapshots.csv
-data/signals_ledger.csv
-data/results_ledger.csv
-data/results_resolved.csv
+data/bak/
 
-# runtime data (should NOT be versioned)
-data/snapshots.csv
-data/results_resolved.csv
-data/results_*.csv
-
-# droplet-only
-html
-data/signals_baseline.csv
+_SAFE_*/
+*.bak_*
+*.GOLD_*
+main.py.bak*
+main.py.GOLD*
