@@ -1,4 +1,4 @@
-import json
+﻿import json
 import re
 from typing import Any, Dict, List, Optional
 
@@ -8,7 +8,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
-import time
+import time
+import os
+import tempfile
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 import logging
 logger = logging.getLogger("dk")
@@ -41,12 +43,15 @@ def fetch_rendered_html(url: str, timeout: int = 25) -> str:
     options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1400,900")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-software-rasterizer")
-    options.add_argument("--single-process")
+    options.add_argument("--window-size=1400,900")
+    # Windows stability: unique user-data-dir prevents Chrome startup crashes
+    profile_dir = os.path.join(tempfile.gettempdir(), f"dk_selenium_{int(time.time())}")
+    os.makedirs(profile_dir, exist_ok=True)
+    options.add_argument(f"--user-data-dir={profile_dir}")
 
+    # More stability in headless on Windows
+    options.add_argument("--disable-features=VizDisplayCompositor")
+    options.add_argument("--remote-debugging-port=9222")
     driver = webdriver.Chrome(
     service=Service(ChromeDriverManager().install()),
     options=options
@@ -279,7 +284,7 @@ def dom_scrape_splits(html, sport):
         odd_text = odd_a.get_text(" ", strip=True) if odd_a else None
         if odd_text:
             odd_text = odd_text.replace("opens in a new tab", "").strip()
-            odd_text = odd_text.replace("\u2212", "-").replace("−", "-")
+            odd_text = odd_text.replace("\u2212", "-").replace("âˆ’", "-")
 
 
         # Current = what we can track historically
@@ -377,4 +382,5 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
         "json_records_found": 0,
         "records": all_records,
     }
+
 
