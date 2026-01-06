@@ -48,9 +48,10 @@ def fetch_rendered_html(url: str, timeout: int = 25) -> str:
     options.add_argument("--single-process")
 
     driver = webdriver.Chrome(
-        service=Service("/usr/bin/chromedriver"),
-        options=options
-    )
+    service=Service(ChromeDriverManager().install()),
+    options=options
+)
+
 
     try:
         fresh_url = _with_cache_buster(url)
