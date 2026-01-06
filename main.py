@@ -2102,7 +2102,7 @@ def build_dashboard():
         now_utc = datetime.now(timezone.utc)
     
         # --- Stale cutoff (clean dashboard) ---
-        stale_hours = 18
+        stale_hours = 36
         cutoff = now_utc - timedelta(hours=stale_hours)
     
         before = len(latest)
@@ -3155,6 +3155,7 @@ def build_color_baseline_summary():
 
 if __name__ == "__main__":
     main()
+
 
 
 
