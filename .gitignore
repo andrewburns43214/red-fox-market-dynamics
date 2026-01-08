@@ -10,3 +10,4 @@ _SAFE_*/
 *.GOLD_*
 main.py.bak*
 main.py.GOLD*
+data/dashboard_v1.csv
