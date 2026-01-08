@@ -1,0 +1,21 @@
+{
+  "columns": [
+    "timestamp",
+    "sport",
+    "game_id",
+    "game",
+    "side",
+    "market",
+    "bets_pct",
+    "money_pct",
+    "open_line",
+    "current_line",
+    "injury_news",
+    "key_number_note",
+    "dk_start_iso",
+    "sport_label",
+    "market_display",
+    "side_key",
+    "open_line_first"
+  ]
+}
