@@ -1676,9 +1676,19 @@ def build_dashboard():
     )
 
     # FIX: the merge creates open_line_first (because df already has open_line).
-    # We want the computed stable-open to be the real open_line used downstream.
+
+    # Prefer persisted open_line (open_registry/snapshots). Only fill blanks from first_seen.
+
     if "open_line_first" in df.columns:
-        df["open_line"] = df["open_line_first"]
+
+        ol = df["open_line"].fillna("").astype(str)
+
+        mask = ol.str.len().eq(0)
+
+        if mask.any():
+
+            df.loc[mask, "open_line"] = df.loc[mask, "open_line_first"].fillna("").astype(str)
+
 
     # --- LATEST row per selection
     latest = (
@@ -1998,6 +2008,7 @@ def build_dashboard():
             if not games:
                 continue
 
+        if False:
             km = get_espn_kickoff_map(sp, games)
             print(f"[dash debug] ESPN map sport={sp} type={type(km)} len={len(km) if isinstance(km, dict) else 'NA'}")
             if isinstance(km, dict):
@@ -2006,23 +2017,23 @@ def build_dashboard():
                 all_kickoffs.update({k: v for k, v in km.items() if str(v).strip()})
 
                 
-        print(f"[dash debug] ESPN kickoffs total={len(all_kickoffs)}")
+            print(f"[dash debug] ESPN kickoffs total={len(all_kickoffs)}")
 
-        # Fill ONLY blanks from ESPN (never overwrite DK-provided kickoff)
-        espn_iso = latest["game"].map(all_kickoffs).fillna("")
-        m_blank = latest["game_time_iso"].fillna("").astype(str).str.strip().eq("")
-        latest.loc[m_blank, "game_time_iso"] = espn_iso.loc[m_blank]
+            # Fill ONLY blanks from ESPN (never overwrite DK-provided kickoff)
+            espn_iso = latest["game"].map(all_kickoffs).fillna("")
+            m_blank = latest["game_time_iso"].fillna("").astype(str).str.strip().eq("")
+            latest.loc[m_blank, "game_time_iso"] = espn_iso.loc[m_blank]
 
-        # ---- DEBUG: confirm we actually have kickoff values ----
-        _s = latest["game_time_iso"].fillna("").astype(str).str.strip()
-        print(f"[dash debug] game_time_iso nonblank={(_s!='').sum()} / {len(_s)}  sample={_s[_s!=''].head(3).tolist()}")
+            # ---- DEBUG: confirm we actually have kickoff values ----
+            _s = latest["game_time_iso"].fillna("").astype(str).str.strip()
+            print(f"[dash debug] game_time_iso nonblank={(_s!='').sum()} / {len(_s)}  sample={_s[_s!=''].head(3).tolist()}")
 
     except Exception as e:
         import traceback
         print("[dash debug] ESPN kickoff enrichment failed:")
         print(traceback.format_exc())
-        latest["game_time_iso"] = ""
-
+        # Do NOT overwrite DK kickoff times on ESPN failure
+        latest["game_time_iso"] = latest["game_time_iso"].fillna("").astype(str)
 
     # ---- PARSE ISO -> NY datetime (used for filtering + display) ----
     latest["game_time_ny"] = (
@@ -2604,6 +2615,7 @@ def build_dashboard():
     else:
         ml["open_ml"] = ml["open_odds"]
         ml["current_ml"] = ml["current_odds"]
+        ml["current_ml_price"] = ml["current_odds"]  # ML odds are the price; keep schema consistent
 
     # Assemble wide df
     dash = base.copy()
@@ -2616,7 +2628,8 @@ def build_dashboard():
             "confidence_score","net_edge","color",
             "open_spread","current_spread","current_spread_price",
             "open_total","current_total","current_total_price",
-            "open_ml","current_ml"
+            "open_ml","current_ml","current_ml_price"
+
         ]
         present = [c for c in keep if c in sub.columns]
         sub = sub[present].copy()
@@ -2635,6 +2648,8 @@ def build_dashboard():
             "current_total_price": f"{prefix}_current_price",
             "open_ml": f"{prefix}_open_line",
             "current_ml": f"{prefix}_current_line",
+            "current_ml_price": f"{prefix}_current_price",
+
         }
         sub = sub.rename(columns=ren)
         sub[f"{prefix}_decision"] = sub[f"{prefix}_model_score"].apply(_decision)
@@ -2646,6 +2661,25 @@ def build_dashboard():
 
     # Fill blanks (NO NaN in output)
     dash = dash.fillna("")
+
+    # ---------- Column order (UI-only) ----------
+    col_order = [
+        "sport_label","game","game_time_iso",
+        # SPREAD
+        "SPREAD_decision","SPREAD_favored","SPREAD_model_score","SPREAD_net_edge","SPREAD_bets_pct","SPREAD_money_pct",
+        "SPREAD_open_line","SPREAD_current_line","SPREAD_current_price",
+        # TOTAL
+        "TOTAL_decision","TOTAL_favored","TOTAL_model_score","TOTAL_net_edge","TOTAL_bets_pct","TOTAL_money_pct",
+        "TOTAL_open_line","TOTAL_current_line","TOTAL_current_price",
+        # MONEYLINE
+        "MONEYLINE_decision","MONEYLINE_favored","MONEYLINE_model_score","MONEYLINE_net_edge","MONEYLINE_bets_pct","MONEYLINE_money_pct",
+        "MONEYLINE_open_line","MONEYLINE_current_line","MONEYLINE_current_price",
+]
+
+    present = [c for c in col_order if c in dash.columns]
+    extras  = [c for c in dash.columns if c not in present]
+    dash = dash[present + extras]
+
 
     # ---------- Write dashboard.csv (wide schema) ----------
     try:
@@ -2669,7 +2703,7 @@ def build_dashboard():
         "Open Total","Current Total","Current Total Price",
         # ML
         "ML Decision","ML Favored","ML Score","ML Net Edge","ML Bets%","ML Money%",
-        "Open ML","Current ML"
+        "Open ML","Current ML","Current ML Price"
     ]
 
     # Snapshot timestamps (current + previous) — reuse existing logic below
@@ -2737,6 +2771,8 @@ def build_dashboard():
         ml_m    = _fmt_pct(rr.get("MONEYLINE_money_pct"))
         ml_o    = _fmt_int(rr.get("MONEYLINE_open_line"))
         ml_c    = _fmt_int(rr.get("MONEYLINE_current_line"))
+        ml_cp   = _fmt_int(rr.get("MONEYLINE_current_price"))
+
 
         rows_html.append(f"""
 <tr class="game-row">
@@ -2751,7 +2787,7 @@ def build_dashboard():
   <td>{t_o}</td><td>{t_c}</td><td>{t_cp}</td>
 
   <td>{ml_dec}</td><td>{ml_fav}</td><td>{ml_sc}</td><td>{ml_edge}</td><td>{ml_b}</td><td>{ml_m}</td>
-  <td>{ml_o}</td><td>{ml_c}</td>
+  <td>{ml_o}</td><td>{ml_c}</td><td>{ml_cp}</td>
 </tr>
 """)
 
