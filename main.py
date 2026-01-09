@@ -3,6 +3,35 @@ import csv
 import datetime as dt
 import os
 import re
+
+from pathlib import Path
+
+OPEN_REG_PATH = Path("data") / "open_registry.csv"
+
+def _load_open_registry() -> dict:
+    """
+    Key: (sport, game_id, market, side) -> open_line string
+    Persistent across runs so Open is stable even when lines move.
+    """
+    reg = {}
+    if not OPEN_REG_PATH.exists():
+        return reg
+    import csv
+    with OPEN_REG_PATH.open("r", encoding="utf-8", newline="") as f:
+        r = csv.DictReader(f)
+        for row in r:
+            k = (row.get("sport",""), row.get("game_id",""), row.get("market",""), row.get("side",""))
+            reg[k] = (row.get("open_line","") or "").strip()
+    return reg
+
+def _save_open_registry(reg: dict) -> None:
+    import csv
+    OPEN_REG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with OPEN_REG_PATH.open("w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["sport","game_id","market","side","open_line"])
+        for (sport, game_id, market, side), open_line in sorted(reg.items()):
+            w.writerow([sport, game_id, market, side, open_line])
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -1522,8 +1551,8 @@ def append_snapshot(rows, sport: str):
                 "market": row.get("market"),
                 "bets_pct": row.get("bets_pct"),
                 "money_pct": row.get("money_pct"),
-                "open_line": row.get("open"),
-                "current_line": row.get("current"),
+                "open_line": row.get("open") or row.get("open_line"),
+                "current_line": row.get("current") or row.get("current_line"),
                 "injury_news": row.get("news"),
                 "key_number_note": row.get("key_number_note"),
                 "dk_start_iso": row.get("start_time_iso") or row.get("start_time") or row.get("startDate") or row.get("dk_start_iso") or row.get("game_time_iso") or row.get("game_time") or ""
@@ -1534,7 +1563,6 @@ def infer_market_type(side_txt: str, line_txt: str) -> str:
     s = (side_txt or "").strip().lower()
     t = (str(line_txt) if line_txt is not None else "").strip()
 
-    import re
 
     # TOTAL
     if s.startswith("over") or s.startswith("under"):
@@ -1924,7 +1952,11 @@ def build_dashboard():
         latest["game_time_iso"] = ""
     # DK start time is primary source if present
     if "dk_start_iso" in latest.columns:
-        latest["game_time_iso"] = latest["dk_start_iso"].fillna("").astype(str)
+        dk_iso = latest["dk_start_iso"].fillna("").astype(str)
+        # only overwrite if DK actually has values
+        if dk_iso.str.len().gt(0).any():
+            latest["game_time_iso"] = dk_iso
+
     # If dk_start_iso is actually a DK display string (not ISO), convert it -> ISO
     s = latest["game_time_iso"].fillna("").astype(str).str.strip()
     m_not_iso = s.ne("") & ~s.str.contains(r"^\d{4}-\d{2}-\d{2}T", regex=True)
@@ -2112,6 +2144,11 @@ def build_dashboard():
     # Compute colspan from the EXACT columns we will render in the table header.
     # Sort for display: kickoff time first (like the old dashboard), then group by game
     if "game_time_iso" in latest.columns:
+        # --- Guardrail: DK Network kickoff is authoritative for filtering/display ---
+        # ESPN finals/kickoff enrichment is allowed for mapping/metrics, but must NOT overwrite DK kickoff time.
+        if "dk_start_iso" in latest.columns:
+            latest["game_time_iso"] = latest["dk_start_iso"].fillna("").astype(str)
+        
         latest["_sort_time"] = pd.to_datetime(latest["game_time_iso"], errors="coerce", utc=True)
 
         # --- Time bucket (prevents TBD from breaking logic) ---
@@ -2431,7 +2468,292 @@ def build_dashboard():
     # -----------------------------
     # HEADERS
     # -----------------------------
+    # NEW: Wide game-level dashboard (one row per game; grouped markets)
+
+    def _blank(x):
+        if x is None:
+            return ""
+        try:
+            if pd.isna(x):
+                return ""
+        except Exception:
+            pass
+        return str(x)
+
+    def _fmt_int(x):
+        x = _blank(x)
+        if x == "":
+            return ""
+        try:
+            return f"{int(float(x))}"
+        except Exception:
+            return x
+
+    def _fmt_pct(x):
+        x = _blank(x)
+        if x == "":
+            return ""
+        try:
+            return f"{int(float(x))}%"
+        except Exception:
+            return x
+
+    def _fmt_num(x):
+        x = _blank(x)
+        if x == "":
+            return ""
+        try:
+            v = float(x)
+            if v.is_integer():
+                return str(int(v))
+            return f"{v:.1f}"
+        except Exception:
+            return x
+
+    def _fmt_score(x):
+        x = _blank(x)
+        if x == "":
+            return ""
+        try:
+            return f"{float(x):.1f}"
+        except Exception:
+            return x
+
+    # Ensure these exist (no NaN leaks)
+    for c in ["confidence_score","color","why","market_read","game_time_iso"]:
+        if c not in latest.columns:
+            latest[c] = ""
+
+    # Decide thresholds (keep simple for now; you can tune later)
+    def _decision(score):
+        try:
+            sc = float(score)
+        except Exception:
+            sc = 50.0
+        if sc >= 68:
+            return "BET"
+        if sc >= 60:
+            return "LEAN"
+        return "NO BET"
+
+    # Build per-market winners + net edge
+    # For each (sport, game_id, market_display): pick best side row by confidence_score
+    l2 = latest.copy()
+
+    # Side display cleanup for SPREAD (strip the trailing number for display)
+    l2["side_disp"] = l2["side"].astype(str)
+    l2.loc[l2["market_display"] == "SPREAD", "side_disp"] = (
+        l2.loc[l2["market_display"] == "SPREAD", "side_disp"]
+          .str.replace(r"\s[+-]\d+(?:\.\d+)?\s*$", "", regex=True)
+          .str.strip()
+    )
+
+    # Safety: numeric score
+    l2["_score"] = pd.to_numeric(l2["confidence_score"], errors="coerce").fillna(50.0)
+
+    # Net edge per game+market
+    edge = (
+        l2.groupby(["sport","game_id","market_display"])["_score"]
+          .agg(["max","min"])
+          .reset_index()
+    )
+    edge["net_edge"] = edge["max"] - edge["min"]
+
+    # Winner row per game+market
+    winners = (
+        l2.sort_values(["sport","game_id","market_display","_score"], ascending=[True,True,True,False], kind="mergesort")
+          .groupby(["sport","game_id","market_display"], as_index=False)
+          .head(1)
+          .merge(edge[["sport","game_id","market_display","net_edge"]], on=["sport","game_id","market_display"], how="left")
+    )
+
+    # Pivot winners into a single wide row per game_id
+    # Helper: fetch a single value
+    def _get(mkt, col):
+        sub = winners[winners["market_display"] == mkt][["sport","game_id",col]].copy()
+        sub = sub.rename(columns={col: f"{mkt}_{col}"})
+        return sub
+
+    base = (
+        winners.groupby(["sport","game_id"], as_index=False)
+               .first()[["sport","game_id","game","sport_label","game_time_iso"]]
+    )
+
+    # Spread fields
+    sp = winners[winners["market_display"] == "SPREAD"].copy()
+    if sp.empty:
+        sp = pd.DataFrame(columns=["sport","game_id"])
+    else:
+        sp["open_spread"] = sp["open_line_val"]
+        sp["current_spread"] = sp["current_line_val"]
+        sp["current_spread_price"] = sp["current_odds"]
+
+    # Total fields
+    tt = winners[winners["market_display"] == "TOTAL"].copy()
+    if tt.empty:
+        tt = pd.DataFrame(columns=["sport","game_id"])
+    else:
+        tt["open_total"] = tt["open_line_val"]
+        tt["current_total"] = tt["current_line_val"]
+        tt["current_total_price"] = tt["current_odds"]
+
+    # ML fields (open/current are ODDS)
+    ml = winners[winners["market_display"] == "MONEYLINE"].copy()
+    if ml.empty:
+        ml = pd.DataFrame(columns=["sport","game_id"])
+    else:
+        ml["open_ml"] = ml["open_odds"]
+        ml["current_ml"] = ml["current_odds"]
+
+    # Assemble wide df
+    dash = base.copy()
+
+    def _join_market(dash, sub, prefix):
+        if sub is None or len(sub) == 0:
+            return dash
+        keep = [
+            "sport","game_id","side_disp","bets_pct","money_pct",
+            "confidence_score","net_edge","color",
+            "open_spread","current_spread","current_spread_price",
+            "open_total","current_total","current_total_price",
+            "open_ml","current_ml"
+        ]
+        present = [c for c in keep if c in sub.columns]
+        sub = sub[present].copy()
+        ren = {
+            "side_disp": f"{prefix}_favored",
+            "bets_pct": f"{prefix}_bets_pct",
+            "money_pct": f"{prefix}_money_pct",
+            "confidence_score": f"{prefix}_model_score",
+            "net_edge": f"{prefix}_net_edge",
+            "color": f"{prefix}_color",
+            "open_spread": f"{prefix}_open_line",
+            "current_spread": f"{prefix}_current_line",
+            "current_spread_price": f"{prefix}_current_price",
+            "open_total": f"{prefix}_open_line",
+            "current_total": f"{prefix}_current_line",
+            "current_total_price": f"{prefix}_current_price",
+            "open_ml": f"{prefix}_open_line",
+            "current_ml": f"{prefix}_current_line",
+        }
+        sub = sub.rename(columns=ren)
+        sub[f"{prefix}_decision"] = sub[f"{prefix}_model_score"].apply(_decision)
+        return dash.merge(sub, on=["sport","game_id"], how="left")
+
+    dash = _join_market(dash, sp, "SPREAD")
+    dash = _join_market(dash, tt, "TOTAL")
+    dash = _join_market(dash, ml, "MONEYLINE")
+
+    # Fill blanks (NO NaN in output)
+    dash = dash.fillna("")
+
+    # ---------- Write dashboard.csv (wide schema) ----------
+    try:
+        ensure_data_dir()
+        out_csv = os.path.join(DATA_DIR, "dashboard.csv")
+        dash.to_csv(out_csv, index=False, encoding="utf-8")
+        print(f"[ok] wrote dashboard csv: {out_csv}")
+    except Exception as e:
+        print(f"[warn] failed to write dashboard csv: {e}")
+
+    # ---------- HTML table (wide) ----------
+    header_cols = [
+        "Sport",
+        "Game",
+        "Time (ET)",
+        # SPREAD
+        "Spread Decision","Spread Favored","Spread Score","Spread Net Edge","Spread Bets%","Spread Money%",
+        "Open Spread","Current Spread","Current Spread Price",
+        # TOTAL
+        "Total Decision","Total Favored","Total Score","Total Net Edge","Total Bets%","Total Money%",
+        "Open Total","Current Total","Current Total Price",
+        # ML
+        "ML Decision","ML Favored","ML Score","ML Net Edge","ML Bets%","ML Money%",
+        "Open ML","Current ML"
+    ]
+
+    # Snapshot timestamps (current + previous) — reuse existing logic below
     header_ths = "".join(f"<th>{c}</th>" for c in header_cols)
+
+    rows_html = []
+
+    # Render rows
+    # Time display: use game_time_iso (already set to DK start iso in your pipeline)
+    def _time_et(iso):
+        iso = _blank(iso)
+        if iso == "":
+            return ""
+        try:
+            ts = pd.to_datetime(iso, utc=True, errors="coerce")
+            if pd.isna(ts):
+                return ""
+            return ts.tz_convert("America/New_York").strftime("%a %m/%d %I:%M%p")
+        except Exception:
+            return ""
+
+    # Sort: show BETs first, then LEAN, then NO BET
+    def _rank(dec):
+        dec = str(dec or "").upper()
+        if dec == "BET": return 2
+        if dec == "LEAN": return 1
+        return 0
+
+    dash["_rank"] = dash.apply(lambda r: max(_rank(r.get("SPREAD_decision")), _rank(r.get("TOTAL_decision")), _rank(r.get("MONEYLINE_decision"))), axis=1)
+    dash = dash.sort_values(["_rank","sport_label","game"], ascending=[False, True, True], kind="mergesort").drop(columns=["_rank"])
+
+    for _, rr in dash.iterrows():
+        sport = _blank(rr.get("sport_label"))
+        game  = _blank(rr.get("game"))
+        t_et  = _time_et(rr.get("game_time_iso"))
+
+        # Spread cells
+        sp_dec   = _blank(rr.get("SPREAD_decision"))
+        sp_fav   = _blank(rr.get("SPREAD_favored"))
+        sp_sc    = _fmt_score(rr.get("SPREAD_model_score"))
+        sp_edge  = _fmt_score(rr.get("SPREAD_net_edge"))
+        sp_b     = _fmt_pct(rr.get("SPREAD_bets_pct"))
+        sp_m     = _fmt_pct(rr.get("SPREAD_money_pct"))
+        sp_o     = _fmt_num(rr.get("SPREAD_open_line"))
+        sp_c     = _fmt_num(rr.get("SPREAD_current_line"))
+        sp_cp    = _fmt_int(rr.get("SPREAD_current_price"))
+
+        # Total cells
+        t_dec   = _blank(rr.get("TOTAL_decision"))
+        t_fav   = _blank(rr.get("TOTAL_favored"))
+        t_sc    = _fmt_score(rr.get("TOTAL_model_score"))
+        t_edge  = _fmt_score(rr.get("TOTAL_net_edge"))
+        t_b     = _fmt_pct(rr.get("TOTAL_bets_pct"))
+        t_m     = _fmt_pct(rr.get("TOTAL_money_pct"))
+        t_o     = _fmt_num(rr.get("TOTAL_open_line"))
+        t_c     = _fmt_num(rr.get("TOTAL_current_line"))
+        t_cp    = _fmt_int(rr.get("TOTAL_current_price"))
+
+        # ML cells
+        ml_dec  = _blank(rr.get("MONEYLINE_decision"))
+        ml_fav  = _blank(rr.get("MONEYLINE_favored"))
+        ml_sc   = _fmt_score(rr.get("MONEYLINE_model_score"))
+        ml_edge = _fmt_score(rr.get("MONEYLINE_net_edge"))
+        ml_b    = _fmt_pct(rr.get("MONEYLINE_bets_pct"))
+        ml_m    = _fmt_pct(rr.get("MONEYLINE_money_pct"))
+        ml_o    = _fmt_int(rr.get("MONEYLINE_open_line"))
+        ml_c    = _fmt_int(rr.get("MONEYLINE_current_line"))
+
+        rows_html.append(f"""
+<tr class="game-row">
+  <td>{sport}</td>
+  <td>{game}</td>
+  <td>{t_et}</td>
+
+  <td>{sp_dec}</td><td>{sp_fav}</td><td>{sp_sc}</td><td>{sp_edge}</td><td>{sp_b}</td><td>{sp_m}</td>
+  <td>{sp_o}</td><td>{sp_c}</td><td>{sp_cp}</td>
+
+  <td>{t_dec}</td><td>{t_fav}</td><td>{t_sc}</td><td>{t_edge}</td><td>{t_b}</td><td>{t_m}</td>
+  <td>{t_o}</td><td>{t_c}</td><td>{t_cp}</td>
+
+  <td>{ml_dec}</td><td>{ml_fav}</td><td>{ml_sc}</td><td>{ml_edge}</td><td>{ml_b}</td><td>{ml_m}</td>
+  <td>{ml_o}</td><td>{ml_c}</td>
+</tr>
+""")
 
     # =========================
     # Legend + Snapshot timestamps (current + previous)
@@ -2465,9 +2787,9 @@ def build_dashboard():
     snapshot_html = f"""
 <div style="margin:10px 0 14px 0; padding:10px 12px; background:#f7f7f7; border:1px solid #ddd; border-radius:8px;">
   <div style="font-size:12px;">
-    <b>Current snapshot:</b> {current_ts_disp or "â€”"}
+    <b>Current snapshot:</b> {current_ts_disp or "—"}
     &nbsp;&nbsp;|&nbsp;&nbsp;
-    <b>Previous snapshot:</b> {prev_ts_disp or "â€”"}
+    <b>Previous snapshot:</b> {prev_ts_disp or "—"}
   </div>
 </div>
 """
@@ -2476,71 +2798,15 @@ def build_dashboard():
 <div style="margin:0 0 14px 0; padding:10px 12px; background:#fff; border:1px solid #ddd; border-radius:8px;">
   <div style="font-weight:bold; margin-bottom:6px;">Legend</div>
   <div style="font-size:12px; line-height:1.6;">
-    <div><span style="display:inline-block; width:12px; height:12px; background:#0B5A12; border:1px solid #0B5A12; vertical-align:middle; margin-right:6px;"></span><b>Dark Green</b> â€” Market Edge Confirmed</div>
-    <div><span style="display:inline-block; width:12px; height:12px; background:#9AF0A0; border:1px solid #9AF0A0; vertical-align:middle; margin-right:6px;"></span><b>Light Green</b> â€” Market Edge Developing</div>
-    <div><span style="display:inline-block; width:12px; height:12px; background:#E0E0E0; border:1px solid #E0E0E0; vertical-align:middle; margin-right:6px;"></span><b>Grey</b> â€” No clear market signal</div>
-    <div><span style="display:inline-block; width:12px; height:12px; background:#F6E38A; border:1px solid #F6E38A; vertical-align:middle; margin-right:6px;"></span><b>Yellow</b> â€” Caution / conflicting signals</div>
-    <div><span style="display:inline-block; width:12px; height:12px; background:#F08A8A; border:1px solid #F08A8A; vertical-align:middle; margin-right:6px;"></span><b>Red</b> â€” Negative market signal / fade zone</div>
+    <div><b>Decision</b>: BET (≥68), LEAN (≥60), NO BET (&lt;60). Net Edge = best score - worst score per market.</div>
+    <div style="margin-top:6px;"><b>Note</b>: This is Observation Mode output (interpretive only).</div>
   </div>
 </div>
 """
 
-    # =========================
-    # Filters UI (client-side)
-    # =========================
-    try:
-        sports = [s for s in latest["sport_label"].dropna().unique().tolist() if str(s).strip() != ""]
-        sports = sorted(sports)
-    except Exception:
-        sports = []
+    # Filters UI stays, but we’ll keep it simple for now
+    filters_html = ""
 
-    sport_opts = '<option value="ALL">All Sports</option>' + "".join(
-        f'<option value="{s}">{s}</option>' for s in sports
-    )
-
-    filters_html = f"""
-<div style="margin:0 0 14px 0; padding:10px 12px; background:#f7f7f7; border:1px solid #ddd; border-radius:8px;">
-  <div style="font-weight:bold; margin-bottom:6px;">Filters</div>
-  <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center; font-size:12px;">
-    <label><input type="checkbox" id="fGreens"> Greens (Dark + Light)</label>
-    <label><input type="checkbox" id="fYellow"> Yellow</label>
-    <label><input type="checkbox" id="fRed"> Red</label>
-    <label><input type="checkbox" id="fHideGrey"> Hide Grey</label>
-
-    <label title="Hides Dark Green MONEYLINE underdogs with odds â‰¥ +300">
-      <input type="checkbox" id="fHideHeavyMLDG">
-      Hide Dark Green ML Big Underdogs (â‰¥ +300)
-    </label>
-
-    <label>Market:
-      <select id="fMarket" style="margin-left:6px;">
-        <option value="ALL">All</option>
-        <option value="MONEYLINE">Moneyline</option>
-        <option value="SPREAD">Spread</option>
-        <option value="TOTAL">Total</option>
-      </select>
-    </label>
-
-    <label>Sport:
-      <select id="fSport" style="margin-left:6px;">
-        {sport_opts}
-      </select>
-    </label>
-
-    <label>Search:
-      <input id="fSearch" type="text" placeholder="Team, game, side..." style="margin-left:6px; padding:4px 6px; width:220px;">
-    </label>
-
-    <label><input type="checkbox" id="fCompact"> Compact</label>
-    <button id="fApply" style="padding:4px 8px; cursor:pointer;">Apply</button>
-    <button id="fReset" style="padding:4px 8px; cursor:pointer;">Reset</button>
-  </div>
-  <div id="fCount" style="margin-top:6px; font-size:12px; color:#333;"></div>
-</div>
-"""
-
-    # NOTE: keep your existing filters_js string as-is if it already exists above.
-    # If it does NOT exist, leave it empty so page still renders.
     try:
         filters_js
     except NameError:
@@ -2554,21 +2820,9 @@ def build_dashboard():
 <style>
   body {{ font-family: Arial, sans-serif; padding: 16px; }}
   table {{ border-collapse: collapse; width: 100%; }}
-  th, td {{ border: 1px solid #ddd; padding: 6px 8px; font-size: 12px; }}
+  th, td {{ border: 1px solid #ddd; padding: 6px 8px; font-size: 12px; white-space: nowrap; }}
   th {{ background: #f5f5f5; position: sticky; top: 0; z-index: 2; }}
-  body.compact th, body.compact td {{ padding: 3px 6px; font-size: 11px; }}
-  body.compact h1 {{ margin: 8px 0; }}
-
-  /* --- UI: game row toggle --- */
-  tr.game-row {{ cursor: pointer; background: #fafafa; }}
   tr.game-row:hover {{ background: #f0f0f0; }}
-  tr.game-row td {{ font-weight: 600; }}
-
-  .pill {{ display:inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid #bbb; font-size: 11px; background:#fff; }}
-  .pill.decision {{ font-weight: 700; }}
-  .pill.score, .pill.edge, .pill.lean {{ font-weight: 600; }}
-
-  tr.side-row td {{ font-weight: 400; }}
 </style>
 {filters_js}
 </head>
@@ -2578,6 +2832,7 @@ def build_dashboard():
 {legend_html}
 {filters_html}
 
+<div style="overflow:auto; border:1px solid #ddd; border-radius:8px;">
 <table>
   <thead>
     <tr data-header="1">
@@ -2587,42 +2842,12 @@ def build_dashboard():
   <tbody>
     {''.join(rows_html)}
   </tbody>
-  </table>
-  <script>
-function toggleGroup(gameKey, forceOpen) {{
-  var rows = document.querySelectorAll('tr.side-row[data-parent="' + gameKey + '"]');
-  if (!rows || rows.length === 0) return;
-
-  var currentlyHidden = (rows[0].style.display === "none" || rows[0].style.display === "");
-  var show = (typeof forceOpen === "boolean") ? forceOpen : currentlyHidden;
-
-  for (var i = 0; i < rows.length; i++) {{
-    rows[i].style.display = show ? "table-row" : "none";
-  }}
-}}
-
-document.addEventListener("DOMContentLoaded", function () {{
-  var gameRows = document.querySelectorAll("tr.game-row");
-  for (var i = 0; i < gameRows.length; i++) {{
-    var tr = gameRows[i];
-    var gk = tr.getAttribute("data-gamekey");
-    if (!gk) continue;
-
-    var pill = tr.querySelector(".pill.decision");
-    var decision = pill ? (pill.textContent || "").trim().toUpperCase() : "";
-
-    if (decision === "BET") {{
-      toggleGroup(gk, true);
-    }}
-  }}
-}});
-</script>
+</table>
+</div>
 
 </body>
 </html>
 """
-
-
 
     # -----------------------------
     # WRITE DASHBOARD HTML (single source of truth)
@@ -2672,6 +2897,33 @@ def cmd_snapshot(args):
         logger.debug("json_candidates_found=%s", result.get("json_candidates_found"))
         logger.debug("json_records_found=%s", result.get("json_records_found"))
         logger.debug("extracted_records=%d", len(rows))
+
+    # --- Model Open (persistent) ---
+    # DK Network Splits often has no true "open". We define open_line as the first observed current_line
+    # per (sport, game_id, market, side) and persist it across runs.
+    open_reg = _load_open_registry()
+    new_opens = 0
+    for r in rows:  
+        sport = str(r.get("sport","") or "")
+        game_id = str(r.get("game_id","") or "")
+        market = str(r.get("market","") or "")
+        side = str(r.get("side","") or "")
+        current_line = str(r.get("current_line","") or r.get("current","") or "").strip()
+        k = (sport, game_id, market, side)
+
+        # If registry has it, use it; else seed from current_line
+        if k in open_reg and open_reg[k]:
+            r["open_line"] = open_reg[k]
+        else:
+            r["open_line"] = current_line
+            if current_line:
+                open_reg[k] = current_line
+                new_opens += 1
+
+    if new_opens:
+        _save_open_registry(open_reg)
+        logger.info(f"[open] seeded {new_opens} model-open lines into {OPEN_REG_PATH.as_posix()}")
+    # --- /Model Open ---
 
     append_snapshot(rows, args.sport)
     print(f"[ok] appended {len(rows)} rows to {SNAPSHOT_CSV}")
