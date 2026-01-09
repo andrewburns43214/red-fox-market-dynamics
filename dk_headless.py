@@ -8,7 +8,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
-import time
+import time
+
 import os
 import tempfile
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
@@ -43,7 +44,8 @@ def fetch_rendered_html(url: str, timeout: int = 25) -> str:
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
     options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1400,900")
+    options.add_argument("--window-size=1400,900")
+
     # Windows stability: unique user-data-dir prevents Chrome startup crashes
     profile_dir = os.path.join(tempfile.gettempdir(), f"dk_selenium_{int(time.time())}")
     os.makedirs(profile_dir, exist_ok=True)
@@ -174,6 +176,34 @@ import re
 from bs4 import BeautifulSoup
 import re
 
+def parse_dk_start_text_to_utc_iso(start_text: str) -> str:
+    """Convert DK splits start text like '1/10, 04:30PM' (ET) to UTC ISO 'YYYY-MM-DDTHH:MM:SSZ'."""
+    try:
+        from datetime import datetime, timezone
+        from zoneinfo import ZoneInfo
+        import re
+        s = (start_text or '').strip()
+        if not s:
+            return ''
+        m = re.search(r'(\d{1,2})/(\d{1,2}),\s*(\d{1,2}):(\d{2})(AM|PM)', s, re.I)
+        if not m:
+            return ''
+        mon = int(m.group(1)); day = int(m.group(2))
+        hh = int(m.group(3)); mm = int(m.group(4))
+        ap = m.group(5).upper()
+        if ap == 'PM' and hh != 12: hh += 12
+        if ap == 'AM' and hh == 12: hh = 0
+        now_et = datetime.now(ZoneInfo('America/New_York'))
+        year = now_et.year
+        if now_et.month == 12 and mon == 1:
+            year = now_et.year + 1
+        dt_local = datetime(year, mon, day, hh, mm, tzinfo=ZoneInfo('America/New_York'))
+        dt_utc = dt_local.astimezone(timezone.utc)
+        return dt_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+    except Exception:
+        return ''
+
+
 def pct_from_style(el):
     if not el:
         return None
@@ -207,23 +237,28 @@ def dom_scrape_splits(html, sport):
     # sanity counts
 
     # 1) Find "row containers" by climbing up from each progress bar
+    # 1) Find "row containers" by climbing up from each progress bar
     containers = []
     seen = set()
 
     for p in soup.select("div.tb-progress"):
         cur = p
-        for _ in range(8):  # climb up a few levels
+        for _ in range(10):  # climb up a few levels (a bit more room)
             cur = getattr(cur, "parent", None)
             if not cur or not hasattr(cur, "select"):
                 break
 
-            # row container = has at least 2 progress bars somewhere inside it
-            if len(cur.select("div.tb-progress")) >= 2:
-                key = id(cur)
-                if key not in seen:
-                    seen.add(key)
-                    containers.append(cur)
-                break
+            progs = cur.select("div.tb-progress")
+            # We want the *actual* bet row: typically EXACTLY 2 progress bars
+            if len(progs) == 2:
+                # Must look like a real row (has the selection line or odds link)
+                if cur.select_one("div.tb-slipline") or cur.select_one("a.tb-odd-s"):
+                    key = id(cur)
+                    if key not in seen:
+                        seen.add(key)
+                        containers.append(cur)
+                    break
+
 
 
     # 2) Parse each container
@@ -292,10 +327,37 @@ def dom_scrape_splits(html, sport):
         if sl_text and odd_text:
             current = f"{sl_text} @ {odd_text}"
 
+
+        # --- DK kickoff time (dk_start_text / dk_start_iso) ---
+        dk_start_text = ''
+        dk_start_iso = ''
+        try:
+            # sec is the tb-se event container for this row (set above)
+            if sec is not None:
+                spans = sec.select('div.tb-se-title span')
+                # Pick the first span that looks like a real kickoff time, not screen-reader junk
+                _rx = re.compile(r'\b\d{1,2}/\d{1,2},\s*\d{1,2}:\d{2}\s*(AM|PM)\b')
+                for spn in spans:
+                    t = spn.get_text(' ', strip=True) if spn else ''
+                    if not t:
+                        continue
+                    if 'opens in a new tab' in t.lower():
+                        continue
+                    if _rx.search(t):
+                        dk_start_text = t
+                        dk_start_iso = parse_dk_start_text_to_utc_iso(dk_start_text)
+                        break
+        except Exception:
+            dk_start_text = ''
+            dk_start_iso = ''
+        # --- end kickoff ---
+
         rows.append({
             "sport": sport,
             "game_id": game_id,
             "game": game_name,
+            "dk_start_text": dk_start_text,
+            "dk_start_iso": dk_start_iso,
             "side": side,
             "market": market,
             "bets_pct": bets_pct,

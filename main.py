@@ -86,10 +86,30 @@ import re
 import re
 
 # Super forgiving split: supports "Away @ Home", "Away vs Home", "Away v Home"
-def _split_game(game: str) -> tuple[str, str]:
-    g = (game or "").strip()
-    if not g:
+def _split_game(game) -> tuple[str, str]:
+    # Defensive: snapshots.csv may contain NaN/float/None for game
+    try:
+        import pandas as pd
+        if pd.isna(game):
+            return "", ""
+    except Exception:
+        pass
+
+    g = str(game).strip() if game is not None else ""
+    if not g or g.lower() == "nan":
         return "", ""
+
+    # normalize separators
+    g = re.sub(r"\s+vs\.?\s+|\s+v\.?\s+", " @ ", g, flags=re.IGNORECASE)
+    if " @ " in g:
+        a, h = g.split(" @ ", 1)
+        return a.strip(), h.strip()
+    return "", ""
+
+    g = str(game).strip() if game is not None else ""
+    if not g or g.lower() == "nan":
+        return "", ""
+
     # normalize separators
     g = re.sub(r"\s+vs\.?\s+|\s+v\.?\s+", " @ ", g, flags=re.IGNORECASE)
     if " @ " in g:
@@ -640,6 +660,7 @@ def update_snapshots_with_espn_finals():
     for TEAM rows only (moneyline/spread rows where side looks like a team name).
     Safe no-op if no finals found.
     """
+    import pandas as pd
     import os
 
     src = "data/snapshots.csv"
@@ -677,15 +698,25 @@ def update_snapshots_with_espn_finals():
         return
 
     def _split_game(g: str):
-        g = ("" if g is None else str(g)).strip()
-        if " @ " in g:
-            a, h = g.split(" @ ", 1)
+        # Defensive: allow NaN/float/None
+        try:
+            import pandas as pd
+            if pd.isna(g):
+                return "", ""
+        except Exception:
+            pass
+    
+        s = str(g).strip() if g is not None else ""
+        if not s or s.lower() == "nan":
+            return "", ""
+        if " @ " in s:
+            a, h = s.split(" @ ", 1)
             return a.strip(), h.strip()
-        if " vs " in g:
-            h, a = g.split(" vs ", 1)
+        if " vs " in s:
+            h, a = s.split(" vs ", 1)
             return a.strip(), h.strip()
         return "", ""
-
+    
     def _norm(x: str) -> str:
         try:
             return _normalize_team_name((x or "").strip())
@@ -1547,52 +1578,6 @@ def build_dashboard():
         "news": "injury_news",
     })
 
-    # -------------------------------
-    # PLUMBING: backfill missing game labels (prevents "missing games" illusion)
-    # DK pages for some sports may omit "game" while still providing game_id + team sides.
-    # This does NOT change logic/scoring; it only ensures display/group keys exist.
-    # -------------------------------
-    if "game" not in df.columns:
-        df["game"] = ""
-    df["game"] = df["game"].fillna("").astype(str)
-
-    # Build a per-(sport,game_id) label using team sides when available
-    # Prefer team sides from SPREAD/MONEYLINE rows (exclude Over/Under).
-    def _is_team_side(s: str) -> bool:
-        s = ("" if s is None else str(s)).strip()
-        if not s:
-            return False
-        if s.lower().startswith("over ") or s.lower().startswith("under "):
-            return False
-        return True
-
-    labels = []
-    for (sp, gid), g in df.groupby(["sport", "game_id"], dropna=False):
-        if (g["game"].str.len() > 0).any():
-            # already has a game label somewhere in this group
-            lab = g.loc[g["game"].str.len() > 0, "game"].iloc[0]
-            labels.append((sp, gid, lab))
-            continue
-
-        # derive from team sides
-        sides = [s for s in g["side"].dropna().astype(str).tolist() if _is_team_side(s)]
-        uniq = []
-        for s in sides:
-            if s not in uniq:
-                uniq.append(s)
-        if len(uniq) >= 2:
-            lab = f"{uniq[0]} vs {uniq[1]}"
-        elif len(uniq) == 1:
-            lab = f"{uniq[0]} (game {gid})"
-        else:
-            lab = f"Game {gid}"
-        labels.append((sp, gid, lab))
-
-    lab_df = pd.DataFrame(labels, columns=["sport", "game_id", "_game_fill"])
-    df = df.merge(lab_df, on=["sport", "game_id"], how="left")
-    df.loc[df["game"].str.len() == 0, "game"] = df.loc[df["game"].str.len() == 0, "_game_fill"]
-    df = df.drop(columns=["_game_fill"])
-
     # Timestamps
     if "timestamp" not in df.columns:
         print("[warn] snapshots.csv missing timestamp column")
@@ -1733,23 +1718,6 @@ def build_dashboard():
     latest["prev_odds"] = prv_parsed.get("odds", None)
     latest["prev_line_val"] = prv_parsed.get("line_val", None)
 
-    # -------------------------------
-    # PLUMBING: structured fields (guarantee columns; no scoring/UI change yet)
-    # These are the canonical numeric/price fields the new dashboard schema will use.
-    # -------------------------------
-    latest["current_price"] = pd.to_numeric(latest.get("current_odds"), errors="coerce")
-    latest["open_price"]    = pd.to_numeric(latest.get("open_odds"), errors="coerce")
-
-    latest["current_num"]   = pd.to_numeric(latest.get("current_line_val"), errors="coerce")
-    latest["open_num"]      = pd.to_numeric(latest.get("open_line_val"), errors="coerce")
-
-    # Moneyline has no "line number" — force these to NaN so we don't accidentally treat ML like spread/total.
-    try:
-        mdisp = latest.get("market_display", "").astype(str).str.upper()
-        latest.loc[mdisp == "MONEYLINE", ["current_num", "open_num"]] = float("nan")
-    except Exception:
-        pass
-
     # ========= MAIN LINE FILTER (drop alternates; keep only 1 number per game for SPREAD + TOTAL) =========
     # DK often includes alternate spreads/totals (ex: +3, +5.5, O45.5, O46.5).
     # Deterministic rule based ONLY on scraped rows in *latest*:
@@ -1871,7 +1839,7 @@ def build_dashboard():
         game = row.get("game")
         side = row.get("side")
         mkt = row.get("market_display")
-        # -----------------------------
+                # -----------------------------
         # Numeric confidence score (0â€“100), interpretive only
         # -----------------------------
         score = 50.0
@@ -1979,9 +1947,49 @@ def build_dashboard():
         latest.loc[m_not_iso, "game_time_iso"] = parsed.dt.tz_convert("UTC").dt.strftime("%Y-%m-%dT%H:%M:%SZ").fillna("")
 
 
-    if False:
-        # ESPN kickoff enrichment disabled (intentionally)
-        pass
+    try:
+        # ESPN kickoff enrichment disabled (DK dk_start_iso is source of truth).
+        # ESPN FINALS remains enabled via update_snapshots_with_espn_finals().
+        pass  # ESPN kickoff enrichment disabled (DK dk_start_iso is source of truth)
+        
+        latest["game"] = latest["game"].fillna("").astype(str)
+
+        all_kickoffs = {}
+        for sp in latest["sport"].dropna().astype(str).unique():
+            games = (
+                latest.loc[latest["sport"] == sp, "game"]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+            if not games:
+                continue
+
+            km = get_espn_kickoff_map(sp, games)
+            print(f"[dash debug] ESPN map sport={sp} type={type(km)} len={len(km) if isinstance(km, dict) else 'NA'}")
+            if isinstance(km, dict):
+                nonblank = sum(1 for v in km.values() if str(v).strip())
+                print(f"[dash debug] ESPN map sport={sp} nonblank_values={nonblank} sample={list(km.items())[:2]}")
+                all_kickoffs.update({k: v for k, v in km.items() if str(v).strip()})
+
+                
+        print(f"[dash debug] ESPN kickoffs total={len(all_kickoffs)}")
+
+        # Fill ONLY blanks from ESPN (never overwrite DK-provided kickoff)
+        espn_iso = latest["game"].map(all_kickoffs).fillna("")
+        m_blank = latest["game_time_iso"].fillna("").astype(str).str.strip().eq("")
+        latest.loc[m_blank, "game_time_iso"] = espn_iso.loc[m_blank]
+
+        # ---- DEBUG: confirm we actually have kickoff values ----
+        _s = latest["game_time_iso"].fillna("").astype(str).str.strip()
+        print(f"[dash debug] game_time_iso nonblank={(_s!='').sum()} / {len(_s)}  sample={_s[_s!=''].head(3).tolist()}")
+
+    except Exception as e:
+        import traceback
+        print("[dash debug] ESPN kickoff enrichment failed:")
+        print(traceback.format_exc())
+        latest["game_time_iso"] = ""
 
 
     # ---- PARSE ISO -> NY datetime (used for filtering + display) ----
@@ -2179,6 +2187,25 @@ def build_dashboard():
     game_keys = ["sport", "game_id", "market_display"]
 
     # Ensure numeric
+    # --- ensure score_num / score_bucket are defined (lint + runtime safety) ---
+    score_raw = ''
+    try:
+        # r is the row dict/Series in the row-building loop (common pattern in this file)
+        score_raw = r.get('model_score','') if 'r' in locals() else (row.get('model_score','') if 'row' in locals() else '')
+    except Exception:
+        score_raw = ''
+    try:
+        s = str(score_raw).strip()
+        score_num = float(s) if s and s.lower() not in ('nan','none','null') else 0.0
+    except Exception:
+        score_num = 0.0
+    try:
+        # simple buckets; adjust thresholds later if needed
+        score_bucket = 'DARK_GREEN' if score_num >= 75 else ('GREEN' if score_num >= 65 else ('LEAN' if score_num >= 55 else ''))
+    except Exception:
+        score_bucket = ''
+    # --- end score vars ---
+    
     latest["_score_num"] = pd.to_numeric(latest["confidence_score"], errors="coerce").fillna(50.0)
 
     # Favored side = max score within the game+market
@@ -2598,217 +2625,6 @@ document.addEventListener("DOMContentLoaded", function () {{
 
 
     # -----------------------------
-    # WRITE DASHBOARD OUTPUTS (HTML + CSV for audits)
-    # -----------------------------
-    try:
-        from pathlib import Path
-        ensure_data_dir()
-
-        # Best-effort: write a CSV snapshot for audits
-        try:
-            if 'df' in locals() and isinstance(locals().get('df'), pd.DataFrame):
-                out_csv = os.path.join(DATA_DIR, 'dashboard.csv')
-                _csv = df.copy()
-                _csv = _csv.fillna('')
-                # Extra safety: keep optional text cols truly blank (not NaN)
-                for _c in ['injury_news','key_number_note']:
-                    if _c in _csv.columns:
-                        _csv[_c] = _csv[_c].fillna('')
-                _csv.to_csv(out_csv, index=False, encoding='utf-8')
-                print(f'[ok] wrote dashboard csv: {out_csv}')
-                # -----------------------------
-                # WRITE DASHBOARD V1 CSV (GAME-LEVEL grouped schema) - NO LOGIC/SCORING CHANGES
-                # Keeps existing dashboard.csv long-form as audit log.
-                # -----------------------------
-                try:
-                    import re as _re
-                    import json as _json
-
-                    def _parse_side_line_price(s_in: str):
-                        """
-                        Input examples:
-                          'PHI Eagles -5.5 @ -105'
-                          'CAR Panthers @ +440'
-                          'Over 233.5 @ -105'
-                        Returns dict:
-                          side_name, line_val, price_val
-                        """
-                        s = (s_in or "").strip()
-                        if not s or "@" not in s:
-                            return {"side_name": "", "line_val": "", "price_val": ""}
-
-                        left, right = s.split("@", 1)
-                        left = left.strip()
-                        right = right.strip()
-
-                        # price: first signed int in right
-                        m_price = _re.search(r"([+-]?\d+)", right)
-                        price_val = m_price.group(1) if m_price else ""
-
-                        # line: first number in left (spread/total). ML often has none.
-                        m_line = _re.search(r"([+-]?\d+(?:\.\d+)?)", left)
-                        line_val = m_line.group(1) if m_line else ""
-
-                        # side label
-                        if _re.match(r"^(Over|Under)\b", left, flags=_re.I):
-                            side_name = _re.match(r"^(Over|Under)\b", left, flags=_re.I).group(1).title()
-                        else:
-                            side_name = _re.sub(r"\s[+-]\d+(?:\.\d+)?\s*$", "", left).strip()
-
-                        return {"side_name": side_name, "line_val": line_val, "price_val": price_val}
-
-                    def _split_game(game: str):
-                        g = (game or "").strip()
-                        if " @ " in g:
-                            a, h = g.split(" @ ", 1)
-                            return a.strip(), h.strip()
-                        return "", ""
-
-                    base = df.copy()
-                    base["market_norm"] = base["market"].astype(str).str.lower().str.strip()
-                    base = base[base["market_norm"].isin(["spread", "total", "moneyline"])].copy()
-
-                    parsed = base["current_line"].apply(_parse_side_line_price)
-                    base["side_name"] = parsed.apply(lambda d: d["side_name"])
-                    base["line_val"] = parsed.apply(lambda d: d["line_val"])
-                    base["price_val"] = parsed.apply(lambda d: d["price_val"])
-                    base["_away"] = base["game"].apply(lambda g: _split_game(g)[0])
-                    base["_home"] = base["game"].apply(lambda g: _split_game(g)[1])
-
-                    V1_COLS = [
-                        "timestamp","sport","sport_label","game_id","game","away_team","home_team","dk_start_iso",
-
-                        "spread_side_1","current_spread_1","current_spread_price_1","spread_bets_pct_1","spread_money_pct_1","open_spread_1",
-                        "spread_side_2","current_spread_2","current_spread_price_2","spread_bets_pct_2","spread_money_pct_2","open_spread_2",
-
-                        "current_total_over","current_total_price_over","total_bets_pct_over","total_money_pct_over","open_total_over",
-                        "current_total_under","current_total_price_under","total_bets_pct_under","total_money_pct_under","open_total_under",
-
-                        "ml_side_1","current_moneyline_1","ml_bets_pct_1","ml_money_pct_1","open_moneyline_1",
-                        "ml_side_2","current_moneyline_2","ml_bets_pct_2","ml_money_pct_2","open_moneyline_2",
-
-                        "injury_news","key_number_note",
-
-                        # reserved (blank for now; NO LOGIC)
-                        "spread_decision","spread_model_score","spread_net_edge",
-                        "total_decision","total_model_score","total_net_edge",
-                        "ml_decision","ml_model_score","ml_net_edge",
-                    ]
-
-                    # one row per (sport, game_id): take last timestamp for metadata
-                    v1_meta = (
-                        base.sort_values("timestamp")
-                            .groupby(["sport","game_id"], as_index=False)
-                            .tail(1)
-                            .copy()
-                    )
-
-                    out_rows = []
-                    for _, r in v1_meta.iterrows():
-                        row = {c: "" for c in V1_COLS}
-                        row["timestamp"] = r.get("timestamp","")
-                        row["sport"] = r.get("sport","")
-                        row["sport_label"] = r.get("sport_label","")
-                        row["game_id"] = r.get("game_id","")
-                        row["game"] = r.get("game","")
-                        row["away_team"] = r.get("_away","")
-                        row["home_team"] = r.get("_home","")
-                        row["dk_start_iso"] = r.get("dk_start_iso","")
-                        row["injury_news"] = r.get("injury_news","")
-                        row["key_number_note"] = r.get("key_number_note","")
-                        out_rows.append(row)
-
-                    out = pd.DataFrame(out_rows)
-
-                    # fill grouped columns by game
-                    for (sport, gid), g in base.groupby(["sport","game_id"]):
-                        idx = out.index[(out["sport"] == sport) & (out["game_id"].astype(str) == str(gid))]
-                        if len(idx) == 0:
-                            continue
-                        i = idx[0]
-
-                        # SPREAD (2 sides)
-                        sp = g[g["market_norm"] == "spread"].copy()
-                        if len(sp) > 0:
-                            sp = sp.sort_values(["bets_pct","money_pct"], ascending=False)
-                            for k, rr in enumerate(sp.head(2).to_dict("records"), start=1):
-                                out.at[i, f"spread_side_{k}"] = rr.get("side_name","")
-                                out.at[i, f"current_spread_{k}"] = rr.get("line_val","")
-                                out.at[i, f"current_spread_price_{k}"] = rr.get("price_val","")
-                                out.at[i, f"spread_bets_pct_{k}"] = str(rr.get("bets_pct",""))
-                                out.at[i, f"spread_money_pct_{k}"] = str(rr.get("money_pct",""))
-                                op = _parse_side_line_price(rr.get("open_line",""))
-                                out.at[i, f"open_spread_{k}"] = op.get("line_val","")
-
-                        # TOTAL (Over/Under)
-                        tot = g[g["market_norm"] == "total"].copy()
-                        if len(tot) > 0:
-                            for _, rr in tot.iterrows():
-                                nm = (rr.get("side_name","") or "").strip().lower()
-                                if nm == "over":
-                                    out.at[i, "current_total_over"] = rr.get("line_val","")
-                                    out.at[i, "current_total_price_over"] = rr.get("price_val","")
-                                    out.at[i, "total_bets_pct_over"] = str(rr.get("bets_pct",""))
-                                    out.at[i, "total_money_pct_over"] = str(rr.get("money_pct",""))
-                                    op = _parse_side_line_price(rr.get("open_line",""))
-                                    out.at[i, "open_total_over"] = op.get("line_val","")
-                                elif nm == "under":
-                                    out.at[i, "current_total_under"] = rr.get("line_val","")
-                                    out.at[i, "current_total_price_under"] = rr.get("price_val","")
-                                    out.at[i, "total_bets_pct_under"] = str(rr.get("bets_pct",""))
-                                    out.at[i, "total_money_pct_under"] = str(rr.get("money_pct",""))
-                                    op = _parse_side_line_price(rr.get("open_line",""))
-                                    out.at[i, "open_total_under"] = op.get("line_val","")
-
-                        # MONEYLINE (2 sides)
-                        ml = g[g["market_norm"] == "moneyline"].copy()
-                        if len(ml) > 0:
-                            ml = ml.sort_values(["bets_pct","money_pct"], ascending=False)
-                            for k, rr in enumerate(ml.head(2).to_dict("records"), start=1):
-                                out.at[i, f"ml_side_{k}"] = rr.get("side_name","")
-                                out.at[i, f"current_moneyline_{k}"] = rr.get("price_val","")
-                                out.at[i, f"ml_bets_pct_{k}"] = str(rr.get("bets_pct",""))
-                                out.at[i, f"ml_money_pct_{k}"] = str(rr.get("money_pct",""))
-                                op = _parse_side_line_price(rr.get("open_line",""))
-                                out.at[i, f"open_moneyline_{k}"] = op.get("price_val","")
-
-                    out = out.reindex(columns=V1_COLS).fillna("")
-
-                    out_v1_csv = os.path.join(DATA_DIR, "dashboard_v1.csv")
-                    out.to_csv(out_v1_csv, index=False, encoding="utf-8")
-                    print(f"[ok] wrote dashboard v1 csv: {out_v1_csv} rows={len(out)} cols={len(out.columns)}")
-
-                    open(os.path.join(DATA_DIR, "dashboard_v1_schema.json"), "w", encoding="utf-8").write(_json.dumps({"columns": V1_COLS}, indent=2))
-                    print("[ok] wrote dashboard v1 schema: data/dashboard_v1_schema.json")
-                    # -----------------------------
-                    # ENFORCE DASHBOARD V1 SCHEMA (column presence + order) - blanks only
-                    # -----------------------------
-                    try:
-                        schema_path = os.path.join(DATA_DIR, 'dashboard_v1_schema.json')
-                        if os.path.exists(schema_path):
-                            _schema = _json.load(open(schema_path, 'r', encoding='utf-8')).get('columns', [])
-                            _missing = [c for c in _schema if c not in out.columns]
-                            for _c in _missing:
-                                out[_c] = ''
-                            _ordered = [c for c in _schema if c in out.columns] + [c for c in out.columns if c not in _schema]
-                            out = out[_ordered].fillna('')
-                            out.to_csv(out_v1_csv, index=False, encoding='utf-8')
-                            print(f"[ok] enforced dashboard v1 schema: added={len(_missing)}")
-                    except Exception as _e_enforce:
-                        print(f"[warn] v1 schema enforcement failed: {_e_enforce}")
-
-                except Exception as e_v1:
-                    print(f"[warn] failed to write dashboard_v1.csv: {e_v1}")
-
-            else:
-                print('[dash] no df in scope; skipping dashboard.csv write')
-        except Exception as e:
-            print(f'[warn] failed to write dashboard CSV: {e}')
-
-    except Exception as e:
-        print(f'[warn] dashboard CSV block error: {e}')
-
-    # -----------------------------
     # WRITE DASHBOARD HTML (single source of truth)
     # -----------------------------
     try:
@@ -2860,7 +2676,6 @@ def cmd_snapshot(args):
     append_snapshot(rows, args.sport)
     print(f"[ok] appended {len(rows)} rows to {SNAPSHOT_CSV}")
 
-    # (metrics-only) ESPN finals update runs in report, not snapshot
 
     build_dashboard()
     resolve_results_for_baseline()
@@ -2868,11 +2683,7 @@ def cmd_snapshot(args):
 
 
 def cmd_report(_args):
-    # Metrics-only: ESPN finals should NEVER block report/dashboard output
-    try:
-        update_snapshots_with_espn_finals()
-    except Exception as e:
-        print(f"[warn] ESPN finals update skipped (non-fatal): {e}")
+    update_snapshots_with_espn_finals()   # <-- ADD THIS
     build_dashboard()
     resolve_results_for_baseline()
     build_color_baseline_summary()
@@ -3082,6 +2893,7 @@ def cmd_baseline_market_read_joined(args):
 
 
 def cmd_baseline_market_read(args):
+    import pandas as pd
 
     # Inputs (ledgers)
     sig = pd.read_csv("data/signals_baseline.csv")
@@ -3268,6 +3080,7 @@ def log_baseline_signal(row):
         })
 
 def resolve_results_for_baseline():
+    import pandas as pd
     import os
 
     baseline_file = "data/signals_baseline.csv"
@@ -3352,6 +3165,7 @@ def main():
     args.func(args)
 
 def build_color_baseline_summary():
+    import pandas as pd
     import os
 
     out = "data/color_baseline_summary.csv"
