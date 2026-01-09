@@ -15,3 +15,6 @@ data/dashboard_v1.csv
 # local safety backups
 bak/
 
+# runtime artifacts
+data/
+bak/
