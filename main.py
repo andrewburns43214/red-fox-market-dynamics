@@ -1933,28 +1933,6 @@ def _color_rank(c):
     if c == "YELLOW": return 1
     return 0
 
-
-def _score_td(score_val):
-    """Render a <td> for model score with per-market heat + badge."""
-    try:
-        s = float(str(score_val).strip())
-    except Exception:
-        return '<td class="score"></td>'
-
-    td_cls = "score"
-    badge = ""
-    if s >= 72:
-        td_cls = "score score-strong"
-        badge = '<span class="score-badge badge-strong">STRONG</span>'
-    elif s >= 68:
-        td_cls = "score score-bet"
-        badge = '<span class="score-badge badge-bet">BET</span>'
-    elif s >= 60:
-        td_cls = "score score-lean"
-        badge = '<span class="score-badge badge-lean">LEAN</span>'
-
-    return f'<td class="{td_cls}" data-sort="{s:.3f}">{s:.1f}{badge}</td>'
-
 def build_dashboard():
     ensure_data_dir()
 
@@ -2826,7 +2804,7 @@ def build_dashboard():
             # Blank game-time cell for side rows
             gt_side = "<td></td>" if show_game_time else ""
 
-        _row_html = '''
+            rows_html.append(f"""
 <tr class="side-row" style="{st}display:none;"
     data-row="1"
     data-parent="{gk}"
@@ -2841,174 +2819,10 @@ def build_dashboard():
   <td>{market_cell}</td>
   <td>{decision_cell}</td>
   <td>{oc_cell}</td>
-
-    td_cls = "score"
-    badge = ""
-    
-    if s >= 72:
-    td_cls = "score score-strong"
-    badge = '<span class="score-badge badge-strong">STRONG</span>'
-    elif s >= 68:
-    td_cls = "score score-bet"
-    badge = '<span class="score-badge badge-bet">BET</span>'
-    elif s >= 60:
-    td_cls = "score score-lean"
-    badge = '<span class="score-badge badge-lean">LEAN</span>'
-    
-    # data-sort ensures sorting stays numeric even with badge text
-    return f'<td class="{td_cls}" data-sort="{s:.3f}">{s:.1f}{badge}</td>'
-    
-    for _, rr in dash.iterrows():
-    sport = _blank(rr.get("sport_label"))
-    game = _blank(rr.get("game"))
-    t_et = _time_et(rr.get("game_time_iso"))
-
-    # Spread cells
-    sp_dec = _blank(rr.get("SPREAD_decision"))
-    sp_fav = _blank(rr.get("SPREAD_favored"))
-    sp_sc = _fmt_score(rr.get("SPREAD_model_score"))
-    sp_edge = _fmt_score(rr.get("SPREAD_net_edge"))
-    sp_b = _fmt_pct(rr.get("SPREAD_bets_pct"))
-    sp_m = _fmt_pct(rr.get("SPREAD_money_pct"))
-    sp_o = _fmt_num(rr.get("SPREAD_open_line"))
-    sp_c = _fmt_num(rr.get("SPREAD_current_line"))
-    sp_cp = _fmt_int(rr.get("SPREAD_current_price"))
-
-    # Total cells
-    t_dec = _blank(rr.get("TOTAL_decision"))
-    t_fav = _blank(rr.get("TOTAL_favored"))
-    t_sc = _fmt_score(rr.get("TOTAL_model_score"))
-    t_edge = _fmt_score(rr.get("TOTAL_net_edge"))
-    t_b = _fmt_pct(rr.get("TOTAL_bets_pct"))
-    t_m = _fmt_pct(rr.get("TOTAL_money_pct"))
-    t_o = _fmt_num(rr.get("TOTAL_open_line"))
-    t_c = _fmt_num(rr.get("TOTAL_current_line"))
-    t_cp = _fmt_int(rr.get("TOTAL_current_price"))
-
-    # ML cells
-    ml_dec = _blank(rr.get("MONEYLINE_decision"))
-    ml_fav = _blank(rr.get("MONEYLINE_favored"))
-    ml_sc = _fmt_score(rr.get("MONEYLINE_model_score"))
-    ml_edge = _fmt_score(rr.get("MONEYLINE_net_edge"))
-    ml_b = _fmt_pct(rr.get("MONEYLINE_bets_pct"))
-    ml_m = _fmt_pct(rr.get("MONEYLINE_money_pct"))
-    ml_o = _fmt_int(rr.get("MONEYLINE_open_line"))
-    ml_c = _fmt_int(rr.get("MONEYLINE_current_line"))
-    ml_cp = _fmt_int(rr.get("MONEYLINE_current_price"))
-    # If Moneyline market doesn't exist, show dashes in HTML (keeps scanability)
-    if (ml_dec + ml_fav + ml_sc + ml_edge + ml_b + ml_m + ml_o + ml_c + ml_cp).strip() == "":
-    ml_dec = ml_fav = ml_sc = ml_edge = ml_b = ml_m = ml_o = ml_c = ml_cp = "--"
-
-    rows_html.append(
-    f"""
-    <tr class="game-row">
-    <td>{sport}</td>
-    <td>{game}</td>
-    <td>{t_et}</td>
-        
-    <td>{sp_dec}</td><td>{sp_fav}</td>{_score_td(rr.get("SPREAD_model_score"))}<td>{sp_edge}</td><td>{sp_b}</td><td>{sp_m}</td>
-    <td>{sp_o}</td><td>{sp_c}</td><td>{sp_cp}</td>
-        
-    <td>{t_dec}</td><td>{t_fav}</td>{_score_td(rr.get("TOTAL_model_score"))}<td>{t_edge}</td><td>{t_b}</td><td>{t_m}</td>
-    <td>{t_o}</td><td>{t_c}</td><td>{t_cp}</td>
-        
-    <td>{ml_dec}</td><td>{ml_fav}</td>{_score_td(rr.get("MONEYLINE_model_score"))}<td>{ml_edge}</td><td>{ml_b}</td><td>{ml_m}</td>
-    <td>{ml_o}</td><td>{ml_c}</td><td>{ml_cp}</td>
-        
-    </tr>
-    """
-    )
-        
-    # Snapshot timestamps (current + previous)
-    current_ts_disp = ""
-    prev_ts_disp = ""
-    try:
-    if "timestamp" in df.columns:
-    ts_all = pd.to_datetime(df["timestamp"], errors="coerce", utc=True).dropna()
-    ts_unique = ts_all.drop_duplicates().sort_values()
-
-    if len(ts_unique) > 0:
-    cur = ts_unique.iloc[-1]
-    current_ts_disp = cur.tz_convert("America/New_York").strftime("%a %b %d, %Y %I:%M:%S %p ET")
-
-    if len(ts_unique) > 1:
-    prv = ts_unique.iloc[-2]
-    prev_ts_disp = prv.tz_convert("America/New_York").strftime("%a %b %d, %Y %I:%M:%S %p ET")
-    except Exception:
-    pass
-
-    snapshot_html = f"""
-    <div style="margin:10px 0 14px 0; padding:10px 12px; background:#f7f7f7; border:1px solid #ddd; border-radius:8px;">
-    <div style="font-size:12px;">
-    <b>Current snapshot:</b> {current_ts_disp or "—"}
-    &nbsp;&nbsp;|&nbsp;&nbsp;
-    <b>Previous snapshot:</b> {prev_ts_disp or "—"}
-    </div>
-    </div>
-    """
-
-    legend_html = """
-    <div style="margin:0 0 14px 0; padding:10px 12px; background:#fff; border:1px solid #ddd; border-radius:8px;">
-    <div style="font-weight:bold; margin-bottom:6px;">Legend</div>
-    <div style="font-size:12px; line-height:1.6;">
-    <div><b>Decision</b>: STRONG BET (>=72 + Net Edge >=10), BET (>=68), LEAN (>=60), NO BET (&lt;60).</div>
-    <div style="margin-top:6px;"><b>Note</b>: Observation Mode output (interpretive only).</div>
-    </div>
-    </div>
-    """
-
-    filters_html = ""
-    filters_js = ""
-
-    DASHBOARD_HTML_TEMPLATE = """\n<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Red Fox Dashboard</title>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 16px; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ddd; padding: 6px 8px; font-size: 12px; }
-    th { position: sticky; top: 0; background: #f7f7f7; cursor: pointer; z-index: 2; }
-    tr:nth-child(even) { background: #fafafa; }
-    .score { font-weight: 700; text-align: right; white-space: nowrap; }
-    .score-badge { display:inline-block; margin-left:6px; padding:1px 6px; border-radius:10px; font-size:11px; font-weight:700; border:1px solid #ccc; }
-    .badge-strong { background:#ffe9e9; border-color:#ffb3b3; }
-    .badge-bet    { background:#fff3d6; border-color:#ffd18a; }
-    .badge-lean   { background:#eef7ff; border-color:#b7ddff; }
-    .badge-none   { background:#f3f3f3; border-color:#d7d7d7; }
-  </style>
-</head>
-<body>
-  <div id="rf-root">
-    __TABLE_HTML__
-  </div>
-</body>
-</html>
-\n    """\n    html = DASHBOARD_HTML_TEMPLATE.replace("__TABLE_HTML__", table_html)\n
-
-    # -----------------------------
-    # WRITE DASHBOARD HTML (single source of truth)
-    # -----------------------------
-    try:
-    from pathlib import Path
-    ensure_data_dir()
-    Path(REPORT_HTML).write_text(html, encoding="utf-8")
-    print(f"[ok] wrote dashboard: {REPORT_HTML}")
-    except Exception as e:
-    print(f"[warn] failed to write dashboard HTML: {e}")
-
-    # =========================
-    # CLI
-    # =========================
-
-
-  {_score_td(rr.get("confidence_score"))}
+  <td>{sc}</td>
   <td>{mr}</td>
 </tr>
-                        '''
-        rows_html.append(_row_html)
+""")
 
     # -----------------------------
     # HEADERS
@@ -3096,8 +2910,13 @@ def build_dashboard():
     # For each (sport, game_id, market_display): pick best side row by confidence_score
     l2 = latest.copy()
 
-    # Side display (DO NOT strip spread numbers; "Favored" should be the real side)
-    l2["side_disp"] = l2["side"].fillna("").astype(str).str.strip()
+    # Side display cleanup for SPREAD (strip trailing number for display)
+    l2["side_disp"] = l2["side"].astype(str)
+    l2.loc[l2["market_display"] == "SPREAD", "side_disp"] = (
+        l2.loc[l2["market_display"] == "SPREAD", "side_disp"]
+          .str.replace(r"\s[+-]\d+(?:\.\d+)?\s*$", "", regex=True)
+          .str.strip()
+    )
 
     # Safety: numeric score
     l2["_score"] = pd.to_numeric(l2["confidence_score"], errors="coerce").fillna(50.0)
@@ -3176,7 +2995,7 @@ def build_dashboard():
         sub = sub_df[present].copy()
 
         ren = {
-            "side_disp": f"{prefix}_favored",
+            "side_disp": f"{prefix}_side",
             "bets_pct": f"{prefix}_bets_pct",
             "money_pct": f"{prefix}_money_pct",
             "confidence_score": f"{prefix}_model_score",
@@ -3216,13 +3035,13 @@ def build_dashboard():
     col_order = [
         "sport_label", "game", "game_time_iso",
         # SPREAD
-        "SPREAD_decision", "SPREAD_favored", "SPREAD_model_score", "SPREAD_net_edge", "SPREAD_bets_pct", "SPREAD_money_pct",
+        "SPREAD_decision", "SPREAD_side", "SPREAD_model_score", "SPREAD_net_edge", "SPREAD_bets_pct", "SPREAD_money_pct",
         "SPREAD_open_line", "SPREAD_current_line", "SPREAD_current_price",
         # TOTAL
-        "TOTAL_decision", "TOTAL_favored", "TOTAL_model_score", "TOTAL_net_edge", "TOTAL_bets_pct", "TOTAL_money_pct",
+        "TOTAL_decision", "TOTAL_side", "TOTAL_model_score", "TOTAL_net_edge", "TOTAL_bets_pct", "TOTAL_money_pct",
         "TOTAL_open_line", "TOTAL_current_line", "TOTAL_current_price",
         # MONEYLINE
-        "MONEYLINE_decision", "MONEYLINE_favored", "MONEYLINE_model_score", "MONEYLINE_net_edge", "MONEYLINE_bets_pct", "MONEYLINE_money_pct",
+        "MONEYLINE_decision", "MONEYLINE_side", "MONEYLINE_model_score", "MONEYLINE_net_edge", "MONEYLINE_bets_pct", "MONEYLINE_money_pct",
         "MONEYLINE_open_line", "MONEYLINE_current_line", "MONEYLINE_current_price",
     ]
 
@@ -3257,7 +3076,7 @@ def build_dashboard():
         _dash = _pd.read_csv(_dash_path, keep_default_na=False)
 
         def _best_side_col(mkt: str) -> str:
-            direct = f"{mkt}_favored"
+            direct = f"{mkt}_side"
             if direct in _dash.columns:
                 return direct
             for c in _dash.columns:
@@ -3329,10 +3148,10 @@ def build_dashboard():
         "Spread Decision", "Spread Side", "Spread Score", "Spread Net Edge", "Spread Bets%", "Spread Money%",
         "Open Spread", "Current Spread", "Current Spread Price",
         # TOTAL
-        "Total Decision", "Total Favored", "Total Score", "Total Net Edge", "Total Bets%", "Total Money%",
+        "Total Decision", "Total Side", "Total Score", "Total Net Edge", "Total Bets%", "Total Money%",
         "Open Total", "Current Total", "Current Total Price",
         # ML
-        "ML Decision", "ML Favored", "ML Score", "ML Net Edge", "ML Bets%", "ML Money%",
+        "ML Decision", "ML Side", "ML Score", "ML Net Edge", "ML Bets%", "ML Money%",
         "Open ML", "Current ML", "Current ML Price",
     ]
 
@@ -3351,7 +3170,209 @@ def build_dashboard():
             return ts.tz_convert("America/New_York").strftime("%a %m/%d %I:%M%p")
         except Exception:
             return ""
-        
+
+    for _, rr in dash.iterrows():
+        sport = _blank(rr.get("sport_label"))
+        game = _blank(rr.get("game"))
+        t_et = _time_et(rr.get("game_time_iso"))
+
+        # Spread cells
+        sp_dec = _blank(rr.get("SPREAD_decision"))
+        sp_side = _blank(rr.get("SPREAD_side")) or _blank(rr.get("SPREAD_favored"))
+        sp_sc = _fmt_score(rr.get("SPREAD_model_score"))
+        sp_edge = _fmt_score(rr.get("SPREAD_net_edge"))
+        sp_b = _fmt_pct(rr.get("SPREAD_bets_pct"))
+        sp_m = _fmt_pct(rr.get("SPREAD_money_pct"))
+        sp_o = _fmt_num(rr.get("SPREAD_open_line"))
+        sp_c = _fmt_num(rr.get("SPREAD_current_line"))
+        sp_cp = _fmt_int(rr.get("SPREAD_current_price"))
+
+        # Total cells
+        t_dec = _blank(rr.get("TOTAL_decision"))
+        t_side = _blank(rr.get("TOTAL_side")) or _blank(rr.get("TOTAL_favored"))
+        t_sc = _fmt_score(rr.get("TOTAL_model_score"))
+        t_edge = _fmt_score(rr.get("TOTAL_net_edge"))
+        t_b = _fmt_pct(rr.get("TOTAL_bets_pct"))
+        t_m = _fmt_pct(rr.get("TOTAL_money_pct"))
+        t_o = _fmt_num(rr.get("TOTAL_open_line"))
+        t_c = _fmt_num(rr.get("TOTAL_current_line"))
+        t_cp = _fmt_int(rr.get("TOTAL_current_price"))
+
+        # ML cells
+        ml_dec = _blank(rr.get("MONEYLINE_decision"))
+        ml_side = _blank(rr.get("MONEYLINE_side")) or _blank(rr.get("MONEYLINE_favored"))
+        ml_sc = _fmt_score(rr.get("MONEYLINE_model_score"))
+        ml_edge = _fmt_score(rr.get("MONEYLINE_net_edge"))
+        ml_b = _fmt_pct(rr.get("MONEYLINE_bets_pct"))
+        ml_m = _fmt_pct(rr.get("MONEYLINE_money_pct"))
+        ml_o = _fmt_int(rr.get("MONEYLINE_open_line"))
+        ml_c = _fmt_int(rr.get("MONEYLINE_current_line"))
+        ml_cp = _fmt_int(rr.get("MONEYLINE_current_price"))
+
+        rows_html.append(
+            f"""
+<tr class="game-row">
+  <td>{sport}</td>
+  <td>{game}</td>
+  <td>{t_et}</td>
+
+  <td>{sp_dec}</td><td>{sp_side}</td><td>{sp_sc}</td><td>{sp_edge}</td><td>{sp_b}</td><td>{sp_m}</td>
+  <td>{sp_o}</td><td>{sp_c}</td><td>{sp_cp}</td>
+
+  <td>{t_dec}</td><td>{t_side}</td><td>{t_sc}</td><td>{t_edge}</td><td>{t_b}</td><td>{t_m}</td>
+  <td>{t_o}</td><td>{t_c}</td><td>{t_cp}</td>
+
+  <td>{ml_dec}</td><td>{ml_side}</td><td>{ml_sc}</td><td>{ml_edge}</td><td>{ml_b}</td><td>{ml_m}</td>
+  <td>{ml_o}</td><td>{ml_c}</td><td>{ml_cp}</td>
+</tr>
+"""
+        )
+
+    # Snapshot timestamps (current + previous)
+    current_ts_disp = ""
+    prev_ts_disp = ""
+    try:
+        if "timestamp" in df.columns:
+            ts_all = pd.to_datetime(df["timestamp"], errors="coerce", utc=True).dropna()
+            ts_unique = ts_all.drop_duplicates().sort_values()
+
+            if len(ts_unique) > 0:
+                cur = ts_unique.iloc[-1]
+                current_ts_disp = cur.tz_convert("America/New_York").strftime("%a %b %d, %Y %I:%M:%S %p ET")
+
+            if len(ts_unique) > 1:
+                prv = ts_unique.iloc[-2]
+                prev_ts_disp = prv.tz_convert("America/New_York").strftime("%a %b %d, %Y %I:%M:%S %p ET")
+    except Exception:
+        pass
+
+    snapshot_html = f"""
+<div style="margin:10px 0 14px 0; padding:10px 12px; background:#f7f7f7; border:1px solid #ddd; border-radius:8px;">
+  <div style="font-size:12px;">
+    <b>Current snapshot:</b> {current_ts_disp or "—"}
+    &nbsp;&nbsp;|&nbsp;&nbsp;
+    <b>Previous snapshot:</b> {prev_ts_disp or "—"}
+  </div>
+</div>
+"""
+
+    legend_html = """
+<div style="margin:0 0 14px 0; padding:10px 12px; background:#fff; border:1px solid #ddd; border-radius:8px;">
+  <div style="font-weight:bold; margin-bottom:6px;">Legend</div>
+  <div style="font-size:12px; line-height:1.6;">
+    <div><b>Decision</b>: STRONG BET (≥72 + Net Edge ≥10), BET (≥68), LEAN (≥60), NO BET (&lt;60).</div>
+    <div style="margin-top:6px;"><b>Note</b>: Observation Mode output (interpretive only).</div>
+  </div>
+</div>
+"""
+
+    filters_html = ""
+    try:
+        filters_js
+    except NameError:
+        filters_js = ""
+
+    html = f"""<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Market Intelligence Dashboard</title>
+<style>
+  body {{ font-family: Arial, sans-serif; padding: 16px; }}
+  table {{ border-collapse: collapse; width: 100%; }}
+  th, td {{ border: 1px solid #ddd; padding: 6px 8px; font-size: 12px; white-space: nowrap; }}
+  th {{ background: #f5f5f5; position: sticky; top: 0; z-index: 2; }}
+  tr.game-row:hover {{ background: #f0f0f0; }}
+</style>
+{filters_js}
+</head>
+<body>
+<h1>Market Intelligence Dashboard</h1>
+{snapshot_html}
+{legend_html}
+{filters_html}
+
+<div style="overflow:auto; border:1px solid #ddd; border-radius:8px;">
+<table id="dashboard">
+  <thead>
+    <tr data-header="1">
+      {header_ths}
+    </tr>
+  </thead>
+  <tbody>
+    {''.join(rows_html)}
+  </tbody>
+</table>
+</div>
+
+<script>
+(function () {{
+  try {{
+    const table = document.getElementById("dashboard");
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+    if (!tbody) return;
+
+    function getCellValue(tr, idx) {{
+      const td = tr.children[idx];
+      return td ? (td.innerText || td.textContent || "").trim() : "";
+    }}
+
+    function asNumber(s) {{
+      const x = String(s || "").replace(/[%,$]/g, "").replace(/—/g, "").trim();
+      const n = parseFloat(x);
+      return Number.isNaN(n) ? null : n;
+    }}
+
+    function comparer(idx, asc) {{
+      return function (a, b) {{
+        const va = getCellValue(asc ? a : b, idx);
+        const vb = getCellValue(asc ? b : a, idx);
+        const na = asNumber(va), nb = asNumber(vb);
+        if (na !== null && nb !== null) return na - nb;
+        return va.localeCompare(vb);
+      }};
+    }}
+
+    const headerRow = table.querySelector('thead tr[data-header="1"]');
+    if (!headerRow) return;
+
+    Array.from(headerRow.children).forEach(function (cell, idx) {{
+      cell.style.cursor = "pointer";
+      cell.addEventListener("click", function () {{
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        const asc = cell.dataset.asc !== "1";
+        cell.dataset.asc = asc ? "1" : "0";
+        rows.sort(comparer(idx, asc));
+        rows.forEach(r => tbody.appendChild(r));
+      }});
+    }});
+  }} catch (e) {{
+    // swallow errors so dashboard still renders
+  }}
+}})();
+</script>
+
+</body>
+</html>
+"""
+
+
+    # -----------------------------
+    # WRITE DASHBOARD HTML (single source of truth)
+    # -----------------------------
+    try:
+        from pathlib import Path
+        ensure_data_dir()
+        Path(REPORT_HTML).write_text(html, encoding="utf-8")
+        print(f"[ok] wrote dashboard: {REPORT_HTML}")
+    except Exception as e:
+        print(f"[warn] failed to write dashboard HTML: {e}")
+
+# =========================
+# CLI
+# =========================
+
 def cmd_snapshot(args):
     # No hard skips here.
     # If a sport has no games, dk_headless/get_splits should return 0 records,
@@ -3942,6 +3963,10 @@ def build_color_baseline_summary():
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 
