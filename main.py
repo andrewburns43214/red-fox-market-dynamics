@@ -156,6 +156,10 @@ def _norm_team(s: str) -> str:
 # Add more over time without breaking anything.
 # Main alias map (DK name -> ESPN shortDisplayName style)
 # Single source of truth. All keys MUST be lowercase.
+
+# ---- Step C (metrics instrumentation only) ----
+LOGIC_VERSION = "v1.0"   # tag every ledger/state write; official tracking may start at v1.1 later
+
 TEAM_ALIASES = {
     # Miami variations
     "miami fl": "miami",
@@ -697,21 +701,27 @@ def update_snapshots_with_espn_finals():
         return
 
     try:
-        df = pd.read_csv(src)
-    except Exception:
+        df = pd.read_csv(src, keep_default_na=False, dtype=str)
+    except Exception as e:
+        print(f"[finals] read failed: {e}")
         return
 
     if df.empty or "sport" not in df.columns or "game" not in df.columns or "side" not in df.columns:
         return
 
-    # ensure columns exist
+    # ensure columns exist (string-safe; do NOT use pd.NA here)
     if "final_score_for" not in df.columns:
-        df["final_score_for"] = pd.NA
+        df["final_score_for"] = ""
     if "final_score_against" not in df.columns:
-        df["final_score_against"] = pd.NA
+        df["final_score_against"] = ""
 
-    # only try to fill rows missing finals
-    need = df[df["final_score_for"].isna() | df["final_score_against"].isna()]
+    # Normalize these columns so blanks count as missing (robust vs NA parsing)
+    df["final_score_for"] = df["final_score_for"].fillna("").astype(str).str.strip()
+    df["final_score_against"] = df["final_score_against"].fillna("").astype(str).str.strip()
+
+    # only try to fill rows missing finals (blank-safe)
+    need = df[(df["final_score_for"] == "") | (df["final_score_against"] == "")]
+
     if need.empty:
         return
 
@@ -755,7 +765,9 @@ def update_snapshots_with_espn_finals():
     # fill finals for TEAM rows (side matches away/home team)
     updated = 0
     for idx, row in df.iterrows():
-        if pd.notna(row.get("final_score_for")) and pd.notna(row.get("final_score_against")):
+        fsf = str(row.get("final_score_for") or "").strip()
+        fsa = str(row.get("final_score_against") or "").strip()
+        if fsf != "" and fsa != "":
             continue
 
         sport = row.get("sport")
@@ -795,7 +807,343 @@ def update_snapshots_with_espn_finals():
         print(f"[finals] updated {updated} rows in {src}")
 
 
+# ---- Step C (metrics instrumentation only): row_state + signal_ledger ----
+def _metrics_now_iso_utc() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+
+def _metrics_blank(x) -> str:
+    try:
+        if x is None:
+            return ""
+        s = str(x).strip()
+        if s.lower() in ("nan", "none", "null"):
+            return ""
+        return s
+    except Exception:
+        return ""
+
+
+def _metrics_float(x, default=None):
+    s = _metrics_blank(x)
+    if s == "":
+        return default
+    try:
+        return float(s)
+    except Exception:
+        return default
+
+
+def _metrics_key(row) -> tuple[str, str, str, str]:
+    # Keyed by (sport, game_id, market, side) as locked
+    sport = _metrics_blank(row.get("sport"))
+    game_id = _metrics_blank(row.get("game_id"))
+    # Prefer report-level market_display (SPREAD/TOTAL/MONEYLINE) if present.
+    # Fallback to inferred _market_display (metrics may create it), else raw snapshots market (usually "splits").
+    market = _metrics_blank(row.get("market_display"))
+    if not market:
+        market = _metrics_blank(row.get("_market_display"))
+    if not market:
+        market = _metrics_blank(row.get("market"))
+    side = _metrics_blank(row.get("side"))
+    return (sport, game_id, market, side)
+
+
+def _score_bucket(score: float) -> str:
+    # Instrumentation-only bucket (does NOT affect scoring logic)
+    # Buckets:
+    #   NO_BET < 60
+    #   LEAN   60?65
+    #   BET    66?71
+    #   STRONG_BET >= 72
+    try:
+        s = float(score)
+    except Exception:
+        return "NO_BET"
+    if s >= 72.0:
+        return "STRONG_BET"
+    if s >= 66.0:
+        return "BET"
+    if s >= 60.0:
+        return "LEAN"
+    return "NO_BET"
+def _load_row_state(path: str):
+    import pandas as pd
+    import os
+    if not os.path.exists(path):
+        return pd.DataFrame(columns=[
+            "sport", "game_id", "market", "side",
+            "logic_version",
+            "last_score", "last_ts",
+            "peak_score", "peak_ts",
+            "last_bucket",
+        ])
+    try:
+        df = pd.read_csv(path, keep_default_na=False, dtype=str)
+        if df.empty:
+            return pd.DataFrame(columns=[
+                "sport", "game_id", "market", "side",
+                "logic_version",
+                "last_score", "last_ts",
+                "peak_score", "peak_ts",
+                "last_bucket",
+            ])
+        # ensure cols exist
+        for c in ["sport","game_id","market","side","logic_version","last_score","last_ts","peak_score","peak_ts","last_bucket"]:
+            if c not in df.columns:
+                df[c] = ""
+        return df
+    except Exception:
+        # if state file is corrupted, fail safe (do not break report)
+        return pd.DataFrame(columns=[
+            "sport", "game_id", "market", "side",
+            "logic_version",
+            "last_score", "last_ts",
+            "peak_score", "peak_ts",
+            "last_bucket",
+        ])
+
+
+def _append_signal_ledger(path: str, rows: list[dict]):
+    import pandas as pd
+    import os
+
+    if not rows:
+        # Create an empty ledger file with headers (so downstream reads don't crash)
+        if not os.path.exists(path):
+            cols = ["ts","logic_version","event","from_bucket","to_bucket","sport","game_id","market","side","game",
+                    "current_line","current_odds","bets_pct","money_pct","score","net_edge"]
+            pd.DataFrame(columns=cols).to_csv(path, index=False)
+        return
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    out = pd.DataFrame(rows)
+    # enforce string-safe output
+    for c in out.columns:
+        out[c] = out[c].fillna("").astype(str)
+
+    header = not os.path.exists(path)
+    try:
+        out.to_csv(path, index=False, mode="a", header=header)
+    except Exception:
+        # never break report
+        return
+
+
+def update_row_state_and_signal_ledger(latest):
+    """
+    Instrumentation-only.
+    Writes:
+      - data/row_state.csv: last_score, peak_score, peak_ts (plus last_ts/last_bucket)
+      - data/signal_ledger.csv: bucket crossings w/ context + logic_version
+    Key: (sport, game_id, market, side)
+    """
+    try:
+        import os
+        import pandas as pd
+
+        if latest is None or len(latest) == 0:
+            return
+
+        # Require identifiers; accept market_display (current schema)
+        # Prefer market_display (SPREAD/TOTAL/MONEYLINE) for metrics keys; fall back to raw market
+        market_col = "market_display" if "market_display" in latest.columns else ("market" if "market" in latest.columns else "")
+
+        # Robust score column selection (some builds use 'score', others 'model_score')
+        score_col = "score" if "score" in latest.columns else ("model_score" if "model_score" in latest.columns else "")
+        if not score_col:
+            return
+
+        if os.environ.get("METRICS_DEBUG","") == "1":
+            try:
+                tmp_s = latest.get(score_col, "").fillna("").astype(str).str.strip()
+                nonblank = int((tmp_s != "").sum())
+                print(f"[metrics debug] score_col={score_col} nonblank_scores={nonblank}/{len(latest)} sample={list(tmp_s.head(3))}")
+            except Exception as e:
+                print(f"[metrics debug] score debug failed: {e}")
+
+        if not market_col:
+            return
+
+        # If the only market value is 'splits', infer a real market label from current_line
+        # (SPREAD / TOTAL / MONEYLINE) for metrics keys + net_edge grouping.
+        if market_col == "market":
+            try:
+                mv = latest.get("market", "").fillna("").astype(str).str.strip().str.lower()
+                if mv.nunique() == 1 and mv.iloc[0] == "splits":
+                    def _infer_market_display(v):
+                        try:
+                            d = parse_line_and_odds(str(v))
+                            mt = (d.get("market_type") or "").lower()
+                            if mt == "spread":
+                                return "SPREAD"
+                            if mt == "total":
+                                return "TOTAL"
+                            if mt == "moneyline":
+                                return "MONEYLINE"
+                            return "OTHER"
+                        except Exception:
+                            return "OTHER"
+
+                    latest["_market_display"] = latest.get("current_line", "").fillna("").astype(str).apply(_infer_market_display)
+                    market_col = "_market_display"
+            except Exception:
+                pass
+
+        if os.environ.get("METRICS_DEBUG","") == "1":
+            try:
+                print(f"[metrics debug] market_col={market_col} unique_market_vals={sorted(set(latest.get(market_col, "").fillna("").astype(str).str.strip().unique()))[:5]}")
+            except Exception as e:
+                print(f"[metrics debug] debug print failed: {e}")
+
+
+        for req in ("sport", "game_id", "side"):
+            if req not in latest.columns:
+                return
+
+        # Require score; if missing, do nothing safely
+        score_col = "confidence_score" if "confidence_score" in latest.columns else ("model_score" if "model_score" in latest.columns else "")
+        if not score_col:
+            return
+
+        os.makedirs("data", exist_ok=True)
+        state_path = os.path.join("data", "row_state.csv")
+        ledger_path = os.path.join("data", "signal_ledger.csv")
+        # Ensure ledger file exists even if there are no crossings this run (prevents FileNotFoundError)
+        _append_signal_ledger(ledger_path, [])
+
+        state_df = _load_row_state(state_path)
+
+        # Build state index
+        idx_cols = ["sport", "game_id", market_col, "side"]
+        if not state_df.empty:
+            state_df["_k"] = state_df[idx_cols].fillna("").astype(str).agg("|".join, axis=1)
+        else:
+            state_df["_k"] = ""
+
+        state_map = {}
+        for _, r in state_df.iterrows():
+            k = "|".join([_metrics_blank(r.get("sport")), _metrics_blank(r.get("game_id")),
+                        _metrics_blank(r.get(market_col)), _metrics_blank(r.get("side"))])
+
+            state_map[k] = r.to_dict()
+
+        now_ts = _metrics_now_iso_utc()
+        ledger_rows = []
+        processed = 0
+        if os.environ.get('METRICS_DEBUG','') == '1':
+            print(f"[metrics debug] now_ts={now_ts}")
+
+
+        # --- precompute net_edge per (sport, game_id, market) from latest rows (instrumentation only)
+        # Net Edge = max(score) - min(score) across sides within the same market.
+        # IMPORTANT: normalize keys exactly like the per-row loop uses.
+        edge_map = {}
+        try:
+            tmp = latest.copy()
+            tmp["_sport_k"] = tmp.get("sport", "").apply(_metrics_blank)
+            tmp["_gid_k"]   = tmp.get("game_id", "").apply(_metrics_blank)
+            tmp["_mkt_k"]   = tmp.get(market_col, "").apply(_metrics_blank)
+            tmp["_score_k"] = tmp[score_col].apply(lambda v: _metrics_float(v, default=None))
+
+            tmp = tmp[tmp["_score_k"].notna()]
+            if not tmp.empty:
+                g = (
+                    tmp.groupby(["_sport_k","_gid_k","_mkt_k"])["_score_k"]
+                       .agg(["max","min"])
+                       .reset_index()
+                )
+                g["net_edge"] = (g["max"] - g["min"]).astype(float)
+
+                for _, rr in g.iterrows():
+                    k = (str(rr["_sport_k"]), str(rr["_gid_k"]), str(rr["_mkt_k"]))
+                    edge_map[k] = float(rr["net_edge"])
+        except Exception:
+            edge_map = {}
+
+        # Iterate latest rows (instrumentation only)
+        for _, r in latest.iterrows():
+            sport, game_id, market, side = _metrics_key(r)
+            if sport == "" or game_id == "" or market == "" or side == "":
+                continue
+
+            k = f"{sport}|{game_id}|{market}|{side}"
+
+            score = _metrics_float(r.get(score_col), default=None)
+            # net_edge from precomputed market edge_map (fallback 0.0)
+            net_edge = float(edge_map.get((sport, game_id, market), 0.0) or 0.0)
+            if score is None:
+                continue
+            processed += 1
+
+            bucket = _score_bucket(score)
+
+            prev = state_map.get(k, {})
+            prev_bucket = _metrics_blank(prev.get("last_bucket"))
+
+            # peak tracking
+            prev_peak = _metrics_float(prev.get("peak_score"), default=None)
+            peak_score = score if (prev_peak is None or score > prev_peak) else prev_peak
+            peak_ts = now_ts if (prev_peak is None or score > prev_peak) else _metrics_blank(prev.get("peak_ts"))
+
+            # threshold crossing logging
+            # Only log upward crossings into LEAN/BET/STRONG_BET (including brand-new rows)
+            rank = {"": 0, "NO_BET": 0, "LEAN": 1, "BET": 2, "STRONG_BET": 3}
+            pb = prev_bucket if prev_bucket in rank else "NO_BET"
+            cb = bucket if bucket in ("NO_BET", "LEAN", "BET", "STRONG_BET") else "NO_BET"
+            if rank.get(pb, 0) < rank.get(cb, 0) and cb in ("LEAN", "BET", "STRONG_BET"):
+                ledger_rows.append({
+                    "ts": now_ts,
+                    "logic_version": LOGIC_VERSION,
+                    "event": "THRESHOLD_CROSS",
+                    "from_bucket": pb,
+                    "to_bucket": cb,
+                    "sport": sport,
+                    "game_id": game_id,
+                    "market": market,
+                    "side": side,
+                    "game": _metrics_blank(r.get("game")),
+                    "current_line": _metrics_blank(r.get("current_line")),
+                    "current_odds": _metrics_blank(r.get("current_odds")),
+                    "bets_pct": _metrics_blank(r.get("bets_pct")),
+                    "money_pct": _metrics_blank(r.get("money_pct")),
+                    "score": f"{score:.2f}",
+                    "net_edge": f"{(net_edge or 0.0):.2f}",
+                })
+
+            # upsert state
+            state_map[k] = {
+                "sport": sport,
+                "game_id": game_id,
+                "market": market,
+                "side": side,
+                "logic_version": LOGIC_VERSION,
+                "last_score": f"{score:.2f}",
+                "last_ts": now_ts,
+                "peak_score": f"{peak_score:.2f}",
+                "peak_ts": peak_ts,
+                "last_bucket": bucket,
+            }
+
+        if os.environ.get('METRICS_DEBUG','') == '1':
+            print(f"[metrics debug] processed_rows={processed} state_rows={len(state_map)} ledger_rows_this_run={len(ledger_rows)}")
+        # Write state (full rewrite for simplicity + safety)
+        out_rows = list(state_map.values())
+        if out_rows:
+            out = pd.DataFrame(out_rows)
+            for c in out.columns:
+                out[c] = out[c].fillna("").astype(str)
+            out = out.sort_values(["sport", "game_id", "market", "side"], kind="mergesort")
+            out.to_csv(state_path, index=False)
+
+        _append_signal_ledger(ledger_path, ledger_rows)
+
+    except Exception:
+        # never break report
+        return
+# ---- end Step C metrics helpers ----
 
 # ---- kickoff wrappers (unchanged behavior) ----
 def espn_nfl_kickoff_map(games: list[str]) -> dict[str, str]:
@@ -1585,6 +1933,28 @@ def _color_rank(c):
     if c == "YELLOW": return 1
     return 0
 
+
+def _score_td(score_val):
+    """Render a <td> for model score with per-market heat + badge."""
+    try:
+        s = float(str(score_val).strip())
+    except Exception:
+        return '<td class="score"></td>'
+
+    td_cls = "score"
+    badge = ""
+    if s >= 72:
+        td_cls = "score score-strong"
+        badge = '<span class="score-badge badge-strong">STRONG</span>'
+    elif s >= 68:
+        td_cls = "score score-bet"
+        badge = '<span class="score-badge badge-bet">BET</span>'
+    elif s >= 60:
+        td_cls = "score score-lean"
+        badge = '<span class="score-badge badge-lean">LEAN</span>'
+
+    return f'<td class="{td_cls}" data-sort="{s:.3f}">{s:.1f}{badge}</td>'
+
 def build_dashboard():
     ensure_data_dir()
 
@@ -1877,7 +2247,7 @@ def build_dashboard():
         game = row.get("game")
         side = row.get("side")
         mkt = row.get("market_display")
-                # -----------------------------
+        # -----------------------------
         # Numeric confidence score (0â€“100), interpretive only
         # -----------------------------
         score = 50.0
@@ -2456,7 +2826,7 @@ def build_dashboard():
             # Blank game-time cell for side rows
             gt_side = "<td></td>" if show_game_time else ""
 
-            rows_html.append(f"""
+        _row_html = '''
 <tr class="side-row" style="{st}display:none;"
     data-row="1"
     data-parent="{gk}"
@@ -2471,15 +2841,179 @@ def build_dashboard():
   <td>{market_cell}</td>
   <td>{decision_cell}</td>
   <td>{oc_cell}</td>
-  <td>{sc}</td>
+
+    td_cls = "score"
+    badge = ""
+    
+    if s >= 72:
+    td_cls = "score score-strong"
+    badge = '<span class="score-badge badge-strong">STRONG</span>'
+    elif s >= 68:
+    td_cls = "score score-bet"
+    badge = '<span class="score-badge badge-bet">BET</span>'
+    elif s >= 60:
+    td_cls = "score score-lean"
+    badge = '<span class="score-badge badge-lean">LEAN</span>'
+    
+    # data-sort ensures sorting stays numeric even with badge text
+    return f'<td class="{td_cls}" data-sort="{s:.3f}">{s:.1f}{badge}</td>'
+    
+    for _, rr in dash.iterrows():
+    sport = _blank(rr.get("sport_label"))
+    game = _blank(rr.get("game"))
+    t_et = _time_et(rr.get("game_time_iso"))
+
+    # Spread cells
+    sp_dec = _blank(rr.get("SPREAD_decision"))
+    sp_fav = _blank(rr.get("SPREAD_favored"))
+    sp_sc = _fmt_score(rr.get("SPREAD_model_score"))
+    sp_edge = _fmt_score(rr.get("SPREAD_net_edge"))
+    sp_b = _fmt_pct(rr.get("SPREAD_bets_pct"))
+    sp_m = _fmt_pct(rr.get("SPREAD_money_pct"))
+    sp_o = _fmt_num(rr.get("SPREAD_open_line"))
+    sp_c = _fmt_num(rr.get("SPREAD_current_line"))
+    sp_cp = _fmt_int(rr.get("SPREAD_current_price"))
+
+    # Total cells
+    t_dec = _blank(rr.get("TOTAL_decision"))
+    t_fav = _blank(rr.get("TOTAL_favored"))
+    t_sc = _fmt_score(rr.get("TOTAL_model_score"))
+    t_edge = _fmt_score(rr.get("TOTAL_net_edge"))
+    t_b = _fmt_pct(rr.get("TOTAL_bets_pct"))
+    t_m = _fmt_pct(rr.get("TOTAL_money_pct"))
+    t_o = _fmt_num(rr.get("TOTAL_open_line"))
+    t_c = _fmt_num(rr.get("TOTAL_current_line"))
+    t_cp = _fmt_int(rr.get("TOTAL_current_price"))
+
+    # ML cells
+    ml_dec = _blank(rr.get("MONEYLINE_decision"))
+    ml_fav = _blank(rr.get("MONEYLINE_favored"))
+    ml_sc = _fmt_score(rr.get("MONEYLINE_model_score"))
+    ml_edge = _fmt_score(rr.get("MONEYLINE_net_edge"))
+    ml_b = _fmt_pct(rr.get("MONEYLINE_bets_pct"))
+    ml_m = _fmt_pct(rr.get("MONEYLINE_money_pct"))
+    ml_o = _fmt_int(rr.get("MONEYLINE_open_line"))
+    ml_c = _fmt_int(rr.get("MONEYLINE_current_line"))
+    ml_cp = _fmt_int(rr.get("MONEYLINE_current_price"))
+    # If Moneyline market doesn't exist, show dashes in HTML (keeps scanability)
+    if (ml_dec + ml_fav + ml_sc + ml_edge + ml_b + ml_m + ml_o + ml_c + ml_cp).strip() == "":
+    ml_dec = ml_fav = ml_sc = ml_edge = ml_b = ml_m = ml_o = ml_c = ml_cp = "--"
+
+    rows_html.append(
+    f"""
+    <tr class="game-row">
+    <td>{sport}</td>
+    <td>{game}</td>
+    <td>{t_et}</td>
+        
+    <td>{sp_dec}</td><td>{sp_fav}</td>{_score_td(rr.get("SPREAD_model_score"))}<td>{sp_edge}</td><td>{sp_b}</td><td>{sp_m}</td>
+    <td>{sp_o}</td><td>{sp_c}</td><td>{sp_cp}</td>
+        
+    <td>{t_dec}</td><td>{t_fav}</td>{_score_td(rr.get("TOTAL_model_score"))}<td>{t_edge}</td><td>{t_b}</td><td>{t_m}</td>
+    <td>{t_o}</td><td>{t_c}</td><td>{t_cp}</td>
+        
+    <td>{ml_dec}</td><td>{ml_fav}</td>{_score_td(rr.get("MONEYLINE_model_score"))}<td>{ml_edge}</td><td>{ml_b}</td><td>{ml_m}</td>
+    <td>{ml_o}</td><td>{ml_c}</td><td>{ml_cp}</td>
+        
+    </tr>
+    """
+    )
+        
+    # Snapshot timestamps (current + previous)
+    current_ts_disp = ""
+    prev_ts_disp = ""
+    try:
+    if "timestamp" in df.columns:
+    ts_all = pd.to_datetime(df["timestamp"], errors="coerce", utc=True).dropna()
+    ts_unique = ts_all.drop_duplicates().sort_values()
+
+    if len(ts_unique) > 0:
+    cur = ts_unique.iloc[-1]
+    current_ts_disp = cur.tz_convert("America/New_York").strftime("%a %b %d, %Y %I:%M:%S %p ET")
+
+    if len(ts_unique) > 1:
+    prv = ts_unique.iloc[-2]
+    prev_ts_disp = prv.tz_convert("America/New_York").strftime("%a %b %d, %Y %I:%M:%S %p ET")
+    except Exception:
+    pass
+
+    snapshot_html = f"""
+    <div style="margin:10px 0 14px 0; padding:10px 12px; background:#f7f7f7; border:1px solid #ddd; border-radius:8px;">
+    <div style="font-size:12px;">
+    <b>Current snapshot:</b> {current_ts_disp or "—"}
+    &nbsp;&nbsp;|&nbsp;&nbsp;
+    <b>Previous snapshot:</b> {prev_ts_disp or "—"}
+    </div>
+    </div>
+    """
+
+    legend_html = """
+    <div style="margin:0 0 14px 0; padding:10px 12px; background:#fff; border:1px solid #ddd; border-radius:8px;">
+    <div style="font-weight:bold; margin-bottom:6px;">Legend</div>
+    <div style="font-size:12px; line-height:1.6;">
+    <div><b>Decision</b>: STRONG BET (>=72 + Net Edge >=10), BET (>=68), LEAN (>=60), NO BET (&lt;60).</div>
+    <div style="margin-top:6px;"><b>Note</b>: Observation Mode output (interpretive only).</div>
+    </div>
+    </div>
+    """
+
+    filters_html = ""
+    filters_js = ""
+
+    DASHBOARD_HTML_TEMPLATE = """\n<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Red Fox Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 16px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 6px 8px; font-size: 12px; }
+    th { position: sticky; top: 0; background: #f7f7f7; cursor: pointer; z-index: 2; }
+    tr:nth-child(even) { background: #fafafa; }
+    .score { font-weight: 700; text-align: right; white-space: nowrap; }
+    .score-badge { display:inline-block; margin-left:6px; padding:1px 6px; border-radius:10px; font-size:11px; font-weight:700; border:1px solid #ccc; }
+    .badge-strong { background:#ffe9e9; border-color:#ffb3b3; }
+    .badge-bet    { background:#fff3d6; border-color:#ffd18a; }
+    .badge-lean   { background:#eef7ff; border-color:#b7ddff; }
+    .badge-none   { background:#f3f3f3; border-color:#d7d7d7; }
+  </style>
+</head>
+<body>
+  <div id="rf-root">
+    __TABLE_HTML__
+  </div>
+</body>
+</html>
+\n    """\n    html = DASHBOARD_HTML_TEMPLATE.replace("__TABLE_HTML__", table_html)\n
+
+    # -----------------------------
+    # WRITE DASHBOARD HTML (single source of truth)
+    # -----------------------------
+    try:
+    from pathlib import Path
+    ensure_data_dir()
+    Path(REPORT_HTML).write_text(html, encoding="utf-8")
+    print(f"[ok] wrote dashboard: {REPORT_HTML}")
+    except Exception as e:
+    print(f"[warn] failed to write dashboard HTML: {e}")
+
+    # =========================
+    # CLI
+    # =========================
+
+
+  {_score_td(rr.get("confidence_score"))}
   <td>{mr}</td>
 </tr>
-""")
+                        '''
+        rows_html.append(_row_html)
 
     # -----------------------------
     # HEADERS
     # -----------------------------
-    # NEW: Wide game-level dashboard (one row per game; grouped markets)
+    # Wide game-level dashboard (one row per game; grouped markets)
 
     def _blank(x):
         if x is None:
@@ -2531,108 +3065,116 @@ def build_dashboard():
             return x
 
     # Ensure these exist (no NaN leaks)
-    for c in ["confidence_score","color","why","market_read","game_time_iso"]:
+    for c in ["confidence_score", "color", "why", "market_read", "game_time_iso"]:
         if c not in latest.columns:
             latest[c] = ""
 
-    # Decide thresholds (keep simple for now; you can tune later)
-    def _decision(score):
+    # Decide thresholds (UI-only label; does NOT change scoring)
+    def _decision(score, net_edge=None):
         try:
             sc = float(score)
         except Exception:
             sc = 50.0
+
+        try:
+            ne = float(net_edge) if net_edge is not None else 0.0
+        except Exception:
+            ne = 0.0
+
+        # STRONG BET = high score + meaningful asymmetry
+        if sc >= 72 and ne >= 10:
+            return "STRONG BET"
         if sc >= 68:
             return "BET"
         if sc >= 60:
             return "LEAN"
         return "NO BET"
 
+    # -----------------------------
     # Build per-market winners + net edge
+    # -----------------------------
     # For each (sport, game_id, market_display): pick best side row by confidence_score
     l2 = latest.copy()
 
-    # Side display cleanup for SPREAD (strip the trailing number for display)
-    l2["side_disp"] = l2["side"].astype(str)
-    l2.loc[l2["market_display"] == "SPREAD", "side_disp"] = (
-        l2.loc[l2["market_display"] == "SPREAD", "side_disp"]
-          .str.replace(r"\s[+-]\d+(?:\.\d+)?\s*$", "", regex=True)
-          .str.strip()
-    )
+    # Side display (DO NOT strip spread numbers; "Favored" should be the real side)
+    l2["side_disp"] = l2["side"].fillna("").astype(str).str.strip()
 
     # Safety: numeric score
     l2["_score"] = pd.to_numeric(l2["confidence_score"], errors="coerce").fillna(50.0)
 
     # Net edge per game+market
     edge = (
-        l2.groupby(["sport","game_id","market_display"])["_score"]
-          .agg(["max","min"])
+        l2.groupby(["sport", "game_id", "market_display"])["_score"]
+          .agg(["max", "min"])
           .reset_index()
     )
     edge["net_edge"] = edge["max"] - edge["min"]
 
     # Winner row per game+market
     winners = (
-        l2.sort_values(["sport","game_id","market_display","_score"], ascending=[True,True,True,False], kind="mergesort")
-          .groupby(["sport","game_id","market_display"], as_index=False)
-          .head(1)
-          .merge(edge[["sport","game_id","market_display","net_edge"]], on=["sport","game_id","market_display"], how="left")
+        l2.sort_values(
+            ["sport", "game_id", "market_display", "_score"],
+            ascending=[True, True, True, False],
+            kind="mergesort"
+        )
+        .groupby(["sport", "game_id", "market_display"], as_index=False)
+        .head(1)
+        .merge(
+            edge[["sport", "game_id", "market_display", "net_edge"]],
+            on=["sport", "game_id", "market_display"],
+            how="left"
+        )
     )
 
-    # Pivot winners into a single wide row per game_id
-    # Helper: fetch a single value
-    def _get(mkt, col):
-        sub = winners[winners["market_display"] == mkt][["sport","game_id",col]].copy()
-        sub = sub.rename(columns={col: f"{mkt}_{col}"})
-        return sub
-
     base = (
-        winners.groupby(["sport","game_id"], as_index=False)
-               .first()[["sport","game_id","game","sport_label","game_time_iso"]]
+        winners.groupby(["sport", "game_id"], as_index=False)
+               .first()[["sport", "game_id", "game", "sport_label", "game_time_iso"]]
     )
 
     # Spread fields
     sp = winners[winners["market_display"] == "SPREAD"].copy()
     if sp.empty:
-        sp = pd.DataFrame(columns=["sport","game_id"])
+        sp = pd.DataFrame(columns=["sport", "game_id"])
     else:
-        sp["open_spread"] = sp["open_line_val"]
-        sp["current_spread"] = sp["current_line_val"]
-        sp["current_spread_price"] = sp["current_odds"]
+        sp["open_spread"] = sp.get("open_line_val", "")
+        sp["current_spread"] = sp.get("current_line_val", "")
+        sp["current_spread_price"] = sp.get("current_odds", "")
 
     # Total fields
     tt = winners[winners["market_display"] == "TOTAL"].copy()
     if tt.empty:
-        tt = pd.DataFrame(columns=["sport","game_id"])
+        tt = pd.DataFrame(columns=["sport", "game_id"])
     else:
-        tt["open_total"] = tt["open_line_val"]
-        tt["current_total"] = tt["current_line_val"]
-        tt["current_total_price"] = tt["current_odds"]
+        tt["open_total"] = tt.get("open_line_val", "")
+        tt["current_total"] = tt.get("current_line_val", "")
+        tt["current_total_price"] = tt.get("current_odds", "")
 
     # ML fields (open/current are ODDS)
     ml = winners[winners["market_display"] == "MONEYLINE"].copy()
     if ml.empty:
-        ml = pd.DataFrame(columns=["sport","game_id"])
+        ml = pd.DataFrame(columns=["sport", "game_id"])
     else:
-        ml["open_ml"] = ml["open_odds"]
-        ml["current_ml"] = ml["current_odds"]
-        ml["current_ml_price"] = ml["current_odds"]  # ML odds are the price; keep schema consistent
+        ml["open_ml"] = ml.get("open_odds", "")
+        ml["current_ml"] = ml.get("current_odds", "")
+        ml["current_ml_price"] = ml.get("current_odds", "")
 
     # Assemble wide df
     dash = base.copy()
 
-    def _join_market(dash, sub, prefix):
-        if sub is None or len(sub) == 0:
-            return dash
-        keep = [
-            "sport","game_id","side_disp","bets_pct","money_pct",
-            "confidence_score","net_edge","color",
-            "open_spread","current_spread","current_spread_price",
-            "open_total","current_total","current_total_price",
-            "open_ml","current_ml","current_ml_price"
+    def _join_market(dash_df, sub_df, prefix):
+        if sub_df is None or len(sub_df) == 0:
+            return dash_df
 
+        keep = [
+            "sport", "game_id", "side_disp", "bets_pct", "money_pct",
+            "confidence_score", "net_edge", "color",
+            "open_spread", "current_spread", "current_spread_price",
+            "open_total", "current_total", "current_total_price",
+            "open_ml", "current_ml", "current_ml_price",
         ]
-        present = [c for c in keep if c in sub.columns]
-        sub = sub[present].copy()
+        present = [c for c in keep if c in sub_df.columns]
+        sub = sub_df[present].copy()
+
         ren = {
             "side_disp": f"{prefix}_favored",
             "bets_pct": f"{prefix}_bets_pct",
@@ -2640,20 +3182,27 @@ def build_dashboard():
             "confidence_score": f"{prefix}_model_score",
             "net_edge": f"{prefix}_net_edge",
             "color": f"{prefix}_color",
+
             "open_spread": f"{prefix}_open_line",
             "current_spread": f"{prefix}_current_line",
             "current_spread_price": f"{prefix}_current_price",
+
             "open_total": f"{prefix}_open_line",
             "current_total": f"{prefix}_current_line",
             "current_total_price": f"{prefix}_current_price",
+
             "open_ml": f"{prefix}_open_line",
             "current_ml": f"{prefix}_current_line",
             "current_ml_price": f"{prefix}_current_price",
-
         }
+
         sub = sub.rename(columns=ren)
-        sub[f"{prefix}_decision"] = sub[f"{prefix}_model_score"].apply(_decision)
-        return dash.merge(sub, on=["sport","game_id"], how="left")
+        sub[f"{prefix}_decision"] = sub.apply(
+            lambda r: _decision(r.get(f"{prefix}_model_score"), r.get(f"{prefix}_net_edge")),
+            axis=1
+        )
+
+        return dash_df.merge(sub, on=["sport", "game_id"], how="left")
 
     dash = _join_market(dash, sp, "SPREAD")
     dash = _join_market(dash, tt, "TOTAL")
@@ -2662,33 +3211,114 @@ def build_dashboard():
     # Fill blanks (NO NaN in output)
     dash = dash.fillna("")
 
-    # ---------- Column order (UI-only) ----------
+    # ---------- Column order (LOCKED) ----------
+    # Markets grouped left→right as: SPREAD → TOTAL → MONEYLINE
     col_order = [
-        "sport_label","game","game_time_iso",
+        "sport_label", "game", "game_time_iso",
         # SPREAD
-        "SPREAD_decision","SPREAD_favored","SPREAD_model_score","SPREAD_net_edge","SPREAD_bets_pct","SPREAD_money_pct",
-        "SPREAD_open_line","SPREAD_current_line","SPREAD_current_price",
+        "SPREAD_decision", "SPREAD_favored", "SPREAD_model_score", "SPREAD_net_edge", "SPREAD_bets_pct", "SPREAD_money_pct",
+        "SPREAD_open_line", "SPREAD_current_line", "SPREAD_current_price",
         # TOTAL
-        "TOTAL_decision","TOTAL_favored","TOTAL_model_score","TOTAL_net_edge","TOTAL_bets_pct","TOTAL_money_pct",
-        "TOTAL_open_line","TOTAL_current_line","TOTAL_current_price",
+        "TOTAL_decision", "TOTAL_favored", "TOTAL_model_score", "TOTAL_net_edge", "TOTAL_bets_pct", "TOTAL_money_pct",
+        "TOTAL_open_line", "TOTAL_current_line", "TOTAL_current_price",
         # MONEYLINE
-        "MONEYLINE_decision","MONEYLINE_favored","MONEYLINE_model_score","MONEYLINE_net_edge","MONEYLINE_bets_pct","MONEYLINE_money_pct",
-        "MONEYLINE_open_line","MONEYLINE_current_line","MONEYLINE_current_price",
-]
+        "MONEYLINE_decision", "MONEYLINE_favored", "MONEYLINE_model_score", "MONEYLINE_net_edge", "MONEYLINE_bets_pct", "MONEYLINE_money_pct",
+        "MONEYLINE_open_line", "MONEYLINE_current_line", "MONEYLINE_current_price",
+    ]
 
     present = [c for c in col_order if c in dash.columns]
-    extras  = [c for c in dash.columns if c not in present]
+    extras = [c for c in dash.columns if c not in present]
     dash = dash[present + extras]
 
-
     # ---------- Write dashboard.csv (wide schema) ----------
+    ensure_data_dir()
+    out_csv = os.path.join(DATA_DIR, "dashboard.csv")
+
+    # Default sort: sport order -> kickoff time -> game
+    sport_order = {"NFL": 0, "NBA": 1, "NHL": 2, "NCAAF": 3, "NCAAB": 4}
+    _sport = dash.get("sport_label", dash.get("sport", "")).fillna("").astype(str).str.upper()
+    dash["_sport_rank"] = _sport.map(sport_order).fillna(99).astype(int)
+    dash["_kickoff"] = pd.to_datetime(dash.get("game_time_iso", ""), errors="coerce", utc=True)
+    dash["_game_sort"] = dash.get("game", "").fillna("").astype(str)
+
+    dash = (
+        dash.sort_values(["_sport_rank", "_kickoff", "_game_sort"], kind="stable")
+            .drop(columns=["_sport_rank", "_kickoff", "_game_sort"], errors="ignore")
+    )
+
+    dash.to_csv(out_csv, index=False, encoding="utf-8")
+
+    # ---- Step C metrics input (instrumentation only) ----
+    # IMPORTANT: snapshots.csv does NOT contain model scores; dashboard.csv does.
     try:
-        ensure_data_dir()
-        out_csv = os.path.join(DATA_DIR, "dashboard.csv")
-        dash.to_csv(out_csv, index=False, encoding="utf-8")
-        print(f"[ok] wrote dashboard csv: {out_csv}")
-    except Exception as e:
-        print(f"[warn] failed to write dashboard csv: {e}")
+        import pandas as _pd
+
+        _dash_path = os.path.join("data", "dashboard.csv")
+        _dash = _pd.read_csv(_dash_path, keep_default_na=False)
+
+        def _best_side_col(mkt: str) -> str:
+            direct = f"{mkt}_favored"
+            if direct in _dash.columns:
+                return direct
+            for c in _dash.columns:
+                cu = c.upper()
+                cl = c.lower()
+                if not cu.startswith(mkt + "_"):
+                    continue
+                if any(k in cl for k in ("favored_side", "favourite_side", "favorite_side", "favored", "side", "pick", "selection")):
+                    return c
+            return ""
+
+        rows = []
+
+        def _add_market(mkt: str, score_col: str):
+            if score_col not in _dash.columns:
+                return
+            side_col = _best_side_col(mkt)
+            if not side_col:
+                return
+
+            # net edge column (this is what we need for C2 wiring)
+            net_col = f"{mkt}_net_edge"
+            has_net = net_col in _dash.columns
+
+            for _, rr in _dash.iterrows():
+                sport = str(rr.get("sport", rr.get("sport_label", ""))).strip()
+                gid = str(rr.get("game_id", "")).strip()
+                game = str(rr.get("game", "")).strip()
+                side = str(rr.get(side_col, "")).strip()
+                sc = str(rr.get(score_col, "")).strip()
+
+                if not sport or not gid or not side or not sc:
+                    continue
+
+                rows.append({
+                    "sport": sport,
+                    "game_id": gid,
+                    "game": game,
+                    "market_display": mkt,
+                    "side": side,
+                    "model_score": sc,
+                    "net_edge": str(rr.get(net_col, "")).strip() if has_net else "",
+                    "current_line": "",
+                    "current_odds": "",
+                    "bets_pct": "",
+                    "money_pct": "",
+                })
+
+        _add_market("SPREAD", "SPREAD_model_score")
+        _add_market("TOTAL", "TOTAL_model_score")
+        _add_market("MONEYLINE", "MONEYLINE_model_score")
+
+        if rows:
+            _metrics_df = _pd.DataFrame(rows)
+            update_row_state_and_signal_ledger(_metrics_df)
+
+    except Exception:
+        pass
+    # ---- end Step C metrics input ----
+
+    print(f"[ok] wrote dashboard csv: {out_csv}")
 
     # ---------- HTML table (wide) ----------
     header_cols = [
@@ -2696,23 +3326,20 @@ def build_dashboard():
         "Game",
         "Time (ET)",
         # SPREAD
-        "Spread Decision","Spread Favored","Spread Score","Spread Net Edge","Spread Bets%","Spread Money%",
-        "Open Spread","Current Spread","Current Spread Price",
+        "Spread Decision", "Spread Side", "Spread Score", "Spread Net Edge", "Spread Bets%", "Spread Money%",
+        "Open Spread", "Current Spread", "Current Spread Price",
         # TOTAL
-        "Total Decision","Total Favored","Total Score","Total Net Edge","Total Bets%","Total Money%",
-        "Open Total","Current Total","Current Total Price",
+        "Total Decision", "Total Favored", "Total Score", "Total Net Edge", "Total Bets%", "Total Money%",
+        "Open Total", "Current Total", "Current Total Price",
         # ML
-        "ML Decision","ML Favored","ML Score","ML Net Edge","ML Bets%","ML Money%",
-        "Open ML","Current ML","Current ML Price"
+        "ML Decision", "ML Favored", "ML Score", "ML Net Edge", "ML Bets%", "ML Money%",
+        "Open ML", "Current ML", "Current ML Price",
     ]
 
-    # Snapshot timestamps (current + previous) — reuse existing logic below
     header_ths = "".join(f"<th>{c}</th>" for c in header_cols)
 
     rows_html = []
 
-    # Render rows
-    # Time display: use game_time_iso (already set to DK start iso in your pipeline)
     def _time_et(iso):
         iso = _blank(iso)
         if iso == "":
@@ -2724,182 +3351,7 @@ def build_dashboard():
             return ts.tz_convert("America/New_York").strftime("%a %m/%d %I:%M%p")
         except Exception:
             return ""
-
-    # Sort: show BETs first, then LEAN, then NO BET
-    def _rank(dec):
-        dec = str(dec or "").upper()
-        if dec == "BET": return 2
-        if dec == "LEAN": return 1
-        return 0
-
-    dash["_rank"] = dash.apply(lambda r: max(_rank(r.get("SPREAD_decision")), _rank(r.get("TOTAL_decision")), _rank(r.get("MONEYLINE_decision"))), axis=1)
-    dash = dash.sort_values(["_rank","sport_label","game"], ascending=[False, True, True], kind="mergesort").drop(columns=["_rank"])
-
-    for _, rr in dash.iterrows():
-        sport = _blank(rr.get("sport_label"))
-        game  = _blank(rr.get("game"))
-        t_et  = _time_et(rr.get("game_time_iso"))
-
-        # Spread cells
-        sp_dec   = _blank(rr.get("SPREAD_decision"))
-        sp_fav   = _blank(rr.get("SPREAD_favored"))
-        sp_sc    = _fmt_score(rr.get("SPREAD_model_score"))
-        sp_edge  = _fmt_score(rr.get("SPREAD_net_edge"))
-        sp_b     = _fmt_pct(rr.get("SPREAD_bets_pct"))
-        sp_m     = _fmt_pct(rr.get("SPREAD_money_pct"))
-        sp_o     = _fmt_num(rr.get("SPREAD_open_line"))
-        sp_c     = _fmt_num(rr.get("SPREAD_current_line"))
-        sp_cp    = _fmt_int(rr.get("SPREAD_current_price"))
-
-        # Total cells
-        t_dec   = _blank(rr.get("TOTAL_decision"))
-        t_fav   = _blank(rr.get("TOTAL_favored"))
-        t_sc    = _fmt_score(rr.get("TOTAL_model_score"))
-        t_edge  = _fmt_score(rr.get("TOTAL_net_edge"))
-        t_b     = _fmt_pct(rr.get("TOTAL_bets_pct"))
-        t_m     = _fmt_pct(rr.get("TOTAL_money_pct"))
-        t_o     = _fmt_num(rr.get("TOTAL_open_line"))
-        t_c     = _fmt_num(rr.get("TOTAL_current_line"))
-        t_cp    = _fmt_int(rr.get("TOTAL_current_price"))
-
-        # ML cells
-        ml_dec  = _blank(rr.get("MONEYLINE_decision"))
-        ml_fav  = _blank(rr.get("MONEYLINE_favored"))
-        ml_sc   = _fmt_score(rr.get("MONEYLINE_model_score"))
-        ml_edge = _fmt_score(rr.get("MONEYLINE_net_edge"))
-        ml_b    = _fmt_pct(rr.get("MONEYLINE_bets_pct"))
-        ml_m    = _fmt_pct(rr.get("MONEYLINE_money_pct"))
-        ml_o    = _fmt_int(rr.get("MONEYLINE_open_line"))
-        ml_c    = _fmt_int(rr.get("MONEYLINE_current_line"))
-        ml_cp   = _fmt_int(rr.get("MONEYLINE_current_price"))
-
-
-        rows_html.append(f"""
-<tr class="game-row">
-  <td>{sport}</td>
-  <td>{game}</td>
-  <td>{t_et}</td>
-
-  <td>{sp_dec}</td><td>{sp_fav}</td><td>{sp_sc}</td><td>{sp_edge}</td><td>{sp_b}</td><td>{sp_m}</td>
-  <td>{sp_o}</td><td>{sp_c}</td><td>{sp_cp}</td>
-
-  <td>{t_dec}</td><td>{t_fav}</td><td>{t_sc}</td><td>{t_edge}</td><td>{t_b}</td><td>{t_m}</td>
-  <td>{t_o}</td><td>{t_c}</td><td>{t_cp}</td>
-
-  <td>{ml_dec}</td><td>{ml_fav}</td><td>{ml_sc}</td><td>{ml_edge}</td><td>{ml_b}</td><td>{ml_m}</td>
-  <td>{ml_o}</td><td>{ml_c}</td><td>{ml_cp}</td>
-</tr>
-""")
-
-    # =========================
-    # Legend + Snapshot timestamps (current + previous)
-    # =========================
-    current_ts_disp = ""
-    prev_ts_disp = ""
-
-    try:
-        if "timestamp" in df.columns:
-            ts_all = pd.to_datetime(df["timestamp"], errors="coerce", utc=True).dropna()
-            ts_unique = ts_all.drop_duplicates().sort_values()
-
-            if len(ts_unique) > 0:
-                cur = ts_unique.iloc[-1]
-                try:
-                    cur_local = cur.tz_convert("America/New_York")
-                except Exception:
-                    cur_local = cur
-                current_ts_disp = cur_local.strftime("%a %b %d, %Y %I:%M:%S %p ET")
-
-            if len(ts_unique) > 1:
-                prv = ts_unique.iloc[-2]
-                try:
-                    prv_local = prv.tz_convert("America/New_York")
-                except Exception:
-                    prv_local = prv
-                prev_ts_disp = prv_local.strftime("%a %b %d, %Y %I:%M:%S %p ET")
-    except Exception:
-        pass
-
-    snapshot_html = f"""
-<div style="margin:10px 0 14px 0; padding:10px 12px; background:#f7f7f7; border:1px solid #ddd; border-radius:8px;">
-  <div style="font-size:12px;">
-    <b>Current snapshot:</b> {current_ts_disp or "—"}
-    &nbsp;&nbsp;|&nbsp;&nbsp;
-    <b>Previous snapshot:</b> {prev_ts_disp or "—"}
-  </div>
-</div>
-"""
-
-    legend_html = """
-<div style="margin:0 0 14px 0; padding:10px 12px; background:#fff; border:1px solid #ddd; border-radius:8px;">
-  <div style="font-weight:bold; margin-bottom:6px;">Legend</div>
-  <div style="font-size:12px; line-height:1.6;">
-    <div><b>Decision</b>: BET (≥68), LEAN (≥60), NO BET (&lt;60). Net Edge = best score - worst score per market.</div>
-    <div style="margin-top:6px;"><b>Note</b>: This is Observation Mode output (interpretive only).</div>
-  </div>
-</div>
-"""
-
-    # Filters UI stays, but we’ll keep it simple for now
-    filters_html = ""
-
-    try:
-        filters_js
-    except NameError:
-        filters_js = ""
-
-    html = f"""<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Market Intelligence Dashboard</title>
-<style>
-  body {{ font-family: Arial, sans-serif; padding: 16px; }}
-  table {{ border-collapse: collapse; width: 100%; }}
-  th, td {{ border: 1px solid #ddd; padding: 6px 8px; font-size: 12px; white-space: nowrap; }}
-  th {{ background: #f5f5f5; position: sticky; top: 0; z-index: 2; }}
-  tr.game-row:hover {{ background: #f0f0f0; }}
-</style>
-{filters_js}
-</head>
-<body>
-<h1>Market Intelligence Dashboard</h1>
-{snapshot_html}
-{legend_html}
-{filters_html}
-
-<div style="overflow:auto; border:1px solid #ddd; border-radius:8px;">
-<table>
-  <thead>
-    <tr data-header="1">
-      {header_ths}
-    </tr>
-  </thead>
-  <tbody>
-    {''.join(rows_html)}
-  </tbody>
-</table>
-</div>
-
-</body>
-</html>
-"""
-
-    # -----------------------------
-    # WRITE DASHBOARD HTML (single source of truth)
-    # -----------------------------
-    try:
-        from pathlib import Path
-        ensure_data_dir()
-        Path(REPORT_HTML).write_text(html, encoding="utf-8")
-        print(f"[ok] wrote dashboard: {REPORT_HTML}")
-    except Exception as e:
-        print(f"[warn] failed to write dashboard HTML: {e}")
-
-# =========================
-# CLI
-# =========================
-
+        
 def cmd_snapshot(args):
     # No hard skips here.
     # If a sport has no games, dk_headless/get_splits should return 0 records,
@@ -3386,11 +3838,10 @@ def resolve_results_for_baseline():
     if "final_score_for" not in snaps.columns or "final_score_against" not in snaps.columns:
         return
 
-    snaps = snaps[
-        snaps["final_score_for"].notna()
-        & snaps["final_score_against"].notna()
-    ]
+    snaps["final_score_for"] = snaps["final_score_for"].fillna("").astype(str).str.strip()
+    snaps["final_score_against"] = snaps["final_score_against"].fillna("").astype(str).str.strip()
 
+    snaps = snaps[(snaps["final_score_for"] != "") & (snaps["final_score_against"] != "")]
 
     if snaps.empty:
         return
@@ -3466,8 +3917,9 @@ def build_color_baseline_summary():
         return
     
     try:
-        df = pd.read_csv(src)
-    except Exception:
+        df = pd.read_csv(src, keep_default_na=False, dtype=str)
+    except Exception as e:
+        print(f"[finals] read failed: {e}")
         return
 
     if df.empty or "color" not in df.columns or "result" not in df.columns:
