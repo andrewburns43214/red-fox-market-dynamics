@@ -1041,12 +1041,6 @@ def update_row_state_and_signal_ledger(latest):
         if not market_col:
             return
 
-        if os.environ.get("METRICS_DEBUG","") == "1":
-            try:
-                print(f"[metrics debug] market_col={market_col} unique_market_vals={sorted(set(latest.get(market_col, "").fillna("").astype(str).str.strip().unique()))[:5]}")
-            except Exception as e:
-                print(f"[metrics debug] debug print failed: {e}")
-
 
         for req in ("sport", "game_id", "side"):
             if req not in latest.columns:
@@ -2107,6 +2101,10 @@ def build_dashboard():
         mask = ol.str.len().eq(0)
 
         if mask.any():
+
+                        # Ensure open_line is string dtype before assigning strings (avoids pandas FutureWarning)
+            if "open_line" in df.columns:
+                df["open_line"] = df["open_line"].fillna("").astype(str)
 
             df.loc[mask, "open_line"] = df.loc[mask, "open_line_first"].fillna("").astype(str)
 
