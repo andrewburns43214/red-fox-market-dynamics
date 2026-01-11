@@ -6,7 +6,6 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
 import time
 
@@ -42,7 +41,13 @@ def _set_tb_page(url: str, page: int) -> str:
 
 def fetch_rendered_html(url: str, timeout: int = 25) -> str:
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
+    options.binary_location = '/opt/google/chrome/google-chrome'
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
+
+    options.add_argument('--headless=new')
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1400,900")
 
@@ -54,10 +59,7 @@ def fetch_rendered_html(url: str, timeout: int = 25) -> str:
     # More stability in headless on Windows
     options.add_argument("--disable-features=VizDisplayCompositor")
     options.add_argument("--remote-debugging-port=9222")
-    driver = webdriver.Chrome(
-    service=Service(ChromeDriverManager().install()),
-    options=options
-)
+    driver = webdriver.Chrome(options=options)
 
 
     try:
