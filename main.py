@@ -878,6 +878,7 @@ def _load_row_state(path: str):
             "last_score", "last_ts",
             "peak_score", "peak_ts",
             "last_bucket",
+            "last_net_edge", "last_net_edge_ts",
         ])
     try:
         df = pd.read_csv(path, keep_default_na=False, dtype=str)
@@ -888,9 +889,10 @@ def _load_row_state(path: str):
                 "last_score", "last_ts",
                 "peak_score", "peak_ts",
                 "last_bucket",
+                "last_net_edge", "last_net_edge_ts",
             ])
         # ensure cols exist
-        for c in ["sport","game_id","market","side","logic_version","last_score","last_ts","peak_score","peak_ts","last_bucket"]:
+        for c in ["sport","game_id","market","side","logic_version","last_score","last_ts","peak_score","peak_ts","last_bucket","last_net_edge","last_net_edge_ts"]:
             if c not in df.columns:
                 df[c] = ""
         return df
@@ -902,6 +904,7 @@ def _load_row_state(path: str):
             "last_score", "last_ts",
             "peak_score", "peak_ts",
             "last_bucket",
+            "last_net_edge", "last_net_edge_ts",
         ])
 
 
@@ -909,26 +912,52 @@ def _append_signal_ledger(path: str, rows: list[dict]):
     import pandas as pd
     import os
 
-    if not rows:
-        # Create an empty ledger file with headers (so downstream reads don't crash)
-        if not os.path.exists(path):
-            cols = ["ts","logic_version","event","from_bucket","to_bucket","sport","game_id","market","side","game",
-                    "current_line","current_odds","bets_pct","money_pct","score","net_edge"]
+    # Canonical ledger schema (stable across runs)
+    cols = [
+        "ts","logic_version","event","from_bucket","to_bucket",
+        "sport","game_id","market","side","game",
+        "current_line","current_odds","bets_pct","money_pct",
+        "score","net_edge"
+    ]
+
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+
+    # Ensure file exists AND has required columns (even if it already exists)
+    try:
+        if os.path.exists(path):
+            df0 = pd.read_csv(path, keep_default_na=False, dtype=str)
+            if df0.empty:
+                pd.DataFrame(columns=cols).to_csv(path, index=False)
+            else:
+                for c in cols:
+                    if c not in df0.columns:
+                        df0[c] = ""
+                extra_cols = [c for c in df0.columns if c not in cols]
+                df0 = df0[cols + extra_cols]
+                df0.to_csv(path, index=False)
+        else:
             pd.DataFrame(columns=cols).to_csv(path, index=False)
+    except Exception:
+        # Never break report due to ledger hygiene
         return
 
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    # Nothing to append: schema is now guaranteed
+    if not rows:
+        return
 
-    out = pd.DataFrame(rows)
-    # enforce string-safe output
-    for c in out.columns:
-        out[c] = out[c].fillna("").astype(str)
-
-    header = not os.path.exists(path)
+    # Append rows in canonical schema (extras allowed but canonical columns guaranteed)
     try:
-        out.to_csv(path, index=False, mode="a", header=header)
+        out = pd.DataFrame(rows)
+        for c in cols:
+            if c not in out.columns:
+                out[c] = ""
+        for c in out.columns:
+            out[c] = out[c].fillna("").astype(str)
+        extra_cols = [c for c in out.columns if c not in cols]
+        out = out[cols + extra_cols]
+        out.to_csv(path, index=False, mode="a", header=False)
     except Exception:
-        # never break report
         return
 
 
@@ -947,9 +976,54 @@ def update_row_state_and_signal_ledger(latest):
         if latest is None or len(latest) == 0:
             return
 
-        # Require identifiers; accept market_display (current schema)
-        # Prefer market_display (SPREAD/TOTAL/MONEYLINE) for metrics keys; fall back to raw market
-        market_col = "market_display" if "market_display" in latest.columns else ("market" if "market" in latest.columns else "")
+        # --- Metrics persistence key (DO NOT USE market_display for state keys) ---
+        # Persisted key schema MUST remain: sport | game_id | market | side
+        # We store the key label in latest['_metrics_market'] and always persist it under state field 'market'.
+        #
+        # Priority:
+        #   1) raw 'market' if it already looks like a real market (SPREAD/TOTAL/MONEYLINE)
+        #   2) else 'market_display' if present
+        #   3) else infer from current_line (when raw market is only 'splits' or blank)
+        def _infer_market_from_line(v):
+            try:
+                d = parse_line_and_odds(str(v))
+                mt = (d.get("market_type") or "").lower()
+                if mt == "spread":
+                    return "SPREAD"
+                if mt == "total":
+                    return "TOTAL"
+                if mt == "moneyline":
+                    return "MONEYLINE"
+                return "OTHER"
+            except Exception:
+                return "OTHER"
+
+        if "market" in latest.columns:
+            mv = latest.get("market", "").fillna("").astype(str).str.strip()
+            mv_u = mv.str.upper()
+            looks_real = mv_u.isin(["SPREAD", "TOTAL", "MONEYLINE"])
+            if looks_real.any():
+                latest["_metrics_market"] = mv_u.where(looks_real, "")
+            else:
+                latest["_metrics_market"] = ""
+        else:
+            latest["_metrics_market"] = ""
+
+        if "_metrics_market" not in latest.columns:
+            latest["_metrics_market"] = ""
+
+        # If still blank, fall back to market_display
+        if "market_display" in latest.columns:
+            md = latest.get("market_display", "").fillna("").astype(str).str.strip().str.upper()
+            latest["_metrics_market"] = latest["_metrics_market"].mask(latest["_metrics_market"].astype(str).str.strip() == "", md)
+
+        # If still blank OR raw market is only 'splits', infer from current_line
+        mm = latest["_metrics_market"].fillna("").astype(str).str.strip()
+        if (mm == "").any():
+            inferred = latest.get("current_line", "").fillna("").astype(str).apply(_infer_market_from_line)
+            latest["_metrics_market"] = latest["_metrics_market"].mask(mm == "", inferred)
+
+        market_col = "_metrics_market"
 
         # Robust score column selection (some builds use 'score', others 'model_score')
         score_col = "score" if "score" in latest.columns else ("model_score" if "model_score" in latest.columns else "")
@@ -966,31 +1040,6 @@ def update_row_state_and_signal_ledger(latest):
 
         if not market_col:
             return
-
-        # If the only market value is 'splits', infer a real market label from current_line
-        # (SPREAD / TOTAL / MONEYLINE) for metrics keys + net_edge grouping.
-        if market_col == "market":
-            try:
-                mv = latest.get("market", "").fillna("").astype(str).str.strip().str.lower()
-                if mv.nunique() == 1 and mv.iloc[0] == "splits":
-                    def _infer_market_display(v):
-                        try:
-                            d = parse_line_and_odds(str(v))
-                            mt = (d.get("market_type") or "").lower()
-                            if mt == "spread":
-                                return "SPREAD"
-                            if mt == "total":
-                                return "TOTAL"
-                            if mt == "moneyline":
-                                return "MONEYLINE"
-                            return "OTHER"
-                        except Exception:
-                            return "OTHER"
-
-                    latest["_market_display"] = latest.get("current_line", "").fillna("").astype(str).apply(_infer_market_display)
-                    market_col = "_market_display"
-            except Exception:
-                pass
 
         if os.environ.get("METRICS_DEBUG","") == "1":
             try:
@@ -1016,19 +1065,26 @@ def update_row_state_and_signal_ledger(latest):
 
         state_df = _load_row_state(state_path)
 
-        # Build state index
-        idx_cols = ["sport", "game_id", market_col, "side"]
-        if not state_df.empty:
+        # Build state index (PERSISTED row_state schema: sport, game_id, market, side)
+        if state_df is not None and not state_df.empty:
+            for c in ("sport","game_id","market","side"):
+                if c not in state_df.columns:
+                    state_df[c] = ""
+            idx_cols = ["sport","game_id","market","side"]
             state_df["_k"] = state_df[idx_cols].fillna("").astype(str).agg("|".join, axis=1)
         else:
-            state_df["_k"] = ""
+            state_df = None
 
         state_map = {}
-        for _, r in state_df.iterrows():
-            k = "|".join([_metrics_blank(r.get("sport")), _metrics_blank(r.get("game_id")),
-                        _metrics_blank(r.get(market_col)), _metrics_blank(r.get("side"))])
-
-            state_map[k] = r.to_dict()
+        if state_df is not None and not state_df.empty:
+            for _, r in state_df.iterrows():
+                k = "|".join([
+                    _metrics_blank(r.get("sport")),
+                    _metrics_blank(r.get("game_id")),
+                    _metrics_blank(r.get("market")),
+                    _metrics_blank(r.get("side")),
+                ])
+                state_map[k] = r.to_dict()
 
         now_ts = _metrics_now_iso_utc()
         ledger_rows = []
@@ -1065,7 +1121,11 @@ def update_row_state_and_signal_ledger(latest):
 
         # Iterate latest rows (instrumentation only)
         for _, r in latest.iterrows():
-            sport, game_id, market, side = _metrics_key(r)
+            sport = _metrics_blank(r.get('sport'))
+            game_id = _metrics_blank(r.get('game_id'))
+            market = _metrics_blank(r.get('_metrics_market') if '_metrics_market' in getattr(latest,'columns',[]) else r.get(market_col)).upper()
+            side = _metrics_blank(r.get('side'))
+
             if sport == "" or game_id == "" or market == "" or side == "":
                 continue
 
@@ -1073,7 +1133,10 @@ def update_row_state_and_signal_ledger(latest):
 
             score = _metrics_float(r.get(score_col), default=None)
             # net_edge from precomputed market edge_map (fallback 0.0)
-            net_edge = float(edge_map.get((sport, game_id, market), 0.0) or 0.0)
+            net_edge = _metrics_float(r.get('net_edge'), default=None)
+            if net_edge is None:
+                net_edge = float(edge_map.get((sport, game_id, market), 0.0) or 0.0)
+
             if score is None:
                 continue
             processed += 1
@@ -1122,6 +1185,9 @@ def update_row_state_and_signal_ledger(latest):
                 "logic_version": LOGIC_VERSION,
                 "last_score": f"{score:.2f}",
                 "last_ts": now_ts,
+                "last_net_edge": (f"{_metrics_float(net_edge, default=0.0):.2f}" if str(net_edge).strip() != "" else ""),
+                "last_net_edge_ts": (now_ts if str(net_edge).strip() != "" else ""),
+
                 "peak_score": f"{peak_score:.2f}",
                 "peak_ts": peak_ts,
                 "last_bucket": bucket,
@@ -1139,10 +1205,17 @@ def update_row_state_and_signal_ledger(latest):
             out.to_csv(state_path, index=False)
 
         _append_signal_ledger(ledger_path, ledger_rows)
-
-    except Exception:
-        # never break report
+    except Exception as e:
+        # never break report; but show traceback when debugging
+        try:
+            import os, traceback
+            if os.environ.get('METRICS_DEBUG','') == '1':
+                print(f"[metrics debug] EXCEPTION in update_row_state_and_signal_ledger: {repr(e)}")
+                print(traceback.format_exc())
+        except Exception:
+            pass
         return
+
 # ---- end Step C metrics helpers ----
 
 # ---- kickoff wrappers (unchanged behavior) ----
