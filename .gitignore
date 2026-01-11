@@ -38,3 +38,7 @@ requirements.txt
 # OS cruft
 .DS_Store
 Thumbs.db
+
+# local one-off scripts
+tools_local/
+
