@@ -18,3 +18,23 @@ bak/
 # runtime artifacts
 data/
 bak/
+# Local env / editor
+.venv/
+.vscode/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local runner helpers
+__runner_main.py
+
+# Type checking / tooling
+pyrightconfig.json
+
+# Local-only dependency export
+requirements.txt
+
+# OS cruft
+.DS_Store
+Thumbs.db
