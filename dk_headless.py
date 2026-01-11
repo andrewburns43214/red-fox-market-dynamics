@@ -41,7 +41,8 @@ def _set_tb_page(url: str, page: int) -> str:
 
 def fetch_rendered_html(url: str, timeout: int = 25) -> str:
     options = webdriver.ChromeOptions()
-    options.binary_location = '/opt/google/chrome/google-chrome'
+        # Use the real Chrome ELF binary (not the wrapper script)
+    options.binary_location = '/opt/google/chrome/chrome'
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
@@ -59,7 +60,7 @@ def fetch_rendered_html(url: str, timeout: int = 25) -> str:
     # More stability in headless on Windows
     options.add_argument("--disable-features=VizDisplayCompositor")
     options.add_argument("--remote-debugging-port=9222")
-    driver = webdriver.Chrome(options=options)
+    driver = webdriver.Chrome(service=Service('/usr/local/bin/chromedriver'), options=options)
 
 
     try:
