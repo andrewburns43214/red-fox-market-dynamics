@@ -2007,7 +2007,7 @@ def build_dashboard():
         print(f"[warn] no snapshots yet: {SNAPSHOT_CSV}")
         return
 
-    df = pd.read_csv(SNAPSHOT_CSV)
+    df = pd.read_csv(SNAPSHOT_CSV, keep_default_na=False, dtype=str)
     print(f"[dash debug] rows after read_csv: {len(df)}")
     if "sport" in df.columns:
         print(f"[dash debug] sports present: {sorted(df['sport'].dropna().astype(str).unique().tolist())}")
@@ -3923,7 +3923,7 @@ def resolve_results_for_baseline():
         return
 
     base = pd.read_csv(baseline_file)
-    snaps = pd.read_csv(snapshot_file)
+    snaps = pd.read_csv(snapshot_file, keep_default_na=False, dtype=str)
 
     # Only finished games (must have final score)
         # If final scores are not present yet, exit safely
