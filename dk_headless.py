@@ -41,7 +41,7 @@ def _set_tb_page(url: str, page: int) -> str:
 
 def fetch_rendered_html(url: str, timeout: int = 25) -> str:
     options = webdriver.ChromeOptions()
-        # Use the real Chrome ELF binary (not the wrapper script)
+    # Use the real Chrome ELF binary (not the wrapper script)
     options.binary_location = '/opt/google/chrome/chrome'
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
