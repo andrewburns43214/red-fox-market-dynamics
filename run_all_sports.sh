@@ -2,6 +2,12 @@
 
 set -euo pipefail
 
+# ---- prevent overlapping runs ----
+exec 200>/var/lock/redfox_run.lock
+flock -n 200 || exit 0
+# ---------------------------------
+
+
 export TMPDIR=/opt/red-fox-market-dynamics/tmp
 mkdir -p "$TMPDIR"
 chmod 700 "$TMPDIR"
