@@ -1,9 +1,12 @@
+#!/usr/bin/env bash
+
+#!/usr/bin/env bash
+set -euo pipefail
+
 export TMPDIR=/opt/red-fox-market-dynamics/tmp
 mkdir -p "$TMPDIR"
 chmod 700 "$TMPDIR"
 
-#!/usr/bin/env bash
-set -euo pipefail
 
 cd /opt/red-fox-market-dynamics
 LOG=/var/log/redfox_update.log
