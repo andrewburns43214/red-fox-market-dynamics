@@ -40,97 +40,82 @@ def _set_tb_page(url: str, page: int) -> str:
 
 
 def fetch_rendered_html(url: str, timeout: int = 25) -> str:
-    last_err = None
-    for attempt in range(2):
+    options = webdriver.ChromeOptions()
+    # Use the real Chrome ELF binary (not the wrapper script)
+    options.binary_location = '/opt/google/chrome/chrome'
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
+
+    options.add_argument('--headless=new')
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1400,900")
+
+    # Windows stability: unique user-data-dir prevents Chrome startup crashes
+    profile_dir = tempfile.mkdtemp(prefix="dk_selenium_", dir=tempfile.gettempdir())
+    os.makedirs(profile_dir, exist_ok=True)
+    options.add_argument(f"--user-data-dir={profile_dir}")
+
+    # More stability in headless on Windows
+    options.add_argument("--disable-features=VizDisplayCompositor")
+    driver = webdriver.Chrome(options=options)
+
+
+    try:
+        fresh_url = _with_cache_buster(url)
+
+        # Best-effort: disable Chrome cache (safe if CDP fails)
         try:
-            options = webdriver.ChromeOptions()
-            # Use the real Chrome ELF binary (not the wrapper script)
-            options.binary_location = '/opt/google/chrome/chrome'
-            options.add_argument('--no-sandbox')
-            options.add_argument('--disable-dev-shm-usage')
-            options.add_argument('--disable-gpu')
-            options.add_argument('--window-size=1920,1080')
-        
-            options.add_argument('--headless=new')
-            options.add_argument("--disable-gpu")
-            options.add_argument("--window-size=1400,900")
-        
-            # Windows stability: unique user-data-dir prevents Chrome startup crashes
-            profile_dir = tempfile.mkdtemp(prefix="dk_selenium_", dir=tempfile.gettempdir())
-            os.makedirs(profile_dir, exist_ok=True)
-            options.add_argument(f"--user-data-dir={profile_dir}")
-        
-            # More stability in headless on Windows
-            options.add_argument("--disable-features=VizDisplayCompositor")
-            driver = webdriver.Chrome(options=options)
-        
-        
-            try:
-                fresh_url = _with_cache_buster(url)
-        
-                # Best-effort: disable Chrome cache (safe if CDP fails)
-                try:
-                    driver.execute_cdp_cmd("Network.enable", {})
-                    driver.execute_cdp_cmd("Network.setCacheDisabled", {"cacheDisabled": True})
-                except Exception:
-                    pass
-        
-                logger.info("[fetch] %s", fresh_url)
-                driver.get(fresh_url)
-        
-        
-                # Wait for page shell (always exists if page loaded)
-                WebDriverWait(driver, timeout).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "body"))
-                )
-        
-                # Some sports/pages don't render div.tb-progress (MLB/UFC offseason, event hubs, etc).
-                # Try it, but never fail the scrape just because it isn't present.
-                try:
-                    WebDriverWait(driver, min(6, timeout)).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, "div.tb-progress"))
-                    )
-                except Exception:
-                    pass
-        
-                return driver.page_source
-        
-        
-            finally:
-                try:
-                    driver.quit()
-                except Exception:
-                    pass
-                try:
-                    shutil.rmtree(profile_dir, ignore_errors=True)
-                except Exception:
-                    pass
-        # -------------------------
-        # Option 1: Extract embedded JSON (stable when present)
-        # -------------------------
-        
-        _JSON_SCRIPT_PATTERNS = [
-            # Next.js
-            r'<script[^>]+id="__NEXT_DATA__"[^>]*>(.*?)</script>',
-            # Generic JSON script tags
-            r'<script[^>]+type="application/json"[^>]*>(.*?)</script>',
-            # Some sites embed global variables
-            r'window\.__INITIAL_STATE__\s*=\s*(\{.*?\});',
-            r'window\.__NUXT__\s*=\s*(\{.*?\});',
-        ]
-        
-        except Exception as e:
-            last_err = e
-            # brief backoff + retry once
-            try:
-                time.sleep(1.0)
-            except Exception:
-                pass
-            if attempt == 0:
-                continue
-            raise
-    # should not reach here
-    raise last_err
+            driver.execute_cdp_cmd("Network.enable", {})
+            driver.execute_cdp_cmd("Network.setCacheDisabled", {"cacheDisabled": True})
+        except Exception:
+            pass
+
+        logger.info("[fetch] %s", fresh_url)
+        driver.get(fresh_url)
+
+
+        # Wait for page shell (always exists if page loaded)
+        WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "body"))
+        )
+
+        # Some sports/pages don't render div.tb-progress (MLB/UFC offseason, event hubs, etc).
+        # Try it, but never fail the scrape just because it isn't present.
+        try:
+            WebDriverWait(driver, min(6, timeout)).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "div.tb-progress"))
+            )
+        except Exception:
+            pass
+
+        return driver.page_source
+
+
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
+        try:
+            shutil.rmtree(profile_dir, ignore_errors=True)
+        except Exception:
+            pass
+# -------------------------
+# Option 1: Extract embedded JSON (stable when present)
+# -------------------------
+
+_JSON_SCRIPT_PATTERNS = [
+    # Next.js
+    r'<script[^>]+id="__NEXT_DATA__"[^>]*>(.*?)</script>',
+    # Generic JSON script tags
+    r'<script[^>]+type="application/json"[^>]*>(.*?)</script>',
+    # Some sites embed global variables
+    r'window\.__INITIAL_STATE__\s*=\s*(\{.*?\});',
+    r'window\.__NUXT__\s*=\s*(\{.*?\});',
+]
+
 def _try_load_json(text: str) -> Optional[Any]:
     text = text.strip()
     if not text:
@@ -423,7 +408,15 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
         else:
             page_url = _set_tb_page(url, page)
 
-        html = fetch_rendered_html(page_url)
+        try:
+            html = fetch_rendered_html(page_url)
+        except Exception as e:
+            logger.warning('[dk] fetch_rendered_html failed once; retrying: %r', e)
+            try:
+                time.sleep(1.0)
+            except Exception:
+                pass
+            html = fetch_rendered_html(page_url)
 
         if debug_dump_path and page == 1:
             with open(debug_dump_path, "w", encoding="utf-8") as f:
