@@ -16,6 +16,7 @@ echo "===== $(date) RUN START =====" >> "$LOG"
 for SPORT in nfl nba mlb nhl ncaaf ncaab ufc; do
   echo "--- $(date) snapshot --sport $SPORT ---" >> "$LOG"
   "$PY" main.py snapshot --sport "$SPORT" >> "$LOG" 2>&1
+  echo "--- $(date) snapshot DONE --sport $SPORT ---" >> "$LOG"
   sleep 10
 done
 
