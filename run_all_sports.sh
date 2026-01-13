@@ -9,6 +9,7 @@ flock -n 200 || exit 0
 
 
 export TMPDIR=/opt/red-fox-market-dynamics/tmp
+export RF_DISABLE_BASELINE_LOG=1
 mkdir -p "$TMPDIR"
 chmod 700 "$TMPDIR"
 
