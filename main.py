@@ -158,7 +158,33 @@ def _norm_team(s: str) -> str:
 # Single source of truth. All keys MUST be lowercase.
 
 # ---- Step C (metrics instrumentation only) ----
-LOGIC_VERSION = "v1.0"   # tag every ledger/state write; official tracking may start at v1.1 later
+LOGIC_VERSION = "v1.1"   # tag every ledger/state write; official tracking may start at v1.1 later
+
+# ============================================================
+# v1.1 STEP 2 — SPORT-SPECIFIC DAMPENERS (INSTRUMENTATION ONLY)
+# ============================================================
+
+# NOTE:
+# - NO score math changes
+# - NO threshold changes
+# - Flags only (explanatory / gating)
+
+# --- NCAAB ---
+NCAAB_EARLY_STRONG_BLOCK = True          # early window cannot certify STRONG
+NCAAB_STRONG_MIN_PERSIST = 3             # ≥3 consecutive snapshots ≥72
+NCAAB_STRONG_STABILITY_DELTA = 2          # last ≥ peak − 2
+NCAAB_LATE_STRONG_BLOCK = True            # never certify STRONG late
+NCAAB_REQUIRE_MULTI_MARKET = True         # single-market dependency blocks STRONG
+
+# --- NCAAF ---
+NCAAF_EARLY_INSTANT_STRONG_BLOCK = True   # no instant STRONG early
+NCAAF_STRONG_STABILITY_DELTA = 3
+NCAAF_LATE_NEW_STRONG_BLOCK = True        # late can hold, not create
+
+# --- GLOBAL ---
+PUBLIC_DRIFT_BLOCKS_STRONG = True
+FAST_SNAP_BLOCKS_STRONG = True
+
 
 TEAM_ALIASES = {
     # Miami variations
@@ -892,7 +918,7 @@ def _load_row_state(path: str):
                 "last_net_edge", "last_net_edge_ts",
             ])
         # ensure cols exist
-        for c in ["sport","game_id","market","side","logic_version","last_score","last_ts","peak_score","peak_ts","last_bucket","last_net_edge","last_net_edge_ts"]:
+        for c in ["sport","game_id","market","side","logic_version","last_score","last_ts","peak_score","peak_ts","last_bucket","last_net_edge","last_net_edge_ts","strong_streak"]:
             if c not in df.columns:
                 df[c] = ""
         return df
@@ -1137,6 +1163,21 @@ def update_row_state_and_signal_ledger(latest):
 
             bucket = _score_bucket(score)
 
+            # --- v1.1 STRONG streak (instrumentation only) ---
+            # strong_streak = consecutive runs where score >= 72
+            prev = state_map.get(k, {})
+            prev_streak = 0
+            try:
+                prev_streak = int(str(prev.get("strong_streak","0")).strip() or "0")
+            except Exception:
+                prev_streak = 0
+            try:
+                strong_now = float(score) >= 72.0
+            except Exception:
+                strong_now = False
+            strong_streak = (prev_streak + 1) if strong_now else 0
+            # --- end v1.1 ---
+
             prev = state_map.get(k, {})
             prev_bucket = _metrics_blank(prev.get("last_bucket"))
 
@@ -1185,6 +1226,7 @@ def update_row_state_and_signal_ledger(latest):
                 "peak_score": f"{peak_score:.2f}",
                 "peak_ts": peak_ts,
                 "last_bucket": bucket,
+                "strong_streak": str(strong_streak),
             }
 
         if os.environ.get('METRICS_DEBUG','') == '1':
@@ -2594,27 +2636,34 @@ def build_dashboard():
         latest["time_bucket"] = latest["_sort_time"].apply(_time_bucket)
 
     
-        # --- HARD FILTER: drop stale games (prevents old games lingering on dashboard) ---
+        # --- HARD FILTER: drop stale games quickly (clean dashboard) ---
         now_utc = datetime.now(timezone.utc)
-    
-        # --- Stale cutoff (clean dashboard) ---
-        stale_hours = 36
-        cutoff = now_utc - timedelta(hours=stale_hours)
-    
+
+        # Policy:
+        # - Keep upcoming games through horizon_days
+        # - Drop games fast after kickoff (postgame_grace_hours)
+        postgame_grace_hours = 4
+        horizon_days = 7
+
+        window_start = now_utc - timedelta(hours=postgame_grace_hours)
+        window_end   = now_utc + timedelta(days=horizon_days)
+
         before = len(latest)
         kick = latest["_sort_time"]
-    
-        # Keep games with unknown kickoff (to avoid silently hiding unresolved rows),
-        # OR games that kick off after cutoff.
-        latest = latest.loc[kick.isna() | (kick >= cutoff)].copy()
+
+        # Keep games with unknown kickoff (avoid silently hiding unresolved rows),
+        # OR games whose kickoff is within [window_start, window_end].
+        latest = latest.loc[
+            kick.isna() | ((kick >= window_start) & (kick <= window_end))
+        ].copy()
         after = len(latest)
-    
+
         # Recompute sort time after filtering (keeps downstream stable)
         latest["_sort_time"] = pd.to_datetime(latest["game_time_iso"], errors="coerce", utc=True)
-    
+
         print(
-            f"[dash debug] stale-kickoff filter: cutoff={cutoff.isoformat()} "
-            f"kept={after}/{before} dropped={before-after}"
+            f"[dash debug] stale-kickoff filter: window_start={window_start.isoformat()} "
+            f"window_end={window_end.isoformat()} kept={after}/{before} dropped={before-after}"
         )
     else:
         latest["_sort_time"] = pd.NaT
@@ -3135,6 +3184,423 @@ def build_dashboard():
         dash.sort_values(["_sport_rank", "_kickoff", "_game_sort"], kind="stable")
             .drop(columns=["_sport_rank", "_kickoff", "_game_sort"], errors="ignore")
     )
+
+    # --- v1.1 timing buckets (flags only; no scoring) ---
+    import datetime as _dt
+
+    now_utc = _dt.datetime.now(_dt.timezone.utc)
+
+    dash["mins_to_kick"] = ""
+    dash["timing_bucket"] = ""
+    dash["is_game_day"] = False
+
+    _time_col = "dk_start_iso" if "dk_start_iso" in dash.columns else "game_time_iso"
+    if _time_col in dash.columns:
+        _mins = []
+        _bucket = []
+        _gameday = []
+
+    for v in dash[_time_col].astype(str):
+        try:
+            dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+        except Exception:
+            _mins.append("")
+            _bucket.append("")
+            _gameday.append(False)
+            continue
+
+        m = int((dt - now_utc).total_seconds() // 60)
+        _mins.append(m)
+
+        gd = (dt.date() == now_utc.date())
+        _gameday.append(gd)
+
+        if m is None:
+            _bucket.append("")
+        elif m > 480:
+            _bucket.append("EARLY")
+        elif m > 60:
+            _bucket.append("MID")
+        elif m >= 0:
+            _bucket.append("LATE")
+        else:
+            _bucket.append("")
+    dash["mins_to_kick"] = _mins
+    dash["timing_bucket"] = _bucket
+    dash["is_game_day"] = _gameday
+# --- end v1.1 timing buckets ---
+
+    # --- v1.1 persistence & stability flags (flags only; no scoring) ---
+    try:
+        import pandas as _pd
+
+        state_path = os.path.join(DATA_DIR, "row_state.csv")
+        if os.path.exists(state_path):
+            _state = _pd.read_csv(state_path, keep_default_na=False)
+
+            key_cols = ["sport", "game_id", "market", "side"]
+            # NOTE: dashboard is WIDE (no generic 'market'/'side' cols). Per-market flags are computed below.
+            if all(c in dash.columns for c in key_cols):
+                dash_key = dash[key_cols].astype(str).agg("|".join, axis=1).tolist()
+            else:
+                dash_key = ["" for _ in range(len(dash))]
+
+            # Normalize state keys to match dashboard lookups (case-sensitive dict keys!)
+            _tmpk = _state[key_cols].copy()
+            _tmpk["sport"]  = _tmpk["sport"].astype(str).str.strip().str.upper()
+            _tmpk["market"] = _tmpk["market"].astype(str).str.strip().str.upper()
+            _tmpk["game_id"]= _tmpk["game_id"].astype(str).str.strip()
+            _tmpk["side"]   = _tmpk["side"].astype(str).str.strip()
+            _state["_k"] = _tmpk.astype(str).agg("|".join, axis=1)
+            state_map = _state.set_index("_k").to_dict("index")
+
+            persist_ok = []
+            stable_ok = []
+
+            for k in dash_key:
+                r = state_map.get(k)
+                if not r:
+                    persist_ok.append(False)
+                    stable_ok.append(False)
+                    continue
+
+                # persistence (instrumentation-only):
+                # Global STRONG requires >=2 consecutive snapshots >=72
+                # NCAAB STRONG requires >=3 consecutive snapshots >=72
+                try:
+                    ss = int(str(r.get("strong_streak","0")).strip() or "0")
+                except Exception:
+                    ss = 0
+                sp = str(k).split("|", 1)[0].strip().upper()
+                need = 3 if sp == "NCAAB" else 2
+                persist_ok.append(ss >= need)
+
+                # stability: last_score >= peak_score - 3 (NCAAB tighter: -2)
+                try:
+                    ls = float(r.get("last_score", ""))
+                    ps = float(r.get("peak_score", ""))
+                    # dash_key is "sport|game_id|market|side"
+                    sp = str(k).split("|", 1)[0].strip().upper()
+                    delta = 2 if sp == "NCAAB" else 3
+                    stable_ok.append(ls >= (ps - delta))
+                except Exception:
+                    stable_ok.append(False)
+
+            dash["persist_ok"] = persist_ok
+            dash["stable_ok"] = stable_ok
+            # --- v1.1 per-market persistence/stability (dashboard-only; no scoring) ---
+            # Uses row_state key: sport|game_id|market|side  (market in SPREAD/TOTAL/MONEYLINE)
+            for _m in ("SPREAD","TOTAL","MONEYLINE"):
+                dash[f"{_m}_persist_ok"] = False
+                dash[f"{_m}_stable_ok"] = False
+
+            try:
+                # Prefer per-market side columns if present; otherwise fall back to per-market favored columns.
+                for _m in ("SPREAD","TOTAL","MONEYLINE"):
+                    side_col = f"{_m}_side"
+                    if side_col not in dash.columns:
+                        side_col = f"{_m}_favored"
+            
+                    p_ok = []
+                    s_ok = []
+            
+                    for _, rr in dash.iterrows():
+                        sp = str(rr.get("sport_label", rr.get("sport",""))).strip().upper()
+                        gid = str(rr.get("game_id","")).strip()
+                        side = str(rr.get(side_col,"")).strip()
+            
+                        if not sp or not gid or not side:
+                            p_ok.append(False)
+                            s_ok.append(False)
+                            continue
+            
+                        kk = f"{sp}|{gid}|{_m}|{side}"
+                        r = state_map.get(kk)
+                        if not r:
+                            p_ok.append(False)
+                            s_ok.append(False)
+                            continue
+            
+                        # persistence streak threshold (>=2 global, >=3 NCAAB)
+                        try:
+                            ss = int(str(r.get("strong_streak","0")).strip() or "0")
+                        except Exception:
+                            ss = 0
+                        need = 3 if sp == "NCAAB" else 2
+                        p_ok.append(ss >= need)
+            
+                        # stability (NCAAB tighter)
+                        try:
+                            ls = float(str(r.get("last_score","")).strip() or "0")
+                            ps = float(str(r.get("peak_score","")).strip() or "0")
+                            delta = 2 if sp == "NCAAB" else 3
+                            s_ok.append(ls >= (ps - delta))
+                        except Exception:
+                            s_ok.append(False)
+            
+                    dash[f"{_m}_persist_ok"] = p_ok
+                    dash[f"{_m}_stable_ok"] = s_ok
+            except Exception:
+                pass
+            # --- end v1.1 per-market persistence/stability ---
+
+
+        else:
+            dash["persist_ok"] = False
+            dash["stable_ok"] = False
+    except Exception:
+        dash["persist_ok"] = False
+        dash["stable_ok"] = False
+    # --- end v1.1 persistence & stability flags ---
+
+    # --- v1.1 STRONG certification flags (dashboard-only; no scoring) ---
+    def _strong_flags(row, mkt, score_col):
+        try:
+            sc = float(row.get(score_col, ""))
+        except Exception:
+            return False, "no_score"
+
+        if sc < 72:
+            return False, "score_lt_72"
+        mkt = str(score_col).split("_", 1)[0].strip().upper()
+        if not bool(row.get(f"{mkt}_persist_ok", False)):
+            return False, "no_persistence"
+        mkt = str(score_col).split("_", 1)[0].strip().upper()
+        if not bool(row.get(f"{mkt}_stable_ok", False)):
+            return False, "unstable"
+        # --- v1.1 NCAAB EARLY STRONG BLOCK ---
+        if str(row.get("sport","")).upper() == "NCAAB" and row.get("timing_bucket") == "EARLY":
+            return False, "ncaab_early_block"
+        # --- end v1.1 ---
+
+        # --- v1.1 NCAAB LATE STRONG HARD BLOCK ---
+        if str(row.get("sport","")).upper() == "NCAAB" and row.get("timing_bucket") == "LATE":
+            return False, "ncaab_late_block"
+        # --- end v1.1 ---
+
+        # --- v1.1 NCAAB REQUIRE MULTI-MARKET (presence only; no scoring) ---
+        if str(row.get("sport","")).upper() == "NCAAB":
+            mcount = 0
+            for c in ("SPREAD_model_score","TOTAL_model_score","MONEYLINE_model_score"):
+                v = str(row.get(c, "")).strip()
+                if v != "":
+                    mcount += 1
+            if mcount < 2:
+                return False, "ncaab_single_market_block"
+        # --- end v1.1 ---
+
+        # --- v1.1 STRONG timing discipline ---
+        # Global rule: no NEW STRONG in LATE. If it was already STRONG_BET previously, it may remain.
+        if row.get("timing_bucket") == "LATE":
+            prev_bucket = str(row.get("prev_bucket") or "").strip()
+            if prev_bucket != "STRONG_BET":
+                return False, "late_new_strong_block"
+        # --- end v1.1 ---
+
+        # --- v1.1 STRONG cross-market non-contradiction (score-based; wide dashboard) ---
+        try:
+            mkt_u = str(mkt or "").strip().upper()
+            if mkt_u in ("SPREAD", "MONEYLINE"):
+                other = "MONEYLINE" if mkt_u == "SPREAD" else "SPREAD"
+                my_side  = str(row.get(f"{mkt_u}_side") or "").strip()
+                oth_side = str(row.get(f"{other}_side") or "").strip()
+                oth_sc = row.get(f"{other}_model_score")
+                try:
+                    oth_sc_f = float(oth_sc) if str(oth_sc).strip() != "" else None
+                except Exception:
+                    oth_sc_f = None
+
+                def _team_token(s):
+                    s = str(s).strip()
+                    if not s: return ""
+                    if s.lower().startswith("over") or s.lower().startswith("under"):
+                        return ""
+                    s = s.split('@')[0].strip()
+                    m = re.search(r"[0-9\+\-]", s)
+                    if m:
+                        s = s[:m.start()].strip()
+                    return s
+
+                my_team  = _team_token(my_side)
+                oth_team = _team_token(oth_side)
+                if my_team and oth_team and my_team != oth_team and (oth_sc_f is not None) and oth_sc_f >= 68:
+                    return False, "xmarket_contradiction"
+        except Exception:
+            pass
+        # --- end v1.1 ---
+
+
+        # --- v1.1 STRONG hard block: Public Drift / Line Inflation ---
+        try:
+            mkt_u = str(mkt or "").strip().upper()
+            bets = row.get(f"{mkt_u}_bets_pct")
+            money = row.get(f"{mkt_u}_money_pct")
+            try:
+                bets_f = float(bets) if str(bets).strip() != "" else None
+                money_f = float(money) if str(money).strip() != "" else None
+            except Exception:
+                bets_f = None; money_f = None
+
+            if bets_f is not None and money_f is not None and bets_f >= 60 and money_f <= bets_f:
+                side = str(row.get(f"{mkt_u}_side") or "").strip()
+                op = str(row.get(f"{mkt_u}_open_line") or "").strip()
+                cu = str(row.get(f"{mkt_u}_current_line") or "").strip()
+
+                def _num(s):
+                    m = re.search(r"-?\d+(?:\.\d+)?", str(s))
+                    return float(m.group(0)) if m else None
+
+                drift = False
+
+                if mkt_u == "TOTAL":
+                    o = _num(op); c = _num(cu)
+                    if o is not None and c is not None:
+                        if side.lower().startswith("over") and c > o:
+                            drift = True
+                        elif side.lower().startswith("under") and c < o:
+                            drift = True
+
+                elif mkt_u == "SPREAD":
+                    o = _num(op); c = _num(cu)
+                    if o is not None and c is not None:
+                        if '-' in side and c < o:
+                            drift = True
+                        elif '+' in side and c > o:
+                            drift = True
+
+                elif mkt_u == "MONEYLINE":
+                    o = _num(op); c = _num(cu)
+                    if o is not None and c is not None:
+                        if c < o:
+                            drift = True
+
+                if drift:
+                    return False, "public_drift_block"
+        except Exception:
+            pass
+        # --- end v1.1 ---
+
+        if row.get("market_read") == "Public Drift":
+            return False, "public_drift"
+
+
+        # --- v1.1 STRONG: no escalation on decay ---
+        # If score has decayed from its peak, do not allow promotion to STRONG unless it was already STRONG_BET previously.
+        try:
+            prev_bucket = str(row.get("prev_bucket") or "").strip()
+            pk = row.get("_rs_peak")
+            ls = row.get("_rs_last")
+            pkf = float(pk) if str(pk).strip() != "" else None
+            lsf = float(ls) if str(ls).strip() != "" else None
+            if pkf is not None and lsf is not None and lsf < pkf and prev_bucket != "STRONG_BET":
+                return False, "decay_no_escalation"
+        except Exception:
+            pass
+        # --- end v1.1 ---
+        return True, ""
+
+    dash["strong_eligible"] = False
+    dash["strong_block_reason"] = ""
+
+    # --- v1.1: attach prior bucket from row_state (used for LATE "no NEW STRONG" rule) ---
+    dash["prev_bucket"] = ""
+    try:
+        import pandas as _pd
+        _sp = os.path.join(DATA_DIR, 'row_state.csv')
+        if os.path.exists(_sp):
+            _rs = _pd.read_csv(_sp, keep_default_na=False, dtype=str)
+            if all(c in _rs.columns for c in ['sport','game_id','market','side','last_bucket']):
+                _rs['sport'] = _rs['sport'].astype(str).str.strip().str.upper()
+                _rs['market'] = _rs['market'].astype(str).str.strip().str.upper()
+                _rs['game_id'] = _rs['game_id'].astype(str).str.strip()
+                _rs['side'] = _rs['side'].astype(str).str.strip()
+                _rs['_k'] = _rs[['sport','game_id','market','side']].astype(str).agg('|'.join, axis=1)
+                _pb = dict(zip(_rs['_k'], _rs['last_bucket'].astype(str)))
+                _p_peak = dict(zip(_rs['_k'], _rs.get('peak_score', '').astype(str)))
+                _p_last = dict(zip(_rs['_k'], _rs.get('last_score', '').astype(str)))
+                # dashboard is WIDE: each market has its own side column
+                _prev = []
+                for _, _r in dash.iterrows():
+                    sp = str(_r.get('sport','')).strip().upper()
+                    gid = str(_r.get('game_id','')).strip()
+                    # choose a side (prefer spread side, else total, else moneyline) just to create a stable key
+                    side = str(_r.get('SPREAD_side') or _r.get('TOTAL_side') or _r.get('MONEYLINE_side') or '').strip()
+                    # market will be set inside strong loop; default here is empty
+                    _prev.append('')
+                dash['prev_bucket'] = _prev
+                # We will fill prev_bucket per-market in the STRONG loop below (more accurate).
+    except Exception:
+        pass
+    # --- end v1.1 ---
+
+    # --- v1.1: map prior bucket from row_state for LATE "no NEW STRONG" rule ---
+    _pb = {}
+    try:
+        import pandas as _pd
+        _rsp = os.path.join(DATA_DIR, 'row_state.csv')
+        if os.path.exists(_rsp):
+            _rs = _pd.read_csv(_rsp, keep_default_na=False, dtype=str)
+            need = ['sport','game_id','market','side','last_bucket']
+            if all(c in _rs.columns for c in need):
+                _rs['sport']  = _rs['sport'].astype(str).str.strip().str.upper()
+                _rs['market'] = _rs['market'].astype(str).str.strip().str.upper()
+                _rs['game_id']= _rs['game_id'].astype(str).str.strip()
+                _rs['side']   = _rs['side'].astype(str).str.strip()
+                _rs['_k'] = _rs[['sport','game_id','market','side']].astype(str).agg('|'.join, axis=1)
+                _pb = dict(zip(_rs['_k'], _rs['last_bucket'].astype(str)))
+    except Exception:
+        _pb = {}
+        _p_peak = {}
+        _p_last = {}
+    # --- end v1.1 ---
+
+    for mkt in ("SPREAD", "TOTAL", "MONEYLINE"):
+        sc_col = f"{mkt}_model_score"
+        if sc_col not in dash.columns:
+            continue
+
+        elig = []
+        reason = []
+
+        for _, rr in dash.iterrows():
+            rr2 = rr.copy()
+            sp = str(rr2.get("sport","")).strip().upper()
+            gid = str(rr2.get("game_id","")).strip()
+            side = str(rr2.get(f"{mkt}_side","") or "").strip()
+            k = f"{sp}|{gid}|{mkt}|{side}"
+            rr2["prev_bucket"] = _pb.get(k, "")
+            rr2["_rs_peak"] = _p_peak.get(k, "")
+            rr2["_rs_last"] = _p_last.get(k, "")
+            ok, why = _strong_flags(rr2, mkt, sc_col)
+            elig.append(ok)
+            reason.append(why)
+
+        dash[f"{mkt}_strong_eligible"] = elig
+        dash[f"{mkt}_strong_block_reason"] = reason
+    # --- end v1.1 STRONG certification flags ---
+
+
+
+    # REFRESH present/extras AFTER adding dashboard-only flags
+
+
+    try:
+
+
+        present = [c for c in col_order if c in dash.columns]
+
+
+        extras = [c for c in dash.columns if c not in present]
+
+
+        dash = dash[present + extras]
+
+
+    except Exception:
+
+
+        pass
+
 
     dash.to_csv(out_csv, index=False, encoding="utf-8")
 
