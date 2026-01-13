@@ -2325,6 +2325,23 @@ def build_dashboard():
     scores = []
     ml_green = set()
 
+
+    # --- v1.1 market presence map (per game) for NCAAB single-market governors ---
+    _mktset = {}
+    try:
+        for _, _r in latest.iterrows():
+            sp_u = str(_r.get('sport','')).strip().upper()
+            gid  = str(_r.get('game_id','')).strip()
+            mk_u = str(_r.get('market','') or '').strip().upper()
+            if not sp_u or not gid:
+                continue
+            if mk_u in ('SPREAD','TOTAL','MONEYLINE'):
+                _mktset.setdefault((sp_u, gid), set()).add(mk_u)
+        _mktcount = {k: len(v) for k, v in _mktset.items()}
+    except Exception:
+        _mktcount = {}
+    # --- end v1.1 ---
+
     for _, row in latest.iterrows():
         color, expl = classify_side(
             bets_pct=int(row["bets_pct"]) if pd.notna(row.get("bets_pct")) else None,
@@ -2377,6 +2394,52 @@ def build_dashboard():
             score += 1
         elif tb == "late":
             score -= 1
+
+        # --- v1.1 NCAAB early-window dampener (governor; score adjustment) ---
+        # Reduce early NCAAB confidence to prevent premature upgrades.
+        try:
+            if str(row.get("sport", "")).strip().upper() == "NCAAB" and tb == "early":
+                score -= 4
+        except Exception:
+            pass
+        # --- end v1.1 ---
+
+        # --- v1.1 NCAAB single-market dependency penalty (governor; score adjustment) ---
+        # Score-based (WIDE dashboard): penalize when only one primary market supports the game.
+        # If this row is SPREAD but TOTAL score is missing/weak (<60) -> -3.
+        # If this row is TOTAL but SPREAD score is missing/weak (<60) -> -3.
+        try:
+            if str(row.get('sport','')).strip().upper() == 'NCAAB':
+                _side = str(row.get('side','') or '').strip().lower()
+                _mk_guess = ''
+                if _side.startswith('over') or _side.startswith('under'):
+                    _mk_guess = 'TOTAL'
+                else:
+                    _mk_guess = 'SPREAD'
+
+                def _f(x):
+                    try:
+                        xs = str(x).strip()
+                        if xs == '':
+                            return None
+                        return float(xs)
+                    except Exception:
+                        return None
+
+                _sp = _f(row.get('SPREAD_model_score',''))
+                _to = _f(row.get('TOTAL_model_score',''))
+
+                if _mk_guess == 'SPREAD':
+                    if (_to is None) or (_to < 60.0):
+                        score -= 3
+                elif _mk_guess == 'TOTAL':
+                    if (_sp is None) or (_sp < 60.0):
+                        score -= 3
+        except Exception:
+            pass
+        # --- end v1.1 ---
+
+
 
         if color == "DARK_GREEN":
             score += 6
