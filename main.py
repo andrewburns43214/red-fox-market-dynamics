@@ -1,5 +1,9 @@
 ﻿import argparse
 import csv
+
+# --- BASELINE LOG CACHE ---
+_BASELINE_SEEN_KEYS = None  # set[(sport, game_id, market, side, bucket)]
+
 import datetime as dt
 import os
 import re
@@ -4343,6 +4347,48 @@ def cmd_baseline_market_read(args):
 
 
 def log_baseline_signal(row):
+
+    # Fast-path: build baseline "seen" cache once (avoid O(N^2) scans)
+    global _BASELINE_SEEN_KEYS
+    if _BASELINE_SEEN_KEYS is None:
+        try:
+            import pandas as _pd
+            rs = _pd.read_csv("data/row_state.csv", keep_default_na=False, dtype=str)
+            cols = set(rs.columns)
+            sport_c = "sport" if "sport" in cols else None
+            game_c  = "game_id" if "game_id" in cols else None
+            mkt_c   = "market" if "market" in cols else ("market_display" if "market_display" in cols else ("_market_display" if "_market_display" in cols else None))
+            side_c  = "side" if "side" in cols else None
+            bucket_c = "last_bucket" if "last_bucket" in cols else ("score_bucket" if "score_bucket" in cols else None)
+
+            def _get(r, c):
+                return (str(r.get(c, "")).strip() if c else "")
+
+            seen = set()
+            for _, rr in rs.iterrows():
+                seen.add((
+                    _get(rr, sport_c).lower(),
+                    _get(rr, game_c),
+                    _get(rr, mkt_c).upper(),
+                    _get(rr, side_c),
+                    _get(rr, bucket_c),
+                ))
+            _BASELINE_SEEN_KEYS = seen
+        except Exception:
+            _BASELINE_SEEN_KEYS = set()
+
+    try:
+        _sport = str(row.get("sport","")).strip().lower()
+        _gid   = str(row.get("game_id","")).strip()
+        _mkt   = str(row.get("_market_display", row.get("market_display", row.get("market","")))).strip().upper()
+        _side  = str(row.get("side","")).strip()
+        _bucket = str(row.get("score_bucket", row.get("last_bucket",""))).strip()
+        _k = (_sport, _gid, _mkt, _side, _bucket)
+        if _k in _BASELINE_SEEN_KEYS:
+            return
+        _BASELINE_SEEN_KEYS.add(_k)
+    except Exception:
+        pass
     import csv, os
     from datetime import datetime, timezone
 
