@@ -1,3 +1,7 @@
+export TMPDIR=/opt/red-fox-market-dynamics/tmp
+mkdir -p "$TMPDIR"
+chmod 700 "$TMPDIR"
+
 #!/usr/bin/env bash
 set -euo pipefail
 
