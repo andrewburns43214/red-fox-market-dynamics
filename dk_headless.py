@@ -446,6 +446,8 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
         for attempt in (1, 2):
             try:
                 html = fetch_rendered_html(page_url)
+                if attempt == 2:
+                    logger.info("[dk] fetch_rendered_html succeeded on retry (attempt 2/2) page_url=%s", page_url)
                 last_err = None
                 break
             except Exception as e:
