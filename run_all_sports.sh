@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-#!/usr/bin/env bash
 set -euo pipefail
 
 export TMPDIR=/opt/red-fox-market-dynamics/tmp
