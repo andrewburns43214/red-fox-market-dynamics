@@ -7,7 +7,6 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
 import time
 
 import os
@@ -60,7 +59,7 @@ def fetch_rendered_html(url: str, timeout: int = 25) -> str:
 
     # More stability in headless on Windows
     options.add_argument("--disable-features=VizDisplayCompositor")
-    driver = webdriver.Chrome(service=Service('/usr/local/bin/chromedriver'), options=options)
+    driver = webdriver.Chrome(options=options)
 
 
     try:
