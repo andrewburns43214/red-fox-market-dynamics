@@ -40,29 +40,49 @@ def _set_tb_page(url: str, page: int) -> str:
 
 
 def fetch_rendered_html(url: str, timeout: int = 25) -> str:
+    """
+    Hardening goals:
+      - enforce hard timeouts so Selenium never hangs indefinitely
+      - fail fast if the chromedriver session dies
+      - always cleanup driver + temp profile dir
+    """
+    import os
+    import time
+    import tempfile
+    import shutil
+
+    from selenium import webdriver
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.common.exceptions import TimeoutException, WebDriverException
+
     options = webdriver.ChromeOptions()
     # Use the real Chrome ELF binary (not the wrapper script)
     options.binary_location = '/opt/google/chrome/chrome'
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
-    options.add_argument('--window-size=1920,1080')
-
+    options.add_argument('--window-size=1400,900')
     options.add_argument('--headless=new')
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1400,900")
 
-    # Windows stability: unique user-data-dir prevents Chrome startup crashes
+    # Unique profile dir prevents "profile in use" / startup weirdness
     profile_dir = tempfile.mkdtemp(prefix="dk_selenium_", dir=tempfile.gettempdir())
     os.makedirs(profile_dir, exist_ok=True)
     options.add_argument(f"--user-data-dir={profile_dir}")
 
-    # More stability in headless on Windows
+    # Keep your existing stability flag (even though comment says Windows)
     options.add_argument("--disable-features=VizDisplayCompositor")
-    driver = webdriver.Chrome(options=options)
 
+    # Reduce "wait for full load forever" risk
+    options.set_capability("pageLoadStrategy", "eager")
 
+    driver = None
     try:
+        driver = webdriver.Chrome(options=options)
+
+        # Hard timeouts (critical)
+        driver.set_page_load_timeout(timeout)
+        driver.set_script_timeout(timeout)
+
         fresh_url = _with_cache_buster(url)
 
         # Best-effort: disable Chrome cache (safe if CDP fails)
@@ -72,50 +92,63 @@ def fetch_rendered_html(url: str, timeout: int = 25) -> str:
         except Exception:
             pass
 
-        logger.info("[fetch] %s", fresh_url)
-        driver.get(fresh_url)
-
-
-        # Wait for page shell (always exists if page loaded)
-        WebDriverWait(driver, timeout).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "body"))
-        )
-
-        # Some sports/pages don't render div.tb-progress (MLB/UFC offseason, event hubs, etc).
-        # Try it, but never fail the scrape just because it isn't present.
+        # --- bounded driver.get ---
         try:
-            WebDriverWait(driver, min(6, timeout)).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div.tb-progress"))
+            driver.get(fresh_url)
+        except TimeoutException:
+            # Stop loading and try to salvage DOM
+            try:
+                driver.execute_script("window.stop();")
+            except Exception:
+                pass
+        except WebDriverException as e:
+            # session died / connection refused / etc.
+            raise RuntimeError(f"Selenium driver.get failed: {repr(e)}")
+
+        # --- bounded readiness wait ---
+        try:
+            WebDriverWait(driver, min(20, timeout)).until(
+                lambda d: d.execute_script("return document.readyState") in ("interactive", "complete")
+            )
+        except TimeoutException:
+            try:
+                driver.execute_script("window.stop();")
+            except Exception:
+                pass
+
+        # --- bounded wait for DK table rows (prevents returning a blank shell) ---
+        # Keep this minimal: just wait for *some* row container to appear.
+        try:
+            WebDriverWait(driver, min(15, timeout)).until(
+                lambda d: "tb-se" in (d.page_source or "")
             )
         except Exception:
+            # still allow fallthrough; page_source check below will fail if empty
             pass
 
-        return driver.page_source
+        # Small pause for JS hydration
+        time.sleep(0.25)
 
+        try:
+            html = driver.page_source or ""
+        except WebDriverException as e:
+            raise RuntimeError(f"Selenium page_source failed: {repr(e)}")
+
+        if not html.strip():
+            raise RuntimeError("Selenium returned empty HTML")
+
+        return html
 
     finally:
-        try:
-            driver.quit()
-        except Exception:
-            pass
+        if driver is not None:
+            try:
+                driver.quit()
+            except Exception:
+                pass
         try:
             shutil.rmtree(profile_dir, ignore_errors=True)
         except Exception:
             pass
-# -------------------------
-# Option 1: Extract embedded JSON (stable when present)
-# -------------------------
-
-_JSON_SCRIPT_PATTERNS = [
-    # Next.js
-    r'<script[^>]+id="__NEXT_DATA__"[^>]*>(.*?)</script>',
-    # Generic JSON script tags
-    r'<script[^>]+type="application/json"[^>]*>(.*?)</script>',
-    # Some sites embed global variables
-    r'window\.__INITIAL_STATE__\s*=\s*(\{.*?\});',
-    r'window\.__NUXT__\s*=\s*(\{.*?\});',
-]
-
 def _try_load_json(text: str) -> Optional[Any]:
     text = text.strip()
     if not text:
@@ -408,15 +441,24 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
         else:
             page_url = _set_tb_page(url, page)
 
-        try:
-            html = fetch_rendered_html(page_url)
-        except Exception as e:
-            logger.warning('[dk] fetch_rendered_html failed once; retrying: %r', e)
+        html = None
+        last_err = None
+        for attempt in (1, 2):
             try:
-                time.sleep(1.0)
-            except Exception:
-                pass
-            html = fetch_rendered_html(page_url)
+                html = fetch_rendered_html(page_url)
+                last_err = None
+                break
+            except Exception as e:
+                last_err = e
+                logger.warning("[dk] fetch_rendered_html failed (attempt %s/2) page_url=%s err=%r", attempt, page_url, e)
+                try:
+                    time.sleep(1.0)
+                except Exception:
+                    pass
+
+        if not html:
+            logger.error("[dk] giving up on page=%s sport=%s url=%s last_err=%r", page, sport, page_url, last_err)
+            break
 
         if debug_dump_path and page == 1:
             with open(debug_dump_path, "w", encoding="utf-8") as f:
