@@ -2615,7 +2615,8 @@ def build_dashboard():
 
 
     for _, r in latest.iterrows():
-        log_baseline_signal(r)
+        if os.environ.get("RF_DISABLE_BASELINE_LOG","") != "1":
+                log_baseline_signal(r)
 
 
 
