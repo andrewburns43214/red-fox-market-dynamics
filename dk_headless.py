@@ -1,5 +1,6 @@
 ﻿import json
 import re
+import shutil
 from typing import Any, Dict, List, Optional
 
 from selenium import webdriver
@@ -53,13 +54,12 @@ def fetch_rendered_html(url: str, timeout: int = 25) -> str:
     options.add_argument("--window-size=1400,900")
 
     # Windows stability: unique user-data-dir prevents Chrome startup crashes
-    profile_dir = os.path.join(tempfile.gettempdir(), f"dk_selenium_{int(time.time())}")
+    profile_dir = tempfile.mkdtemp(prefix="dk_selenium_", dir=tempfile.gettempdir())
     os.makedirs(profile_dir, exist_ok=True)
     options.add_argument(f"--user-data-dir={profile_dir}")
 
     # More stability in headless on Windows
     options.add_argument("--disable-features=VizDisplayCompositor")
-    options.add_argument("--remote-debugging-port=9222")
     driver = webdriver.Chrome(service=Service('/usr/local/bin/chromedriver'), options=options)
 
 
@@ -95,10 +95,14 @@ def fetch_rendered_html(url: str, timeout: int = 25) -> str:
 
 
     finally:
-        driver.quit()
-
-
-
+        try:
+            driver.quit()
+        except Exception:
+            pass
+        try:
+            shutil.rmtree(profile_dir, ignore_errors=True)
+        except Exception:
+            pass
 # -------------------------
 # Option 1: Extract embedded JSON (stable when present)
 # -------------------------
