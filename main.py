@@ -946,7 +946,7 @@ def _load_row_state(path: str):
                 "last_net_edge", "last_net_edge_ts",
             ])
         # ensure cols exist
-        for c in ["sport","game_id","market","side","logic_version","last_score","last_ts","peak_score","peak_ts","last_bucket","last_net_edge","last_net_edge_ts","strong_streak"]:
+        for c in ["sport","game_id","market","side","logic_version","last_score","last_ts","last_seen_tick","peak_score","peak_ts","last_bucket","last_net_edge","last_net_edge_ts","strong_streak"]:
             if c not in df.columns:
                 df[c] = ""
         return df
@@ -1203,7 +1203,16 @@ def update_row_state_and_signal_ledger(latest):
                 strong_now = (str(bucket).strip().upper() == "STRONG_BET")
             except Exception:
                 strong_now = False
-            strong_streak = str((prev_streak + 1) if strong_now else 0)
+            # --- v1.1 FIX: streak must only advance on NEW snapshot tick (idempotent on repeated report runs)
+            cur_tick = _metrics_blank(r.get("ts") or r.get("snapshot_ts") or r.get("timestamp"))
+            prev_tick = _metrics_blank(prev.get("last_seen_tick") or prev.get("last_tick") or prev.get("last_ts"))
+            is_new_tick = (cur_tick != "" and cur_tick != prev_tick)
+
+            if not is_new_tick:
+                strong_streak = str(prev_streak if strong_now else 0)
+            else:
+                strong_streak = str((prev_streak + 1) if strong_now else 0)
+            # --- end v1.1 FIX ---
             # --- end v1.1 ---
 
             prev = state_map.get(k, {})
@@ -1255,6 +1264,7 @@ def update_row_state_and_signal_ledger(latest):
                 "peak_ts": peak_ts,
                 "last_bucket": bucket,
                 "strong_streak": str(strong_streak),
+                "last_seen_tick": cur_tick,
             }
 
         if os.environ.get('METRICS_DEBUG','') == '1':
@@ -2471,36 +2481,15 @@ def build_dashboard():
         # --- end v1.1 ---
 
         # --- v1.1 NCAAB single-market dependency penalty (governor; score adjustment) ---
-        # Score-based (WIDE dashboard): penalize when only one primary market supports the game.
-        # If this row is SPREAD but TOTAL score is missing/weak (<60) -> -3.
-        # If this row is TOTAL but SPREAD score is missing/weak (<60) -> -3.
+        # IMPORTANT: At this stage we are scoring SIDE rows (not the wide dashboard),
+        # so SPREAD_model_score/TOTAL_model_score do NOT exist yet.
+        # Use per-game market PRESENCE instead (built above as _mktcount).
         try:
             if str(row.get('sport','')).strip().upper() == 'NCAAB':
-                _side = str(row.get('side','') or '').strip().lower()
-                _mk_guess = ''
-                if _side.startswith('over') or _side.startswith('under'):
-                    _mk_guess = 'TOTAL'
-                else:
-                    _mk_guess = 'SPREAD'
-
-                def _f(x):
-                    try:
-                        xs = str(x).strip()
-                        if xs == '':
-                            return None
-                        return float(xs)
-                    except Exception:
-                        return None
-
-                _sp = _f(row.get('SPREAD_model_score',''))
-                _to = _f(row.get('TOTAL_model_score',''))
-
-                if _mk_guess == 'SPREAD':
-                    if (_to is None) or (_to < 60.0):
-                        score -= 3
-                elif _mk_guess == 'TOTAL':
-                    if (_sp is None) or (_sp < 60.0):
-                        score -= 3
+                gid = str(row.get('game_id','')).strip()
+                # if the game only has ONE primary market available, penalize (-3)
+                if gid and _mktcount.get(('NCAAB', gid), 0) <= 1:
+                    score -= 3
         except Exception:
             pass
         # --- end v1.1 ---
