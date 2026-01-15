@@ -1,4 +1,4 @@
-﻿import argparse
+import argparse
 import csv
 
 # --- BASELINE LOG CACHE ---
@@ -3568,431 +3568,8 @@ def build_dashboard():
     # --- end v1.1 persistence & stability flags ---
 
     # --- v1.1 STRONG certification flags (dashboard-only; no scoring) ---
-    def _strong_flags_legacy(row, mkt, score_col):
-        try:
-            sc = float(row.get(score_col, ""))
-        except Exception:
-            return False, "no_score"
-
-        if sc < 72:
-            return False, "score_lt_72"
-        mkt = str(score_col).split("_", 1)[0].strip().upper()
-        if not bool(row.get(f"{mkt}_persist_ok", False)):
-            return False, "no_persistence"
-        mkt = str(score_col).split("_", 1)[0].strip().upper()
-        if not bool(row.get(f"{mkt}_stable_ok", False)):
-            return False, "unstable"
-        # --- v1.1 NCAAB EARLY STRONG BLOCK ---
-        if str(row.get("sport","")).upper() == "NCAAB" and row.get("timing_bucket") == "EARLY":
-            return False, "ncaab_early_block"
-        # --- end v1.1 ---
-
-        # --- v1.1 NCAAB LATE STRONG HARD BLOCK ---
-        if str(row.get("sport","")).upper() == "NCAAB" and row.get("timing_bucket") == "LATE":
-            return False, "ncaab_late_block"
-        # --- end v1.1 ---
-
-        # --- v1.1 NCAAB REQUIRE MULTI-MARKET (presence only; no scoring) ---
-        if str(row.get("sport","")).upper() == "NCAAB":
-            mcount = 0
-            for c in ("SPREAD_model_score","TOTAL_model_score","MONEYLINE_model_score"):
-                v = str(row.get(c, "")).strip()
-                if v != "":
-                    mcount += 1
-            if mcount < 2:
-                return False, "ncaab_single_market_block"
-        # --- end v1.1 ---
-
-        # --- v1.1 STRONG timing discipline ---
-        # Global rule: no NEW STRONG in LATE. If it was already STRONG_BET previously, it may remain.
-        if row.get("timing_bucket") == "LATE":
-            prev_bucket = str(row.get("prev_bucket") or "").strip()
-            if prev_bucket != "STRONG_BET":
-                return False, "late_new_strong_block"
-        # --- end v1.1 ---
-
-        # --- v1.1 STRONG cross-market non-contradiction (score-based; wide dashboard) ---
-        try:
-            mkt_u = str(mkt or "").strip().upper()
-            if mkt_u in ("SPREAD", "MONEYLINE"):
-                other = "MONEYLINE" if mkt_u == "SPREAD" else "SPREAD"
-                my_side  = str(row.get(f"{mkt_u}_side") or "").strip()
-                oth_side = str(row.get(f"{other}_side") or "").strip()
-                oth_sc = row.get(f"{other}_model_score")
-                try:
-                    oth_sc_f = float(oth_sc) if str(oth_sc).strip() != "" else None
-                except Exception:
-                    oth_sc_f = None
-
-                def _team_token(s):
-                    s = str(s).strip()
-                    if not s: return ""
-                    if s.lower().startswith("over") or s.lower().startswith("under"):
-                        return ""
-                    s = s.split('@')[0].strip()
-                    m = re.search(r"[0-9\+\-]", s)
-                    if m:
-                        s = s[:m.start()].strip()
-                    return s
-
-                my_team  = _team_token(my_side)
-                oth_team = _team_token(oth_side)
-                if my_team and oth_team and my_team != oth_team and (oth_sc_f is not None) and oth_sc_f >= 68:
-                    return False, "xmarket_contradiction"
-        except Exception:
-            pass
-        # --- end v1.1 ---
-
-
-        # --- v1.1 STRONG hard block: Public Drift / Line Inflation ---
-        try:
-            mkt_u = str(mkt or "").strip().upper()
-            bets = row.get(f"{mkt_u}_bets_pct")
-            money = row.get(f"{mkt_u}_money_pct")
-            try:
-                bets_f = float(bets) if str(bets).strip() != "" else None
-                money_f = float(money) if str(money).strip() != "" else None
-            except Exception:
-                bets_f = None; money_f = None
-
-            if bets_f is not None and money_f is not None and bets_f >= 60 and money_f <= bets_f:
-                side = str(row.get(f"{mkt_u}_side") or "").strip()
-                op = str(row.get(f"{mkt_u}_open_line") or "").strip()
-                cu = str(row.get(f"{mkt_u}_current_line") or "").strip()
-
-                def _num(s):
-                    m = re.search(r"-?\d+(?:\.\d+)?", str(s))
-                    return float(m.group(0)) if m else None
-
-                drift = False
-
-                if mkt_u == "TOTAL":
-                    o = _num(op); c = _num(cu)
-                    if o is not None and c is not None:
-                        if side.lower().startswith("over") and c > o:
-                            drift = True
-                        elif side.lower().startswith("under") and c < o:
-                            drift = True
-
-                elif mkt_u == "SPREAD":
-                    o = _num(op); c = _num(cu)
-                    if o is not None and c is not None:
-                        if '-' in side and c < o:
-                            drift = True
-                        elif '+' in side and c > o:
-                            drift = True
-
-                elif mkt_u == "MONEYLINE":
-                    o = _num(op); c = _num(cu)
-                    if o is not None and c is not None:
-                        if c < o:
-                            drift = True
-
-                if drift:
-                    return False, "public_drift_block"
-        except Exception:
-            pass
-        # --- end v1.1 ---
-
-        if row.get("market_read") == "Public Drift":
-            return False, "public_drift"
-
-
-        # --- v1.1 STRONG: no escalation on decay ---
-        # If score has decayed from its peak, do not allow promotion to STRONG unless it was already STRONG_BET previously.
-        try:
-            prev_bucket = str(row.get("prev_bucket") or "").strip()
-            pk = row.get("_rs_peak")
-            ls = row.get("_rs_last")
-            pkf = float(pk) if str(pk).strip() != "" else None
-            lsf = float(ls) if str(ls).strip() != "" else None
-            if pkf is not None and lsf is not None and lsf < pkf and prev_bucket != "STRONG_BET":
-                return False, "decay_no_escalation"
-        except Exception:
-            pass
-        # --- end v1.1 ---
-        return True, ""
-
-# --- v1.1 STRONG CERTIFICATION HELPERS (DO NOT EDIT BY HAND) ---
-def _strong_flags(row, market: str, pb_map: dict | None = None):
-    """v1.1 STRONG certification gate.
-    Returns (eligible: bool, reason: str)
-    market in {SPREAD,TOTAL,MONEYLINE}
-    pb_map: optional prior-bucket lookup dict keyed by 'SPORT|GAME_ID|MARKET|SIDE'
-    """
-    try:
-        m = str(market).strip().upper()
-        sp = str(row.get('sport','')).strip().upper()
-        game_id = str(row.get('game_id','')).strip()
-
-        # Score must be >= 72 to even be considered
-        score_col = f"{m}_model_score"
-        try:
-            score = float(str(row.get(score_col, '')).strip() or 'nan')
-        except Exception:
-            score = float('nan')
-        if not (score == score) or score < 72.0:
-            return False, 'score_lt_72'
-
-        # Timing: no STRONG in LATE (invariant)
-        tb = str(row.get('timing_bucket','')).strip().upper()
-        if tb == 'LATE':
-            return False, 'late_block'
-
-        # Persistence / stability (prefer per-market flags computed from row_state)
-        p_ok = row.get(f"{m}_persist_ok", False)
-        s_ok = row.get(f"{m}_stable_ok", False)
-        try:
-            p_ok = bool(p_ok) if isinstance(p_ok, (bool,int)) else str(p_ok).strip().lower() in ('true','1','yes')
-        except Exception:
-            p_ok = False
-        try:
-            s_ok = bool(s_ok) if isinstance(s_ok, (bool,int)) else str(s_ok).strip().lower() in ('true','1','yes')
-        except Exception:
-            s_ok = False
-        if not p_ok:
-            return False, 'no_persistence'
-        if not s_ok:
-            return False, 'unstable'
-
-        # LATE 'no NEW STRONG' rule is already enforced by tb==LATE, but keep prior-bucket hook for safety.
-        # If you ever loosen tb handling later, this will still prevent 'new' strong in LATE.
-        prev_bucket = ''
-        try:
-            # Prefer per-market side column if present; else favored
-            side = str(row.get(f"{m}_side", '')).strip() or str(row.get(f"{m}_favored", '')).strip()
-            if pb_map is not None and side and sp and game_id:
-                kk = f"{sp}|{game_id}|{m}|{side}"
-                prev_bucket = str(pb_map.get(kk,'')).strip().upper()
-        except Exception:
-            prev_bucket = ''
-
-        # Cross-market non-contradiction (only apply to SPREAD <-> MONEYLINE)
-        # If favored sides disagree, block STRONG.
-        try:
-            spread_fav = str(row.get('SPREAD_favored','')).strip()
-            ml_fav = str(row.get('MONEYLINE_favored','')).strip()
-            if m in ('SPREAD','MONEYLINE') and spread_fav and ml_fav and spread_fav != ml_fav:
-                return False, 'cross_market_contradiction'
-        except Exception:
-            pass
-
-        # Public Drift / Line Inflation block
-        # We don't assume a specific schema: we scan common per-market columns if present.
-        def _get_txt(*cols):
-            out = []
-            for c in cols:
-                if c and c in row and row.get(c, '') not in (None, ''):
-                    out.append(str(row.get(c, '')).upper())
-            return ' | '.join(out)
-
-        txt = _get_txt(f"{m}_market_read", f"{m}_market_why", f"{m}_why", 'market_read', 'market_why', 'why')
-        if 'PUBLIC DRIFT' in txt or 'LINE INFLATION' in txt:
-            return False, 'public_drift_block'
-
-        return True, ''
-    except Exception:
-        return False, 'strong_flags_exception'
-
-# --- end v1.1 STRONG CERTIFICATION HELPERS ---
-
-    dash["strong_eligible"] = False
-    dash["strong_block_reason"] = ""
-# --- v1.1 STRONG CERTIFICATION WIRING (DO NOT EDIT BY HAND) ---
-    # Compute per-market STRONG eligibility (v1.1 spec)
-    # Writes: {M}_strong_eligible, {M}_strong_block_reason
-    for _m in ("SPREAD","TOTAL","MONEYLINE"):
-        dash[f"{_m}_strong_eligible"] = False
-        dash[f"{_m}_strong_block_reason"] = ""
-
-    try:
-        # _pb should already be built above (row_state prior bucket map). If not, use empty.
-        _pb_map = _pb if isinstance(_pb, dict) else {}
-    except Exception:
-        _pb_map = {}
-
-    try:
-        _elig_cols = {}
-        for _m in ("SPREAD","TOTAL","MONEYLINE"):
-            elig = []
-            rsn = []
-            for _, _r in dash.iterrows():
-                ok, why = _strong_flags(_r, _m, _pb_map)
-                elig.append(bool(ok))
-                rsn.append(str(why or ""))
-            dash[f"{_m}_strong_eligible"] = elig
-            dash[f"{_m}_strong_block_reason"] = rsn
-
-        # Preserve existing global columns conservatively: use SPREAD market as primary.
-        if "SPREAD_strong_eligible" in dash.columns:
-            dash["strong_eligible"] = dash["SPREAD_strong_eligible"].astype(bool)
-            dash["strong_block_reason"] = dash.get("SPREAD_strong_block_reason", "")
-    except Exception:
-        pass
-    # --- end v1.1 STRONG CERTIFICATION WIRING ---
-
-    # --- v1.1: attach prior bucket from row_state (used for LATE "no NEW STRONG" rule) ---
-    dash["prev_bucket"] = ""
-    try:
-        import pandas as _pd
-        _sp = os.path.join(DATA_DIR, 'row_state.csv')
-        if os.path.exists(_sp):
-            _rs = _pd.read_csv(_sp, keep_default_na=False, dtype=str)
-            if all(c in _rs.columns for c in ['sport','game_id','market','side','last_bucket']):
-                _rs['sport'] = _rs['sport'].astype(str).str.strip().str.upper()
-                _rs['market'] = _rs['market'].astype(str).str.strip().str.upper()
-                _rs['game_id'] = _rs['game_id'].astype(str).str.strip()
-                _rs['side'] = _rs['side'].astype(str).str.strip()
-                _rs['_k'] = _rs[['sport','game_id','market','side']].astype(str).agg('|'.join, axis=1)
-                _pb = dict(zip(_rs['_k'], _rs['last_bucket'].astype(str)))
-                _p_peak = dict(zip(_rs['_k'], _rs.get('peak_score', '').astype(str)))
-                _p_last = dict(zip(_rs['_k'], _rs.get('last_score', '').astype(str)))
-                # dashboard is WIDE: each market has its own side column
-                _prev = []
-                for _, _r in dash.iterrows():
-                    sp = str(_r.get('sport','')).strip().upper()
-                    gid = str(_r.get('game_id','')).strip()
-                    # choose a side (prefer spread side, else total, else moneyline) just to create a stable key
-                    side = str(_r.get('SPREAD_side') or _r.get('TOTAL_side') or _r.get('MONEYLINE_side') or '').strip()
-                    # market will be set inside strong loop; default here is empty
-                    _prev.append('')
-                dash['prev_bucket'] = _prev
-                # We will fill prev_bucket per-market in the STRONG loop below (more accurate).
-    except Exception:
-        pass
-    # --- end v1.1 ---
-
-    # --- v1.1: map prior bucket from row_state for LATE "no NEW STRONG" rule ---
-    _pb = {}
-    try:
-        import pandas as _pd
-        _rsp = os.path.join(DATA_DIR, 'row_state.csv')
-        if os.path.exists(_rsp):
-            _rs = _pd.read_csv(_rsp, keep_default_na=False, dtype=str)
-            need = ['sport','game_id','market','side','last_bucket']
-            if all(c in _rs.columns for c in need):
-                _rs['sport']  = _rs['sport'].astype(str).str.strip().str.upper()
-                _rs['market'] = _rs['market'].astype(str).str.strip().str.upper()
-                _rs['game_id']= _rs['game_id'].astype(str).str.strip()
-                _rs['side']   = _rs['side'].astype(str).str.strip()
-                _rs['_k'] = _rs[['sport','game_id','market','side']].astype(str).agg('|'.join, axis=1)
-                _pb = dict(zip(_rs['_k'], _rs['last_bucket'].astype(str)))
-    except Exception:
-        _pb = {}
-        _p_peak = {}
-        _p_last = {}
-    # --- end v1.1 ---
-
-    if False:  # legacy STRONG eligibility loop disabled (v1.1 uses per-market _strong_flags)
-        for mkt in ("SPREAD", "TOTAL", "MONEYLINE"):
-            sc_col = f"{mkt}_model_score"
-            if sc_col not in dash.columns:
-                continue
-
-            elig = []
-            reason = []
-
-            for _, rr in dash.iterrows():
-                rr2 = rr.copy()
-                sp = str(rr2.get("sport","")).strip().upper()
-                gid = str(rr2.get("game_id","")).strip()
-                side = str(rr2.get(f"{mkt}_side","") or "").strip()
-                k = f"{sp}|{gid}|{mkt}|{side}"
-                rr2["prev_bucket"] = _pb.get(k, "")
-                rr2["_rs_peak"] = _p_peak.get(k, "")
-                rr2["_rs_last"] = _p_last.get(k, "")
-                ok, why = _strong_flags_legacy(rr2, mkt, sc_col)
-                elig.append(ok)
-                reason.append(why)
-
-            dash[f"{mkt}_strong_eligible"] = elig
-            dash[f"{mkt}_strong_block_reason"] = reason
-    # --- end v1.1 STRONG certification flags ---
-
-
-    # --- v1.1: ENFORCE STRONG eligibility into decisions (not just flags) ---
-    # If a market is labeled STRONG BET by score/edge, but fails STRONG certification,
-    # downgrade decision to BET. This makes NCAAB EARLY/LATE blocks and other STRONG gates real.
-    try:
-        for _mkt in ("SPREAD", "TOTAL", "MONEYLINE"):
-            _dec = f"{_mkt}_decision"
-            _elig = f"{_mkt}_strong_eligible"
-            if _dec in dash.columns and _elig in dash.columns:
-                try:
-                    _is_strong = dash[_dec].astype(str).str.upper().eq("STRONG BET")
-                    _ok = dash[_elig].astype(bool)
-                    _mask = _is_strong & (~_ok)
-                    if int(_mask.sum()) > 0:
-                        dash.loc[_mask, _dec] = "BET"
-                except Exception:
-                    pass
-    except Exception:
-        pass
-    # --- end v1.1 STRONG decision enforcement ---
-
-
-
-    # REFRESH present/extras AFTER adding dashboard-only flags
-
-
-    try:
-
-
-        present = [c for c in col_order if c in dash.columns]
-
-
-        extras = [c for c in dash.columns if c not in present]
-
-
-        dash = dash[present + extras]
-
-
-    except Exception:
-
-
-        pass
-
-
-    # --- v1.1 STRONG CERTIFICATION FINAL OVERWRITE (DO NOT EDIT BY HAND) ---
-    # Force canonical per-market STRONG eligibility + reasons at end of build_dashboard()
-    # This prevents any earlier legacy logic from overwriting the final columns.
-    try:
-        print('[v1.1 strong overwrite] ENTER')
-        try:
-            _pb_map = _pb if isinstance(_pb, dict) else {}
-        except Exception:
-            _pb_map = {}
-
-        for _m in ('SPREAD','TOTAL','MONEYLINE'):
-            elig = []
-            rsn = []
-            for _, _r in dash.iterrows():
-                ok, why = _strong_flags(_r, _m, _pb_map)
-                elig.append(bool(ok))
-                rsn.append(str(why or ''))
-            dash[f'{_m}_strong_eligible'] = elig
-            dash[f'{_m}_strong_block_reason'] = rsn
-
-        dash['strong_eligible'] = dash.get('SPREAD_strong_eligible', False)
-        dash['strong_block_reason'] = dash.get('SPREAD_strong_block_reason', '')
-
-        # quick sanity prints
-        try:
-            for _m in ('SPREAD','TOTAL','MONEYLINE'):
-                _rc=f'{_m}_strong_block_reason'
-                if _rc in dash.columns:
-                    _top = dash[_rc].astype(str).replace('', 'OK').value_counts().head(5).to_dict()
-                    print(f'[v1.1 strong overwrite] {_m} top5={_top}')
-        except Exception:
-            pass
-
-        print('[v1.1 strong overwrite] OK')
-    except Exception as _e:
-        import traceback
-        print('[v1.1 strong overwrite] ERROR:', repr(_e))
-        print(traceback.format_exc())
-    # --- end v1.1 STRONG CERTIFICATION FINAL OVERWRITE ---
     dash.to_csv(out_csv, index=False, encoding="utf-8")
+    print("[ok] wrote dashboard csv:", out_csv)
 
     # ---- Step C metrics input (instrumentation only) ----
     # IMPORTANT: snapshots.csv does NOT contain model scores; dashboard.csv does.
@@ -4065,7 +3642,6 @@ def _strong_flags(row, market: str, pb_map: dict | None = None):
     # ---- end Step C metrics input ----
 
 
-    print(f"[ok] wrote dashboard csv: {out_csv}")
 
     # ---------- HTML table (wide) ----------
     header_cols = [
@@ -4305,6 +3881,270 @@ def cmd_snapshot(args):
     # No hard skips here.
     # If a sport has no games, dk_headless/get_splits should return 0 records,
     # and we will print "[snapshot] no games available for <sport>" below.
+
+    """v1.1 STRONG certification gate.
+    Returns (eligible: bool, reason: str)
+    market in {SPREAD,TOTAL,MONEYLINE}
+    pb_map: optional prior-bucket lookup dict keyed by 'SPORT|GAME_ID|MARKET|SIDE'
+    """
+    try:
+        m = str(market).strip().upper()
+        sp = str(row.get('sport','')).strip().upper()
+        game_id = str(row.get('game_id','')).strip()
+
+        # Score must be >= 72 to even be considered
+        score_col = f"{m}_model_score"
+        try:
+            score = float(str(row.get(score_col, '')).strip() or 'nan')
+        except Exception:
+            score = float('nan')
+        if not (score == score) or score < 72.0:
+            return False, 'score_lt_72'
+
+        # Timing: no STRONG in LATE (invariant)
+        tb = str(row.get('timing_bucket','')).strip().upper()
+        if tb == 'LATE':
+            return False, 'late_block'
+
+        # Persistence / stability (prefer per-market flags computed from row_state)
+        p_ok = row.get(f"{m}_persist_ok", False)
+        s_ok = row.get(f"{m}_stable_ok", False)
+        try:
+            p_ok = bool(p_ok) if isinstance(p_ok, (bool,int)) else str(p_ok).strip().lower() in ('true','1','yes')
+        except Exception:
+            p_ok = False
+        try:
+            s_ok = bool(s_ok) if isinstance(s_ok, (bool,int)) else str(s_ok).strip().lower() in ('true','1','yes')
+        except Exception:
+            s_ok = False
+        if not p_ok:
+            return False, 'no_persistence'
+        if not s_ok:
+            return False, 'unstable'
+
+        # LATE 'no NEW STRONG' rule is already enforced by tb==LATE, but keep prior-bucket hook for safety.
+        # If you ever loosen tb handling later, this will still prevent 'new' strong in LATE.
+        prev_bucket = ''
+        try:
+            # Prefer per-market side column if present; else favored
+            side = str(row.get(f"{m}_side", '')).strip() or str(row.get(f"{m}_favored", '')).strip()
+            if pb_map is not None and side and sp and game_id:
+                kk = f"{sp}|{game_id}|{m}|{side}"
+                prev_bucket = str(pb_map.get(kk,'')).strip().upper()
+        except Exception:
+            prev_bucket = ''
+
+        # Cross-market non-contradiction (only apply to SPREAD <-> MONEYLINE)
+        # If favored sides disagree, block STRONG.
+        try:
+            spread_fav = str(row.get('SPREAD_favored','')).strip()
+            ml_fav = str(row.get('MONEYLINE_favored','')).strip()
+            if m in ('SPREAD','MONEYLINE') and spread_fav and ml_fav and spread_fav != ml_fav:
+                return False, 'cross_market_contradiction'
+        except Exception:
+            pass
+
+        # Public Drift / Line Inflation block
+        # We don't assume a specific schema: we scan common per-market columns if present.
+        def _get_txt(*cols):
+            out = []
+            for c in cols:
+                if c and c in row and row.get(c, '') not in (None, ''):
+                    out.append(str(row.get(c, '')).upper())
+            return ' | '.join(out)
+
+        txt = _get_txt(f"{m}_market_read", f"{m}_market_why", f"{m}_why", 'market_read', 'market_why', 'why')
+        if 'PUBLIC DRIFT' in txt or 'LINE INFLATION' in txt:
+            return False, 'public_drift_block'
+
+        return True, ''
+    except Exception:
+        return False, 'strong_flags_exception'
+
+# --- end v1.1 STRONG CERTIFICATION HELPERS ---
+
+    dash["strong_eligible"] = False
+    dash["strong_block_reason"] = ""
+# --- v1.1 STRONG CERTIFICATION WIRING (DO NOT EDIT BY HAND) ---
+    # Compute per-market STRONG eligibility (v1.1 spec)
+    # Writes: {M}_strong_eligible, {M}_strong_block_reason
+    for _m in ("SPREAD","TOTAL","MONEYLINE"):
+        dash[f"{_m}_strong_eligible"] = False
+        dash[f"{_m}_strong_block_reason"] = ""
+
+    try:
+        # _pb should already be built above (row_state prior bucket map). If not, use empty.
+        _pb_map = _pb if isinstance(_pb, dict) else {}
+    except Exception:
+        _pb_map = {}
+
+    try:
+        _elig_cols = {}
+        for _m in ("SPREAD","TOTAL","MONEYLINE"):
+            elig = []
+            rsn = []
+            for _, _r in dash.iterrows():
+                ok, why = _strong_flags(_r, _m, _pb_map)
+                elig.append(bool(ok))
+                rsn.append(str(why or ""))
+            dash[f"{_m}_strong_eligible"] = elig
+            dash[f"{_m}_strong_block_reason"] = rsn
+
+        # Preserve existing global columns conservatively: use SPREAD market as primary.
+        if "SPREAD_strong_eligible" in dash.columns:
+            dash["strong_eligible"] = dash["SPREAD_strong_eligible"].astype(bool)
+            dash["strong_block_reason"] = dash.get("SPREAD_strong_block_reason", "")
+    except Exception:
+        pass
+    # --- end v1.1 STRONG CERTIFICATION WIRING ---
+
+    # --- v1.1: attach prior bucket from row_state (used for LATE "no NEW STRONG" rule) ---
+    dash["prev_bucket"] = ""
+    try:
+        import pandas as _pd
+        _sp = os.path.join(DATA_DIR, 'row_state.csv')
+        if os.path.exists(_sp):
+            _rs = _pd.read_csv(_sp, keep_default_na=False, dtype=str)
+            if all(c in _rs.columns for c in ['sport','game_id','market','side','last_bucket']):
+                _rs['sport'] = _rs['sport'].astype(str).str.strip().str.upper()
+                _rs['market'] = _rs['market'].astype(str).str.strip().str.upper()
+                _rs['game_id'] = _rs['game_id'].astype(str).str.strip()
+                _rs['side'] = _rs['side'].astype(str).str.strip()
+                _rs['_k'] = _rs[['sport','game_id','market','side']].astype(str).agg('|'.join, axis=1)
+                _pb = dict(zip(_rs['_k'], _rs['last_bucket'].astype(str)))
+                _p_peak = dict(zip(_rs['_k'], _rs.get('peak_score', '').astype(str)))
+                _p_last = dict(zip(_rs['_k'], _rs.get('last_score', '').astype(str)))
+                # dashboard is WIDE: each market has its own side column
+                _prev = []
+                for _, _r in dash.iterrows():
+                    sp = str(_r.get('sport','')).strip().upper()
+                    gid = str(_r.get('game_id','')).strip()
+                    # choose a side (prefer spread side, else total, else moneyline) just to create a stable key
+                    side = str(_r.get('SPREAD_side') or _r.get('TOTAL_side') or _r.get('MONEYLINE_side') or '').strip()
+                    # market will be set inside strong loop; default here is empty
+                    _prev.append('')
+                dash['prev_bucket'] = _prev
+                # We will fill prev_bucket per-market in the STRONG loop below (more accurate).
+    except Exception:
+        pass
+    # --- end v1.1 ---
+
+    # --- v1.1: map prior bucket from row_state for LATE "no NEW STRONG" rule ---
+    _pb = {}
+    try:
+        import pandas as _pd
+        _rsp = os.path.join(DATA_DIR, 'row_state.csv')
+        if os.path.exists(_rsp):
+            _rs = _pd.read_csv(_rsp, keep_default_na=False, dtype=str)
+            need = ['sport','game_id','market','side','last_bucket']
+            if all(c in _rs.columns for c in need):
+                _rs['sport']  = _rs['sport'].astype(str).str.strip().str.upper()
+                _rs['market'] = _rs['market'].astype(str).str.strip().str.upper()
+                _rs['game_id']= _rs['game_id'].astype(str).str.strip()
+                _rs['side']   = _rs['side'].astype(str).str.strip()
+                _rs['_k'] = _rs[['sport','game_id','market','side']].astype(str).agg('|'.join, axis=1)
+                _pb = dict(zip(_rs['_k'], _rs['last_bucket'].astype(str)))
+    except Exception:
+        _pb = {}
+        _p_peak = {}
+        _p_last = {}
+    # --- end v1.1 ---
+
+    if False:  # legacy STRONG eligibility loop disabled (v1.1 uses per-market _strong_flags)
+        for mkt in ("SPREAD", "TOTAL", "MONEYLINE"):
+            sc_col = f"{mkt}_model_score"
+            if sc_col not in dash.columns:
+                continue
+
+            elig = []
+            reason = []
+
+            for _, rr in dash.iterrows():
+                rr2 = rr.copy()
+                sp = str(rr2.get("sport","")).strip().upper()
+                gid = str(rr2.get("game_id","")).strip()
+                side = str(rr2.get(f"{mkt}_side","") or "").strip()
+                k = f"{sp}|{gid}|{mkt}|{side}"
+                rr2["prev_bucket"] = _pb.get(k, "")
+                rr2["_rs_peak"] = _p_peak.get(k, "")
+                rr2["_rs_last"] = _p_last.get(k, "")
+                elig.append(ok)
+                reason.append(why)
+
+            dash[f"{mkt}_strong_eligible"] = elig
+            dash[f"{mkt}_strong_block_reason"] = reason
+    # --- end v1.1 STRONG certification flags ---
+
+
+    # --- v1.1: ENFORCE STRONG eligibility into decisions (not just flags) ---
+    # If a market is labeled STRONG BET by score/edge, but fails STRONG certification,
+    # downgrade decision to BET. This makes NCAAB EARLY/LATE blocks and other STRONG gates real.
+    try:
+        for _mkt in ("SPREAD", "TOTAL", "MONEYLINE"):
+            _dec = f"{_mkt}_decision"
+            _elig = f"{_mkt}_strong_eligible"
+            if _dec in dash.columns and _elig in dash.columns:
+                try:
+                    _is_strong = dash[_dec].astype(str).str.upper().eq("STRONG BET")
+                    _ok = dash[_elig].astype(bool)
+                    _mask = _is_strong & (~_ok)
+                    if int(_mask.sum()) > 0:
+                        dash.loc[_mask, _dec] = "BET"
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    # --- end v1.1 STRONG decision enforcement ---
+
+
+
+    # REFRESH present/extras AFTER adding dashboard-only flags
+
+
+    try:
+
+
+        present = [c for c in col_order if c in dash.columns]
+
+
+        extras = [c for c in dash.columns if c not in present]
+
+
+        dash = dash[present + extras]
+
+
+    except Exception:
+
+
+        pass
+
+
+    # --- v1.1 STRONG CERTIFICATION FINAL OVERWRITE (DO NOT EDIT BY HAND) ---
+    # Force canonical per-market STRONG eligibility + reasons right before dashboard.csv write.
+    # This prevents any earlier legacy logic from overwriting the final columns.
+    try:
+        _pb_map = _pb if isinstance(_pb, dict) else {}
+    except Exception:
+        _pb_map = {}
+    
+    try:
+        for _m in ("SPREAD","TOTAL","MONEYLINE"):
+            elig = []
+            rsn = []
+            for _, _r in dash.iterrows():
+                ok, why = _strong_flags(_r, _m, _pb_map)
+                elig.append(bool(ok))
+                rsn.append(str(why or ""))
+            dash[f"{_m}_strong_eligible"] = elig
+            dash[f"{_m}_strong_block_reason"] = rsn
+    
+        # keep global convenience columns aligned to SPREAD
+        dash["strong_eligible"] = dash.get("SPREAD_strong_eligible", False)
+        dash["strong_block_reason"] = dash.get("SPREAD_strong_block_reason", "")
+    except Exception:
+        pass
+    # --- end v1.1 STRONG CERTIFICATION FINAL OVERWRITE ---
+
 
 
     # All sports use the same DK Network splits page
