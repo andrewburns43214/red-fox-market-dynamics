@@ -3817,7 +3817,7 @@ def _strong_flags(row, market: str, pb_map: dict | None = None):
             elig = []
             rsn = []
             for _, _r in dash.iterrows():
-                ok, why = _strong_flags_legacy(_r, _m, _pb_map)
+                ok, why = _strong_flags(_r, _m, _pb_map)
                 elig.append(bool(ok))
                 rsn.append(str(why or ""))
             dash[f"{_m}_strong_eligible"] = elig
