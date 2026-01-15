@@ -40,115 +40,53 @@ def _set_tb_page(url: str, page: int) -> str:
 
 
 def fetch_rendered_html(url: str, timeout: int = 25) -> str:
+    """Render a URL using Selenium.
+    - Never hang indefinitely
+    - Never return None (returns "" on failure)
+    - Never hardcode Linux chrome paths on Windows
     """
-    Hardening goals:
-      - enforce hard timeouts so Selenium never hangs indefinitely
-      - fail fast if the chromedriver session dies
-      - always cleanup driver + temp profile dir
-    """
-    import os
-    import time
-    import tempfile
-    import shutil
-
-    from selenium import webdriver
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.common.exceptions import TimeoutException, WebDriverException
-
-    options = webdriver.ChromeOptions()
-    # Use the real Chrome ELF binary (not the wrapper script)
-    options.binary_location = '/opt/google/chrome/chrome'
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--window-size=1400,900')
-    options.add_argument('--headless=new')
-
-    # Unique profile dir prevents "profile in use" / startup weirdness
-    profile_dir = tempfile.mkdtemp(prefix="dk_selenium_", dir=tempfile.gettempdir())
-    os.makedirs(profile_dir, exist_ok=True)
-    options.add_argument(f"--user-data-dir={profile_dir}")
-
-    # Keep your existing stability flag (even though comment says Windows)
-    options.add_argument("--disable-features=VizDisplayCompositor")
-
-    # Reduce "wait for full load forever" risk
-    options.set_capability("pageLoadStrategy", "eager")
-
     driver = None
     try:
-        driver = webdriver.Chrome(options=options)
-
-        # Hard timeouts (critical)
-        driver.set_page_load_timeout(timeout)
-        driver.set_script_timeout(timeout)
-
-        fresh_url = _with_cache_buster(url)
-
-        # Best-effort: disable Chrome cache (safe if CDP fails)
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+    except Exception as e:
         try:
-            driver.execute_cdp_cmd("Network.enable", {})
-            driver.execute_cdp_cmd("Network.setCacheDisabled", {"cacheDisabled": True})
+            print(f"[dk] selenium import failed: {repr(e)}")
+        except Exception:
+            pass
+        return ""
+
+    try:
+        opts = Options()
+        # Match your working smoketest pattern
+        opts.add_argument("--headless=new")
+        opts.add_argument("--disable-gpu")
+        opts.add_argument("--window-size=1400,900")
+        # Windows: do NOT set binary_location. Linux can be set elsewhere (guarded).
+
+        driver = webdriver.Chrome(options=opts)
+        try:
+            driver.set_page_load_timeout(timeout)
         except Exception:
             pass
 
-        # --- bounded driver.get ---
-        try:
-            driver.get(fresh_url)
-        except TimeoutException:
-            # Stop loading and try to salvage DOM
-            try:
-                driver.execute_script("window.stop();")
-            except Exception:
-                pass
-        except WebDriverException as e:
-            # session died / connection refused / etc.
-            raise RuntimeError(f"Selenium driver.get failed: {repr(e)}")
-
-        # --- bounded readiness wait ---
-        try:
-            WebDriverWait(driver, min(20, timeout)).until(
-                lambda d: d.execute_script("return document.readyState") in ("interactive", "complete")
-            )
-        except TimeoutException:
-            try:
-                driver.execute_script("window.stop();")
-            except Exception:
-                pass
-
-        # --- bounded wait for DK table rows (prevents returning a blank shell) ---
-        # Keep this minimal: just wait for *some* row container to appear.
-        try:
-            WebDriverWait(driver, min(15, timeout)).until(
-                lambda d: "tb-se" in (d.page_source or "")
-            )
-        except Exception:
-            # still allow fallthrough; page_source check below will fail if empty
-            pass
-
-        # Small pause for JS hydration
-        time.sleep(0.25)
-
-        try:
-            html = driver.page_source or ""
-        except WebDriverException as e:
-            raise RuntimeError(f"Selenium page_source failed: {repr(e)}")
-
-        if not html.strip():
-            raise RuntimeError("Selenium returned empty HTML")
-
+        driver.get(url)
+        html = driver.page_source or ""
         return html
-
-    finally:
-        if driver is not None:
-            try:
-                driver.quit()
-            except Exception:
-                pass
+    except Exception as e:
         try:
-            shutil.rmtree(profile_dir, ignore_errors=True)
+            print(f"[dk] fetch_rendered_html ERROR: {repr(e)} url={url}")
         except Exception:
             pass
+        return ""
+    finally:
+        try:
+            if driver is not None:
+                driver.quit()
+        except Exception:
+            # swallow quit errors (driver may already be dead)
+            pass
+
 def _try_load_json(text: str) -> Optional[Any]:
     text = text.strip()
     if not text:
@@ -487,7 +425,7 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
             logger.info("[dk] page %d produced no new rows, stopping paging", page)
             break
 
-    if not all_records and ("No events match your current selections" in html):
+    if (not all_records) and html and ("No events match your current selections" in html):
         logger.info("[dk] no events found across all pages")
         return {
             "html": html,
