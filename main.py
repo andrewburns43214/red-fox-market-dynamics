@@ -3794,6 +3794,27 @@ def build_dashboard():
     # --- end v1.1 STRONG certification flags ---
 
 
+    # --- v1.1: ENFORCE STRONG eligibility into decisions (not just flags) ---
+    # If a market is labeled STRONG BET by score/edge, but fails STRONG certification,
+    # downgrade decision to BET. This makes NCAAB EARLY/LATE blocks and other STRONG gates real.
+    try:
+        for _mkt in ("SPREAD", "TOTAL", "MONEYLINE"):
+            _dec = f"{_mkt}_decision"
+            _elig = f"{_mkt}_strong_eligible"
+            if _dec in dash.columns and _elig in dash.columns:
+                try:
+                    _is_strong = dash[_dec].astype(str).str.upper().eq("STRONG BET")
+                    _ok = dash[_elig].astype(bool)
+                    _mask = _is_strong & (~_ok)
+                    if int(_mask.sum()) > 0:
+                        dash.loc[_mask, _dec] = "BET"
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    # --- end v1.1 STRONG decision enforcement ---
+
+
 
     # REFRESH present/extras AFTER adding dashboard-only flags
 
