@@ -3933,6 +3933,17 @@ def _strong_flags(row, market, pb_map=None):
         if not (score == score) or score < 72.0:
             return False, 'score_lt_72'
 
+        # Net Edge requirement for STRONG (per dashboard legend): >= 10 when available
+        try:
+            ne_col = f"{m}_net_edge"
+            ne_raw = row.get(ne_col, "")
+            ne = float(str(ne_raw).strip() or "nan")
+            if not (ne == ne) or ne < 10.0:
+                return False, "net_edge_lt_10"
+        except Exception:
+            # If net edge is missing/unparseable, do NOT grant STRONG
+            return False, "net_edge_missing"
+
         tb = str(row.get('timing_bucket','')).strip().upper()
         if tb == 'LATE':
             return False, 'late_block'
