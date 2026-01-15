@@ -2737,8 +2737,15 @@ def build_dashboard():
 
         # Keep games with unknown kickoff (avoid silently hiding unresolved rows),
         # OR games whose kickoff is within [window_start, window_end].
+        # Count unknown kickoffs (NaT) so we can see whether DK is supplying times
+        try:
+            unknown_kick = int(kick.isna().sum())
+        except Exception:
+            unknown_kick = -1
+
+        # Keep unknown kickoff rows (NaT) OR rows within the window
         latest = latest.loc[
-            ((kick >= window_start) & (kick <= window_end))
+            (kick.isna()) | ((kick >= window_start) & (kick <= window_end))
         ].copy()
         after = len(latest)
 
