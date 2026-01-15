@@ -1687,12 +1687,12 @@ def add_market_pair_checks(latest: pd.DataFrame) -> pd.DataFrame:
     if "espn_day" in df.columns:
         pair_cols.append("espn_day")
 
-    non_neutral = {"Aligned Sharp", "Stealth Move", "Freeze Pressure", "Reverse Pressure", "Contradiction"}
+    sharp_pressure = {"Aligned Sharp", "Stealth Move", "Freeze Pressure", "Reverse Pressure", "Contradiction"}
     # Optional debug mode to validate wiring (does not affect default behavior)
     import os as _os
     _pair_mode = (_os.environ.get('PAIR_CHECK_MODE','') or '').strip().upper()
     if _pair_mode == 'LOOSE':
-        non_neutral = non_neutral.union({'Public Drift'})
+        sharp_pressure = sharp_pressure.union({'Public Drift'})
     df["market_pair_check"] = ""
 
     # Debug only when PAIR_CHECK_MODE is set (never noisy by default)
@@ -1710,12 +1710,12 @@ def add_market_pair_checks(latest: pd.DataFrame) -> pd.DataFrame:
         a = str(df.loc[idx[0], "market_read"] or "")
         b = str(df.loc[idx[1], "market_read"] or "")
 
-        a_nn = (a in non_neutral)
-        b_nn = (b in non_neutral)
-        # Flag anomaly: both sides non-neutral (possible contradiction / unstable read)
-        if a_nn and b_nn:
-            df.loc[idx[0], "market_pair_check"] = "PAIR_CHECK: both sides non-neutral"
-            df.loc[idx[1], "market_pair_check"] = "PAIR_CHECK: both sides non-neutral"
+        a_sp = (a in sharp_pressure)
+        b_sp = (b in sharp_pressure)
+        # Flag rare pairing anomaly: both sides sharp-pressure
+        if a_sp and b_sp:
+            df.loc[idx[0], "market_pair_check"] = "PAIR_CHECK: both sides sharp-pressure"
+            df.loc[idx[1], "market_pair_check"] = "PAIR_CHECK: both sides sharp-pressure"
 
 
     # debug summary (only when PAIR_CHECK_MODE is set)
