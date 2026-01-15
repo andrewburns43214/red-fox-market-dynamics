@@ -4025,6 +4025,32 @@ def _strong_flags(row, market: str, pb_map: dict | None = None):
         pass
     # ---- end Step C metrics input ----
 
+    # --- v1.1 STRONG CERTIFICATION FINAL OVERWRITE (DO NOT EDIT BY HAND) ---
+    # Force canonical per-market STRONG eligibility + reasons at end of build_dashboard()
+    # This prevents any earlier legacy logic from overwriting the final columns.
+    try:
+        _pb_map = _pb if isinstance(_pb, dict) else {}
+    except Exception:
+        _pb_map = {}
+
+    try:
+        for _m in ("SPREAD","TOTAL","MONEYLINE"):
+            elig = []
+            rsn = []
+            for _, _r in dash.iterrows():
+                ok, why = _strong_flags(_r, _m, _pb_map)
+                elig.append(bool(ok))
+                rsn.append(str(why or ""))
+            dash[f"{_m}_strong_eligible"] = elig
+            dash[f"{_m}_strong_block_reason"] = rsn
+
+        # keep global convenience columns aligned to SPREAD
+        dash["strong_eligible"] = dash.get("SPREAD_strong_eligible", False)
+        dash["strong_block_reason"] = dash.get("SPREAD_strong_block_reason", "")
+    except Exception:
+        pass
+    # --- end v1.1 STRONG CERTIFICATION FINAL OVERWRITE ---
+
     print(f"[ok] wrote dashboard csv: {out_csv}")
 
     # ---------- HTML table (wide) ----------
