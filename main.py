@@ -3568,14 +3568,6 @@ def build_dashboard():
     # --- end v1.1 persistence & stability flags ---
 
     # --- v1.1 STRONG certification flags (dashboard-only; no scoring) ---
-    # --- FORCE_STRONG_CERT_COLS_STEP1 (dashboard output schema) ---
-    for _m in ("SPREAD","TOTAL","MONEYLINE"):
-        dash[f"{_m}_strong_eligible"] = False
-        dash[f"{_m}_strong_block_reason"] = ""
-    # keep aggregate convenience column stable
-    dash["strong_block_reason"] = dash.get("SPREAD_strong_block_reason", "")
-    # --- end FORCE_STRONG_CERT_COLS_STEP1 ---
-
     dash.to_csv(out_csv, index=False, encoding="utf-8")
     print("[ok] wrote dashboard csv:", out_csv)
 
@@ -3881,10 +3873,67 @@ def build_dashboard():
     except Exception as e:
         print(f"[warn] failed to write dashboard HTML: {e}")
 
-    return dash
 # =========================
 # CLI
 # =========================
+
+
+def _strong_flags(row, market, pb_map=None):
+    """v1.1 STRONG certification gate."""
+    try:
+        m = str(market).strip().upper()
+        sp = str(row.get('sport','')).strip().upper()
+        game_id = str(row.get('game_id','')).strip()
+
+        score_col = f"{m}_model_score"
+        try:
+            score = float(str(row.get(score_col, '')).strip() or 'nan')
+        except Exception:
+            score = float('nan')
+        if not (score == score) or score < 72.0:
+            return False, 'score_lt_72'
+
+        tb = str(row.get('timing_bucket','')).strip().upper()
+        if tb == 'LATE':
+            return False, 'late_block'
+
+        p_ok = row.get(f"{m}_persist_ok", False)
+        s_ok = row.get(f"{m}_stable_ok", False)
+
+        p_ok = bool(p_ok) if isinstance(p_ok,(bool,int)) else str(p_ok).lower() in ('true','1','yes')
+        s_ok = bool(s_ok) if isinstance(s_ok,(bool,int)) else str(s_ok).lower() in ('true','1','yes')
+
+        if not p_ok:
+            return False, 'no_persistence'
+        if not s_ok:
+            return False, 'unstable'
+
+        try:
+            side = str(row.get(f"{m}_side") or row.get(f"{m}_favored") or '').strip()
+            if pb_map and side and sp and game_id:
+                prev = pb_map.get(f"{sp}|{game_id}|{m}|{side}", '')
+        except Exception:
+            pass
+
+        spread_fav = str(row.get('SPREAD_favored','')).strip()
+        ml_fav = str(row.get('MONEYLINE_favored','')).strip()
+        if m in ('SPREAD','MONEYLINE') and spread_fav and ml_fav and spread_fav != ml_fav:
+            return False, 'cross_market_contradiction'
+
+        txt = " ".join(
+            str(row.get(c,"")).upper()
+            for c in (
+                f"{m}_market_read", f"{m}_market_why", f"{m}_why",
+                "market_read", "market_why", "why"
+            )
+        )
+        if "PUBLIC DRIFT" in txt or "LINE INFLATION" in txt:
+            return False, 'public_drift_block'
+
+        return True, ''
+    except Exception:
+        return False, 'strong_flags_exception'
+
 
 def cmd_snapshot(args):
     # No hard skips here.
@@ -3894,7 +3943,6 @@ def cmd_snapshot(args):
     """v1.1 STRONG certification gate.
     Returns (eligible: bool, reason: str)
     market in {SPREAD,TOTAL,MONEYLINE}
-    pb_map: optional prior-bucket lookup dict keyed by 'SPORT|GAME_ID|MARKET|SIDE'
     """
     try:
         m = str(market).strip().upper()
@@ -4107,7 +4155,38 @@ def cmd_snapshot(args):
 
 
 
-    # REFRESH present/extras AFTER adding dashboard-only flags
+        # --- v1.1 STRONG CERTIFICATION (module-scope _strong_flags) ---
+    try:
+        _pb_map = _pb if isinstance(_pb, dict) else {}
+    except Exception:
+        _pb_map = {}
+
+    for _m in ("SPREAD","TOTAL","MONEYLINE"):
+        elig = []
+        rsn = []
+        for _, _r in dash.iterrows():
+            ok, why = _strong_flags(_r, _m, _pb_map)
+            elig.append(bool(ok))
+            rsn.append(str(why or ""))
+        dash[f"{_m}_strong_eligible"] = elig
+        dash[f"{_m}_strong_block_reason"] = rsn
+
+        # Enforce downgrade
+        _dec = f"{_m}_decision"
+        if _dec in dash.columns:
+            mask = (
+                dash[_dec].astype(str).str.upper().eq("STRONG BET")
+                & (~dash[f"{_m}_strong_eligible"])
+            )
+            if int(mask.sum()) > 0:
+                dash.loc[mask, _dec] = "BET"
+
+    # Global convenience columns (SPREAD is canonical)
+    dash["strong_eligible"] = dash.get("SPREAD_strong_eligible", False)
+    dash["strong_block_reason"] = dash.get("SPREAD_strong_block_reason", "")
+    # --- end v1.1 STRONG CERTIFICATION ---
+
+# REFRESH present/extras AFTER adding dashboard-only flags
 
 
     try:
