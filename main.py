@@ -2097,11 +2097,14 @@ def build_dashboard():
         return
 
     df = pd.read_csv(SNAPSHOT_CSV, keep_default_na=False, dtype=str)
-    print(f"[dash debug] rows after read_csv: {len(df)}")
+    if DASH_DEBUG:
+        print(f"[dash debug] rows after read_csv: {len(df)}")
     if "sport" in df.columns:
-        print(f"[dash debug] sports present: {sorted(df['sport'].dropna().astype(str).unique().tolist())}")
+        if DASH_DEBUG:
+            print(f"[dash debug] sports present: {sorted(df['sport'].dropna().astype(str).unique().tolist())}")
     else:
-        print("[dash debug] sports present: NO sport col")
+        if DASH_DEBUG:
+            print("[dash debug] sports present: NO sport col")
 
     # Normalize column names for dashboard
     df = df.rename(columns={
@@ -2118,11 +2121,13 @@ def build_dashboard():
     df["timestamp"] = df["timestamp"].astype(str).str.strip()
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce", utc=True, format="mixed")
     bad = df[df["timestamp"].isna()]
-    print(f"[dash debug] bad timestamp rows: {len(bad)}")
+    if DASH_DEBUG:
+        print(f"[dash debug] bad timestamp rows: {len(bad)}")
 
     # If timestamp couldn't parse, drop it
     df = df.dropna(subset=["timestamp"]).copy()
-    print(f"[dash debug] rows after timestamp parse/dropna: {len(df)}")
+    if DASH_DEBUG:
+        print(f"[dash debug] rows after timestamp parse/dropna: {len(df)}")
 
     # Sport display labels (keep consistent with your existing mapping if present elsewhere)
     df["sport"] = df["sport"].astype(str).str.lower().str.strip()
@@ -2205,7 +2210,8 @@ def build_dashboard():
           .copy()
           .reset_index(drop=True)
     )
-    print(f"[dash debug] rows in latest: {len(latest)}")
+    if DASH_DEBUG:
+        print(f"[dash debug] rows in latest: {len(latest)}")
 
     # ---- FILTER: today and future games only (NY time) ----
     today_ny = pd.Timestamp.now(tz="America/New_York").normalize()
@@ -2233,7 +2239,8 @@ def build_dashboard():
     # Debug sample
     if len(latest) > 0:
         sample = latest.head(5)
-        print("[dash debug] inferred market types:")
+        if DASH_DEBUG:
+            print("[dash debug] inferred market types:")
         for _, rr in sample.iterrows():
             mt = infer_market_type(rr.get("side", ""), rr.get("current_line", ""))
             print("  ", rr.get("side", ""), "|", rr.get("current_line", ""), "->", mt)
@@ -2338,8 +2345,10 @@ def build_dashboard():
 
     # Debug: how many rows did we keep?
     try:
-        print(f"[dash debug] after main-line filter: rows in latest = {len(latest)}")
-        print("[dash debug] after main-line filter: unique games =", latest["game_id"].nunique())
+        if DASH_DEBUG:
+            print(f"[dash debug] after main-line filter: rows in latest = {len(latest)}")
+        if DASH_DEBUG:
+            print("[dash debug] after main-line filter: unique games =", latest["game_id"].nunique())
     except Exception:
         pass
 
@@ -2583,14 +2592,17 @@ def build_dashboard():
 
         if False:
             km = get_espn_kickoff_map(sp, games)
-            print(f"[dash debug] ESPN map sport={sp} type={type(km)} len={len(km) if isinstance(km, dict) else 'NA'}")
+            if DASH_DEBUG:
+                print(f"[dash debug] ESPN map sport={sp} type={type(km)} len={len(km) if isinstance(km, dict) else 'NA'}")
             if isinstance(km, dict):
                 nonblank = sum(1 for v in km.values() if str(v).strip())
-                print(f"[dash debug] ESPN map sport={sp} nonblank_values={nonblank} sample={list(km.items())[:2]}")
+                if DASH_DEBUG:
+                    print(f"[dash debug] ESPN map sport={sp} nonblank_values={nonblank} sample={list(km.items())[:2]}")
                 all_kickoffs.update({k: v for k, v in km.items() if str(v).strip()})
 
                 
-            print(f"[dash debug] ESPN kickoffs total={len(all_kickoffs)}")
+            if DASH_DEBUG:
+                print(f"[dash debug] ESPN kickoffs total={len(all_kickoffs)}")
 
             # Fill ONLY blanks from ESPN (never overwrite DK-provided kickoff)
             espn_iso = latest["game"].map(all_kickoffs).fillna("")
@@ -2599,11 +2611,13 @@ def build_dashboard():
 
             # ---- DEBUG: confirm we actually have kickoff values ----
             _s = latest["game_time_iso"].fillna("").astype(str).str.strip()
-            print(f"[dash debug] game_time_iso nonblank={(_s!='').sum()} / {len(_s)}  sample={_s[_s!=''].head(3).tolist()}")
+            if DASH_DEBUG:
+                print(f"[dash debug] game_time_iso nonblank={(_s!='').sum()} / {len(_s)}  sample={_s[_s!=''].head(3).tolist()}")
 
     except Exception as e:
         import traceback
-        print("[dash debug] ESPN kickoff enrichment failed:")
+        if DASH_DEBUG:
+            print("[dash debug] ESPN kickoff enrichment failed:")
         print(traceback.format_exc())
         # Do NOT overwrite DK kickoff times on ESPN failure
         latest["game_time_iso"] = latest["game_time_iso"].fillna("").astype(str)
@@ -2807,7 +2821,8 @@ def build_dashboard():
         # Recompute sort time after filtering (keeps downstream stable)
         latest["_sort_time"] = pd.to_datetime(latest["game_time_iso"], errors="coerce", utc=True)
 
-        print(
+        if DASH_DEBUG:
+            print(
 
             f"[dash debug] stale-kickoff filter: window_start={window_start.isoformat()} "
             f"window_end={window_end.isoformat()} kept={after}/{before} dropped={before-after}"
