@@ -2722,7 +2722,7 @@ def build_dashboard():
         # Keep games with unknown kickoff (avoid silently hiding unresolved rows),
         # OR games whose kickoff is within [window_start, window_end].
         latest = latest.loc[
-            kick.isna() | ((kick >= window_start) & (kick <= window_end))
+            ((kick >= window_start) & (kick <= window_end))
         ].copy()
         after = len(latest)
 
@@ -2730,6 +2730,7 @@ def build_dashboard():
         latest["_sort_time"] = pd.to_datetime(latest["game_time_iso"], errors="coerce", utc=True)
 
         print(
+
             f"[dash debug] stale-kickoff filter: window_start={window_start.isoformat()} "
             f"window_end={window_end.isoformat()} kept={after}/{before} dropped={before-after}"
         )
@@ -3133,11 +3134,20 @@ def build_dashboard():
         )
     )
 
-    base = (
-        winners.groupby(["sport", "game_id"], as_index=False)
-               .first()[["sport", "game_id", "game", "sport_label", "game_time_iso"]]
-    )
-
+    # Base game rows: derive kickoff from SIDE-level latest (already passed stale-kickoff filter)
+    _tm = latest[["sport", "game_id", "game_time_iso"]].copy() if "game_time_iso" in latest.columns else pd.DataFrame(columns=["sport","game_id","game_time_iso"])
+    if not _tm.empty:
+        _tm["game_time_iso"] = _tm["game_time_iso"].fillna("").astype(str).str.strip()
+        _tm = _tm[_tm["game_time_iso"] != ""]
+        _tm = _tm.drop_duplicates(subset=["sport", "game_id"], keep="first")
+    
+    base = winners.groupby(["sport", "game_id"], as_index=False).first()[["sport", "game_id", "game", "sport_label"]]
+    if not _tm.empty:
+        base = base.merge(_tm, on=["sport", "game_id"], how="left")
+    else:
+        base["game_time_iso"] = ""
+    base["game_time_iso"] = base["game_time_iso"].fillna("").astype(str)
+    
     # Spread fields
     sp = winners[winners["market_display"] == "SPREAD"].copy()
     if sp.empty:
@@ -3262,40 +3272,45 @@ def build_dashboard():
     dash["timing_bucket"] = ""
     dash["is_game_day"] = False
 
-    _time_col = "dk_start_iso" if "dk_start_iso" in dash.columns else "game_time_iso"
+    _time_col = "game_time_iso"
     if _time_col in dash.columns:
         _mins = []
         _bucket = []
         _gameday = []
 
-    for v in dash[_time_col].astype(str):
-        try:
-            dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
-        except Exception:
-            _mins.append("")
-            _bucket.append("")
-            _gameday.append(False)
-            continue
+        for v in dash[_time_col].astype(str):
+            v = (v or "").strip()
+            try:
+                dt = _dt.datetime.fromisoformat(v.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=_dt.timezone.utc)
+            except Exception:
+                _mins.append("")
+                _bucket.append("")
+                _gameday.append(False)
+                continue
 
-        m = int((dt - now_utc).total_seconds() // 60)
-        _mins.append(m)
+            m = int((dt - now_utc).total_seconds() // 60)
+            _mins.append(m)
 
-        gd = (dt.date() == now_utc.date())
-        _gameday.append(gd)
+            gd = (dt.date() == now_utc.date())
+            _gameday.append(gd)
 
-        if m is None:
-            _bucket.append("")
-        elif m > 480:
-            _bucket.append("EARLY")
-        elif m > 60:
-            _bucket.append("MID")
-        elif m >= 0:
-            _bucket.append("LATE")
-        else:
-            _bucket.append("")
-    dash["mins_to_kick"] = _mins
-    dash["timing_bucket"] = _bucket
-    dash["is_game_day"] = _gameday
+            # EARLY: > 8 hours
+            # MID:   60..480 minutes
+            # LATE:  0..60 minutes
+            if m > 480:
+                _bucket.append("EARLY")
+            elif m > 60:
+                _bucket.append("MID")
+            elif m >= 0:
+                _bucket.append("LATE")
+            else:
+                _bucket.append("")
+
+        dash["mins_to_kick"] = _mins
+        dash["timing_bucket"] = _bucket
+        dash["is_game_day"] = _gameday
 # --- end v1.1 timing buckets ---
 
     # --- v1.1 persistence & stability flags (flags only; no scoring) ---
@@ -4049,7 +4064,13 @@ def cmd_snapshot(args):
 
 
 def cmd_report(_args):
-    update_snapshots_with_espn_finals()   # <-- ADD THIS
+    # ESPN finals (results) update is best-effort; never block dashboard build
+    try:
+        update_snapshots_with_espn_finals()
+    except KeyboardInterrupt:
+        print("[espn finals] skipped (KeyboardInterrupt)")
+    except Exception as e:
+        print(f"[espn finals] skipped due to error: {repr(e)}")
     build_dashboard()
     resolve_results_for_baseline()
     build_color_baseline_summary()
