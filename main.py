@@ -1687,7 +1687,7 @@ def add_market_pair_checks(latest: pd.DataFrame) -> pd.DataFrame:
     if "espn_day" in df.columns:
         pair_cols.append("espn_day")
 
-    non_neutral = {"Aligned Sharp", "Stealth Move", "Freeze Pressure", "Contradiction", "Reverse Pressure", "Public Drift"}
+    sharp_pressure = {"Aligned Sharp", "Stealth Move", "Freeze Pressure", "Reverse Pressure", "Contradiction"}
     df["market_pair_check"] = ""
 
     for _, g in df.groupby(pair_cols):
@@ -1698,12 +1698,12 @@ def add_market_pair_checks(latest: pd.DataFrame) -> pd.DataFrame:
         a = str(df.loc[idx[0], "market_read"] or "")
         b = str(df.loc[idx[1], "market_read"] or "")
 
-        a_nn = (a in non_neutral)
-        b_nn = (b in non_neutral)
-        # Flag asymmetric non-neutral reads (one side pressured, the other neutral)
-        if (a_nn and not b_nn) or (b_nn and not a_nn):
-            df.loc[idx[0], "market_pair_check"] = "PAIR_CHECK: asymmetric non-neutral"
-            df.loc[idx[1], "market_pair_check"] = "PAIR_CHECK: asymmetric non-neutral"
+        a_sp = (a in sharp_pressure)
+        b_sp = (b in sharp_pressure)
+        # Flag rare pairing anomaly: both sides sharp-pressure
+        if a_sp and b_sp:
+            df.loc[idx[0], "market_pair_check"] = "PAIR_CHECK: both sides sharp-pressure"
+            df.loc[idx[1], "market_pair_check"] = "PAIR_CHECK: both sides sharp-pressure"
 
     return df
 
