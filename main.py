@@ -2726,14 +2726,39 @@ def build_dashboard():
         # Policy:
         # - Keep upcoming games through horizon_days
         # - Drop games fast after kickoff (postgame_grace_hours)
-        postgame_grace_hours = 4
+        # v1.1 dashboard rule: show ONLY upcoming games (no old DK n7days clutter)
+        # Keep games from now through horizon_days.
+        # If you want a tiny kickoff grace, change to: now_utc - timedelta(minutes=15)
         horizon_days = 7
 
-        window_start = now_utc - timedelta(hours=postgame_grace_hours)
+        window_start = now_utc
         window_end   = now_utc + timedelta(days=horizon_days)
 
         before = len(latest)
         kick = latest["_sort_time"]
+        # --- kickoff window diagnostics (debug only) ---
+        try:
+            _kick_na = int(kick.isna().sum())
+        except Exception:
+            _kick_na = -1
+        try:
+            _kick_min = kick.min()
+            _kick_max = kick.max()
+        except Exception:
+            _kick_min = None
+            _kick_max = None
+        try:
+            _lt = int((kick < window_start).sum())
+            _in = int(((kick >= window_start) & (kick <= window_end)).sum())
+            _gt = int((kick > window_end).sum())
+        except Exception:
+            _lt = _in = _gt = -1
+        print(
+            f"[dash debug] kickoff dist: na={_kick_na} lt_start={_lt} in_window={_in} gt_end={_gt} "
+            f"kick_min={str(_kick_min)} kick_max={str(_kick_max)} "
+            f"window_start={window_start.isoformat()} window_end={window_end.isoformat()}"
+        )
+        # --- end kickoff window diagnostics ---
 
         # Keep games with unknown kickoff (avoid silently hiding unresolved rows),
         # OR games whose kickoff is within [window_start, window_end].
