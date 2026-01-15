@@ -928,6 +928,14 @@ def _load_row_state(path: str):
         ])
     try:
         df = pd.read_csv(path, keep_default_na=False, dtype=str)
+        # Normalize instrumentation fields (avoid blank strong_streak from older rows)
+        try:
+            if "strong_streak" in df.columns:
+                df["strong_streak"] = df["strong_streak"].astype(str).str.strip()
+                df.loc[df["strong_streak"] == "", "strong_streak"] = "0"
+        except Exception:
+            pass
+
         if df.empty:
             return pd.DataFrame(columns=[
                 "sport", "game_id", "market", "side",
@@ -1192,10 +1200,10 @@ def update_row_state_and_signal_ledger(latest):
             except Exception:
                 prev_streak = 0
             try:
-                strong_now = float(score) >= 72.0
+                strong_now = (str(bucket).strip().upper() == "STRONG_BET")
             except Exception:
                 strong_now = False
-            strong_streak = (prev_streak + 1) if strong_now else 0
+            strong_streak = str((prev_streak + 1) if strong_now else 0)
             # --- end v1.1 ---
 
             prev = state_map.get(k, {})
@@ -2638,35 +2646,40 @@ def build_dashboard():
         (latest["game_time_ny"] - now_ny).dt.total_seconds() / 60.0
     ).round(0)
 
-    # timing_bucket depends only on sport + minutes_to_kickoff
-    def _timing_bucket(sp: str, m2k):
+    # timing_bucket (v1.1): game-day anchored windows
+    #   - NOT game day => EARLY (regardless of minutes, unless LIVE)
+    #   - game day => EARLY (>480), MID (60..480), LATE (0..60), LIVE (<0)
+    # NOTE: This is ADD-ONLY; does not touch snapshot timestamps or kickoff source.
+    latest["is_game_day"] = False
+    try:
+        # compare NY dates (kickoff vs now)
+        latest["is_game_day"] = (latest["game_time_ny"].dt.date == now_ny.date())
+    except Exception:
+        latest["is_game_day"] = False
+
+    def _timing_bucket_v11(m2k, is_game_day):
         try:
             if pd.isna(m2k):
                 return "UNKNOWN"
             m2k = int(m2k)
             if m2k < 0:
                 return "LIVE"
-            sp = (sp or "").lower()
-            # Conservative defaults (can tune later without touching timestamps)
-            if sp in ("nfl", "ncaaf"):
-                early, mid = 24 * 60, 6 * 60
-            else:
-                early, mid = 12 * 60, 3 * 60
-            if m2k >= early:
+            if not bool(is_game_day):
                 return "EARLY"
-            if m2k >= mid:  
-                return "MID"
-            return "LATE"
+            # game day: strict v1.1 windows
+            return compute_timing_bucket("", m2k)
         except Exception:
             return "UNKNOWN"
 
     latest["timing_bucket"] = latest.apply(
-        lambda r: _timing_bucket(
-            r.get("sport", ""),
+        lambda r: _timing_bucket_v11(
             r.get("minutes_to_kickoff"),
+            r.get("is_game_day"),
         ),
         axis=1,
     )
+
+
 
     latest["color"] = colors
     latest["why"] = explains
@@ -3177,8 +3190,20 @@ def build_dashboard():
         except Exception:
             ne = 0.0
 
-        # STRONG BET = high score + meaningful asymmetry
-        if sc >= 72 and ne >= 10:
+        # STRONG BET = high score + meaningful asymmetry (v1.1 timing enforcement)
+        # Enforce timing discipline in the decision pipeline (not just dashboard flags):
+        #   - Global: no STRONG BET in LATE
+        #   - NCAAB: STRONG blocked in EARLY and LATE
+        tb = str(rr.get("timing_bucket") or "").strip().upper()
+        sp = str(rr.get("sport") or "").strip().lower()
+
+        strong_block = False
+        if tb == "LATE":
+            strong_block = True
+        if sp == "ncaab" and tb in ("EARLY", "LATE"):
+            strong_block = True
+
+        if sc >= 72 and ne >= 10 and not strong_block:
             return "STRONG BET"
         if sc >= 68:
             return "BET"
@@ -3341,6 +3366,16 @@ def build_dashboard():
     # Fill blanks (NO NaN in output)
     dash = dash.fillna("")
 
+    # Ensure timing audit columns survive into dashboard.csv
+    for _c in ("minutes_to_kickoff", "is_game_day", "timing_bucket"):
+        if _c not in dash.columns and _c in latest.columns:
+            try:
+                # map from latest -> dash by sport/game_id
+                _map = {(str(r.get("sport","")).strip(), str(r.get("game_id","")).strip()): r.get(_c) for _, r in latest.iterrows()}
+                dash[_c] = dash.apply(lambda rr: _map.get((str(rr.get("sport","")).strip(), str(rr.get("game_id","")).strip())), axis=1)
+            except Exception:
+                dash[_c] = ""
+
     # ---------- Column order (LOCKED) ----------
     # Markets grouped left→right as: SPREAD → TOTAL → MONEYLINE
     col_order = [
@@ -3376,60 +3411,43 @@ def build_dashboard():
             .drop(columns=["_sport_rank", "_kickoff", "_game_sort"], errors="ignore")
     )
 
-    # --- v1.1 timing buckets (flags only; no scoring) ---
-    import datetime as _dt
-
-    now_utc = _dt.datetime.now(_dt.timezone.utc)
-
+    # --- v1.1 timing buckets (canonical; flags only; no scoring) ---
+    # Canonical source:
+    #   - minutes_to_kickoff + is_game_day are computed upstream from DK kickoff
+    #   - timing_bucket uses strict v1.1 windows on GAME DAY only; otherwise EARLY (unless LIVE)
     dash["mins_to_kick"] = ""
     dash["timing_bucket"] = ""
-    dash["is_game_day"] = False
+    # dash["is_game_day"] already exists upstream; keep default False if missing
 
-    _time_col = "game_time_iso"
-    if _time_col in dash.columns:
-        _mins = []
-        _bucket = []
-        _gameday = []
+    if "minutes_to_kickoff" in dash.columns:
+        try:
+            dash["mins_to_kick"] = dash["minutes_to_kickoff"]
+        except Exception:
+            dash["mins_to_kick"] = ""
 
-        for v in dash[_time_col].astype(str):
-            v = (v or "").strip()
+        def _dash_tb(m2k, is_gd):
             try:
-                dt = _dt.datetime.fromisoformat(v.replace("Z", "+00:00"))
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=_dt.timezone.utc)
+                if m2k in ("", None):
+                    return ""
+                m = int(float(m2k))
+                if m < 0:
+                    return "LIVE"
+                if not bool(is_gd):
+                    return "EARLY"
+                return compute_timing_bucket("", m)
             except Exception:
-                _mins.append("")
-                _bucket.append("")
-                _gameday.append(False)
-                continue
+                return ""
 
-            m = int((dt - now_utc).total_seconds() // 60)
-            _mins.append(m)
+        try:
+            if "is_game_day" not in dash.columns:
+                dash["is_game_day"] = False
+        except Exception:
+            pass
 
-            gd = (dt.date() == now_utc.date())
-            _gameday.append(gd)
-
-            # v1.1 GAME-DAY ANCHORED BUCKETS:
-            # - If NOT game day: treat as EARLY (no MID/LATE until the day of the game)
-            # - If game day:
-            #     EARLY: > 8h
-            #     MID:   60..480
-            #     LATE:  0..60
-            if not gd:
-                _bucket.append("EARLY")
-            else:
-                if m > 480:
-                    _bucket.append("EARLY")
-                elif m > 60:
-                    _bucket.append("MID")
-                elif m >= 0:
-                    _bucket.append("LATE")
-                else:
-                    _bucket.append("LIVE")
-
-        dash["mins_to_kick"] = _mins
-        dash["timing_bucket"] = _bucket
-        dash["is_game_day"] = _gameday
+        try:
+            dash["timing_bucket"] = dash.apply(lambda r: _dash_tb(r.get("mins_to_kick"), r.get("is_game_day")), axis=1)
+        except Exception:
+            pass
     # --- end v1.1 timing buckets ---
 
     # --- v1.1 persistence & stability flags (flags only; no scoring) ---
