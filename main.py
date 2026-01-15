@@ -3953,6 +3953,45 @@ def _strong_flags(row, market: str, pb_map: dict | None = None):
         pass
 
 
+    # --- v1.1 STRONG CERTIFICATION FINAL OVERWRITE (DO NOT EDIT BY HAND) ---
+    # Force canonical per-market STRONG eligibility + reasons at end of build_dashboard()
+    # This prevents any earlier legacy logic from overwriting the final columns.
+    try:
+        print('[v1.1 strong overwrite] ENTER')
+        try:
+            _pb_map = _pb if isinstance(_pb, dict) else {}
+        except Exception:
+            _pb_map = {}
+
+        for _m in ('SPREAD','TOTAL','MONEYLINE'):
+            elig = []
+            rsn = []
+            for _, _r in dash.iterrows():
+                ok, why = _strong_flags(_r, _m, _pb_map)
+                elig.append(bool(ok))
+                rsn.append(str(why or ''))
+            dash[f'{_m}_strong_eligible'] = elig
+            dash[f'{_m}_strong_block_reason'] = rsn
+
+        dash['strong_eligible'] = dash.get('SPREAD_strong_eligible', False)
+        dash['strong_block_reason'] = dash.get('SPREAD_strong_block_reason', '')
+
+        # quick sanity prints
+        try:
+            for _m in ('SPREAD','TOTAL','MONEYLINE'):
+                _rc=f'{_m}_strong_block_reason'
+                if _rc in dash.columns:
+                    _top = dash[_rc].astype(str).replace('', 'OK').value_counts().head(5).to_dict()
+                    print(f'[v1.1 strong overwrite] {_m} top5={_top}')
+        except Exception:
+            pass
+
+        print('[v1.1 strong overwrite] OK')
+    except Exception as _e:
+        import traceback
+        print('[v1.1 strong overwrite] ERROR:', repr(_e))
+        print(traceback.format_exc())
+    # --- end v1.1 STRONG CERTIFICATION FINAL OVERWRITE ---
     dash.to_csv(out_csv, index=False, encoding="utf-8")
 
     # ---- Step C metrics input (instrumentation only) ----
@@ -4025,31 +4064,6 @@ def _strong_flags(row, market: str, pb_map: dict | None = None):
         pass
     # ---- end Step C metrics input ----
 
-    # --- v1.1 STRONG CERTIFICATION FINAL OVERWRITE (DO NOT EDIT BY HAND) ---
-    # Force canonical per-market STRONG eligibility + reasons at end of build_dashboard()
-    # This prevents any earlier legacy logic from overwriting the final columns.
-    try:
-        _pb_map = _pb if isinstance(_pb, dict) else {}
-    except Exception:
-        _pb_map = {}
-
-    try:
-        for _m in ("SPREAD","TOTAL","MONEYLINE"):
-            elig = []
-            rsn = []
-            for _, _r in dash.iterrows():
-                ok, why = _strong_flags(_r, _m, _pb_map)
-                elig.append(bool(ok))
-                rsn.append(str(why or ""))
-            dash[f"{_m}_strong_eligible"] = elig
-            dash[f"{_m}_strong_block_reason"] = rsn
-
-        # keep global convenience columns aligned to SPREAD
-        dash["strong_eligible"] = dash.get("SPREAD_strong_eligible", False)
-        dash["strong_block_reason"] = dash.get("SPREAD_strong_block_reason", "")
-    except Exception:
-        pass
-    # --- end v1.1 STRONG CERTIFICATION FINAL OVERWRITE ---
 
     print(f"[ok] wrote dashboard csv: {out_csv}")
 
