@@ -3883,29 +3883,30 @@ def _strong_flags(row, market: str, pb_map: dict | None = None):
         _p_last = {}
     # --- end v1.1 ---
 
-    for mkt in ("SPREAD", "TOTAL", "MONEYLINE"):
-        sc_col = f"{mkt}_model_score"
-        if sc_col not in dash.columns:
-            continue
+    if False:  # legacy STRONG eligibility loop disabled (v1.1 uses per-market _strong_flags)
+        for mkt in ("SPREAD", "TOTAL", "MONEYLINE"):
+            sc_col = f"{mkt}_model_score"
+            if sc_col not in dash.columns:
+                continue
 
-        elig = []
-        reason = []
+            elig = []
+            reason = []
 
-        for _, rr in dash.iterrows():
-            rr2 = rr.copy()
-            sp = str(rr2.get("sport","")).strip().upper()
-            gid = str(rr2.get("game_id","")).strip()
-            side = str(rr2.get(f"{mkt}_side","") or "").strip()
-            k = f"{sp}|{gid}|{mkt}|{side}"
-            rr2["prev_bucket"] = _pb.get(k, "")
-            rr2["_rs_peak"] = _p_peak.get(k, "")
-            rr2["_rs_last"] = _p_last.get(k, "")
-            ok, why = _strong_flags_legacy(rr2, mkt, sc_col)
-            elig.append(ok)
-            reason.append(why)
+            for _, rr in dash.iterrows():
+                rr2 = rr.copy()
+                sp = str(rr2.get("sport","")).strip().upper()
+                gid = str(rr2.get("game_id","")).strip()
+                side = str(rr2.get(f"{mkt}_side","") or "").strip()
+                k = f"{sp}|{gid}|{mkt}|{side}"
+                rr2["prev_bucket"] = _pb.get(k, "")
+                rr2["_rs_peak"] = _p_peak.get(k, "")
+                rr2["_rs_last"] = _p_last.get(k, "")
+                ok, why = _strong_flags_legacy(rr2, mkt, sc_col)
+                elig.append(ok)
+                reason.append(why)
 
-        dash[f"{mkt}_strong_eligible"] = elig
-        dash[f"{mkt}_strong_block_reason"] = reason
+            dash[f"{mkt}_strong_eligible"] = elig
+            dash[f"{mkt}_strong_block_reason"] = reason
     # --- end v1.1 STRONG certification flags ---
 
 
