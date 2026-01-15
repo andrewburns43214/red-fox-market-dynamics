@@ -1688,6 +1688,11 @@ def add_market_pair_checks(latest: pd.DataFrame) -> pd.DataFrame:
         pair_cols.append("espn_day")
 
     sharp_pressure = {"Aligned Sharp", "Stealth Move", "Freeze Pressure", "Reverse Pressure", "Contradiction"}
+    # Optional debug mode to validate wiring (does not affect default behavior)
+    import os as _os
+    _pair_mode = (_os.environ.get('PAIR_CHECK_MODE','') or '').strip().upper()
+    if _pair_mode == 'LOOSE':
+        sharp_pressure = sharp_pressure.union({'Public Drift'})
     df["market_pair_check"] = ""
 
     for _, g in df.groupby(pair_cols):
