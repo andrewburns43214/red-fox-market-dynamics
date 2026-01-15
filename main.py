@@ -3568,6 +3568,46 @@ def build_dashboard():
     # --- end v1.1 persistence & stability flags ---
 
     # --- v1.1 STRONG certification flags (dashboard-only; no scoring) ---
+
+    # --- v1.1 STRONG CERTIFICATION WIRING (INSIDE build_dashboard) ---
+    # Writes: {M}_strong_eligible, {M}_strong_block_reason
+    try:
+        # initialize columns so CSV always has them
+        for _m in ("SPREAD","TOTAL","MONEYLINE"):
+            dash[f"{_m}_strong_eligible"] = False
+            dash[f"{_m}_strong_block_reason"] = ""
+
+        # prior-bucket map best-effort (may be empty)
+        try:
+            _pb_map = _pb if isinstance(_pb, dict) else {}
+        except Exception:
+            _pb_map = {}
+
+        for _m in ("SPREAD","TOTAL","MONEYLINE"):
+            elig = []
+            rsn = []
+            for _, _r in dash.iterrows():
+                ok, why = _strong_flags(_r, _m, _pb_map)
+                elig.append(bool(ok))
+                rsn.append(str(why or ""))
+            dash[f"{_m}_strong_eligible"] = elig
+            dash[f"{_m}_strong_block_reason"] = rsn
+
+            # enforce downgrade
+            _dec = f"{_m}_decision"
+            if _dec in dash.columns:
+                _is_strong = dash[_dec].astype(str).str.upper().eq("STRONG BET")
+                _ok = dash[f"{_m}_strong_eligible"].astype(bool)
+                _mask = _is_strong & (~_ok)
+                if int(_mask.sum()) > 0:
+                    dash.loc[_mask, _dec] = "BET"
+
+        # convenience fields (SPREAD canonical)
+        dash["strong_eligible"] = dash.get("SPREAD_strong_eligible", False)
+        dash["strong_block_reason"] = dash.get("SPREAD_strong_block_reason", "")
+    except Exception:
+        pass
+    # --- end v1.1 STRONG CERTIFICATION WIRING ---
     dash.to_csv(out_csv, index=False, encoding="utf-8")
     print("[ok] wrote dashboard csv:", out_csv)
 
@@ -4020,171 +4060,6 @@ def cmd_snapshot(args):
 
 # --- end v1.1 STRONG CERTIFICATION HELPERS ---
 
-    dash["strong_eligible"] = False
-    dash["strong_block_reason"] = ""
-# --- v1.1 STRONG CERTIFICATION WIRING (DO NOT EDIT BY HAND) ---
-    # Compute per-market STRONG eligibility (v1.1 spec)
-    # Writes: {M}_strong_eligible, {M}_strong_block_reason
-    for _m in ("SPREAD","TOTAL","MONEYLINE"):
-        dash[f"{_m}_strong_eligible"] = False
-        dash[f"{_m}_strong_block_reason"] = ""
-
-    try:
-        # _pb should already be built above (row_state prior bucket map). If not, use empty.
-        _pb_map = _pb if isinstance(_pb, dict) else {}
-    except Exception:
-        _pb_map = {}
-
-    try:
-        _elig_cols = {}
-        for _m in ("SPREAD","TOTAL","MONEYLINE"):
-            elig = []
-            rsn = []
-            for _, _r in dash.iterrows():
-                ok, why = _strong_flags(_r, _m, _pb_map)
-                elig.append(bool(ok))
-                rsn.append(str(why or ""))
-            dash[f"{_m}_strong_eligible"] = elig
-            dash[f"{_m}_strong_block_reason"] = rsn
-
-        # Preserve existing global columns conservatively: use SPREAD market as primary.
-        if "SPREAD_strong_eligible" in dash.columns:
-            dash["strong_eligible"] = dash["SPREAD_strong_eligible"].astype(bool)
-            dash["strong_block_reason"] = dash.get("SPREAD_strong_block_reason", "")
-    except Exception:
-        pass
-    # --- end v1.1 STRONG CERTIFICATION WIRING ---
-
-    # --- v1.1: attach prior bucket from row_state (used for LATE "no NEW STRONG" rule) ---
-    dash["prev_bucket"] = ""
-    try:
-        import pandas as _pd
-        _sp = os.path.join(DATA_DIR, 'row_state.csv')
-        if os.path.exists(_sp):
-            _rs = _pd.read_csv(_sp, keep_default_na=False, dtype=str)
-            if all(c in _rs.columns for c in ['sport','game_id','market','side','last_bucket']):
-                _rs['sport'] = _rs['sport'].astype(str).str.strip().str.upper()
-                _rs['market'] = _rs['market'].astype(str).str.strip().str.upper()
-                _rs['game_id'] = _rs['game_id'].astype(str).str.strip()
-                _rs['side'] = _rs['side'].astype(str).str.strip()
-                _rs['_k'] = _rs[['sport','game_id','market','side']].astype(str).agg('|'.join, axis=1)
-                _pb = dict(zip(_rs['_k'], _rs['last_bucket'].astype(str)))
-                _p_peak = dict(zip(_rs['_k'], _rs.get('peak_score', '').astype(str)))
-                _p_last = dict(zip(_rs['_k'], _rs.get('last_score', '').astype(str)))
-                # dashboard is WIDE: each market has its own side column
-                _prev = []
-                for _, _r in dash.iterrows():
-                    sp = str(_r.get('sport','')).strip().upper()
-                    gid = str(_r.get('game_id','')).strip()
-                    # choose a side (prefer spread side, else total, else moneyline) just to create a stable key
-                    side = str(_r.get('SPREAD_side') or _r.get('TOTAL_side') or _r.get('MONEYLINE_side') or '').strip()
-                    # market will be set inside strong loop; default here is empty
-                    _prev.append('')
-                dash['prev_bucket'] = _prev
-                # We will fill prev_bucket per-market in the STRONG loop below (more accurate).
-    except Exception:
-        pass
-    # --- end v1.1 ---
-
-    # --- v1.1: map prior bucket from row_state for LATE "no NEW STRONG" rule ---
-    _pb = {}
-    try:
-        import pandas as _pd
-        _rsp = os.path.join(DATA_DIR, 'row_state.csv')
-        if os.path.exists(_rsp):
-            _rs = _pd.read_csv(_rsp, keep_default_na=False, dtype=str)
-            need = ['sport','game_id','market','side','last_bucket']
-            if all(c in _rs.columns for c in need):
-                _rs['sport']  = _rs['sport'].astype(str).str.strip().str.upper()
-                _rs['market'] = _rs['market'].astype(str).str.strip().str.upper()
-                _rs['game_id']= _rs['game_id'].astype(str).str.strip()
-                _rs['side']   = _rs['side'].astype(str).str.strip()
-                _rs['_k'] = _rs[['sport','game_id','market','side']].astype(str).agg('|'.join, axis=1)
-                _pb = dict(zip(_rs['_k'], _rs['last_bucket'].astype(str)))
-    except Exception:
-        _pb = {}
-        _p_peak = {}
-        _p_last = {}
-    # --- end v1.1 ---
-
-    if False:  # legacy STRONG eligibility loop disabled (v1.1 uses per-market _strong_flags)
-        for mkt in ("SPREAD", "TOTAL", "MONEYLINE"):
-            sc_col = f"{mkt}_model_score"
-            if sc_col not in dash.columns:
-                continue
-
-            elig = []
-            reason = []
-
-            for _, rr in dash.iterrows():
-                rr2 = rr.copy()
-                sp = str(rr2.get("sport","")).strip().upper()
-                gid = str(rr2.get("game_id","")).strip()
-                side = str(rr2.get(f"{mkt}_side","") or "").strip()
-                k = f"{sp}|{gid}|{mkt}|{side}"
-                rr2["prev_bucket"] = _pb.get(k, "")
-                rr2["_rs_peak"] = _p_peak.get(k, "")
-                rr2["_rs_last"] = _p_last.get(k, "")
-                elig.append(ok)
-                reason.append(why)
-
-            dash[f"{mkt}_strong_eligible"] = elig
-            dash[f"{mkt}_strong_block_reason"] = reason
-    # --- end v1.1 STRONG certification flags ---
-
-
-    # --- v1.1: ENFORCE STRONG eligibility into decisions (not just flags) ---
-    # If a market is labeled STRONG BET by score/edge, but fails STRONG certification,
-    # downgrade decision to BET. This makes NCAAB EARLY/LATE blocks and other STRONG gates real.
-    try:
-        for _mkt in ("SPREAD", "TOTAL", "MONEYLINE"):
-            _dec = f"{_mkt}_decision"
-            _elig = f"{_mkt}_strong_eligible"
-            if _dec in dash.columns and _elig in dash.columns:
-                try:
-                    _is_strong = dash[_dec].astype(str).str.upper().eq("STRONG BET")
-                    _ok = dash[_elig].astype(bool)
-                    _mask = _is_strong & (~_ok)
-                    if int(_mask.sum()) > 0:
-                        dash.loc[_mask, _dec] = "BET"
-                except Exception:
-                    pass
-    except Exception:
-        pass
-    # --- end v1.1 STRONG decision enforcement ---
-
-
-
-        # --- v1.1 STRONG CERTIFICATION (module-scope _strong_flags) ---
-    try:
-        _pb_map = _pb if isinstance(_pb, dict) else {}
-    except Exception:
-        _pb_map = {}
-
-    for _m in ("SPREAD","TOTAL","MONEYLINE"):
-        elig = []
-        rsn = []
-        for _, _r in dash.iterrows():
-            ok, why = _strong_flags(_r, _m, _pb_map)
-            elig.append(bool(ok))
-            rsn.append(str(why or ""))
-        dash[f"{_m}_strong_eligible"] = elig
-        dash[f"{_m}_strong_block_reason"] = rsn
-
-        # Enforce downgrade
-        _dec = f"{_m}_decision"
-        if _dec in dash.columns:
-            mask = (
-                dash[_dec].astype(str).str.upper().eq("STRONG BET")
-                & (~dash[f"{_m}_strong_eligible"])
-            )
-            if int(mask.sum()) > 0:
-                dash.loc[mask, _dec] = "BET"
-
-    # Global convenience columns (SPREAD is canonical)
-    dash["strong_eligible"] = dash.get("SPREAD_strong_eligible", False)
-    dash["strong_block_reason"] = dash.get("SPREAD_strong_block_reason", "")
-    # --- end v1.1 STRONG CERTIFICATION ---
 
 def cmd_report(_args):
     # ESPN finals (results) update is best-effort; never block dashboard build
