@@ -3664,7 +3664,27 @@ def build_dashboard():
 
         if rows:
             _metrics_df = _pd.DataFrame(rows)
-            update_row_state_and_signal_ledger(_metrics_df)
+            # --- v1.1 FIX: provide snapshot tick to metrics df so strong_streak can advance once per NEW snapshot
+        try:
+            import pandas as _pd
+            _snap = _pd.read_csv("data/snapshots.csv", keep_default_na=False)
+            _tick = ""
+            for _c in ("snapshot_id","snapshot_ts","ts","timestamp"):
+                if _c in _snap.columns:
+                    _tick = str(_snap[_c].astype(str).iloc[-1]).strip()
+                    # prefer max if it's sortable
+                    try:
+                        _tick = str(_snap[_c].astype(str).max()).strip()
+                    except Exception:
+                        pass
+                    if _tick:
+                        break
+            if _tick:
+                _metrics_df["ts"] = _tick
+        except Exception:
+            pass
+        # --- end v1.1 FIX ---
+        update_row_state_and_signal_ledger(_metrics_df)
 
     except Exception:
         pass
