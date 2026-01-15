@@ -3415,16 +3415,10 @@ def build_dashboard():
     # Canonical source:
     #   - minutes_to_kickoff + is_game_day are computed upstream from DK kickoff
     #   - timing_bucket uses strict v1.1 windows on GAME DAY only; otherwise EARLY (unless LIVE)
-    dash["mins_to_kick"] = ""
     dash["timing_bucket"] = ""
     # dash["is_game_day"] already exists upstream; keep default False if missing
 
     if "minutes_to_kickoff" in dash.columns:
-        try:
-            dash["mins_to_kick"] = dash["minutes_to_kickoff"]
-        except Exception:
-            dash["mins_to_kick"] = ""
-
         def _dash_tb(m2k, is_gd):
             try:
                 if m2k in ("", None):
@@ -3445,7 +3439,7 @@ def build_dashboard():
             pass
 
         try:
-            dash["timing_bucket"] = dash.apply(lambda r: _dash_tb(r.get("mins_to_kick"), r.get("is_game_day")), axis=1)
+            dash["timing_bucket"] = dash.apply(lambda r: _dash_tb(r.get("minutes_to_kickoff"), r.get("is_game_day")), axis=1)
         except Exception:
             pass
     # --- end v1.1 timing buckets ---
