@@ -3199,6 +3199,26 @@ def build_dashboard():
         _tm = _tm.drop_duplicates(subset=["sport", "game_id"], keep="first")
     
     base = winners.groupby(["sport", "game_id"], as_index=False).first()[["sport", "game_id", "game", "sport_label"]]
+
+    # --- market pair check (game-level flag from side-level latest) ---
+    try:
+        if 'market_pair_check' in latest.columns:
+            _pc = latest[['sport','game_id','market_pair_check']].copy()
+            _pc['market_pair_check'] = _pc['market_pair_check'].fillna('').astype(str).str.strip()
+            _pc = _pc[_pc['market_pair_check'] != '']
+            if not _pc.empty:
+                _pc = _pc.drop_duplicates(subset=['sport','game_id'])
+                _pc = _pc.rename(columns={'market_pair_check':'dash_pair_check'})
+                base = base.merge(_pc[['sport','game_id','dash_pair_check']], on=['sport','game_id'], how='left')
+            else:
+                base['dash_pair_check'] = ''
+        else:
+            base['dash_pair_check'] = ''
+    except Exception:
+        # never break report for this
+        base['dash_pair_check'] = ''
+    # --- end pair check ---
+
     if not _tm.empty:
         base = base.merge(_tm, on=["sport", "game_id"], how="left")
     else:
