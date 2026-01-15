@@ -3568,6 +3568,14 @@ def build_dashboard():
     # --- end v1.1 persistence & stability flags ---
 
     # --- v1.1 STRONG certification flags (dashboard-only; no scoring) ---
+    # --- FORCE_STRONG_CERT_COLS_STEP1 (dashboard output schema) ---
+    for _m in ("SPREAD","TOTAL","MONEYLINE"):
+        dash[f"{_m}_strong_eligible"] = False
+        dash[f"{_m}_strong_block_reason"] = ""
+    # keep aggregate convenience column stable
+    dash["strong_block_reason"] = dash.get("SPREAD_strong_block_reason", "")
+    # --- end FORCE_STRONG_CERT_COLS_STEP1 ---
+
     dash.to_csv(out_csv, index=False, encoding="utf-8")
     print("[ok] wrote dashboard csv:", out_csv)
 
@@ -3873,6 +3881,7 @@ def build_dashboard():
     except Exception as e:
         print(f"[warn] failed to write dashboard HTML: {e}")
 
+    return dash
 # =========================
 # CLI
 # =========================
