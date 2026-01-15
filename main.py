@@ -91,14 +91,30 @@ def compute_minutes_to_kickoff(row: dict):
     now_utc = datetime.now(timezone.utc)
     return int((dt - now_utc).total_seconds() // 60)
 
-def compute_timing_bucket(sport: str, minutes_to_kickoff: int | None):
+def compute_timing_bucket(sport: str, minutes_to_kickoff):
     """
-    Bucket by minutes-to-kickoff. No timestamps in snapshots are used.
+    v1.1 timing buckets (minute-only helper):
+      - > 480 min: EARLY
+      -  60..480: MID
+      -   0..60:  LATE
+      - negative: LIVE
+    NOTE: game-day anchoring is handled in the dashboard timing block.
     """
-    if minutes_to_kickoff is None:
+    try:
+        if minutes_to_kickoff is None:
+            return "UNKNOWN"
+        m2k = int(minutes_to_kickoff)
+    except Exception:
         return "UNKNOWN"
-    if minutes_to_kickoff < 0:
+
+    if m2k < 0:
         return "LIVE"
+    if m2k > 480:
+        return "EARLY"
+    if m2k > 60:
+        return "MID"
+    return "LATE"
+
 
     sport = (sport or "").lower()
     # Keep these conservative; can tune later without touching timestamps.
@@ -3296,22 +3312,28 @@ def build_dashboard():
             gd = (dt.date() == now_utc.date())
             _gameday.append(gd)
 
-            # EARLY: > 8 hours
-            # MID:   60..480 minutes
-            # LATE:  0..60 minutes
-            if m > 480:
+            # v1.1 GAME-DAY ANCHORED BUCKETS:
+            # - If NOT game day: treat as EARLY (no MID/LATE until the day of the game)
+            # - If game day:
+            #     EARLY: > 8h
+            #     MID:   60..480
+            #     LATE:  0..60
+            if not gd:
                 _bucket.append("EARLY")
-            elif m > 60:
-                _bucket.append("MID")
-            elif m >= 0:
-                _bucket.append("LATE")
             else:
-                _bucket.append("")
+                if m > 480:
+                    _bucket.append("EARLY")
+                elif m > 60:
+                    _bucket.append("MID")
+                elif m >= 0:
+                    _bucket.append("LATE")
+                else:
+                    _bucket.append("LIVE")
 
         dash["mins_to_kick"] = _mins
         dash["timing_bucket"] = _bucket
         dash["is_game_day"] = _gameday
-# --- end v1.1 timing buckets ---
+    # --- end v1.1 timing buckets ---
 
     # --- v1.1 persistence & stability flags (flags only; no scoring) ---
     try:
