@@ -1695,6 +1695,13 @@ def add_market_pair_checks(latest: pd.DataFrame) -> pd.DataFrame:
         sharp_pressure = sharp_pressure.union({'Public Drift'})
     df["market_pair_check"] = ""
 
+    # Debug only when PAIR_CHECK_MODE is set (never noisy by default)
+    try:
+        import os as _os
+        _dbg_pair = (_os.environ.get('PAIR_CHECK_MODE','') or '').strip()
+    except Exception:
+        _dbg_pair = ''
+
     for _, g in df.groupby(pair_cols):
         if len(g) != 2:
             continue
@@ -1709,6 +1716,15 @@ def add_market_pair_checks(latest: pd.DataFrame) -> pd.DataFrame:
         if a_sp and b_sp:
             df.loc[idx[0], "market_pair_check"] = "PAIR_CHECK: both sides sharp-pressure"
             df.loc[idx[1], "market_pair_check"] = "PAIR_CHECK: both sides sharp-pressure"
+
+
+    # debug summary (only when PAIR_CHECK_MODE is set)
+    try:
+        if _dbg_pair:
+            nflag = (df['market_pair_check'].fillna('').astype(str).str.strip() != '').sum()
+            print(f"[pair_check debug] mode={_dbg_pair} flagged_rows={int(nflag)}")
+    except Exception:
+        pass
 
     return df
 
