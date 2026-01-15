@@ -1710,6 +1710,9 @@ def add_market_pair_checks(latest: pd.DataFrame) -> pd.DataFrame:
 
 # =========================
 # Settings (edit these)
+
+# Toggle noisy dashboard diagnostics
+DASH_DEBUG = False
 # =========================
 
 # Put the DK Network betting splits URL you want to scrape here.
@@ -2333,14 +2336,16 @@ def build_dashboard():
     latest = add_market_pair_checks(latest)
 
     # TEMP DEBUG: distribution + spread-only samples (remove after validation)
-    print(
-        "[dash debug] market_read counts:",
-        latest["market_read"].value_counts(dropna=False).head(10).to_dict()
-    )
-    print(
-        "[dash debug] pair_check counts:",
-        latest["market_pair_check"].value_counts(dropna=False).head(5).to_dict()
-    )
+    if DASH_DEBUG:
+        print(
+            "[dash debug] market_read counts:",
+            latest["market_read"].value_counts(dropna=False).head(10).to_dict()
+        )
+    if DASH_DEBUG:
+        print(
+            "[dash debug] pair_check counts:",
+            latest["market_pair_check"].value_counts(dropna=False).head(5).to_dict()
+        )
 
     # Classify each row (this is your existing signal logic)
     colors = []
@@ -2756,7 +2761,8 @@ def build_dashboard():
             _gt = int((kick > window_end).sum())
         except Exception:
             _lt = _in = _gt = -1
-        print(
+        if DASH_DEBUG:
+                    print(
             f"[dash debug] kickoff dist: na={_kick_na} lt_start={_lt} in_window={_in} gt_end={_gt} "
             f"kick_min={str(_kick_min)} kick_max={str(_kick_max)} "
             f"window_start={window_start.isoformat()} window_end={window_end.isoformat()}"
