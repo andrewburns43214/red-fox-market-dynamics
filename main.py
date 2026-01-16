@@ -3698,13 +3698,13 @@ def build_dashboard():
         "Game",
         "Time (ET)",
         # SPREAD
-        "Spread Decision", "Spread Side", "Spread Score", "Spread Net Edge", "Spread Bets%", "Spread Money%",
+        "Spread Decision", "Spread Side", "Spread Score", "Spread Net Edge", "Spread Strong Elig", "Spread Strong Block", "Spread Bets%", "Spread Money%",
         "Open Spread", "Current Spread", "Current Spread Price",
         # TOTAL
-        "Total Decision", "Total Side", "Total Score", "Total Net Edge", "Total Bets%", "Total Money%",
+        "Total Decision", "Total Side", "Total Score", "Total Net Edge", "Total Strong Elig", "Total Strong Block", "Total Bets%", "Total Money%",
         "Open Total", "Current Total", "Current Total Price",
         # ML
-        "ML Decision", "ML Side", "ML Score", "ML Net Edge", "ML Bets%", "ML Money%",
+        "ML Decision", "ML Side", "ML Score", "ML Net Edge", "ML Strong Elig", "ML Strong Block", "ML Bets%", "ML Money%",
         "Open ML", "Current ML", "Current ML Price",
     ]
 
@@ -3734,6 +3734,8 @@ def build_dashboard():
         sp_side = _blank(rr.get("SPREAD_side")) or _blank(rr.get("SPREAD_favored"))
         sp_sc = _fmt_score(rr.get("SPREAD_model_score"))
         sp_edge = _fmt_score(rr.get("SPREAD_net_edge"))
+        sp_elig = _blank(rr.get("SPREAD_strong_eligible"))
+        sp_block = _blank(rr.get("SPREAD_strong_block_reason"))
         sp_b = _fmt_pct(rr.get("SPREAD_bets_pct"))
         sp_m = _fmt_pct(rr.get("SPREAD_money_pct"))
         sp_o = _fmt_num(rr.get("SPREAD_open_line"))
@@ -3745,6 +3747,8 @@ def build_dashboard():
         t_side = _blank(rr.get("TOTAL_side")) or _blank(rr.get("TOTAL_favored"))
         t_sc = _fmt_score(rr.get("TOTAL_model_score"))
         t_edge = _fmt_score(rr.get("TOTAL_net_edge"))
+        t_elig = _blank(rr.get("TOTAL_strong_eligible"))
+        t_block = _blank(rr.get("TOTAL_strong_block_reason"))
         t_b = _fmt_pct(rr.get("TOTAL_bets_pct"))
         t_m = _fmt_pct(rr.get("TOTAL_money_pct"))
         t_o = _fmt_num(rr.get("TOTAL_open_line"))
@@ -3756,6 +3760,8 @@ def build_dashboard():
         ml_side = _blank(rr.get("MONEYLINE_side")) or _blank(rr.get("MONEYLINE_favored"))
         ml_sc = _fmt_score(rr.get("MONEYLINE_model_score"))
         ml_edge = _fmt_score(rr.get("MONEYLINE_net_edge"))
+        ml_elig = _blank(rr.get("MONEYLINE_strong_eligible"))
+        ml_block = _blank(rr.get("MONEYLINE_strong_block_reason"))
         ml_b = _fmt_pct(rr.get("MONEYLINE_bets_pct"))
         ml_m = _fmt_pct(rr.get("MONEYLINE_money_pct"))
         ml_o = _fmt_int(rr.get("MONEYLINE_open_line"))
@@ -3769,13 +3775,13 @@ def build_dashboard():
   <td>{game}</td>
   <td>{t_et}</td>
 
-  <td>{sp_dec}</td><td>{sp_side}</td><td>{sp_sc}</td><td>{sp_edge}</td><td>{sp_b}</td><td>{sp_m}</td>
+  <td>{sp_dec}</td><td>{sp_side}</td><td>{sp_sc}</td><td>{sp_edge}</td><td>{sp_elig}</td><td>{sp_block}</td><td>{sp_b}</td><td>{sp_m}</td>
   <td>{sp_o}</td><td>{sp_c}</td><td>{sp_cp}</td>
 
-  <td>{t_dec}</td><td>{t_side}</td><td>{t_sc}</td><td>{t_edge}</td><td>{t_b}</td><td>{t_m}</td>
+  <td>{t_dec}</td><td>{t_side}</td><td>{t_sc}</td><td>{t_edge}</td><td>{t_elig}</td><td>{t_block}</td><td>{t_b}</td><td>{t_m}</td>
   <td>{t_o}</td><td>{t_c}</td><td>{t_cp}</td>
 
-  <td>{ml_dec}</td><td>{ml_side}</td><td>{ml_sc}</td><td>{ml_edge}</td><td>{ml_b}</td><td>{ml_m}</td>
+  <td>{ml_dec}</td><td>{ml_side}</td><td>{ml_sc}</td><td>{ml_edge}</td><td>{ml_elig}</td><td>{ml_block}</td><td>{ml_b}</td><td>{ml_m}</td>
   <td>{ml_o}</td><td>{ml_c}</td><td>{ml_cp}</td>
 </tr>
 """
