@@ -3734,8 +3734,8 @@ def build_dashboard():
         sp_side = _blank(rr.get("SPREAD_side")) or _blank(rr.get("SPREAD_favored"))
         sp_sc = _fmt_score(rr.get("SPREAD_model_score"))
         sp_edge = _fmt_score(rr.get("SPREAD_net_edge"))
-        sp_elig = _blank(rr.get("SPREAD_strong_eligible"))
-        sp_block = _blank(rr.get("SPREAD_strong_block_reason"))
+        sp_elig = _pretty_strong_elig(rr.get("SPREAD_strong_eligible"))
+        sp_block = _pretty_strong_block(rr.get("SPREAD_strong_block_reason"))
         sp_b = _fmt_pct(rr.get("SPREAD_bets_pct"))
         sp_m = _fmt_pct(rr.get("SPREAD_money_pct"))
         sp_o = _fmt_num(rr.get("SPREAD_open_line"))
@@ -3747,8 +3747,8 @@ def build_dashboard():
         t_side = _blank(rr.get("TOTAL_side")) or _blank(rr.get("TOTAL_favored"))
         t_sc = _fmt_score(rr.get("TOTAL_model_score"))
         t_edge = _fmt_score(rr.get("TOTAL_net_edge"))
-        t_elig = _blank(rr.get("TOTAL_strong_eligible"))
-        t_block = _blank(rr.get("TOTAL_strong_block_reason"))
+        t_elig = _pretty_strong_elig(rr.get("TOTAL_strong_eligible"))
+        t_block = _pretty_strong_block(rr.get("TOTAL_strong_block_reason"))
         t_b = _fmt_pct(rr.get("TOTAL_bets_pct"))
         t_m = _fmt_pct(rr.get("TOTAL_money_pct"))
         t_o = _fmt_num(rr.get("TOTAL_open_line"))
@@ -3760,8 +3760,8 @@ def build_dashboard():
         ml_side = _blank(rr.get("MONEYLINE_side")) or _blank(rr.get("MONEYLINE_favored"))
         ml_sc = _fmt_score(rr.get("MONEYLINE_model_score"))
         ml_edge = _fmt_score(rr.get("MONEYLINE_net_edge"))
-        ml_elig = _blank(rr.get("MONEYLINE_strong_eligible"))
-        ml_block = _blank(rr.get("MONEYLINE_strong_block_reason"))
+        ml_elig = _pretty_strong_elig(rr.get("MONEYLINE_strong_eligible"))
+        ml_block = _pretty_strong_block(rr.get("MONEYLINE_strong_block_reason"))
         ml_b = _fmt_pct(rr.get("MONEYLINE_bets_pct"))
         ml_m = _fmt_pct(rr.get("MONEYLINE_money_pct"))
         ml_o = _fmt_int(rr.get("MONEYLINE_open_line"))
@@ -3932,6 +3932,25 @@ def build_dashboard():
 # CLI
 # =========================
 
+
+
+def _pretty_strong_elig(x):
+    s = str(x).strip().lower()
+    return "Y" if s in ("true","1","yes") else ""
+
+def _pretty_strong_block(x):
+    m = {
+        "score_lt_72": "score<72",
+        "net_edge_lt_10": "edge<10",
+        "net_edge_missing": "edge?",
+        "no_persistence": "persist",
+        "unstable": "unstable",
+        "late_block": "late",
+        "cross_market_contradiction": "x-mkt",
+        "public_drift_block": "pubdrift",
+    }
+    s = str(x).strip()
+    return m.get(s, s)
 
 def _strong_flags(row, market, pb_map=None):
     """v1.1 STRONG certification gate."""
