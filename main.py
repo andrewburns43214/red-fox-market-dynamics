@@ -1567,16 +1567,11 @@ def add_market_read_to_latest(latest: pd.DataFrame) -> pd.DataFrame:
     """
     df = latest.copy()
 
-    # D
-    def _D(r):
-        try:
-            if pd.isna(r.get("money_pct")) or pd.isna(r.get("bets_pct")):
-                return 0.0
-            return float(r["money_pct"]) - float(r["bets_pct"])
-        except Exception:
-            return 0.0
-
-    df["divergence_D"] = df.apply(_D, axis=1)
+    # D (PERF): vectorized money_pct - bets_pct (avoid df.apply(axis=1))
+    # Treat missing/non-numeric as 0.0 to match prior behavior.
+    _money = pd.to_numeric(df.get("money_pct", 0), errors="coerce").fillna(0.0)
+    _bets  = pd.to_numeric(df.get("bets_pct", 0), errors="coerce").fillna(0.0)
+    df["divergence_D"] = _money - _bets
 
     # Pairing: determine which side is "high-bet" within each (sport, game_id, market_display)
     grp_cols = ["sport", "game_id", "market_display"]
