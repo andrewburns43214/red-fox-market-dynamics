@@ -2163,7 +2163,8 @@ def build_dashboard():
 
     # ---------- Stable keys for OPEN/LATEST/PREV (prevents "open resets" when line changes) ----------
     # market_display is consistent even if df["market"] varies (or contains alt labels).
-    df["market_display"] = df.apply(
+    # PERF: avoid df.apply(axis=1) over full frame (datetime/object interleave can be very slow)
+    df["market_display"] = df[["side","current_line"]].apply(
         lambda rr: infer_market_type(rr.get("side", ""), rr.get("current_line", "")),
         axis=1
     )
