@@ -1638,11 +1638,11 @@ def add_market_read_to_latest(latest: pd.DataFrame) -> pd.DataFrame:
 
         elif mkt == "SPREAD":
             move_dir = _toward_side_by_spread(r.get("open_line_val"), r.get("current_line_val"))
+            od = r.get("odds_move_open")  # used below; must be set before referencing
             if move_dir == 0 and pd.notna(od) and abs(float(od)) >= 10:
                 move_dir = _toward_side_by_juice(r.get("open_odds"), r.get("current_odds"))
 
             ld = r.get("line_move_open")
-            od = r.get("odds_move_open")
             key_cross = _crossed_key(abs(r.get("open_line_val")) if pd.notna(r.get("open_line_val")) else None,
                                      abs(r.get("current_line_val")) if pd.notna(r.get("current_line_val")) else None)
             meaningful = (
@@ -2158,11 +2158,19 @@ def build_dashboard():
 
     # ---------- Stable keys for OPEN/LATEST/PREV (prevents "open resets" when line changes) ----------
     # market_display is consistent even if df["market"] varies (or contains alt labels).
-    # PERF: avoid df.apply(axis=1) over full frame (datetime/object interleave can be very slow)
-    df["market_display"] = df[["side","current_line"]].apply(
-        lambda rr: infer_market_type(rr.get("side", ""), rr.get("current_line", "")),
-        axis=1
-    )
+    # PERF: vectorize market_display (avoid df.apply(axis=1))
+    _cl = df.get("current_line", "").astype(str).str.lower()
+
+    # TOTAL: lines that look like o/u or contain over/under
+    _is_total = _cl.str.match(r"^\s*[ou]\s*\d") | _cl.str.contains(r"over|under", regex=True)
+
+    # MONEYLINE: +### or -### with no decimal (common ML) and not total
+    _is_ml = (_cl.str.match(r"^\s*[+-]\d{3,}\s*$")) & (~_is_total)
+
+    df["market_display"] = "SPREAD"
+    df.loc[_is_total, "market_display"] = "TOTAL"
+    df.loc[_is_ml, "market_display"] = "MONEYLINE"
+
 
     # side_key makes a stable identifier per side within a game/market even when the numeric line moves.
     df["side_key"] = df["side"].astype(str)
@@ -2927,8 +2935,7 @@ def build_dashboard():
 
     game_view["game_decision"] = game_view.apply(lambda r: _game_decision(r.get("game_confidence", 50), r.get("net_edge", 0)), axis=1)
     game_view["opp_weak"] = game_view["min_side_score"] <= 35.0
-    game_view["opp_weak_mark"] = game_view["opp_weak"].apply(lambda x: "âš‘" if bool(x) else "")
-
+    game_view["opp_weak_mark"] = game_view["opp_weak"].apply(lambda x: "!" if bool(x) else "")
     # Sort for display: sport, game time, market order
     if "_sort_time" in latest.columns:
         time_map = (
