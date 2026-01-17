@@ -81,7 +81,9 @@ def compute_minutes_to_kickoff(row: dict):
     IMPORTANT: We are NOT touching snapshot timestamps.
     """
     kickoff_iso = (
-        row.get("espn_kickoff_iso")
+        row.get("dk_start_iso")
+        or row.get("game_time_iso")
+        or row.get("espn_kickoff_iso")
         or row.get("espn_kickoff")
         or row.get("game_time_iso")
     )
@@ -859,6 +861,69 @@ def _metrics_now_iso_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+
+def _canonical_market_side_for_state(market: str, side: str, current_line: str):
+    """
+    Enforce invariant:
+      - market in {SPREAD,TOTAL,MONEYLINE}
+      - side normalized by market:
+          SPREAD: team name only
+          TOTAL: Under/Over only
+          MONEYLINE: team name only
+    Uses BOTH side and current_line because DK stores ML odds inside current_line (e.g. "DEN Broncos @ -115").
+    """
+    import re
+
+    m = (market or "").strip().upper()
+    s = (side or "").strip()
+    cl = (current_line or "").strip()
+
+    su = s.upper()
+    clu = cl.upper()
+
+    # TOTAL detection wins (if side or current_line looks like Under/Over)
+    if re.search(r"\b(UNDER|OVER)\b", su) or clu.startswith("UNDER") or clu.startswith("OVER"):
+        # Prefer explicit Under/Over from side first
+        if "UNDER" in su or clu.startswith("UNDER"):
+            return "TOTAL", "Under"
+        if "OVER" in su or clu.startswith("OVER"):
+            return "TOTAL", "Over"
+        return "TOTAL", s  # fallback (shouldn't happen)
+
+    # Spread-ish suffix on side => SPREAD team name
+    if re.search(r"\s[+-]\d+(?:\.\d+)?\s*$", s):
+        team = re.sub(r"\s[+-]\d+(?:\.\d+)?\s*$", "", s).strip()
+        return "SPREAD", team
+
+    # Moneyline detection from current_line: contains "@" and ends with odds
+    # Examples: "DEN Broncos @ -115", "BUF Bills @ +105"
+    if "@" in cl and re.search(r"@\s*[+-]?\d+\s*$", cl):
+        # side should be team name; if missing, parse from current_line before "@"
+        if not s:
+            team = cl.split("@", 1)[0].strip()
+            return "MONEYLINE", team
+        # sanitize anyway
+        team = re.sub(r"\s[+-]\d+(?:\.\d+)?\s*$", "", s).strip()
+        return "MONEYLINE", team
+
+    # If market already valid, sanitize side to match market
+    if m in ("SPREAD","TOTAL","MONEYLINE"):
+        if m == "TOTAL":
+            if "UNDER" in su:
+                return "TOTAL", "Under"
+            if "OVER" in su:
+                return "TOTAL", "Over"
+            return "TOTAL", s
+        if m == "MONEYLINE":
+            team = re.sub(r"\s[+-]\d+(?:\.\d+)?\s*$", "", s).strip()
+            return "MONEYLINE", team
+        if m == "SPREAD":
+            team = re.sub(r"\s[+-]\d+(?:\.\d+)?\s*$", "", s).strip()
+            return "SPREAD", team
+
+    # Fallback: keep something deterministic
+    return (m or "MONEYLINE"), s
+
 def _metrics_blank(x) -> str:
     try:
         if x is None:
@@ -1101,7 +1166,7 @@ def update_row_state_and_signal_ledger(latest):
                 return
 
         # Require score; if missing, do nothing safely
-        score_col = "confidence_score" if "confidence_score" in latest.columns else ("model_score" if "model_score" in latest.columns else "")
+        # score_col already selected above (do not overwrite here)
         if not score_col:
             return
 
@@ -1112,6 +1177,22 @@ def update_row_state_and_signal_ledger(latest):
         _append_signal_ledger(ledger_path, [])
 
         state_df = _load_row_state(state_path)
+
+        # --- v1.1 safety: prune any contaminated legacy keys from row_state on load ---
+        try:
+            if state_df is not None and (not state_df.empty):
+                _side = state_df.get("side", "").fillna("").astype(str)
+                _mkt  = state_df.get("market", "").fillna("").astype(str).str.upper()
+
+                _bad_total = _side.str.contains(r"\bUNDER\b|\bOVER\b", case=False, na=False)
+                _bad_spreadish_ml = (_mkt=="MONEYLINE") & _side.str.contains(r"\s[+-]\d+(?:\.\d+)?\s*$", regex=True, na=False)
+                _bad = ((_mkt.isin(["SPREAD","MONEYLINE"])) & _bad_total) | _bad_spreadish_ml
+
+                if bool(_bad.any()):
+                    state_df = state_df[~_bad].copy()
+        except Exception:
+            pass
+        # --- end prune ---
 
         # Build state index (PERSISTED row_state schema: sport, game_id, market, side)
         if state_df is not None and not state_df.empty:
@@ -1171,8 +1252,33 @@ def update_row_state_and_signal_ledger(latest):
         for _, r in latest.iterrows():
             sport = _metrics_blank(r.get('sport'))
             game_id = _metrics_blank(r.get('game_id'))
-            market = _metrics_blank(r.get('_metrics_market') if '_metrics_market' in getattr(latest,'columns',[]) else r.get(market_col)).upper()
-            side = _metrics_blank(r.get('side'))
+            market = _metrics_blank(r.get(market_col) or r.get("_metrics_market") or r.get("market_display") or "").upper()
+            side = _metrics_blank(r.get("side"))
+            current_line = _metrics_blank(r.get("current_line"))
+
+            # --- canonicalize market/side using the STATE market (SPREAD/TOTAL/MONEYLINE) ---
+            market, side = _canonical_market_side_for_state(market, side, current_line)
+            market = _metrics_blank(market).upper()
+            side = _metrics_blank(side)
+
+
+            # --- v1.1 guardrail: prevent TOTAL/SPREAD/ML cross-contamination in row_state ---
+            try:
+                _mkt_u = str(market).strip().upper()
+                _side_u = str(side).strip().upper()
+
+                # Totals must never be written under SPREAD/MONEYLINE
+                if _mkt_u in ("SPREAD","MONEYLINE") and (("UNDER" in _side_u) or ("OVER" in _side_u)):
+                    continue
+
+                # Spread-like labels must never be written under MONEYLINE (e.g., "Boise State -5.5")
+                if _mkt_u == "MONEYLINE":
+                    import re as _re
+                    if _re.search(r"\s[+-]\d+(?:\.\d+)?\s*$", str(side).strip()):
+                        continue
+            except Exception:
+                pass
+            # --- end guardrail ---
 
             if sport == "" or game_id == "" or market == "" or side == "":
                 continue
@@ -1339,6 +1445,29 @@ def _dk_game_to_espn_key(game: str) -> str:
 
 
 
+
+
+
+def _infer_market_from_side_line(side: str, current_line: str) -> str:
+    """
+    DK 'current_line' generally looks like '<thing> @ -110' for ALL markets.
+    So '@' is NOT a moneyline indicator.
+    Priority: TOTAL > SPREAD > MONEYLINE.
+    """
+    import re
+    s = (str(side or "") + " " + str(current_line or "")).strip().upper()
+
+    # TOTAL: Over/Under
+    if "OVER" in s or "UNDER" in s:
+        return "TOTAL"
+
+    # SPREAD: DK spreads have a decimal (.0/.5) in the line (e.g., -1.5, +3.0, +7.5).
+    # IMPORTANT: do NOT treat moneyline odds like "@ -115" as a spread.
+    # So we only match signed numbers with a decimal.
+    if re.search(r"\s[+-]\d+\.\d+\b", s):
+        return "SPREAD"
+
+    return "MONEYLINE"
 
 
 SPORT_CONFIG = {
@@ -2167,9 +2296,42 @@ def build_dashboard():
     # MONEYLINE: +### or -### with no decimal (common ML) and not total
     _is_ml = (_cl.str.match(r"^\s*[+-]\d{3,}\s*$")) & (~_is_total)
 
+    # market_display must be derived from rendered line text.
+    # NOTE: DK snapshots often store ML odds in current_line (e.g., "DEN Broncos @ -115")
+    # while side is just the team name. So MONEYLINE detection must look at current_line.
+    _line_txt = (
+        df["current_line"].fillna("").astype(str)
+        if "current_line" in df.columns
+        else df["side"].fillna("").astype(str)
+    )
+    _side_txt = df["side"].fillna("").astype(str)
+
+    _line_u = _line_txt.str.upper()
+    _side_u = _side_txt.str.upper()
+
+    _is_total = (_side_u.str.contains("UNDER") | _side_u.str.contains("OVER") |
+                 _line_u.str.contains("UNDER") | _line_u.str.contains("OVER"))
+
+    # ML: detect "@ -115" style odds in current_line (preferred), fallback to side if ever present
+    _is_ml = _line_u.str.contains(r"@\s*[-+]?\d+")
+
+    # --- Canonical market_display (DK uses "@ price" for ALL markets; '@' is not ML) ---
+    # Priority: TOTAL > SPREAD > MONEYLINE (residual)
     df["market_display"] = "SPREAD"
     df.loc[_is_total, "market_display"] = "TOTAL"
+
+    # MONEYLINE = everything that is not TOTAL and not SPREAD
+    try:
+        # SPREAD: detect a signed line BEFORE the "@ price" token, e.g. "SEA Seahawks -7 @ -110"
+        # Works for -7 and -1.5, and avoids treating ML odds like "@ -340" as spread.
+        _cl = df.get("current_line", "").fillna("").astype(str).str.upper()
+        _is_spread = (~_is_total) & _cl.str.contains(r"\s[+-]\d+(?:\.\d+)?\s*@\s*[+-]?\d+\s*$", regex=True, na=False)
+    except Exception:
+        _is_spread = (~_is_total)
+
+    _is_ml = (~_is_total) & (~_is_spread)
     df.loc[_is_ml, "market_display"] = "MONEYLINE"
+    # --- end canonical market_display ---
 
 
     # side_key makes a stable identifier per side within a game/market even when the numeric line moves.
@@ -2675,6 +2837,7 @@ def build_dashboard():
 
 
     latest["color"] = colors
+
     latest["why"] = explains
     latest["confidence_score"] = scores
 
@@ -3171,7 +3334,7 @@ def build_dashboard():
             latest[c] = ""
 
     # Decide thresholds (UI-only label; does NOT change scoring)
-    def _decision(score, net_edge=None):
+    def _decision(score, net_edge=None, sport=None, timing_bucket=None):
         try:
             sc = float(score)
         except Exception:
@@ -3186,8 +3349,8 @@ def build_dashboard():
         # Enforce timing discipline in the decision pipeline (not just dashboard flags):
         #   - Global: no STRONG BET in LATE
         #   - NCAAB: STRONG blocked in EARLY and LATE
-        tb = str(rr.get("timing_bucket") or "").strip().upper()
-        sp = str(rr.get("sport") or "").strip().lower()
+        tb = str(timing_bucket or "").strip().upper()
+        sp = str(sport or "").strip().lower()
 
         strong_block = False
         if tb == "LATE":
@@ -3298,6 +3461,38 @@ def build_dashboard():
 
     # ML fields (open/current are ODDS)
     ml = winners[winners["market_display"] == "MONEYLINE"].copy()
+
+    # --- v1.1: enforce per-market side labels from winners (presentation-only) ---
+    # Prevent SPREAD_side contamination from TOTAL selections (e.g., "Under 48.5").
+    try:
+        if "side_disp" in sp.columns:
+            sp["_side_out"] = sp["side_disp"].fillna("").astype(str)
+        elif "side" in sp.columns:
+            sp["_side_out"] = sp["side"].fillna("").astype(str)
+        else:
+            sp["_side_out"] = ""
+
+        if "side_disp" in tt.columns:
+            tt["_side_out"] = tt["side_disp"].fillna("").astype(str)
+        elif "side" in tt.columns:
+            tt["_side_out"] = tt["side"].fillna("").astype(str)
+        else:
+            tt["_side_out"] = ""
+
+        if "side_disp" in ml.columns:
+            ml["_side_out"] = ml["side_disp"].fillna("").astype(str)
+        elif "side" in ml.columns:
+            ml["_side_out"] = ml["side"].fillna("").astype(str)
+        else:
+            ml["_side_out"] = ""
+
+        # Rename to wide column names expected later
+        sp = sp.rename(columns={"_side_out": "SPREAD_side"})
+        tt = tt.rename(columns={"_side_out": "TOTAL_side"})
+        ml = ml.rename(columns={"_side_out": "MONEYLINE_side"})
+    except Exception:
+        pass
+    # --- end v1.1 per-market side enforcement ---
     if ml.empty:
         ml = pd.DataFrame(columns=["sport", "game_id"])
     else:
@@ -3361,10 +3556,9 @@ def build_dashboard():
             "current_ml": f"{prefix}_current_line",
             "current_ml_price": f"{prefix}_current_price",
         }
-
         sub = sub.rename(columns=ren)
         sub[f"{prefix}_decision"] = sub.apply(
-            lambda r: _decision(r.get(f"{prefix}_model_score"), r.get(f"{prefix}_net_edge")),
+            lambda r: _decision(r.get(f"{prefix}_model_score"), r.get(f"{prefix}_net_edge"), r.get("sport"), r.get("timing_bucket")),
             axis=1
         )
 
@@ -3411,6 +3605,69 @@ def build_dashboard():
     dash = _join_market(dash, ml, "MONEYLINE")
     # =========================
     # FORCE WIDE SCHEMA AFTER JOINS (presentation-only)
+
+    # --- v1.1: populate {M}_favored on GAME rows (presentation-only; no scoring) ---
+    # Favored side is the max-score side per (sport, game_id, market_display) from side-level `latest`.
+    try:
+        _fav = None
+        if "fav_rows" in locals():
+            _fav = fav_rows.copy()
+        elif "fav_rows" in globals():
+            _fav = fav_rows.copy()
+        else:
+            _fav = None
+
+        if _fav is not None and len(_fav) > 0 and "market_display" in _fav.columns:
+            # Choose a "side" label column that exists on favored side rows
+            _side_col = None
+            for _c in ("side", "team", "selection", "side_key"):
+                if _c in _fav.columns:
+                    _side_col = _c
+                    break
+
+            if _side_col:
+                _fav["market_display"] = _fav["market_display"].fillna("").astype(str).str.strip().str.upper()
+                _fav["_favored_side"] = _fav[_side_col].fillna("").astype(str).str.strip()
+
+                _wide = (
+                    _fav.pivot_table(
+                        index=["sport", "game_id"],
+                        columns="market_display",
+                        values="_favored_side",
+                        aggfunc="first",
+                    )
+                    .reset_index()
+                )
+
+                # Rename pivoted columns to wide schema names
+                _ren = {}
+                for _m in ("SPREAD", "TOTAL", "MONEYLINE"):
+                    if _m in _wide.columns:
+                        _ren[_m] = f"{_m}_favored"
+                _wide = _wide.rename(columns=_ren)
+
+                dash = dash.merge(_wide, on=["sport", "game_id"], how="left")
+
+        # Ensure columns exist even if no data
+
+        # Backfill {M}_favored from existing {M}_side (presentation-only).
+        # The wide dashboard already carries {M}_side strings; favored should match that.
+        for _m in ("SPREAD", "TOTAL", "MONEYLINE"):
+            _favc = f"{_m}_favored"
+            _sidec = f"{_m}_side"
+            if _favc in dash.columns and _sidec in dash.columns:
+                _blank = dash[_favc].fillna("").astype(str).str.strip().eq("")
+                if _blank.any():
+                    dash.loc[_blank, _favc] = dash.loc[_blank, _sidec].fillna("").astype(str)
+        for _m in ("SPREAD", "TOTAL", "MONEYLINE"):
+            _c = f"{_m}_favored"
+            if _c not in dash.columns:
+                dash[_c] = ""
+            else:
+                dash[_c] = dash[_c].fillna("").astype(str)
+    except Exception:
+        pass
+    # --- end v1.1 favored wiring ---
     # This runs immediately after SPREAD/TOTAL/MONEYLINE merges so columns exist
     # no matter what later writer/selection does.
     # =========================
@@ -3797,6 +4054,60 @@ def build_dashboard():
 # --- v1.1 STRONG certification flags (dashboard-only; no scoring) ---
 
     # --- v1.1 STRONG CERTIFICATION WIRING (INSIDE build_dashboard) ---
+
+    # --- v1.1: harden {M}_side from per-market winners (presentation-only) ---
+    # winners is already computed as best side row per (sport, game_id, market_display).
+    # Fixes SPREAD_side contamination (e.g., Under/Over showing up in SPREAD_side).
+    try:
+        if "winners" in locals() and winners is not None and len(winners) > 0 and "market_display" in winners.columns:
+            _w = winners.copy()
+            _w["market_display"] = _w["market_display"].fillna("").astype(str).str.strip().str.upper()
+            _val_col = "side_disp" if "side_disp" in _w.columns else ("side" if "side" in _w.columns else "")
+            if _val_col:
+                _wide_side = (
+                    _w.pivot_table(index=["sport","game_id"], columns="market_display", values=_val_col, aggfunc="first")
+                      .reset_index()
+                )
+                _ren = {}
+                for _m in ("SPREAD","TOTAL","MONEYLINE"):
+                    if _m in _wide_side.columns:
+                        _ren[_m] = f"{_m}_side"
+                _wide_side = _wide_side.rename(columns=_ren)
+                dash = dash.merge(_wide_side, on=["sport","game_id"], how="left", suffixes=("", "_wfix"))
+                # If merge produced *_wfix due to existing columns, prefer the fixed values.
+                for _m in ("SPREAD","TOTAL","MONEYLINE"):
+                    c = f"{_m}_side"
+                    wf = f"{c}_wfix"
+                    if wf in dash.columns:
+                        dash[c] = dash[wf].fillna(dash.get(c, "")).astype(str)
+                        dash = dash.drop(columns=[wf], errors="ignore")
+                # Normalize to strings
+                for _m in ("SPREAD","TOTAL","MONEYLINE"):
+                    c = f"{_m}_side"
+                    if c in dash.columns:
+                        dash[c] = dash[c].fillna("").astype(str)
+    except Exception:
+        pass
+    # --- end v1.1 {M}_side hardening ---
+
+    # --- v1.1: guardrail - prevent TOTAL strings from polluting SPREAD columns (presentation-only) ---
+    try:
+        if "SPREAD_side" in dash.columns:
+            _s = dash["SPREAD_side"].fillna("").astype(str).str.strip()
+            _bad = _s.str.contains(r"\bUNDER\b|\bOVER\b", case=False, na=False)
+            if _bad.any():
+                for _c in ("SPREAD_side","SPREAD_favored","SPREAD_model_score","SPREAD_net_edge"):
+                    if _c in dash.columns:
+                        dash.loc[_bad, _c] = ""
+                if "SPREAD_decision" in dash.columns:
+                    dash.loc[_bad, "SPREAD_decision"] = "NO BET"
+                if "SPREAD_strong_eligible" in dash.columns:
+                    dash.loc[_bad, "SPREAD_strong_eligible"] = False
+                if "SPREAD_strong_block_reason" in dash.columns:
+                    dash.loc[_bad, "SPREAD_strong_block_reason"] = "spread_missing"
+    except Exception:
+        pass
+    # --- end v1.1 SPREAD contamination guardrail ---
     # Writes: {M}_strong_eligible, {M}_strong_block_reason
     try:
         # initialize columns so CSV always has them
