@@ -1,4 +1,4 @@
-import argparse
+﻿import argparse
 import csv
 
 # --- BASELINE LOG CACHE ---
@@ -3310,6 +3310,25 @@ def build_dashboard():
 
     def _join_market(dash_df, sub_df, prefix):
         if sub_df is None or len(sub_df) == 0:
+            # =========================
+            # JOIN MARKET GUARANTEE (presentation-only)
+            # Ensure prefixed columns exist even if sub_df is empty (merge would add nothing).
+            # =========================
+            _need = [
+                f"{prefix}_decision",
+                f"{prefix}_side",
+                f"{prefix}_model_score",
+                f"{prefix}_net_edge",
+                f"{prefix}_bets_pct",
+                f"{prefix}_money_pct",
+                f"{prefix}_open_line",
+                f"{prefix}_current_line",
+                f"{prefix}_current_price",
+                f"{prefix}_color",
+            ]
+            for _c in _need:
+                if _c not in dash_df.columns:
+                    dash_df[_c] = ""
             return dash_df
 
         keep = [
@@ -3349,11 +3368,71 @@ def build_dashboard():
             axis=1
         )
 
+        
+        # =========================
+        # JOIN MARKET GUARANTEE (presentation-only)
+        # Ensure prefixed columns exist even if sub_df is empty (merge would add nothing).
+        # =========================
+        _need = [
+            f"{prefix}_decision",
+            f"{prefix}_side",
+            f"{prefix}_model_score",
+            f"{prefix}_net_edge",
+            f"{prefix}_bets_pct",
+            f"{prefix}_money_pct",
+            f"{prefix}_open_line",
+            f"{prefix}_current_line",
+            f"{prefix}_current_price",
+            f"{prefix}_color",
+        ]
+
+        # If sub is empty, create blank columns and return dash_df as-is
+        try:
+            if sub is None or (hasattr(sub, "empty") and bool(sub.empty)):
+                for _c in _need:
+                    if _c not in dash_df.columns:
+                        dash_df[_c] = ""
+                return dash_df
+        except Exception:
+            pass
+
+        # If sub exists but is missing some columns, create them (blank) so merge always yields schema
+        try:
+            for _c in _need:
+                if _c not in sub.columns:
+                    sub[_c] = ""
+        except Exception:
+            pass
+
         return dash_df.merge(sub, on=["sport", "game_id"], how="left")
 
     dash = _join_market(dash, sp, "SPREAD")
     dash = _join_market(dash, tt, "TOTAL")
     dash = _join_market(dash, ml, "MONEYLINE")
+    # =========================
+    # FORCE WIDE SCHEMA AFTER JOINS (presentation-only)
+    # This runs immediately after SPREAD/TOTAL/MONEYLINE merges so columns exist
+    # no matter what later writer/selection does.
+    # =========================
+    try:
+        _wide = []
+        for _m in ("SPREAD","TOTAL","MONEYLINE"):
+            for _f in (
+                "decision","side","model_score","net_edge","bets_pct","money_pct",
+                "open_line","current_line","current_price","color",
+            ):
+                _wide.append(f"{_m}_{_f}")
+
+        for _c in _wide:
+            if _c not in dash.columns:
+                dash[_c] = ""
+
+        # keep existing cols too (just guarantee the wide ones exist)
+        # NOTE: do NOT drop anything here; only ensure presence
+    except Exception:
+        pass
+
+
 
     # Fill blanks (NO NaN in output)
     dash = dash.fillna("")
@@ -3383,9 +3462,17 @@ def build_dashboard():
         "MONEYLINE_open_line", "MONEYLINE_current_line", "MONEYLINE_current_price",
     ]
 
-    present = [c for c in col_order if c in dash.columns]
-    extras = [c for c in dash.columns if c not in present]
-    dash = dash[present + extras]
+    # --- UI schema guarantee (presentation-only): enforce col_order ---
+    # Guarantee every locked column exists, then order as col_order + extras
+    for _c in col_order:
+        if _c not in dash.columns:
+            dash[_c] = ""
+    extras = [c for c in dash.columns if c not in col_order]
+    dash = dash[col_order + extras]
+    # --- end UI schema guarantee ---
+
+    # --- end UI schema guarantee ---
+
 
     # ---------- Write dashboard.csv (wide schema) ----------
     ensure_data_dir()
@@ -3559,7 +3646,155 @@ def build_dashboard():
         dash["stable_ok"] = False
     # --- end v1.1 persistence & stability flags ---
 
-    # --- v1.1 STRONG certification flags (dashboard-only; no scoring) ---
+    
+    # =========================
+    
+    # =========================
+    # WIDE MARKET REPAIR (presentation-only)
+    # Backfill {M}_* columns from long-form `latest` if missing/blank.
+    # Does NOT change scoring logic; only fixes dashboard wide wiring.
+    # =========================
+    try:
+        import pandas as _pd
+
+        # Ensure key cols exist in dash (we MERGE by these)
+        if "sport" not in dash.columns:
+            dash["sport"] = ""
+        if "game_id" not in dash.columns:
+            dash["game_id"] = ""
+
+        # Choose the score column that exists on SIDE rows (`latest`)
+        _score_candidates = ["confidence_score", "model_score", "score"]
+        _best_score_col = ""
+        for _c in _score_candidates:
+            if _c in latest.columns:
+                _best_score_col = _c
+                break
+
+        def _to_num(x):
+            try:
+                s = str(x).strip()
+                if s == "":
+                    return float("-inf")
+                return float(s)
+            except Exception:
+                return float("-inf")
+
+        def _pick_best_rows(mkt: str):
+            if "market_display" not in latest.columns:
+                return None
+
+            sub = latest[latest["market_display"].astype(str).str.upper().eq(mkt)].copy()
+            if sub.empty:
+                return None
+
+            if _best_score_col and _best_score_col in sub.columns:
+                tmp = sub[["sport", "game_id", _best_score_col]].copy()
+                tmp["_s"] = tmp[_best_score_col].apply(_to_num)
+                best_idx = tmp.groupby(["sport", "game_id"], sort=False)["_s"].idxmax()
+
+                # best_idx may be scalar or series; force list-like for .loc
+                try:
+                    best = sub.loc[list(best_idx)].copy()
+                except Exception:
+                    best = sub.loc[best_idx].copy()
+
+                # If best is a Series, make it a one-row DataFrame
+                if isinstance(best, __pd.Series):
+                    best = best.to_frame().T
+            else:
+                best = sub.groupby(["sport", "game_id"], as_index=False, sort=False).head(1).copy()
+
+            return best
+
+        # Always ensure wide columns exist (even if market absent)
+        _need_fields = ("decision","side","model_score","net_edge","bets_pct","money_pct",
+                        "open_line","current_line","current_price","color")
+
+        for _m in ("SPREAD","TOTAL","MONEYLINE"):
+            for _f in _need_fields:
+                c = f"{_m}_{_f}"
+                if c not in dash.columns:
+                    dash[c] = ""
+
+        # Fill each market
+        for _m in ("SPREAD","TOTAL","MONEYLINE"):
+            best = _pick_best_rows(_m)
+            if best is None or len(best) == 0:
+                continue
+
+            out = best[["sport","game_id"]].copy()
+
+            # decision
+            out[f"{_m}_decision"] = best["decision"] if "decision" in best.columns else ""
+
+            # side (prefer side_disp if present)
+            if "side_disp" in best.columns:
+                out[f"{_m}_side"] = best["side_disp"]
+            elif "side" in best.columns:
+                out[f"{_m}_side"] = best["side"]
+            else:
+                out[f"{_m}_side"] = ""
+
+            # model_score
+            if _best_score_col and _best_score_col in best.columns:
+                out[f"{_m}_model_score"] = best[_best_score_col]
+            else:
+                out[f"{_m}_model_score"] = ""
+
+            # net_edge / splits / lines / price / color
+            out[f"{_m}_net_edge"]      = best["net_edge"] if "net_edge" in best.columns else ""
+            out[f"{_m}_bets_pct"]      = best["bets_pct"] if "bets_pct" in best.columns else ""
+            out[f"{_m}_money_pct"]     = best["money_pct"] if "money_pct" in best.columns else ""
+            out[f"{_m}_open_line"]     = best["open_line"] if "open_line" in best.columns else ""
+            out[f"{_m}_current_line"]  = best["current_line"] if "current_line" in best.columns else ""
+            out[f"{_m}_current_price"] = best["current_odds"] if "current_odds" in best.columns else ""
+            out[f"{_m}_color"]         = best["color"] if "color" in best.columns else ""
+
+            # Merge wide fields into dash by (sport, game_id)
+            dash = dash.merge(out, on=["sport","game_id"], how="left", suffixes=("",""))
+            # ---- wide repair: coalesce merge suffix columns back to expected names ----
+            try:
+                _coalesce_cols = []
+                for _f in _need_fields:
+                    _coalesce_cols.append(f"{_m}_{_f}")
+
+                for _c in _coalesce_cols:
+                    cx = _c + "_x"
+                    cy = _c + "_y"
+                    if cy in dash.columns:
+                        if _c not in dash.columns:
+                            dash[_c] = ""
+                        # fill base from _y when base is blank
+                        try:
+                            base_blank = dash[_c].astype(str).str.strip().eq("")
+                        except Exception:
+                            base_blank = dash[_c].astype(str).eq("")
+                        dash.loc[base_blank, _c] = dash.loc[base_blank, cy]
+
+                        # drop suffix cols if present
+                        drop_cols = [z for z in (cx, cy) if z in dash.columns]
+                        if drop_cols:
+                            dash = dash.drop(columns=drop_cols)
+            except Exception:
+                pass
+
+
+        dash = dash.fillna("")
+    except Exception:
+        import traceback
+        try:
+            if bool(globals().get("DASH_DEBUG", False)):
+                print("[wide_market_repair] FAILED:")
+                print(traceback.format_exc())
+        except Exception:
+            pass
+        try:
+            dash = dash.fillna("")
+        except Exception:
+            pass
+
+# --- v1.1 STRONG certification flags (dashboard-only; no scoring) ---
 
     # --- v1.1 STRONG CERTIFICATION WIRING (INSIDE build_dashboard) ---
     # Writes: {M}_strong_eligible, {M}_strong_block_reason
@@ -3570,6 +3805,7 @@ def build_dashboard():
             dash[f"{_m}_strong_block_reason"] = ""
 
         # prior-bucket map best-effort (may be empty)
+        _pb = {}
         try:
             _pb_map = _pb if isinstance(_pb, dict) else {}
         except Exception:
@@ -3600,8 +3836,33 @@ def build_dashboard():
     except Exception:
         pass
     # --- end v1.1 STRONG CERTIFICATION WIRING ---
-    dash.to_csv(out_csv, index=False, encoding="utf-8")
-    print("[ok] wrote dashboard csv:", out_csv)
+    
+    # =========================
+        
+        # =========================
+
+
+        # =========================
+
+
+
+
+        # =========================
+
+
+    wrote_csv = False
+    try:
+        dash.to_csv(out_csv, index=False, encoding="utf-8")
+        wrote_csv = True
+    except Exception:
+        import traceback
+        print("[warn] dashboard.csv write FAILED")
+        print(traceback.format_exc())
+
+    if wrote_csv:
+        print("[ok] wrote dashboard csv:", out_csv)
+    else:
+        print("[warn] did NOT write dashboard csv:", out_csv)
 
     # ---- Step C metrics input (instrumentation only) ----
     # IMPORTANT: snapshots.csv does NOT contain model scores; dashboard.csv does.
@@ -4661,6 +4922,9 @@ def build_color_baseline_summary():
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 
