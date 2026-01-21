@@ -2549,6 +2549,68 @@ def build_dashboard():
     latest = add_market_read_to_latest(latest)
     latest = add_market_pair_checks(latest)
 
+    # --- v1.1 STRONG eligibility (Option B: structure + intent) ---
+    # STRONG eligible only if:
+    #   - score >= 72
+    #   - NOT Public Drift
+    #   - NO cross-market contradiction
+    def _is_strong_eligible(row):
+        # v1.1 STRONG eligibility (Option B + persistence + stability)
+        try:
+            s = float(row.get("model_score", row.get("confidence_score", 0)))
+        except Exception:
+            s = 0.0
+
+        if s < 72:
+            return False
+
+        # Intent: block Public Drift
+        mr = str(row.get("market_read","")).upper()
+        if mr == "PUBLIC DRIFT":
+            return False
+
+        # Structure: block cross-market contradiction
+        if str(row.get("market_pair_check","")).strip() != "":
+            return False
+
+        # Persistence: require >= 2 consecutive STRONG-eligible runs
+        try:
+            ss = int(str(row.get("strong_streak","0")).strip() or "0")
+        except Exception:
+            ss = 0
+        if ss < 2:
+            return False
+
+        # Stability: last_score close to peak_score
+        try:
+            ls = float(row.get("last_score","0"))
+            ps = float(row.get("peak_score","0"))
+        except Exception:
+            return False
+
+        sport = str(row.get("sport","")).upper()
+        delta = 2.0 if sport == "NCAAB" else 3.0
+        if ls < (ps - delta):
+            return False
+
+        return True
+
+
+        if s < 72:
+            return False
+
+        mr = str(row.get("market_read","")).upper()
+        if mr == "PUBLIC DRIFT":
+            return False
+
+        if str(row.get("market_pair_check","")).strip() != "":
+            return False
+
+        return True
+
+    latest["strong_eligible"] = latest.apply(_is_strong_eligible, axis=1)
+
+
     # TEMP DEBUG: distribution + spread-only samples (remove after validation)
     if DASH_DEBUG:
         print(
@@ -3128,10 +3190,16 @@ def build_dashboard():
     show_game_time = True  # always show column; cell renderer will blank if missing
 
     # --- GAME header columns (this is the table schema) ---
+    # Must match the GAME row <td> schema exactly.
     header_cols = (
         ["Sport", "Game"]
         + (["Game Time"] if show_game_time else [])
-        + ["Market", "Decision", "Lean", "Model Score", "Net Edge"]
+        + [
+            "SPREAD Decision","SPREAD Score","SPREAD Side",
+            "ML Decision","ML Score","ML Side",
+            "TOTAL Decision","TOTAL Score","TOTAL Side",
+            "Net Edge"
+        ]
     )
     colspan = len(header_cols)
 
@@ -3199,10 +3267,18 @@ def build_dashboard():
   <td>{gr.get("sport_label","")}</td>
   <td><b>{gr.get("game","")}</b></td>
   {gt}
-  <td>{gr.get("market_display","")}</td>
-  <td><span class="pill decision">{gr.get("game_decision","NO BET")}</span></td>
-  <td><span class="pill lean">{gr.get("favored_side","")}</span></td>
-  <td><span class="pill score">{round(float(gr.get("game_confidence",0) or 0),1)}</span></td>
+  <td>{("" if (gr.get("SPREAD_decision","") is None or str(gr.get("SPREAD_decision","")).lower()=="nan") else str(gr.get("SPREAD_decision","")))}</td>
+  <td>{("" if (gr.get("SPREAD_model_score","") is None or str(gr.get("SPREAD_model_score","")).strip()=="" or str(gr.get("SPREAD_model_score","")).lower()=="nan") else f"{float(gr.get('SPREAD_model_score')):.1f}")}</td>
+  <td>{("" if (gr.get("SPREAD_favored","") is None or str(gr.get("SPREAD_favored","")).lower()=="nan") else str(gr.get("SPREAD_favored","")))}</td>
+
+  <td>{("" if (gr.get("MONEYLINE_decision","") is None or str(gr.get("MONEYLINE_decision","")).lower()=="nan") else str(gr.get("MONEYLINE_decision","")))}</td>
+  <td>{("" if (gr.get("MONEYLINE_model_score","") is None or str(gr.get("MONEYLINE_model_score","")).strip()=="" or str(gr.get("MONEYLINE_model_score","")).lower()=="nan") else f"{float(gr.get('MONEYLINE_model_score')):.1f}")}</td>
+  <td>{("" if (gr.get("MONEYLINE_favored","") is None or str(gr.get("MONEYLINE_favored","")).lower()=="nan") else str(gr.get("MONEYLINE_favored","")))}</td>
+
+  <td>{("" if (gr.get("TOTAL_decision","") is None or str(gr.get("TOTAL_decision","")).lower()=="nan") else str(gr.get("TOTAL_decision","")))}</td>
+  <td>{("" if (gr.get("TOTAL_model_score","") is None or str(gr.get("TOTAL_model_score","")).strip()=="" or str(gr.get("TOTAL_model_score","")).lower()=="nan") else f"{float(gr.get('TOTAL_model_score')):.1f}")}</td>
+  <td>{("" if (gr.get("TOTAL_favored","") is None or str(gr.get("TOTAL_favored","")).lower()=="nan") else str(gr.get("TOTAL_favored","")))}</td>
+
   <td><span class="pill edge">{round(float(gr.get("net_edge",0) or 0),1)}</span></td>
 </tr>
 """)
@@ -3264,13 +3340,10 @@ def build_dashboard():
     data-ml-odds="{'' if pd.isna(rr.get('current_odds')) else int(rr.get('current_odds'))}"
     data-search="{str(rr.get('game',''))} {str(side_disp)} {str(rr.get('market_display',''))}">
   <td></td>
-  <td>â†³ {rr.get("why","")}</td>
+  <td>- {rr.get("why","")}</td>
   {gt_side}
-  <td>{market_cell}</td>
-  <td>{decision_cell}</td>
-  <td>{oc_cell}</td>
-  <td>{sc}</td>
-  <td>{mr}</td>
+  <td colspan="9">{market_cell} | {decision_cell} | {oc_cell} | {sc} | {mr}</td>
+  <td></td>
 </tr>
 """)
 
@@ -3334,1180 +3407,30 @@ def build_dashboard():
             latest[c] = ""
 
     # Decide thresholds (UI-only label; does NOT change scoring)
-    def _decision(score, net_edge=None, sport=None, timing_bucket=None):
-        try:
-            sc = float(score)
-        except Exception:
-            sc = 50.0
-
-        try:
-            ne = float(net_edge) if net_edge is not None else 0.0
-        except Exception:
-            ne = 0.0
-
-        # STRONG BET = high score + meaningful asymmetry (v1.1 timing enforcement)
-        # Enforce timing discipline in the decision pipeline (not just dashboard flags):
-        #   - Global: no STRONG BET in LATE
-        #   - NCAAB: STRONG blocked in EARLY and LATE
+    def _decision(score, net_edge=None, sport=None, timing_bucket=None, strong_eligible=None):
+        # v1.1 decision discipline ? STRONG requires eligibility + timing
         tb = str(timing_bucket or "").strip().upper()
         sp = str(sport or "").strip().lower()
+        try:
+            s = float(score)
+        except Exception:
+            s = 0.0
 
-        strong_block = False
+        # Timing hard blocks
         if tb == "LATE":
-            strong_block = True
+            return "BET" if s >= 68 else ("LEAN" if s >= 60 else "NO BET")
         if sp == "ncaab" and tb in ("EARLY", "LATE"):
-            strong_block = True
+            return "BET" if s >= 68 else ("LEAN" if s >= 60 else "NO BET")
 
-        if sc >= 72 and ne >= 10 and not strong_block:
+        # STRONG requires certification (eligibility already computed)
+        if s >= 72 and bool(strong_eligible):
             return "STRONG BET"
-        if sc >= 68:
+
+        if s >= 68:
             return "BET"
-        if sc >= 60:
+        if s >= 60:
             return "LEAN"
         return "NO BET"
-
-    # -----------------------------
-    # Build per-market winners + net edge
-    # -----------------------------
-    # For each (sport, game_id, market_display): pick best side row by confidence_score
-    l2 = latest.copy()
-
-    # Side display cleanup for SPREAD (strip trailing number for display)
-    l2["side_disp"] = l2["side"].astype(str)
-    l2.loc[l2["market_display"] == "SPREAD", "side_disp"] = (
-        l2.loc[l2["market_display"] == "SPREAD", "side_disp"]
-          .str.replace(r"\s[+-]\d+(?:\.\d+)?\s*$", "", regex=True)
-          .str.strip()
-    )
-
-    # Safety: numeric score
-    l2["_score"] = pd.to_numeric(l2["confidence_score"], errors="coerce").fillna(50.0)
-
-    # Net edge per game+market
-    edge = (
-        l2.groupby(["sport", "game_id", "market_display"])["_score"]
-          .agg(["max", "min"])
-          .reset_index()
-    )
-    edge["net_edge"] = edge["max"] - edge["min"]
-
-    # Winner row per game+market
-    winners = (
-        l2.sort_values(
-            ["sport", "game_id", "market_display", "_score"],
-            ascending=[True, True, True, False],
-            kind="mergesort"
-        )
-        .groupby(["sport", "game_id", "market_display"], as_index=False)
-        .head(1)
-        .merge(
-            edge[["sport", "game_id", "market_display", "net_edge"]],
-            on=["sport", "game_id", "market_display"],
-            how="left"
-        )
-    )
-
-    # Base game rows: derive kickoff from SIDE-level latest (already passed stale-kickoff filter)
-    _tm = latest[["sport", "game_id", "game_time_iso"]].copy() if "game_time_iso" in latest.columns else pd.DataFrame(columns=["sport","game_id","game_time_iso"])
-    if not _tm.empty:
-        _tm["game_time_iso"] = _tm["game_time_iso"].fillna("").astype(str).str.strip()
-        _tm = _tm[_tm["game_time_iso"] != ""]
-        _tm = _tm.drop_duplicates(subset=["sport", "game_id"], keep="first")
-    
-    base = winners.groupby(["sport", "game_id"], as_index=False).first()[["sport", "game_id", "game", "sport_label"]]
-
-    # --- market pair check (game-level flag from side-level latest) ---
-    try:
-        if 'market_pair_check' in latest.columns:
-            _pc = latest[['sport','game_id','market_pair_check']].copy()
-            _pc['market_pair_check'] = _pc['market_pair_check'].fillna('').astype(str).str.strip()
-            _pc = _pc[_pc['market_pair_check'] != '']
-            if not _pc.empty:
-                _pc = _pc.drop_duplicates(subset=['sport','game_id'])
-                _pc = _pc.rename(columns={'market_pair_check':'dash_pair_check'})
-                base = base.merge(_pc[['sport','game_id','dash_pair_check']], on=['sport','game_id'], how='left')
-            else:
-                base['dash_pair_check'] = ''
-        else:
-            base['dash_pair_check'] = ''
-    except Exception:
-        # never break report for this
-        base['dash_pair_check'] = ''
-    # --- end pair check ---
-
-    if not _tm.empty:
-        base = base.merge(_tm, on=["sport", "game_id"], how="left")
-    else:
-        base["game_time_iso"] = ""
-    base["game_time_iso"] = base["game_time_iso"].fillna("").astype(str)
-    
-    # Spread fields
-    sp = winners[winners["market_display"] == "SPREAD"].copy()
-    if sp.empty:
-        sp = pd.DataFrame(columns=["sport", "game_id"])
-    else:
-        sp["open_spread"] = sp.get("open_line_val", "")
-        sp["current_spread"] = sp.get("current_line_val", "")
-        sp["current_spread_price"] = sp.get("current_odds", "")
-
-    # Total fields
-    tt = winners[winners["market_display"] == "TOTAL"].copy()
-    if tt.empty:
-        tt = pd.DataFrame(columns=["sport", "game_id"])
-    else:
-        tt["open_total"] = tt.get("open_line_val", "")
-        tt["current_total"] = tt.get("current_line_val", "")
-        tt["current_total_price"] = tt.get("current_odds", "")
-
-    # ML fields (open/current are ODDS)
-    ml = winners[winners["market_display"] == "MONEYLINE"].copy()
-
-    # --- v1.1: enforce per-market side labels from winners (presentation-only) ---
-    # Prevent SPREAD_side contamination from TOTAL selections (e.g., "Under 48.5").
-    try:
-        if "side_disp" in sp.columns:
-            sp["_side_out"] = sp["side_disp"].fillna("").astype(str)
-        elif "side" in sp.columns:
-            sp["_side_out"] = sp["side"].fillna("").astype(str)
-        else:
-            sp["_side_out"] = ""
-
-        if "side_disp" in tt.columns:
-            tt["_side_out"] = tt["side_disp"].fillna("").astype(str)
-        elif "side" in tt.columns:
-            tt["_side_out"] = tt["side"].fillna("").astype(str)
-        else:
-            tt["_side_out"] = ""
-
-        if "side_disp" in ml.columns:
-            ml["_side_out"] = ml["side_disp"].fillna("").astype(str)
-        elif "side" in ml.columns:
-            ml["_side_out"] = ml["side"].fillna("").astype(str)
-        else:
-            ml["_side_out"] = ""
-
-        # Rename to wide column names expected later
-        sp = sp.rename(columns={"_side_out": "SPREAD_side"})
-        tt = tt.rename(columns={"_side_out": "TOTAL_side"})
-        ml = ml.rename(columns={"_side_out": "MONEYLINE_side"})
-    except Exception:
-        pass
-    # --- end v1.1 per-market side enforcement ---
-    if ml.empty:
-        ml = pd.DataFrame(columns=["sport", "game_id"])
-    else:
-        ml["open_ml"] = ml.get("open_odds", "")
-        ml["current_ml"] = ml.get("current_odds", "")
-        ml["current_ml_price"] = ml.get("current_odds", "")
-
-    # Assemble wide df
-    dash = base.copy()
-
-    def _join_market(dash_df, sub_df, prefix):
-        if sub_df is None or len(sub_df) == 0:
-            # =========================
-            # JOIN MARKET GUARANTEE (presentation-only)
-            # Ensure prefixed columns exist even if sub_df is empty (merge would add nothing).
-            # =========================
-            _need = [
-                f"{prefix}_decision",
-                f"{prefix}_side",
-                f"{prefix}_model_score",
-                f"{prefix}_net_edge",
-                f"{prefix}_bets_pct",
-                f"{prefix}_money_pct",
-                f"{prefix}_open_line",
-                f"{prefix}_current_line",
-                f"{prefix}_current_price",
-                f"{prefix}_color",
-            ]
-            for _c in _need:
-                if _c not in dash_df.columns:
-                    dash_df[_c] = ""
-            return dash_df
-
-        keep = [
-            "sport", "game_id", "side_disp", "bets_pct", "money_pct",
-            "confidence_score", "net_edge", "color",
-            "open_spread", "current_spread", "current_spread_price",
-            "open_total", "current_total", "current_total_price",
-            "open_ml", "current_ml", "current_ml_price",
-        ]
-        present = [c for c in keep if c in sub_df.columns]
-        sub = sub_df[present].copy()
-
-        ren = {
-            "side_disp": f"{prefix}_side",
-            "bets_pct": f"{prefix}_bets_pct",
-            "money_pct": f"{prefix}_money_pct",
-            "confidence_score": f"{prefix}_model_score",
-            "net_edge": f"{prefix}_net_edge",
-            "color": f"{prefix}_color",
-
-            "open_spread": f"{prefix}_open_line",
-            "current_spread": f"{prefix}_current_line",
-            "current_spread_price": f"{prefix}_current_price",
-
-            "open_total": f"{prefix}_open_line",
-            "current_total": f"{prefix}_current_line",
-            "current_total_price": f"{prefix}_current_price",
-
-            "open_ml": f"{prefix}_open_line",
-            "current_ml": f"{prefix}_current_line",
-            "current_ml_price": f"{prefix}_current_price",
-        }
-        sub = sub.rename(columns=ren)
-        sub[f"{prefix}_decision"] = sub.apply(
-            lambda r: _decision(r.get(f"{prefix}_model_score"), r.get(f"{prefix}_net_edge"), r.get("sport"), r.get("timing_bucket")),
-            axis=1
-        )
-
-        
-        # =========================
-        # JOIN MARKET GUARANTEE (presentation-only)
-        # Ensure prefixed columns exist even if sub_df is empty (merge would add nothing).
-        # =========================
-        _need = [
-            f"{prefix}_decision",
-            f"{prefix}_side",
-            f"{prefix}_model_score",
-            f"{prefix}_net_edge",
-            f"{prefix}_bets_pct",
-            f"{prefix}_money_pct",
-            f"{prefix}_open_line",
-            f"{prefix}_current_line",
-            f"{prefix}_current_price",
-            f"{prefix}_color",
-        ]
-
-        # If sub is empty, create blank columns and return dash_df as-is
-        try:
-            if sub is None or (hasattr(sub, "empty") and bool(sub.empty)):
-                for _c in _need:
-                    if _c not in dash_df.columns:
-                        dash_df[_c] = ""
-                return dash_df
-        except Exception:
-            pass
-
-        # If sub exists but is missing some columns, create them (blank) so merge always yields schema
-        try:
-            for _c in _need:
-                if _c not in sub.columns:
-                    sub[_c] = ""
-        except Exception:
-            pass
-
-        return dash_df.merge(sub, on=["sport", "game_id"], how="left")
-
-    dash = _join_market(dash, sp, "SPREAD")
-    dash = _join_market(dash, tt, "TOTAL")
-    dash = _join_market(dash, ml, "MONEYLINE")
-    # =========================
-    # FORCE WIDE SCHEMA AFTER JOINS (presentation-only)
-
-    # --- v1.1: populate {M}_favored on GAME rows (presentation-only; no scoring) ---
-    # Favored side is the max-score side per (sport, game_id, market_display) from side-level `latest`.
-    try:
-        _fav = None
-        if "fav_rows" in locals():
-            _fav = fav_rows.copy()
-        elif "fav_rows" in globals():
-            _fav = fav_rows.copy()
-        else:
-            _fav = None
-
-        if _fav is not None and len(_fav) > 0 and "market_display" in _fav.columns:
-            # Choose a "side" label column that exists on favored side rows
-            _side_col = None
-            for _c in ("side", "team", "selection", "side_key"):
-                if _c in _fav.columns:
-                    _side_col = _c
-                    break
-
-            if _side_col:
-                _fav["market_display"] = _fav["market_display"].fillna("").astype(str).str.strip().str.upper()
-                _fav["_favored_side"] = _fav[_side_col].fillna("").astype(str).str.strip()
-
-                _wide = (
-                    _fav.pivot_table(
-                        index=["sport", "game_id"],
-                        columns="market_display",
-                        values="_favored_side",
-                        aggfunc="first",
-                    )
-                    .reset_index()
-                )
-
-                # Rename pivoted columns to wide schema names
-                _ren = {}
-                for _m in ("SPREAD", "TOTAL", "MONEYLINE"):
-                    if _m in _wide.columns:
-                        _ren[_m] = f"{_m}_favored"
-                _wide = _wide.rename(columns=_ren)
-
-                dash = dash.merge(_wide, on=["sport", "game_id"], how="left")
-
-        # Ensure columns exist even if no data
-
-        # Backfill {M}_favored from existing {M}_side (presentation-only).
-        # The wide dashboard already carries {M}_side strings; favored should match that.
-        for _m in ("SPREAD", "TOTAL", "MONEYLINE"):
-            _favc = f"{_m}_favored"
-            _sidec = f"{_m}_side"
-            if _favc in dash.columns and _sidec in dash.columns:
-                _blank = dash[_favc].fillna("").astype(str).str.strip().eq("")
-                if _blank.any():
-                    dash.loc[_blank, _favc] = dash.loc[_blank, _sidec].fillna("").astype(str)
-        for _m in ("SPREAD", "TOTAL", "MONEYLINE"):
-            _c = f"{_m}_favored"
-            if _c not in dash.columns:
-                dash[_c] = ""
-            else:
-                dash[_c] = dash[_c].fillna("").astype(str)
-    except Exception:
-        pass
-    # --- end v1.1 favored wiring ---
-    # This runs immediately after SPREAD/TOTAL/MONEYLINE merges so columns exist
-    # no matter what later writer/selection does.
-    # =========================
-    try:
-        _wide = []
-        for _m in ("SPREAD","TOTAL","MONEYLINE"):
-            for _f in (
-                "decision","side","model_score","net_edge","bets_pct","money_pct",
-                "open_line","current_line","current_price","color",
-            ):
-                _wide.append(f"{_m}_{_f}")
-
-        for _c in _wide:
-            if _c not in dash.columns:
-                dash[_c] = ""
-
-        # keep existing cols too (just guarantee the wide ones exist)
-        # NOTE: do NOT drop anything here; only ensure presence
-    except Exception:
-        pass
-
-
-
-    # Fill blanks (NO NaN in output)
-    dash = dash.fillna("")
-
-    # Ensure timing audit columns survive into dashboard.csv
-    for _c in ("minutes_to_kickoff", "is_game_day", "timing_bucket"):
-        if _c not in dash.columns and _c in latest.columns:
-            try:
-                # map from latest -> dash by sport/game_id
-                _map = {(str(r.get("sport","")).strip(), str(r.get("game_id","")).strip()): r.get(_c) for _, r in latest.iterrows()}
-                dash[_c] = dash.apply(lambda rr: _map.get((str(rr.get("sport","")).strip(), str(rr.get("game_id","")).strip())), axis=1)
-            except Exception:
-                dash[_c] = ""
-
-    # ---------- Column order (LOCKED) ----------
-    # Markets grouped left→right as: SPREAD → TOTAL → MONEYLINE
-    col_order = [
-        "sport_label", "game", "game_time_iso",
-        # SPREAD
-        "SPREAD_decision", "SPREAD_side", "SPREAD_model_score", "SPREAD_net_edge", "SPREAD_bets_pct", "SPREAD_money_pct",
-        "SPREAD_open_line", "SPREAD_current_line", "SPREAD_current_price",
-        # TOTAL
-        "TOTAL_decision", "TOTAL_side", "TOTAL_model_score", "TOTAL_net_edge", "TOTAL_bets_pct", "TOTAL_money_pct",
-        "TOTAL_open_line", "TOTAL_current_line", "TOTAL_current_price",
-        # MONEYLINE
-        "MONEYLINE_decision", "MONEYLINE_side", "MONEYLINE_model_score", "MONEYLINE_net_edge", "MONEYLINE_bets_pct", "MONEYLINE_money_pct",
-        "MONEYLINE_open_line", "MONEYLINE_current_line", "MONEYLINE_current_price",
-    ]
-
-    # --- UI schema guarantee (presentation-only): enforce col_order ---
-    # Guarantee every locked column exists, then order as col_order + extras
-    for _c in col_order:
-        if _c not in dash.columns:
-            dash[_c] = ""
-    extras = [c for c in dash.columns if c not in col_order]
-    dash = dash[col_order + extras]
-    # --- end UI schema guarantee ---
-
-    # --- end UI schema guarantee ---
-
-
-    # ---------- Write dashboard.csv (wide schema) ----------
-    ensure_data_dir()
-    out_csv = os.path.join(DATA_DIR, "dashboard.csv")
-
-    # Default sort: sport order -> kickoff time -> game
-    sport_order = {"NFL": 0, "NBA": 1, "NHL": 2, "NCAAF": 3, "NCAAB": 4}
-    _sport = dash.get("sport_label", dash.get("sport", "")).fillna("").astype(str).str.upper()
-    dash["_sport_rank"] = _sport.map(sport_order).fillna(99).astype(int)
-    dash["_kickoff"] = pd.to_datetime(dash.get("game_time_iso", ""), errors="coerce", utc=True)
-    dash["_game_sort"] = dash.get("game", "").fillna("").astype(str)
-
-    dash = (
-        dash.sort_values(["_sport_rank", "_kickoff", "_game_sort"], kind="stable")
-            .drop(columns=["_sport_rank", "_kickoff", "_game_sort"], errors="ignore")
-    )
-
-    # --- v1.1 timing buckets (canonical; flags only; no scoring) ---
-    # Canonical source:
-    #   - minutes_to_kickoff + is_game_day are computed upstream from DK kickoff
-    #   - timing_bucket uses strict v1.1 windows on GAME DAY only; otherwise EARLY (unless LIVE)
-    dash["timing_bucket"] = ""
-    # dash["is_game_day"] already exists upstream; keep default False if missing
-
-    if "minutes_to_kickoff" in dash.columns:
-        def _dash_tb(m2k, is_gd):
-            try:
-                if m2k in ("", None):
-                    return ""
-                m = int(float(m2k))
-                if m < 0:
-                    return "LIVE"
-                if not bool(is_gd):
-                    return "EARLY"
-                return compute_timing_bucket("", m)
-            except Exception:
-                return ""
-
-        try:
-            if "is_game_day" not in dash.columns:
-                dash["is_game_day"] = False
-        except Exception:
-            pass
-
-        try:
-            dash["timing_bucket"] = dash.apply(lambda r: _dash_tb(r.get("minutes_to_kickoff"), r.get("is_game_day")), axis=1)
-        except Exception:
-            pass
-    # --- end v1.1 timing buckets ---
-
-    # --- v1.1 persistence & stability flags (flags only; no scoring) ---
-    try:
-        import pandas as _pd
-
-        state_path = os.path.join(DATA_DIR, "row_state.csv")
-        if os.path.exists(state_path):
-            _state = _pd.read_csv(state_path, keep_default_na=False)
-
-            key_cols = ["sport", "game_id", "market", "side"]
-            # NOTE: dashboard is WIDE (no generic 'market'/'side' cols). Per-market flags are computed below.
-            if all(c in dash.columns for c in key_cols):
-                dash_key = dash[key_cols].astype(str).agg("|".join, axis=1).tolist()
-            else:
-                dash_key = ["" for _ in range(len(dash))]
-
-            # Normalize state keys to match dashboard lookups (case-sensitive dict keys!)
-            _tmpk = _state[key_cols].copy()
-            _tmpk["sport"]  = _tmpk["sport"].astype(str).str.strip().str.upper()
-            _tmpk["market"] = _tmpk["market"].astype(str).str.strip().str.upper()
-            _tmpk["game_id"]= _tmpk["game_id"].astype(str).str.strip()
-            _tmpk["side"]   = _tmpk["side"].astype(str).str.strip()
-            _state["_k"] = _tmpk.astype(str).agg("|".join, axis=1)
-            state_map = _state.set_index("_k").to_dict("index")
-
-            persist_ok = []
-            stable_ok = []
-
-            for k in dash_key:
-                r = state_map.get(k)
-                if not r:
-                    persist_ok.append(False)
-                    stable_ok.append(False)
-                    continue
-
-                # persistence (instrumentation-only):
-                # Global STRONG requires >=2 consecutive snapshots >=72
-                # NCAAB STRONG requires >=3 consecutive snapshots >=72
-                try:
-                    ss = int(str(r.get("strong_streak","0")).strip() or "0")
-                except Exception:
-                    ss = 0
-                sp = str(k).split("|", 1)[0].strip().upper()
-                need = 3 if sp == "NCAAB" else 2
-                persist_ok.append(ss >= need)
-
-                # stability: last_score >= peak_score - 3 (NCAAB tighter: -2)
-                try:
-                    ls = float(r.get("last_score", ""))
-                    ps = float(r.get("peak_score", ""))
-                    # dash_key is "sport|game_id|market|side"
-                    sp = str(k).split("|", 1)[0].strip().upper()
-                    delta = 2 if sp == "NCAAB" else 3
-                    stable_ok.append(ls >= (ps - delta))
-                except Exception:
-                    stable_ok.append(False)
-
-            dash["persist_ok"] = persist_ok
-            dash["stable_ok"] = stable_ok
-            # --- v1.1 per-market persistence/stability (dashboard-only; no scoring) ---
-            # Uses row_state key: sport|game_id|market|side  (market in SPREAD/TOTAL/MONEYLINE)
-            for _m in ("SPREAD","TOTAL","MONEYLINE"):
-                dash[f"{_m}_persist_ok"] = False
-                dash[f"{_m}_stable_ok"] = False
-
-            try:
-                # Prefer per-market side columns if present; otherwise fall back to per-market favored columns.
-                for _m in ("SPREAD","TOTAL","MONEYLINE"):
-                    side_col = f"{_m}_side"
-                    if side_col not in dash.columns:
-                        side_col = f"{_m}_favored"
-            
-                    p_ok = []
-                    s_ok = []
-            
-                    for _, rr in dash.iterrows():
-                        sp = str(rr.get("sport_label", rr.get("sport",""))).strip().upper()
-                        gid = str(rr.get("game_id","")).strip()
-                        side = str(rr.get(side_col,"")).strip()
-            
-                        if not sp or not gid or not side:
-                            p_ok.append(False)
-                            s_ok.append(False)
-                            continue
-            
-                        kk = f"{sp}|{gid}|{_m}|{side}"
-                        r = state_map.get(kk)
-                        if not r:
-                            p_ok.append(False)
-                            s_ok.append(False)
-                            continue
-            
-                        # persistence streak threshold (>=2 global, >=3 NCAAB)
-                        try:
-                            ss = int(str(r.get("strong_streak","0")).strip() or "0")
-                        except Exception:
-                            ss = 0
-                        need = 3 if sp == "NCAAB" else 2
-                        p_ok.append(ss >= need)
-            
-                        # stability (NCAAB tighter)
-                        try:
-                            ls = float(str(r.get("last_score","")).strip() or "0")
-                            ps = float(str(r.get("peak_score","")).strip() or "0")
-                            delta = 2 if sp == "NCAAB" else 3
-                            s_ok.append(ls >= (ps - delta))
-                        except Exception:
-                            s_ok.append(False)
-            
-                    dash[f"{_m}_persist_ok"] = p_ok
-                    dash[f"{_m}_stable_ok"] = s_ok
-            except Exception:
-                pass
-            # --- end v1.1 per-market persistence/stability ---
-
-
-        else:
-            dash["persist_ok"] = False
-            dash["stable_ok"] = False
-    except Exception:
-        dash["persist_ok"] = False
-        dash["stable_ok"] = False
-    # --- end v1.1 persistence & stability flags ---
-
-    
-    # =========================
-    
-    # =========================
-    # WIDE MARKET REPAIR (presentation-only)
-    # Backfill {M}_* columns from long-form `latest` if missing/blank.
-    # Does NOT change scoring logic; only fixes dashboard wide wiring.
-    # =========================
-    try:
-        import pandas as _pd
-
-        # Ensure key cols exist in dash (we MERGE by these)
-        if "sport" not in dash.columns:
-            dash["sport"] = ""
-        if "game_id" not in dash.columns:
-            dash["game_id"] = ""
-
-        # Choose the score column that exists on SIDE rows (`latest`)
-        _score_candidates = ["confidence_score", "model_score", "score"]
-        _best_score_col = ""
-        for _c in _score_candidates:
-            if _c in latest.columns:
-                _best_score_col = _c
-                break
-
-        def _to_num(x):
-            try:
-                s = str(x).strip()
-                if s == "":
-                    return float("-inf")
-                return float(s)
-            except Exception:
-                return float("-inf")
-
-        def _pick_best_rows(mkt: str):
-            if "market_display" not in latest.columns:
-                return None
-
-            sub = latest[latest["market_display"].astype(str).str.upper().eq(mkt)].copy()
-            if sub.empty:
-                return None
-
-            if _best_score_col and _best_score_col in sub.columns:
-                tmp = sub[["sport", "game_id", _best_score_col]].copy()
-                tmp["_s"] = tmp[_best_score_col].apply(_to_num)
-                best_idx = tmp.groupby(["sport", "game_id"], sort=False)["_s"].idxmax()
-
-                # best_idx may be scalar or series; force list-like for .loc
-                try:
-                    best = sub.loc[list(best_idx)].copy()
-                except Exception:
-                    best = sub.loc[best_idx].copy()
-
-                # If best is a Series, make it a one-row DataFrame
-                if isinstance(best, __pd.Series):
-                    best = best.to_frame().T
-            else:
-                best = sub.groupby(["sport", "game_id"], as_index=False, sort=False).head(1).copy()
-
-            return best
-
-        # Always ensure wide columns exist (even if market absent)
-        _need_fields = ("decision","side","model_score","net_edge","bets_pct","money_pct",
-                        "open_line","current_line","current_price","color")
-
-        for _m in ("SPREAD","TOTAL","MONEYLINE"):
-            for _f in _need_fields:
-                c = f"{_m}_{_f}"
-                if c not in dash.columns:
-                    dash[c] = ""
-
-        # Fill each market
-        for _m in ("SPREAD","TOTAL","MONEYLINE"):
-            best = _pick_best_rows(_m)
-            if best is None or len(best) == 0:
-                continue
-
-            out = best[["sport","game_id"]].copy()
-
-            # decision
-            out[f"{_m}_decision"] = best["decision"] if "decision" in best.columns else ""
-
-            # side (prefer side_disp if present)
-            if "side_disp" in best.columns:
-                out[f"{_m}_side"] = best["side_disp"]
-            elif "side" in best.columns:
-                out[f"{_m}_side"] = best["side"]
-            else:
-                out[f"{_m}_side"] = ""
-
-            # model_score
-            if _best_score_col and _best_score_col in best.columns:
-                out[f"{_m}_model_score"] = best[_best_score_col]
-            else:
-                out[f"{_m}_model_score"] = ""
-
-            # net_edge / splits / lines / price / color
-            out[f"{_m}_net_edge"]      = best["net_edge"] if "net_edge" in best.columns else ""
-            out[f"{_m}_bets_pct"]      = best["bets_pct"] if "bets_pct" in best.columns else ""
-            out[f"{_m}_money_pct"]     = best["money_pct"] if "money_pct" in best.columns else ""
-            out[f"{_m}_open_line"]     = best["open_line"] if "open_line" in best.columns else ""
-            out[f"{_m}_current_line"]  = best["current_line"] if "current_line" in best.columns else ""
-            out[f"{_m}_current_price"] = best["current_odds"] if "current_odds" in best.columns else ""
-            out[f"{_m}_color"]         = best["color"] if "color" in best.columns else ""
-
-            # Merge wide fields into dash by (sport, game_id)
-            dash = dash.merge(out, on=["sport","game_id"], how="left", suffixes=("",""))
-            # ---- wide repair: coalesce merge suffix columns back to expected names ----
-            try:
-                _coalesce_cols = []
-                for _f in _need_fields:
-                    _coalesce_cols.append(f"{_m}_{_f}")
-
-                for _c in _coalesce_cols:
-                    cx = _c + "_x"
-                    cy = _c + "_y"
-                    if cy in dash.columns:
-                        if _c not in dash.columns:
-                            dash[_c] = ""
-                        # fill base from _y when base is blank
-                        try:
-                            base_blank = dash[_c].astype(str).str.strip().eq("")
-                        except Exception:
-                            base_blank = dash[_c].astype(str).eq("")
-                        dash.loc[base_blank, _c] = dash.loc[base_blank, cy]
-
-                        # drop suffix cols if present
-                        drop_cols = [z for z in (cx, cy) if z in dash.columns]
-                        if drop_cols:
-                            dash = dash.drop(columns=drop_cols)
-            except Exception:
-                pass
-
-
-        dash = dash.fillna("")
-    except Exception:
-        import traceback
-        try:
-            if bool(globals().get("DASH_DEBUG", False)):
-                print("[wide_market_repair] FAILED:")
-                print(traceback.format_exc())
-        except Exception:
-            pass
-        try:
-            dash = dash.fillna("")
-        except Exception:
-            pass
-
-# --- v1.1 STRONG certification flags (dashboard-only; no scoring) ---
-
-    # --- v1.1 STRONG CERTIFICATION WIRING (INSIDE build_dashboard) ---
-
-    # --- v1.1: harden {M}_side from per-market winners (presentation-only) ---
-    # winners is already computed as best side row per (sport, game_id, market_display).
-    # Fixes SPREAD_side contamination (e.g., Under/Over showing up in SPREAD_side).
-    try:
-        if "winners" in locals() and winners is not None and len(winners) > 0 and "market_display" in winners.columns:
-            _w = winners.copy()
-            _w["market_display"] = _w["market_display"].fillna("").astype(str).str.strip().str.upper()
-            _val_col = "side_disp" if "side_disp" in _w.columns else ("side" if "side" in _w.columns else "")
-            if _val_col:
-                _wide_side = (
-                    _w.pivot_table(index=["sport","game_id"], columns="market_display", values=_val_col, aggfunc="first")
-                      .reset_index()
-                )
-                _ren = {}
-                for _m in ("SPREAD","TOTAL","MONEYLINE"):
-                    if _m in _wide_side.columns:
-                        _ren[_m] = f"{_m}_side"
-                _wide_side = _wide_side.rename(columns=_ren)
-                dash = dash.merge(_wide_side, on=["sport","game_id"], how="left", suffixes=("", "_wfix"))
-                # If merge produced *_wfix due to existing columns, prefer the fixed values.
-                for _m in ("SPREAD","TOTAL","MONEYLINE"):
-                    c = f"{_m}_side"
-                    wf = f"{c}_wfix"
-                    if wf in dash.columns:
-                        dash[c] = dash[wf].fillna(dash.get(c, "")).astype(str)
-                        dash = dash.drop(columns=[wf], errors="ignore")
-                # Normalize to strings
-                for _m in ("SPREAD","TOTAL","MONEYLINE"):
-                    c = f"{_m}_side"
-                    if c in dash.columns:
-                        dash[c] = dash[c].fillna("").astype(str)
-    except Exception:
-        pass
-    # --- end v1.1 {M}_side hardening ---
-
-    # --- v1.1: guardrail - prevent TOTAL strings from polluting SPREAD columns (presentation-only) ---
-    try:
-        if "SPREAD_side" in dash.columns:
-            _s = dash["SPREAD_side"].fillna("").astype(str).str.strip()
-            _bad = _s.str.contains(r"\bUNDER\b|\bOVER\b", case=False, na=False)
-            if _bad.any():
-                for _c in ("SPREAD_side","SPREAD_favored","SPREAD_model_score","SPREAD_net_edge"):
-                    if _c in dash.columns:
-                        dash.loc[_bad, _c] = ""
-                if "SPREAD_decision" in dash.columns:
-                    dash.loc[_bad, "SPREAD_decision"] = "NO BET"
-                if "SPREAD_strong_eligible" in dash.columns:
-                    dash.loc[_bad, "SPREAD_strong_eligible"] = False
-                if "SPREAD_strong_block_reason" in dash.columns:
-                    dash.loc[_bad, "SPREAD_strong_block_reason"] = "spread_missing"
-    except Exception:
-        pass
-    # --- end v1.1 SPREAD contamination guardrail ---
-    # Writes: {M}_strong_eligible, {M}_strong_block_reason
-    try:
-        # initialize columns so CSV always has them
-        for _m in ("SPREAD","TOTAL","MONEYLINE"):
-            dash[f"{_m}_strong_eligible"] = False
-            dash[f"{_m}_strong_block_reason"] = ""
-
-        # prior-bucket map best-effort (may be empty)
-        _pb = {}
-        try:
-            _pb_map = _pb if isinstance(_pb, dict) else {}
-        except Exception:
-            _pb_map = {}
-
-        for _m in ("SPREAD","TOTAL","MONEYLINE"):
-            elig = []
-            rsn = []
-            for _, _r in dash.iterrows():
-                ok, why = _strong_flags(_r, _m, _pb_map)
-                elig.append(bool(ok))
-                rsn.append(str(why or ""))
-            dash[f"{_m}_strong_eligible"] = elig
-            dash[f"{_m}_strong_block_reason"] = rsn
-
-            # enforce downgrade
-            _dec = f"{_m}_decision"
-            if _dec in dash.columns:
-                _is_strong = dash[_dec].astype(str).str.upper().eq("STRONG BET")
-                _ok = dash[f"{_m}_strong_eligible"].astype(bool)
-                _mask = _is_strong & (~_ok)
-                if int(_mask.sum()) > 0:
-                    dash.loc[_mask, _dec] = "BET"
-
-        # convenience fields (SPREAD canonical)
-        dash["strong_eligible"] = dash.get("SPREAD_strong_eligible", False)
-        dash["strong_block_reason"] = dash.get("SPREAD_strong_block_reason", "")
-    except Exception:
-        pass
-    # --- end v1.1 STRONG CERTIFICATION WIRING ---
-    
-    # =========================
-        
-        # =========================
-
-
-        # =========================
-
-
-
-
-        # =========================
-
-
-    wrote_csv = False
-    try:
-        dash.to_csv(out_csv, index=False, encoding="utf-8")
-        wrote_csv = True
-    except Exception:
-        import traceback
-        print("[warn] dashboard.csv write FAILED")
-        print(traceback.format_exc())
-
-    if wrote_csv:
-        print("[ok] wrote dashboard csv:", out_csv)
-    else:
-        print("[warn] did NOT write dashboard csv:", out_csv)
-
-    # ---- Step C metrics input (instrumentation only) ----
-    # IMPORTANT: snapshots.csv does NOT contain model scores; dashboard.csv does.
-    try:
-        import pandas as _pd
-
-        _dash_path = os.path.join("data", "dashboard.csv")
-        _dash = _pd.read_csv(_dash_path, keep_default_na=False)
-
-        def _best_side_col(mkt: str) -> str:
-            direct = f"{mkt}_side"
-            if direct in _dash.columns:
-                return direct
-            for c in _dash.columns:
-                cu = c.upper()
-                cl = c.lower()
-                if not cu.startswith(mkt + "_"):
-                    continue
-                if any(k in cl for k in ("favored_side", "favourite_side", "favorite_side", "favored", "side", "pick", "selection")):
-                    return c
-            return ""
-
-        rows = []
-
-        def _add_market(mkt: str, score_col: str):
-            if score_col not in _dash.columns:
-                return
-            side_col = _best_side_col(mkt)
-            if not side_col:
-                return
-
-            # net edge column (this is what we need for C2 wiring)
-            net_col = f"{mkt}_net_edge"
-            has_net = net_col in _dash.columns
-
-            for _, rr in _dash.iterrows():
-                sport = str(rr.get("sport", rr.get("sport_label", ""))).strip()
-                gid = str(rr.get("game_id", "")).strip()
-                game = str(rr.get("game", "")).strip()
-                side = str(rr.get(side_col, "")).strip()
-                sc = str(rr.get(score_col, "")).strip()
-
-                if not sport or not gid or not side or not sc:
-                    continue
-
-                rows.append({
-                    "sport": sport,
-                    "game_id": gid,
-                    "game": game,
-                    "market_display": mkt,
-                    "side": side,
-                    "model_score": sc,
-                    "net_edge": str(rr.get(net_col, "")).strip() if has_net else "",
-                    "current_line": "",
-                    "current_odds": "",
-                    "bets_pct": "",
-                    "money_pct": "",
-                })
-
-        _add_market("SPREAD", "SPREAD_model_score")
-        _add_market("TOTAL", "TOTAL_model_score")
-        _add_market("MONEYLINE", "MONEYLINE_model_score")
-
-        if rows:
-            _metrics_df = _pd.DataFrame(rows)
-            # --- v1.1 FIX: provide snapshot tick to metrics df so strong_streak can advance once per NEW snapshot
-        try:
-            import pandas as _pd
-            _snap = _pd.read_csv("data/snapshots.csv", keep_default_na=False)
-            _tick = ""
-            for _c in ("snapshot_id","snapshot_ts","ts","timestamp"):
-                if _c in _snap.columns:
-                    _tick = str(_snap[_c].astype(str).iloc[-1]).strip()
-                    # prefer max if it's sortable
-                    try:
-                        _tick = str(_snap[_c].astype(str).max()).strip()
-                    except Exception:
-                        pass
-                    if _tick:
-                        break
-            if _tick:
-                _metrics_df["ts"] = _tick
-        except Exception:
-            pass
-        # --- end v1.1 FIX ---
-        update_row_state_and_signal_ledger(_metrics_df)
-
-    except Exception:
-        pass
-    # ---- end Step C metrics input ----
-
-
-
-    # ---------- HTML table (wide) ----------
-    header_cols = [
-        "Sport",
-        "Game",
-        "Time (ET)",
-        # SPREAD
-        "Spread Decision", "Spread Side", "Spread Score", "Spread Net Edge", "Spread Strong Elig", "Spread Strong Block", "Spread Bets%", "Spread Money%",
-        "Open Spread", "Current Spread", "Current Spread Price",
-        # TOTAL
-        "Total Decision", "Total Side", "Total Score", "Total Net Edge", "Total Strong Elig", "Total Strong Block", "Total Bets%", "Total Money%",
-        "Open Total", "Current Total", "Current Total Price",
-        # ML
-        "ML Decision", "ML Side", "ML Score", "ML Net Edge", "ML Strong Elig", "ML Strong Block", "ML Bets%", "ML Money%",
-        "Open ML", "Current ML", "Current ML Price",
-    ]
-
-    header_ths = "".join(f"<th>{c}</th>" for c in header_cols)
-
-    rows_html = []
-
-    def _time_et(iso):
-        iso = _blank(iso)
-        if iso == "":
-            return ""
-        try:
-            ts = pd.to_datetime(iso, utc=True, errors="coerce")
-            if pd.isna(ts):
-                return ""
-            return ts.tz_convert("America/New_York").strftime("%a %m/%d %I:%M%p")
-        except Exception:
-            return ""
-
-    for _, rr in dash.iterrows():
-        sport = _blank(rr.get("sport_label"))
-        game = _blank(rr.get("game"))
-        t_et = _time_et(rr.get("game_time_iso"))
-
-        # Spread cells
-        sp_dec = _blank(rr.get("SPREAD_decision"))
-        sp_side = _blank(rr.get("SPREAD_side")) or _blank(rr.get("SPREAD_favored"))
-        sp_sc = _fmt_score(rr.get("SPREAD_model_score"))
-        sp_edge = _fmt_score(rr.get("SPREAD_net_edge"))
-        sp_elig = _pretty_strong_elig(rr.get("SPREAD_strong_eligible"))
-        sp_block = _pretty_strong_block(rr.get("SPREAD_strong_block_reason"))
-        sp_b = _fmt_pct(rr.get("SPREAD_bets_pct"))
-        sp_m = _fmt_pct(rr.get("SPREAD_money_pct"))
-        sp_o = _fmt_num(rr.get("SPREAD_open_line"))
-        sp_c = _fmt_num(rr.get("SPREAD_current_line"))
-        sp_cp = _fmt_int(rr.get("SPREAD_current_price"))
-
-        # Total cells
-        t_dec = _blank(rr.get("TOTAL_decision"))
-        t_side = _blank(rr.get("TOTAL_side")) or _blank(rr.get("TOTAL_favored"))
-        t_sc = _fmt_score(rr.get("TOTAL_model_score"))
-        t_edge = _fmt_score(rr.get("TOTAL_net_edge"))
-        t_elig = _pretty_strong_elig(rr.get("TOTAL_strong_eligible"))
-        t_block = _pretty_strong_block(rr.get("TOTAL_strong_block_reason"))
-        t_b = _fmt_pct(rr.get("TOTAL_bets_pct"))
-        t_m = _fmt_pct(rr.get("TOTAL_money_pct"))
-        t_o = _fmt_num(rr.get("TOTAL_open_line"))
-        t_c = _fmt_num(rr.get("TOTAL_current_line"))
-        t_cp = _fmt_int(rr.get("TOTAL_current_price"))
-
-        # ML cells
-        ml_dec = _blank(rr.get("MONEYLINE_decision"))
-        ml_side = _blank(rr.get("MONEYLINE_side")) or _blank(rr.get("MONEYLINE_favored"))
-        ml_sc = _fmt_score(rr.get("MONEYLINE_model_score"))
-        ml_edge = _fmt_score(rr.get("MONEYLINE_net_edge"))
-        ml_elig = _pretty_strong_elig(rr.get("MONEYLINE_strong_eligible"))
-        ml_block = _pretty_strong_block(rr.get("MONEYLINE_strong_block_reason"))
-        ml_b = _fmt_pct(rr.get("MONEYLINE_bets_pct"))
-        ml_m = _fmt_pct(rr.get("MONEYLINE_money_pct"))
-        ml_o = _fmt_int(rr.get("MONEYLINE_open_line"))
-        ml_c = _fmt_int(rr.get("MONEYLINE_current_line"))
-        ml_cp = _fmt_int(rr.get("MONEYLINE_current_price"))
-
-        rows_html.append(
-            f"""
-<tr class="game-row">
-  <td>{sport}</td>
-  <td>{game}</td>
-  <td>{t_et}</td>
-
-  <td>{sp_dec}</td><td>{sp_side}</td><td>{sp_sc}</td><td>{sp_edge}</td><td>{sp_elig}</td><td>{sp_block}</td><td>{sp_b}</td><td>{sp_m}</td>
-  <td>{sp_o}</td><td>{sp_c}</td><td>{sp_cp}</td>
-
-  <td>{t_dec}</td><td>{t_side}</td><td>{t_sc}</td><td>{t_edge}</td><td>{t_elig}</td><td>{t_block}</td><td>{t_b}</td><td>{t_m}</td>
-  <td>{t_o}</td><td>{t_c}</td><td>{t_cp}</td>
-
-  <td>{ml_dec}</td><td>{ml_side}</td><td>{ml_sc}</td><td>{ml_edge}</td><td>{ml_elig}</td><td>{ml_block}</td><td>{ml_b}</td><td>{ml_m}</td>
-  <td>{ml_o}</td><td>{ml_c}</td><td>{ml_cp}</td>
-</tr>
-"""
-        )
-
-    # Snapshot timestamps (current + previous)
-    current_ts_disp = ""
-    prev_ts_disp = ""
-    try:
-        if "timestamp" in df.columns:
-            ts_all = pd.to_datetime(df["timestamp"], errors="coerce", utc=True).dropna()
-            ts_unique = ts_all.drop_duplicates().sort_values()
-
-            if len(ts_unique) > 0:
-                cur = ts_unique.iloc[-1]
-                current_ts_disp = cur.tz_convert("America/New_York").strftime("%a %b %d, %Y %I:%M:%S %p ET")
-
-            if len(ts_unique) > 1:
-                prv = ts_unique.iloc[-2]
-                prev_ts_disp = prv.tz_convert("America/New_York").strftime("%a %b %d, %Y %I:%M:%S %p ET")
-    except Exception:
-        pass
-
-    snapshot_html = f"""
-<div style="margin:10px 0 14px 0; padding:10px 12px; background:#f7f7f7; border:1px solid #ddd; border-radius:8px;">
-  <div style="font-size:12px;">
-    <b>Current snapshot:</b> {current_ts_disp or "—"}
-    &nbsp;&nbsp;|&nbsp;&nbsp;
-    <b>Previous snapshot:</b> {prev_ts_disp or "—"}
-  </div>
-</div>
-"""
-
-    legend_html = """
-<div style="margin:0 0 14px 0; padding:10px 12px; background:#fff; border:1px solid #ddd; border-radius:8px;">
-  <div style="font-weight:bold; margin-bottom:6px;">Legend</div>
-  <div style="font-size:12px; line-height:1.6;">
-    <div><b>Decision</b>: STRONG BET (≥72 + Net Edge ≥10), BET (≥68), LEAN (≥60), NO BET (&lt;60).</div>
-    <div style="margin-top:6px;"><b>Note</b>: Observation Mode output (interpretive only).</div>
-  </div>
-</div>
-"""
-
-    filters_html = ""
-    try:
-        filters_js
-    except NameError:
-        filters_js = ""
-
-    html = f"""<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Market Intelligence Dashboard</title>
-<style>
-  body {{ font-family: Arial, sans-serif; padding: 16px; }}
-  table {{ border-collapse: collapse; width: 100%; }}
-  th, td {{ border: 1px solid #ddd; padding: 6px 8px; font-size: 12px; white-space: nowrap; }}
-  th {{ background: #f5f5f5; position: sticky; top: 0; z-index: 2; }}
-  tr.game-row:hover {{ background: #f0f0f0; }}
-</style>
-{filters_js}
-</head>
-<body>
-<h1>Market Intelligence Dashboard</h1>
-{snapshot_html}
-{legend_html}
-{filters_html}
-
-<div style="overflow:auto; border:1px solid #ddd; border-radius:8px;">
-<table id="dashboard">
-  <thead>
-    <tr data-header="1">
-      {header_ths}
-    </tr>
-  </thead>
-  <tbody>
-    {''.join(rows_html)}
-  </tbody>
-</table>
-</div>
-
-<script>
-(function () {{
-  try {{
-    const table = document.getElementById("dashboard");
-    if (!table) return;
-    const tbody = table.querySelector("tbody");
-    if (!tbody) return;
-
-    function getCellValue(tr, idx) {{
-      const td = tr.children[idx];
-      return td ? (td.innerText || td.textContent || "").trim() : "";
-    }}
-
-    function asNumber(s) {{
-      const x = String(s || "").replace(/[%,$]/g, "").replace(/—/g, "").trim();
-      const n = parseFloat(x);
-      return Number.isNaN(n) ? null : n;
-    }}
-
-    function comparer(idx, asc) {{
-      return function (a, b) {{
-        const va = getCellValue(asc ? a : b, idx);
-        const vb = getCellValue(asc ? b : a, idx);
-        const na = asNumber(va), nb = asNumber(vb);
-        if (na !== null && nb !== null) return na - nb;
-        return va.localeCompare(vb);
-      }};
-    }}
-
-    const headerRow = table.querySelector('thead tr[data-header="1"]');
-    if (!headerRow) return;
-
-    Array.from(headerRow.children).forEach(function (cell, idx) {{
-      cell.style.cursor = "pointer";
-      cell.addEventListener("click", function () {{
-        const rows = Array.from(tbody.querySelectorAll("tr"));
-        const asc = cell.dataset.asc !== "1";
-        cell.dataset.asc = asc ? "1" : "0";
-        rows.sort(comparer(idx, asc));
-        rows.forEach(r => tbody.appendChild(r));
-      }});
-    }});
-  }} catch (e) {{
-    // swallow errors so dashboard still renders
-  }}
-}})();
-</script>
-
-</body>
-</html>
-"""
-
-
-    # -----------------------------
-    # WRITE DASHBOARD HTML (single source of truth)
-    # -----------------------------
-    try:
-        from pathlib import Path
-        ensure_data_dir()
-        Path(REPORT_HTML).write_text(html, encoding="utf-8")
-        print(f"[ok] wrote dashboard: {REPORT_HTML}")
-    except Exception as e:
-        print(f"[warn] failed to write dashboard HTML: {e}")
-
-# =========================
-# CLI
-# =========================
-
-
 
 def _pretty_strong_elig(x):
     s = str(x).strip().lower()
