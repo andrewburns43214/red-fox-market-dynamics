@@ -13,6 +13,9 @@ import os
 import tempfile
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 import logging
+
+# Pylance/static: ensure this constant exists even if patterns are built later
+_JSON_SCRIPT_PATTERNS = []
 logger = logging.getLogger("dk")
 def _with_cache_buster(url: str) -> str:
     epoch_ms = int(time.time() * 1000)

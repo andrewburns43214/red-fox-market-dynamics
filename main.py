@@ -1690,7 +1690,9 @@ def _classify_market_read(D, bets_pct, move_dir, meaningful_move, is_high_bet_si
 def add_market_read_to_latest(latest: pd.DataFrame) -> pd.DataFrame:
     """
     Additive only. Uses columns you already compute in build_dashboard():
-      market_display, side, bets_pct, money_pct,
+
+    # -----------------------------
+          market_display, side, bets_pct, money_pct,
       open_odds/current_odds, open_line_val/current_line_val,
       odds_move_open/line_move_open
     """
@@ -3141,6 +3143,8 @@ def build_dashboard():
 
     game_view["net_edge"] = (game_view["max_side_score"] - game_view["min_side_score"]).round(1)
 
+    # -----------------------------
+    
     # Game decision: BET requires strong score + meaningful net edge; otherwise LEAN/NO BET
     def _game_decision(score, net_edge):
         try:
@@ -3182,6 +3186,73 @@ def build_dashboard():
     ).reset_index(drop=True)
 
     # -----------------------------
+    # RESHAPE (UI ONLY): one row per game with grouped SPREAD/ML/TOTAL columns
+    # -----------------------------
+    try:
+        base = ["sport", "game_id", "game", "sport_label", "game_time", "_game_time"]
+
+        tmp = game_view.copy()
+        tmp["market_display"] = tmp["market_display"].astype(str)
+
+        parts = []
+        for m in ("SPREAD", "MONEYLINE", "TOTAL"):
+            sub = tmp[tmp["market_display"] == m].copy()
+            if sub.empty:
+                continue
+
+            sub = sub[base + ["game_confidence", "favored_side", "net_edge", "game_decision"]].copy()
+            sub = sub.rename(columns={
+                "game_confidence": f"{m}_model_score",
+                "favored_side": f"{m}_favored",
+                "net_edge": f"{m}_net_edge",
+                "game_decision": f"{m}_decision",
+            })
+            parts.append(sub)
+
+        if parts:
+            game_view_wide = parts[0]
+            for pp in parts[1:]:
+                game_view_wide = game_view_wide.merge(pp, on=base, how="outer")
+        else:
+            game_view_wide = tmp[base].drop_duplicates().copy()
+
+        # Display Net Edge (single column): max of available market net edges
+        edge_cols = [c for c in game_view_wide.columns if c.endswith("_net_edge")]
+        if edge_cols:
+            game_view_wide["net_edge"] = (
+                pd.DataFrame({c: pd.to_numeric(game_view_wide[c], errors="coerce") for c in edge_cols})
+                .max(axis=1)
+                .fillna(0.0)
+                .round(1)
+            )
+        else:
+            game_view_wide["net_edge"] = 0.0
+
+        # Ensure expected columns exist (no NaN/None in UI)
+        for m in ("SPREAD", "MONEYLINE", "TOTAL"):
+            for c in (f"{m}_decision", f"{m}_model_score", f"{m}_favored"):
+                if c not in game_view_wide.columns:
+                    game_view_wide[c] = ""
+
+        game_view = game_view_wide.reset_index(drop=True)
+
+
+        # Re-sort after reshape (wide merge can scramble row order)
+        try:
+            if "_game_time" in game_view.columns:
+                game_view = game_view.sort_values(
+                    ["sport_label", "_game_time", "game"],
+                    na_position="last"
+                ).reset_index(drop=True)
+        except Exception:
+            pass
+
+    except Exception:
+        # If anything goes wrong, keep the existing game_view to avoid breaking report
+        pass
+
+
+    # -----------------------------
     # TABLE HEADERS + HYBRID ROW BUILD (UI ONLY)
     # GAME rows visible; SIDE rows hidden + directly under their GAME row
     # -----------------------------
@@ -3206,8 +3277,7 @@ def build_dashboard():
     # Build a fast lookup of SIDE rows by parent key so we can render children immediately under each game row
     latest["_parent_gk"] = (
         latest["sport"].astype(str) + "|" +
-        latest["game_id"].astype(str) + "|" +
-        latest["market_display"].astype(str)
+        latest["game_id"].astype(str)
     )
     side_groups = {k: g.copy() for k, g in latest.groupby("_parent_gk", dropna=False)}
 
@@ -3257,7 +3327,7 @@ def build_dashboard():
     rows_html = []
 
     for _, gr in game_view.iterrows():
-        gk = f"{gr.get('sport','')}|{gr.get('game_id','')}|{gr.get('market_display','')}"
+        gk = f"{gr.get('sport','')}|{gr.get('game_id','')}"
 
         # --- GAME SUMMARY ROW (visible) ---
         gt = _time_cell(gr)
@@ -3347,6 +3417,119 @@ def build_dashboard():
 </tr>
 """)
 
+
+
+    # -----------------------------
+    # WRITE DASHBOARD HTML (WIDE ONE-ROW-PER-GAME)
+    # Source of truth: data/dashboard.csv (already normalized; no NaNs)
+    # -----------------------------
+    try:
+        import pandas as _pd
+
+        dash_html = _pd.read_csv("data/dashboard.csv", keep_default_na=False)
+
+        # Columns and display order = whatever is in dashboard.csv already
+        cols = list(dash_html.columns)
+
+        def esc(x):
+            s = "" if x is None else str(x)
+            return (
+                s.replace("&","&amp;")
+                 .replace("<","&lt;")
+                 .replace(">","&gt;")
+            )
+
+        # Build header with sortable th
+        ths = []
+        for idx, h in enumerate(cols):
+            ths.append(f'<th onclick="sortTable({idx})">{esc(h)}</th>')
+        thead = "<tr>" + "".join(ths) + "</tr>"
+
+        # Body
+        rows = []
+        for _, r in dash_html.iterrows():
+            tds = []
+            for c in cols:
+                v = r.get(c, "")
+                s = "" if v is None else str(v)
+                # never show "nan"
+                if s.strip().lower() == "nan":
+                    s = ""
+                tds.append(f"<td>{esc(s)}</td>")
+            rows.append("<tr>" + "".join(tds) + "</tr>")
+        tbody = "\n".join(rows)
+
+        html = f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Red Fox Market Dynamics</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 12px; }}
+    table {{ border-collapse: collapse; width: 100%; }}
+    th, td {{ border: 1px solid #ddd; padding: 6px 8px; font-size: 12px; vertical-align: top; }}
+    th {{ position: sticky; top: 0; background: #f7f7f7; z-index: 2; cursor: pointer; user-select: none; }}
+  </style>
+  <script>
+    // simple, stable sort for ALL columns
+    function sortTable(n) {{
+      var table = document.querySelector("table");
+      var tbody = table.tBodies[0];
+      var rows = Array.prototype.slice.call(tbody.rows, 0);
+      var asc = table.getAttribute("data-sort-col") != String(n) || table.getAttribute("data-sort-dir") != "asc";
+
+      rows.sort(function(a, b) {{
+        var A = a.cells[n].innerText.trim();
+        var B = b.cells[n].innerText.trim();
+
+        // numeric if possible
+        var An = parseFloat(A);
+        var Bn = parseFloat(B);
+        var AisNum = !isNaN(An) && A.match(/^-?[0-9]+([.][0-9]+)?$/);
+        var BisNum = !isNaN(Bn) && B.match(/^-?[0-9]+([.][0-9]+)?$/);
+
+        if (AisNum && BisNum) {{
+          return asc ? (An - Bn) : (Bn - An);
+        }}
+
+        return asc ? A.localeCompare(B) : B.localeCompare(A);
+      }});
+
+      for (var i = 0; i < rows.length; i++) {{
+        tbody.appendChild(rows[i]);
+      }}
+
+      table.setAttribute("data-sort-col", String(n));
+      table.setAttribute("data-sort-dir", asc ? "asc" : "desc");
+    }}
+  </script>
+</head>
+<body>
+  <h2 style="margin: 0 0 10px 0;">Red Fox Market Dynamics</h2>
+  <table>
+    <thead>{thead}</thead>
+    <tbody>
+{tbody}
+    </tbody>
+  </table>
+</body>
+</html>"""
+
+        with open(REPORT_HTML, "w", encoding="utf-8") as f:
+            f.write(html)
+
+        print(f"[ok] wrote dashboard html: {REPORT_HTML}")
+
+    except Exception as e:
+        print(f"[dash] wide html write failed: {repr(e)}")
+        try:
+            import traceback
+            print(traceback.format_exc())
+        except Exception:
+            pass
+
+    # do NOT return early; let the rest of report logic run
     # -----------------------------
     # HEADERS
     # -----------------------------
@@ -3597,6 +3780,127 @@ def cmd_report(_args):
     except Exception as e:
         print(f"[espn finals] skipped due to error: {repr(e)}")
     build_dashboard()
+
+    # -----------------------------
+    # UI/CSV: ensure net_edge exists in data/dashboard.csv (instrumentation-only)
+    # NOTE: must run inside cmd_report AFTER build_dashboard() writes dashboard.csv
+    # -----------------------------
+    try:
+        import pandas as _pd
+        _dpath = "data/dashboard.csv"
+        _d = _pd.read_csv(_dpath, keep_default_na=False)
+
+        if "net_edge" not in _d.columns:
+            # Prefer any per-market net edge columns already present
+            _edge_cols = [c for c in _d.columns if c.endswith("_net_edge")]
+            if _edge_cols:
+                _tmp = _pd.DataFrame({c: _pd.to_numeric(_d[c], errors="coerce") for c in _edge_cols})
+                _d["net_edge"] = _tmp.max(axis=1).fillna(0.0).round(1)
+            else:
+                _d["net_edge"] = 0.0
+
+            _d.to_csv(_dpath, index=False)
+            print("[ok] added net_edge to data/dashboard.csv")
+    except Exception as _e:
+        print(f"[dash] net_edge post-fix failed: {repr(_e)}")
+
+    # -----------------------------
+    # METRICS: wire row_state + signal_ledger (instrumentation-only)
+    # Source of truth: data/dashboard.csv
+    # -----------------------------
+    try:
+        import pandas as _pd
+
+        _d = _pd.read_csv("data/dashboard.csv", keep_default_na=False, dtype=str)
+
+        _rows = []
+        for _m in ("SPREAD","TOTAL","MONEYLINE"):
+            _score_col = f"{_m}_model_score"
+            _side_col  = f"{_m}_favored"
+            _side_fallback_col = f"{_m}_side"
+            _dec_col   = f"{_m}_decision"
+            _edge_col  = f"{_m}_net_edge"
+
+            if _score_col not in _d.columns or _side_col not in _d.columns:
+                continue
+
+            for _, _r in _d.iterrows():
+                _score = str(_r.get(_score_col, "")).strip()
+                _side  = str(_r.get(_side_col, "")).strip()
+                if not _side:
+                    _side = str(_r.get(_side_fallback_col, "")).strip()
+                if not _score or not _side:
+                    continue
+
+                _net = str(_r.get(_edge_col, "")).strip()
+                if not _net:
+                    _net = str(_r.get("net_edge", "")).strip()
+
+                _rows.append({
+                    "sport": str(_r.get("sport","")).strip(),
+                    "game_id": str(_r.get("game_id","")).strip(),
+                    "game": str(_r.get("game","")).strip(),
+                    "market": _m,
+                    "side": _side,
+                    "model_score": _score,
+                    "decision": str(_r.get(_dec_col,"")).strip(),
+                                        "current_line": str(_r.get(f"{_m}_current_line","")).strip(),
+                    "current_odds": str(_r.get(f"{_m}_current_price","")).strip(),
+                    "bets_pct": str(_r.get(f"{_m}_bets_pct","")).strip(),
+                    "money_pct": str(_r.get(f"{_m}_money_pct","")).strip(),
+"net_edge": _net,
+                })
+
+        _latest = _pd.DataFrame(_rows)
+        if not _latest.empty:
+            # Heartbeat removed: RUN_TICK is appended via RUN_TICK_APPEND_AFTER_UPDATE (csv append)
+            update_row_state_and_signal_ledger(_latest)
+            # RUN_TICK_APPEND_AFTER_UPDATE: ensure signal_ledger proves metrics ran even without crossings
+            try:
+                import csv, os
+                from datetime import datetime, timezone
+                _now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                _lv = locals().get("_logic_version", locals().get("logic_version", "v?"))
+                _ledger_path = "data/signal_ledger.csv"
+                _default_cols = ["ts","logic_version","event","from_bucket","to_bucket","sport","game_id","market","side","game","current_line","current_odds","bets_pct","money_pct","score","net_edge"]
+            
+                # Determine columns from existing header if present
+                if os.path.exists(_ledger_path) and os.path.getsize(_ledger_path) > 0:
+                    with open(_ledger_path, "r", encoding="utf-8", newline="") as _f:
+                        _hdr = _f.readline().strip()
+                    _cols = [c.strip() for c in _hdr.split(",") if c.strip()] or _default_cols
+                else:
+                    _cols = _default_cols
+                    os.makedirs(os.path.dirname(_ledger_path) or ".", exist_ok=True)
+                    with open(_ledger_path, "w", encoding="utf-8", newline="") as _f:
+                        _w = csv.DictWriter(_f, fieldnames=_cols)
+                        _w.writeheader()
+            
+                _row = {c: "" for c in _cols}
+                _row.update({
+                    "ts": _now,
+                    "logic_version": _lv,
+                    "event": "RUN_TICK",
+                    "sport": "RUN_TICK",
+                    "game_id": "0",
+                    "market": "RUN_TICK",
+                    "side": "RUN_TICK",
+                    "game": "RUN_TICK",
+                })
+            
+                with open(_ledger_path, "a", encoding="utf-8", newline="") as _f:
+                    _w = csv.DictWriter(_f, fieldnames=_cols)
+                    _w.writerow(_row)
+            except Exception:
+                pass
+
+            print(f"[metrics] updated row_state/signal_ledger rows={len(_latest)}")
+        else:
+            print("[metrics] skipped: no rows built from dashboard.csv")
+    except Exception as _e:
+        print(f"[metrics] metrics wiring failed: {repr(_e)}")
+
+
     resolve_results_for_baseline()
     build_color_baseline_summary()
 
