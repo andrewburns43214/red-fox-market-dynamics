@@ -1,4 +1,4 @@
-﻿import argparse
+import argparse
 import csv
 
 # --- BASELINE LOG CACHE ---
@@ -183,7 +183,7 @@ def _norm_team(s: str) -> str:
 LOGIC_VERSION = "v1.1"   # tag every ledger/state write; official tracking may start at v1.1 later
 
 # ============================================================
-# v1.1 STEP 2 — SPORT-SPECIFIC DAMPENERS (INSTRUMENTATION ONLY)
+# v1.1 STEP 2 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â SPORT-SPECIFIC DAMPENERS (INSTRUMENTATION ONLY)
 # ============================================================
 
 # NOTE:
@@ -193,8 +193,8 @@ LOGIC_VERSION = "v1.1"   # tag every ledger/state write; official tracking may s
 
 # --- NCAAB ---
 NCAAB_EARLY_STRONG_BLOCK = True          # early window cannot certify STRONG
-NCAAB_STRONG_MIN_PERSIST = 3             # ≥3 consecutive snapshots ≥72
-NCAAB_STRONG_STABILITY_DELTA = 2          # last ≥ peak − 2
+NCAAB_STRONG_MIN_PERSIST = 3             # ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€šÃ‚Â¥3 consecutive snapshots ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€šÃ‚Â¥72
+NCAAB_STRONG_STABILITY_DELTA = 2          # last ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€šÃ‚Â¥ peak ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ 2
 NCAAB_LATE_STRONG_BLOCK = True            # never certify STRONG late
 NCAAB_REQUIRE_MULTI_MARKET = True         # single-market dependency blocks STRONG
 
@@ -1765,7 +1765,7 @@ def add_market_read_to_latest(latest: pd.DataFrame) -> pd.DataFrame:
             od = r.get("odds_move_open")
             meaningful = (pd.notna(od) and abs(float(od)) >= 10)
 
-            move_summary.append(f"ML: {r.get('open_odds')}â†’{r.get('current_odds')} (Î”odds={od})")
+            move_summary.append(f"ML: {r.get('open_odds')}ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢{r.get('current_odds')} (ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â½ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âodds={od})")
 
         elif mkt == "SPREAD":
             move_dir = _toward_side_by_spread(r.get("open_line_val"), r.get("current_line_val"))
@@ -1783,8 +1783,8 @@ def add_market_read_to_latest(latest: pd.DataFrame) -> pd.DataFrame:
             )
 
             move_summary.append(
-                f"SPREAD: {r.get('open_line_val')}â†’{r.get('current_line_val')} (Î”line={ld}), "
-                f"odds {r.get('open_odds')}â†’{r.get('current_odds')} (Î”odds={od})"
+                f"SPREAD: {r.get('open_line_val')}ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢{r.get('current_line_val')} (ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â½ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âline={ld}), "
+                f"odds {r.get('open_odds')}ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢{r.get('current_odds')} (ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â½ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âodds={od})"
                 + (f", key={key_cross}" if key_cross else "")
             )
 
@@ -1795,8 +1795,8 @@ def add_market_read_to_latest(latest: pd.DataFrame) -> pd.DataFrame:
             meaningful = (pd.notna(ld) and abs(float(ld)) >= 0.5) or (pd.notna(od) and abs(float(od)) >= 10)
 
             move_summary.append(
-                f"TOTAL: {r.get('open_line_val')}â†’{r.get('current_line_val')} (Î”num={ld}), "
-                f"odds {r.get('open_odds')}â†’{r.get('current_odds')} (Î”odds={od})"
+                f"TOTAL: {r.get('open_line_val')}ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢{r.get('current_line_val')} (ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â½ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Ânum={ld}), "
+                f"odds {r.get('open_odds')}ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢{r.get('current_odds')} (ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â½ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âodds={od})"
             )
         else:
             move_summary.append("Unknown market move")
@@ -1902,7 +1902,7 @@ TIMEZONE = "local"  # for display only
 
 
 # =========================
-# Thresholds (your â€œrare dark greenâ€ setup)
+# Thresholds (your ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œrare dark greenÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â setup)
 # =========================
 
 @dataclass(frozen=True)
@@ -1920,9 +1920,9 @@ class Thresholds:
     red_money_max: int = 55
 
     # Line movement thresholds (optional, if you capture open/current)
-    meaningful_move_pts: float = 1.5  # used for â€œstrong line behaviorâ€
+    meaningful_move_pts: float = 1.5  # used for ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œstrong line behaviorÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â
 
-    # â€œNo movementâ€ / resistance trigger (optional)
+    # ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œNo movementÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â / resistance trigger (optional)
     resistance_public_bets_min: int = 72
     resistance_move_max: float = 0.25
 
@@ -1996,7 +1996,7 @@ def safe_text(el) -> str:
 def parse_splits_generic(html: str, sport: str, debug: bool = False) -> List[SideRow]:
     """
     Generic parser:
-    - Finds repeating â€œgame cardsâ€ or table rows
+    - Finds repeating ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œgame cardsÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â or table rows
     - Extracts game name, side/team labels, bets% and money% if present
     This may need minor tweaks depending on DK Network page structure.
     """
@@ -2041,8 +2041,8 @@ def parse_splits_generic(html: str, sport: str, debug: bool = False) -> List[Sid
         bets_pct = int(pcts[0]) if pcts else None
         money_pct = int(pcts[1]) if len(pcts) > 1 else None
 
-        # Create a single â€œside rowâ€ record as a fallback
-        # We'll show it in output even if itâ€™s not perfectly split by team yet.
+        # Create a single ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œside rowÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â record as a fallback
+        # We'll show it in output even if itÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢s not perfectly split by team yet.
         rows_out.append(SideRow(
             sport=sport,
             game_id=f"row-{idx}",
@@ -2097,11 +2097,11 @@ def classify_side(
 ) -> Tuple[str, str]:
     """
     Returns: (color, explanation)
-    color âˆˆ {"DARK_GREEN","LIGHT_GREEN","GREY","YELLOW","RED"}
+    color ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¹ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Â¹ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â  {"DARK_GREEN","LIGHT_GREEN","GREY","YELLOW","RED"}
     """
     # If we don't have percentages, we can't score well
     if bets_pct is None or money_pct is None:
-        return "GREY", "Missing bet%/money% â†’ default Grey"
+        return "GREY", "Missing bet%/money% ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ default Grey"
 
     # Context modifiers
     has_news = (injury_news or "").strip().lower() in {"yes", "y", "true", "1"}
@@ -2130,29 +2130,29 @@ def classify_side(
             if move >= TH.meaningful_move_pts:
                 strong_line_signal = True
 
-        # Key number note can promote â€œstrong line behaviorâ€ (NFL)
+        # Key number note can promote ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œstrong line behaviorÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â (NFL)
         if key_number_note and key_number_note.strip():
             strong_line_signal = True
 
     # DARK GREEN (rare): requires strong line behavior + strong money signal, AND no obvious news explanation
     if strong_line_signal and dark_money_signal and not has_news:
-        return "DARK_GREEN", "Book behavior + strong money-vs-bets imbalance; no obvious news â†’ Market Edge Confirmed"
+        return "DARK_GREEN", "Book behavior + strong money-vs-bets imbalance; no obvious news ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ Market Edge Confirmed"
 
     # If news explains it, keep in Light Green even if strong
     if strong_line_signal and dark_money_signal and has_news:
-        return "LIGHT_GREEN", "Strong signals but major news present â†’ downgrade to Market Edge Developing" 
+        return "LIGHT_GREEN", "Strong signals but major news present ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ downgrade to Market Edge Developing" 
 
     # LIGHT GREEN: money-vs-bets imbalance without strong line confirmation
     if light_money_signal:
-        return "LIGHT_GREEN", "Money concentration vs bet count â†’ Market Edge Developing (watch for confirmation)"
+        return "LIGHT_GREEN", "Money concentration vs bet count ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ Market Edge Developing (watch for confirmation)"
 
     # RED: avoid this side
     if is_red:
-        return "RED", "Extremely public + weak money support â†’ Wrong Side / Trap (evaluate opposite side)"
+        return "RED", "Extremely public + weak money support ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ Wrong Side / Trap (evaluate opposite side)"
 
     # YELLOW: public-driven
     if is_yellow:
-        return "YELLOW", "Public-heavy demand without strong money support â†’ Caution"
+        return "YELLOW", "Public-heavy demand without strong money support ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ Caution"
 
     return "GREY", "No strong market signal on this side"
 
@@ -2283,7 +2283,7 @@ def build_dashboard():
     df["side"] = df["side"].fillna("").astype(str)
     df["market"] = df["market"].fillna("unknown").astype(str)
 
-    # Clean DK â€œopens in a new tabâ€¦â€ junk if present
+    # Clean DK ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œopens in a new tabÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â junk if present
     df["market"] = df["market"].astype(str).str.replace(r"\s+opens in a new tab.*$", "", regex=True)
     df["game"] = df["game"].astype(str).str.replace(r"\s+opens in a new tab.*$", "", regex=True)
 
@@ -2662,7 +2662,7 @@ def build_dashboard():
         side = row.get("side")
         mkt = row.get("market_display")
         # -----------------------------
-        # Numeric confidence score (0â€“100), interpretive only
+        # Numeric confidence score (0ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“100), interpretive only
         # -----------------------------
         score = 50.0
 
@@ -2747,7 +2747,7 @@ def build_dashboard():
                 and pd.notna(row.get("current_odds"))
                 and int(row["current_odds"]) >= 300
             ):
-                expl = f"{expl} | âš ï¸ Big underdog moneyline (+{int(row['current_odds'])})"
+                expl = f"{expl} | ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¯ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â Big underdog moneyline (+{int(row['current_odds'])})"
         except Exception:
             pass
 
@@ -2756,7 +2756,7 @@ def build_dashboard():
             and (game, side) in ml_green
             and color not in ("DARK_GREEN", "LIGHT_GREEN")
         ):
-            expl = f"{expl} | Sharp ML, margin risk â€” ML favored over spread"
+            expl = f"{expl} | Sharp ML, margin risk ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ML favored over spread"
 
         colors.append(color)
         explains.append(expl)
@@ -3376,17 +3376,17 @@ def build_dashboard():
                 side_disp = re.sub(r"\s[+-]\d+(?:\.\d+)?\s*$", "", str(side_disp)).strip()
 
             # Market cell
-            market_cell = f"{side_disp} â€” {rr.get('market_display','')}".strip(" â€”")
+            market_cell = f"{side_disp} ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â {rr.get('market_display','')}".strip(" ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â")
 
             # Decision: Bets / Money
             bets_cell = "" if pd.isna(rr.get("bets_pct")) else f"{int(rr['bets_pct'])}%"
             money_cell = "" if pd.isna(rr.get("money_pct")) else f"{int(rr['money_pct'])}%"
             decision_cell = f"B {bets_cell} / $ {money_cell}".strip()
 
-            # Open â†’ Current
+            # Open ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ Current
             o = "" if pd.isna(rr.get("open_line")) else str(rr.get("open_line"))
             c = "" if pd.isna(rr.get("current_line")) else str(rr.get("current_line"))
-            oc_cell = (o + " â†’ " + c).strip(" â†’")
+            oc_cell = (o + " ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ " + c).strip(" ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢")
 
             # Side model score
             try:
@@ -3429,7 +3429,7 @@ def build_dashboard():
         dash_html = _pd.read_csv("data/dashboard.csv", keep_default_na=False)
 
         # Columns and display order = whatever is in dashboard.csv already
-        cols = list(dash_html.columns)
+        cols = list(header_cols)
 
         def esc(x):
             s = "" if x is None else str(x)
@@ -3457,7 +3457,7 @@ def build_dashboard():
                     s = ""
                 tds.append(f"<td>{esc(s)}</td>")
             rows.append("<tr>" + "".join(tds) + "</tr>")
-        tbody = "\n".join(rows)
+        tbody = "\n".join(rows_html) if "rows_html" in locals() else "\n".join(rows)
 
         html = f"""<!doctype html>
 <html>
@@ -3472,28 +3472,101 @@ def build_dashboard():
     th {{ position: sticky; top: 0; background: #f7f7f7; z-index: 2; cursor: pointer; user-select: none; }}
   </style>
   <script>
-    // simple, stable sort for ALL columns
-    function sortTable(n) {{
+    // simple, stable sort for ALL columns    function sortTable(n) {{
       var table = document.querySelector("table");
+      if (!table) return;
+
       var tbody = table.tBodies[0];
-      var rows = Array.prototype.slice.call(tbody.rows, 0);
+      if (!tbody) return;
+
+      var all = Array.prototype.slice.call(tbody.rows, 0);
+      var hasGrouped = false;
+      for (var i = 0; i < all.length; i++) {{
+        var rr = all[i];
+        if (rr.classList && rr.classList.contains("game-row")) {{ hasGrouped = true; break; }}
+      }}
+
       var asc = table.getAttribute("data-sort-col") != String(n) || table.getAttribute("data-sort-dir") != "asc";
 
-      rows.sort(function(a, b) {{
-        var A = a.cells[n].innerText.trim();
-        var B = b.cells[n].innerText.trim();
+      function cellText(row, idx) {{
+        if (!row || !row.cells || idx < 0 || idx >= row.cells.length) return "";
+        return (row.cells[idx].textContent || "").trim();
+      }}
 
-        // numeric if possible
-        var An = parseFloat(A);
-        var Bn = parseFloat(B);
-        var AisNum = !isNaN(An) && A.match(/^-?[0-9]+([.][0-9]+)?$/);
-        var BisNum = !isNaN(Bn) && B.match(/^-?[0-9]+([.][0-9]+)?$/);
+      function decisionRank(s) {{
+        var t = (s || "").toUpperCase().trim();
+        if (t === "STRONG BET") return 4;
+        if (t === "BET") return 3;
+        if (t === "LEAN") return 2;
+        if (t === "NO BET" || t === "NO_BET") return 1;
+        return 0;
+      }}
 
-        if (AisNum && BisNum) {{
-          return asc ? (An - Bn) : (Bn - An);
+      function cmp(a, b) {{
+        var head = "";
+        try {{
+          head = (table.tHead && table.tHead.rows[0] && table.tHead.rows[0].cells[n])
+            ? table.tHead.rows[0].cells[n].textContent
+            : "";
+        }} catch(e) {{}}
+        var isDecision = (head || "").toLowerCase().indexOf("decision") >= 0;
+
+        var av = cellText(a, n);
+        var bv = cellText(b, n);
+
+        if (isDecision) {{
+          var ar = decisionRank(av);
+          var br = decisionRank(bv);
+          if (ar !== br) return (ar - br) * (asc ? 1 : -1);
         }}
 
-        return asc ? A.localeCompare(B) : B.localeCompare(A);
+        var an = parseFloat(av.replace(/[^0-9.\-]/g, ""));
+        var bn = parseFloat(bv.replace(/[^0-9.\-]/g, ""));
+        var aNum = !isNaN(an) && av.match(/[0-9]/);
+        var bNum = !isNaN(bn) && bv.match(/[0-9]/);
+
+        if (aNum && bNum) {{
+          if (an === bn) return 0;
+          return (an < bn ? -1 : 1) * (asc ? 1 : -1);
+        }}
+
+        var c = av.localeCompare(bv);
+        return c * (asc ? 1 : -1);
+      }}
+
+      if (!hasGrouped) {{
+        var rows = all.slice();
+        rows.sort(cmp);
+        rows.forEach(function(r) {{ tbody.appendChild(r); }});
+      }} else {{
+        var groups = [];
+        var cur = null;
+
+        for (var j = 0; j < all.length; j++) {{
+          var r = all[j];
+          if (r.classList && r.classList.contains("game-row")) {{
+            cur = {{ head: r, rows: [r] }};
+            groups.push(cur);
+          }} else {{
+            if (!cur) {{
+              cur = {{ head: r, rows: [r] }};
+              groups.push(cur);
+            }} else {{
+              cur.rows.push(r);
+            }}
+          }}
+        }}
+
+        groups.sort(function(g1, g2) {{ return cmp(g1.head, g2.head); }});
+
+        groups.forEach(function(g) {{
+          g.rows.forEach(function(r) {{ tbody.appendChild(r); }});
+        }});
+      }}
+
+      table.setAttribute("data-sort-col", String(n));
+      table.setAttribute("data-sort-dir", asc ? "asc" : "desc");
+    }}return asc ? A.localeCompare(B) : B.localeCompare(A);
       }});
 
       for (var i = 0; i < rows.length; i++) {{
@@ -3939,7 +4012,7 @@ def cmd_baseline_market_read_joined(args):
 
 
     # =========================
-    # B3: Nearest snapshot â‰¤ signal time
+    # B3: Nearest snapshot ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¤ signal time
     # =========================
 
     # Align snapshot timestamp name to match signal time
