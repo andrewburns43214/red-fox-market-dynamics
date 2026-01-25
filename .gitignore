@@ -45,3 +45,22 @@ tools_local/
 
 # local scratch
 /tmp/
+junk/
+tools/__pycache__/
+__pycache__/
+*.pyc
+# one-off patch/verify scripts (keep out of repo)
+_patch_*.py
+patch_*.py
+verify_*.py
+dump_*.py
+check_*.py
+sanitize_*.py
+main.clean.py
+METRICS_BLOCK.txt
+rotate_data_fast.ps1
+
+# data artifacts never committed
+data/*.csv
+data/*.tmp
+data/*MIGRATION_NOTE*.txt
