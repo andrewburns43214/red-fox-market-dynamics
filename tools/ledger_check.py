@@ -1,5 +1,6 @@
 ﻿import csv
 from collections import Counter
+import os
 
 LEDGER = r"data/signal_ledger.csv"
 
@@ -40,7 +41,8 @@ def main():
 
     # tail sanity (last 25 must be v1.1 if that’s your active version)
     tail = rows[-25:]
-    tail_bad = [r for r in tail if (r.get("logic_version") or "").strip() != "v1.1"]
+    expected = (os.environ.get("RF_LOGIC_VERSION") or "v1.1").strip() or "v1.1"
+    tail_bad = [r for r in tail if (r.get("logic_version") or "").strip() != expected]
     if tail_bad:
         print("[ledger_check] FAIL: tail has non-v1.1 rows, example:", tail_bad[0])
         raise SystemExit("[ledger_check] FAIL: tail_bad_count>0")
@@ -49,7 +51,8 @@ def main():
           "rows=", len(rows),
           "logic_version_counts=", dict(lv),
           "bad_transition_count=0",
-          "tail_bad_count=0")
+          "tail_bad_count=0",
+           "expected_logic_version=", expected)
 
 if __name__ == "__main__":
     main()
