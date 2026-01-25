@@ -64,3 +64,6 @@ rotate_data_fast.ps1
 data/*.csv
 data/*.tmp
 data/*MIGRATION_NOTE*.txt
+
+_bak_archive/
+
