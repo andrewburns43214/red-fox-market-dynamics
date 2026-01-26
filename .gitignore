@@ -72,3 +72,4 @@ _bak_archive/
 patch_*.ps1
 restore_latest_compiling_backup.ps1
 
+inspect_dashboard_schema.py
