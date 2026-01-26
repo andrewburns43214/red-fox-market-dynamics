@@ -67,3 +67,8 @@ data/*MIGRATION_NOTE*.txt
 
 _bak_archive/
 
+
+# local patch scripts
+patch_*.ps1
+restore_latest_compiling_backup.ps1
+
