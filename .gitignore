@@ -73,3 +73,8 @@ patch_*.ps1
 restore_latest_compiling_backup.ps1
 
 inspect_dashboard_schema.py
+# one-off local patch scripts
+fix_dup_contradiction_precompute.py
+fix_signal_ledger_hard17.py
+repair_signal_ledger.py
+sl_list_events.py
