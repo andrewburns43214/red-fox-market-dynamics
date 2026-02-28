@@ -1,0 +1,98 @@
+body{
+margin:0;
+background:#05070b;
+color:#d6dbe1;
+font-family:Segoe UI,Arial;
+}
+
+/* HEADER */
+.topbar{
+position:fixed;
+top:0;left:0;right:0;
+height:60px;
+background:#000000;
+border-bottom:1px solid #1c2430;
+display:flex;
+align-items:center;
+padding:0 20px;
+z-index:1000;
+}
+
+.logo{height:28px;margin-right:12px;}
+.brand{font-weight:700;letter-spacing:1px;}
+.live{color:#00ff9c;font-size:11px;font-weight:600;}
+
+.main{padding-top:90px;display:flex;justify-content:center;}
+
+.panel{
+width:1500px;
+background:#0e131a;
+border:1px solid #1b2430;
+border-radius:8px;
+overflow:hidden;
+}
+
+/* THIS IS THE REAL FIX */
+.table-wrap{
+width:100%;
+overflow-x:auto;
+}
+
+/* TABLE */
+table{
+width:1500px;
+border-collapse:collapse;
+table-layout:fixed;
+font-size:13px;
+}
+
+th,td{
+padding:10px 8px;
+border-bottom:1px solid #131a23;
+white-space:nowrap;
+text-align:center;
+}
+
+thead{
+background:#0f1620;
+color:#8fa3b8;
+}
+
+/* column sizing */
+th:nth-child(1),td:nth-child(1){width:60px}
+th:nth-child(2),td:nth-child(2){width:260px}
+th:nth-child(3),td:nth-child(3){width:200px}
+th:nth-child(4),td:nth-child(4){width:90px}
+th:nth-child(5),td:nth-child(5){width:90px}
+th:nth-child(6),td:nth-child(6){width:90px}
+th:nth-child(7),td:nth-child(7){width:90px}
+th:nth-child(8),td:nth-child(8){width:90px}
+th:nth-child(9),td:nth-child(9){width:70px}
+th:nth-child(10),td:nth-child(10){width:70px}
+th:nth-child(11),td:nth-child(11){width:140px}
+
+/* PICK COLUMN */
+th:nth-child(12),td:nth-child(12){
+width:240px;
+white-space:normal;
+}
+
+/* DECISION COLORS */
+.decision{
+font-weight:700;
+border-radius:6px;
+padding:4px 8px;
+display:inline-block;
+min-width:90px;
+}
+
+.decision.strong{background:#0b5d1e;color:#d4ffd8;}
+.decision.bet{background:#1f8f3a;color:#eaffea;}
+.decision.lean{background:#b59b00;color:#fff6cc;}
+.decision.nobet{background:#7a1111;color:#ffd6d6;}
+
+.footer-status{
+position:fixed;bottom:0;left:0;right:0;
+background:#000000;border-top:1px solid #1c2430;
+padding:6px 12px;font-size:11px;color:#6f859c;
+}

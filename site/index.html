@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Red Fox Market Radar</title>
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="topbar">
+    <img src="logo.png" class="logo">
+    <div>
+        <div class="brand">RED FOX MARKET RADAR</div>
+        <div class="live">● LIVE MARKET BOARD</div>
+    </div>
+</div>
+
+<div class="main">
+<div class="panel">
+<div class="panel-title">TOP MARKET EDGES</div>
+
+<!-- NEW WRAPPER (CRITICAL FIX) -->
+<div class="table-wrap">
+
+<table>
+<thead>
+<tr>
+<th>RANK</th>
+<th>GAME</th>
+<th>DATE & TIME (EST)</th>
+<th>MKT</th>
+<th>BET %</th>
+<th>MONEY %</th>
+<th>OPEN</th>
+<th>LINE</th>
+<th>EDGE</th>
+<th>SCORE</th>
+<th>DECISION</th>
+<th>PICK</th>
+</tr>
+</thead>
+<tbody id="tbody"></tbody>
+</table>
+
+</div>
+<!-- END WRAPPER -->
+
+</div>
+</div>
+
+<div class="footer-status" id="status">Connecting to market feed...</div>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
