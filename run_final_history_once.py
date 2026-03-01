@@ -1,0 +1,2 @@
+﻿from main import update_final_scores_history
+update_final_scores_history()

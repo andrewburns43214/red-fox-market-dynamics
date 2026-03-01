@@ -1,0 +1,22 @@
+﻿
+=== GIT STATUS ===
+On branch main
+Your branch is ahead of 'origin/main' by 1 commit.
+  (use "git push" to publish your local commits)
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   main.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	DISABLE_METRICS_NOW.py
+	audit/
+	metrics/
+	metrics_debug.log
+
+no changes added to commit (use "git add" and/or "git commit -a")
+
+=== HEAD ===
+5bded32f38689f0ef4864bbc7e88f8ea329e0fe5

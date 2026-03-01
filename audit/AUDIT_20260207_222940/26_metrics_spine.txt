@@ -1,0 +1,389 @@
+﻿=== Metrics spine integration points (main.py) ===
+
+  main.py:855:        print(f"[finals] updated {updated} rows in {src}")
+  main.py:856:
+  main.py:857:
+> main.py:858:# ---- Step C (metrics instrumentation only): row_state + signal_ledger ----
+  main.py:859:def _metrics_now_iso_utc() -> str:
+  main.py:860:    from datetime import datetime, timezone
+  main.py:861:    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+  main.py:862:
+  main.py:863:
+  main.py:864:
+  main.py:865:def _canonical_market_side_for_state(market: str, side: str, current_line: str):
+  main.py:866:    """
+  main.py:867:    Enforce invariant:
+  main.py:868:      - market in {SPREAD,TOTAL,MONEYLINE}
+  main.py:979:    if s >= 60.0:
+  main.py:980:        return "LEAN"
+  main.py:981:    return "NO_BET"
+> main.py:982:def _load_row_state(path: str):
+  main.py:983:    import pandas as pd
+  main.py:984:    import os
+  main.py:985:    if not os.path.exists(path):
+  main.py:986:        return pd.DataFrame(columns=[
+  main.py:987:            "sport", "game_id", "market", "side",
+  main.py:988:            "logic_version",
+> main.py:989:            "last_score", "last_ts",
+> main.py:990:            "peak_score", "peak_ts",
+> main.py:991:            "last_bucket",
+> main.py:992:            "last_net_edge", "last_net_edge_ts",
+  main.py:993:        ])
+  main.py:994:    try:
+  main.py:995:        df = pd.read_csv(path, keep_default_na=False, dtype=str)
+  main.py:996:        # Normalize instrumentation fields (avoid blank strong_streak from older rows)
+  main.py:997:        try:
+  main.py:998:            if "strong_streak" in df.columns:
+  main.py:999:                df["strong_streak"] = df["strong_streak"].astype(str).str.strip()
+  main.py:1000:                df.loc[df["strong_streak"] == "", "strong_streak"] = "0"
+  main.py:1001:        except Exception:
+  main.py:1002:            pass
+  main.py:1005:            return pd.DataFrame(columns=[
+  main.py:1006:                "sport", "game_id", "market", "side",
+  main.py:1007:                "logic_version",
+> main.py:1008:                "last_score", "last_ts",
+> main.py:1009:                "peak_score", "peak_ts",
+> main.py:1010:                "last_bucket",
+> main.py:1011:                "last_net_edge", "last_net_edge_ts",
+  main.py:1012:            ])
+  main.py:1013:        # ensure cols exist
+> main.py:1014:        for c in ["sport","game_id","market","side","logic_version","last_score","last_ts","last_seen_tick","peak_score","peak_ts","last_bucket","last_net_edge","last_net_edge_ts","strong_streak"]:
+  main.py:1015:            if c not in df.columns:
+  main.py:1016:                df[c] = ""
+  main.py:1017:        return df
+  main.py:1018:    except Exception:
+  main.py:1019:        # if state file is corrupted, fail safe (do not break report)
+  main.py:1020:        return pd.DataFrame(columns=[
+  main.py:1021:            "sport", "game_id", "market", "side",
+  main.py:1022:            "logic_version",
+> main.py:1023:            "last_score", "last_ts",
+> main.py:1024:            "peak_score", "peak_ts",
+> main.py:1025:            "last_bucket",
+> main.py:1026:            "last_net_edge", "last_net_edge_ts",
+  main.py:1027:        ])
+  main.py:1028:
+  main.py:1029:
+> main.py:1030:def _append_signal_ledger(path: str, rows: list[dict]):
+  main.py:1031:    import pandas as pd
+  main.py:1032:    import os
+  main.py:1033:
+  main.py:1034:    # Canonical ledger schema (stable across runs)
+  main.py:1035:    cols = [
+  main.py:1036:        "ts","logic_version","event","from_bucket","to_bucket",
+  main.py:1037:        "sport","game_id","market","side","game",
+  main.py:1038:        "current_line","current_odds","bets_pct","money_pct",
+  main.py:1039:        "score","net_edge"
+  main.py:1040:    ]
+  main.py:1081:
+  main.py:1082:
+  main.py:1083:
+> main.py:1084:def update_row_state_and_signal_ledger(latest):
+  main.py:1085:    # HARD DISABLED — metrics temporarily off
+  main.py:1086:    return
+  main.py:1087:
+  main.py:1088:    # --- METRICS FILE INIT (v1.1) ---
+  main.py:1089:    import os, csv
+  main.py:1090:    os.makedirs("data", exist_ok=True)
+  main.py:1091:
+> main.py:1092:    ROW_STATE_PATH = "data/row_state.csv"
+> main.py:1093:    SIGNAL_LEDGER_PATH = "data/signal_ledger.csv"
+  main.py:1094:
+> main.py:1095:    if not os.path.exists(ROW_STATE_PATH):
+> main.py:1096:        with open(ROW_STATE_PATH, "w", newline="", encoding="utf-8") as f:
+> main.py:1097:            csv.writer(f).writerow(["sport","game_id","market","side","last_score","peak_score","peak_ts","last_bucket"])
+  main.py:1098:
+> main.py:1099:    if not os.path.exists(SIGNAL_LEDGER_PATH):
+> main.py:1100:        with open(SIGNAL_LEDGER_PATH, "w", newline="", encoding="utf-8") as f:
+  main.py:1101:            csv.writer(f).writerow(["ts_utc","sport","game_id","market","side","event","value","logic_version"])
+  main.py:1102:
+  main.py:1103:    """
+  main.py:1104:    Instrumentation-only.
+  main.py:1105:    Writes:
+> main.py:1106:      - data/row_state.csv: last_score, peak_score, peak_ts (plus last_ts/last_bucket)
+> main.py:1107:      - data/signal_ledger.csv: bucket crossings w/ context + logic_version
+  main.py:1108:    Key: (sport, game_id, market, side)
+  main.py:1109:    """
+  main.py:1110:    try:
+  main.py:1111:        import os
+  main.py:1112:        import pandas as pd
+  main.py:1113:
+  main.py:1114:        if latest is None or len(latest) == 0:
+  main.py:1115:            return
+  main.py:1116:
+  main.py:1117:        # --- Metrics persistence key (DO NOT USE market_display for state keys) ---
+  main.py:1190:            return
+  main.py:1191:
+  main.py:1192:        os.makedirs("data", exist_ok=True)
+> main.py:1193:        state_path = os.path.join("data", "row_state.csv")
+> main.py:1194:        ledger_path = os.path.join("data", "signal_ledger.csv")
+  main.py:1195:        # Ensure ledger file exists even if there are no crossings this run (prevents FileNotFoundError)
+> main.py:1196:        _append_signal_ledger(ledger_path, [])
+  main.py:1197:
+> main.py:1198:        state_df = _load_row_state(state_path)
+  main.py:1199:
+> main.py:1200:        # --- v1.1 safety: prune any contaminated legacy keys from row_state on load ---
+  main.py:1201:        try:
+  main.py:1202:            if state_df is not None and (not state_df.empty):
+  main.py:1203:                _side = state_df.get("side", "").fillna("").astype(str)
+  main.py:1204:                _mkt  = state_df.get("market", "").fillna("").astype(str).str.upper()
+  main.py:1205:
+  main.py:1206:                _bad_total = _side.str.contains(r"\bUNDER\b|\bOVER\b", case=False, na=False)
+  main.py:1207:                _bad_spreadish_ml = (_mkt=="MONEYLINE") & _side.str.contains(r"\s[+-]\d+(?:\.\d+)?\s*$", regex=True, na=False)
+  main.py:1208:                _bad = ((_mkt.isin(["SPREAD","MONEYLINE"])) & _bad_total) | _bad_spreadish_ml
+  main.py:1209:
+  main.py:1210:                if bool(_bad.any()):
+  main.py:1213:            pass
+  main.py:1214:        # --- end prune ---
+  main.py:1215:
+> main.py:1216:        # Build state index (PERSISTED row_state schema: sport, game_id, market, side)
+  main.py:1217:        if state_df is not None and not state_df.empty:
+  main.py:1218:            for c in ("sport","game_id","market","side"):
+  main.py:1219:                if c not in state_df.columns:
+  main.py:1220:                    state_df[c] = ""
+  main.py:1221:            idx_cols = ["sport","game_id","market","side"]
+  main.py:1222:            state_df["_k"] = state_df[idx_cols].fillna("").astype(str).agg("|".join, axis=1)
+  main.py:1223:        else:
+  main.py:1224:            state_df = None
+  main.py:1225:
+  main.py:1226:        state_map = {}
+  main.py:1281:            side = _metrics_blank(side)
+  main.py:1282:
+  main.py:1283:
+> main.py:1284:            # --- v1.1 guardrail: prevent TOTAL/SPREAD/ML cross-contamination in row_state ---
+  main.py:1285:            try:
+  main.py:1286:                _mkt_u = str(market).strip().upper()
+  main.py:1287:                _side_u = str(side).strip().upper()
+  main.py:1288:
+  main.py:1289:                # Totals must never be written under SPREAD/MONEYLINE
+  main.py:1290:                if _mkt_u in ("SPREAD","MONEYLINE") and (("UNDER" in _side_u) or ("OVER" in _side_u)):
+  main.py:1291:                    continue
+  main.py:1292:
+  main.py:1293:                # Spread-like labels must never be written under MONEYLINE (e.g., "Boise State -5.5")
+  main.py:1294:                if _mkt_u == "MONEYLINE":
+  main.py:1341:            # --- end v1.1 ---
+  main.py:1342:
+  main.py:1343:            prev = state_map.get(k, {})
+> main.py:1344:            prev_bucket = _metrics_blank(prev.get("last_bucket"))
+  main.py:1345:
+  main.py:1346:            # peak tracking
+> main.py:1347:            prev_peak = _metrics_float(prev.get("peak_score"), default=None)
+> main.py:1348:            peak_score = score if (prev_peak is None or score > prev_peak) else prev_peak
+> main.py:1349:            peak_ts = now_ts if (prev_peak is None or score > prev_peak) else _metrics_blank(prev.get("peak_ts"))
+  main.py:1350:
+  main.py:1351:            # threshold crossing logging
+  main.py:1352:            # Only log upward crossings into LEAN/BET/STRONG_BET (including brand-new rows)
+  main.py:1353:            rank = {"": 0, "NO_BET": 0, "LEAN": 1, "BET": 2, "STRONG_BET": 3}
+  main.py:1354:            pb = prev_bucket if prev_bucket in rank else "NO_BET"
+  main.py:1355:            cb = bucket if bucket in ("NO_BET", "LEAN", "BET", "STRONG_BET") else "NO_BET"
+  main.py:1356:            if rank.get(pb, 0) < rank.get(cb, 0) and cb in ("LEAN", "BET", "STRONG_BET"):
+  main.py:1357:                ledger
+  main.py:1358:                # --- METRICS FEED (v1.1): consume per-market rows immediately ---
+  main.py:1359:                try:
+  main.py:1360:                    _metrics_df = _pd.DataFrame(_rows)
+  main.py:1361:                    if not _metrics_df.empty:
+> main.py:1362:                        update_row_state_and_signal_ledger(_metrics_df)
+  main.py:1363:                except Exception as _e:
+  main.py:1364:                    print("[metrics] early feed failed:", repr(_e))
+  main.py:1365:
+  main.py:1366:                _rows.append({
+  main.py:1367:                    "ts": now_ts,
+  main.py:1368:                    "logic_version": LOGIC_VERSION,
+  main.py:1369:                    "event": "THRESHOLD_CROSS",
+  main.py:1370:                    "from_bucket": pb,
+  main.py:1371:                    "to_bucket": cb,
+  main.py:1372:                    "sport": sport,
+  main.py:1389:                "market": market,
+  main.py:1390:                "side": side,
+  main.py:1391:                "logic_version": LOGIC_VERSION,
+> main.py:1392:                "last_score": f"{score:.2f}",
+  main.py:1393:                "last_ts": now_ts,
+> main.py:1394:                "last_net_edge": (f"{_metrics_float(net_edge, default=0.0):.2f}" if str(net_edge).strip() != "" else ""),
+> main.py:1395:                "last_net_edge_ts": (now_ts if str(net_edge).strip() != "" else ""),
+  main.py:1396:
+> main.py:1397:                "peak_score": f"{peak_score:.2f}",
+> main.py:1398:                "peak_ts": peak_ts,
+> main.py:1399:                "last_bucket": bucket,
+  main.py:1400:                "timing_bucket": _metrics_blank(r.get("timing_bucket")),
+  main.py:1401:                "strong_streak": str(strong_streak),
+  main.py:1402:                "last_seen_tick": cur_tick,
+  main.py:1403:            }
+  main.py:1404:
+  main.py:1405:        if os.environ.get('METRICS_DEBUG','') == '1':
+  main.py:1406:            print(f"[metrics debug] processed_rows={processed} state_rows={len(state_map)} ledger_rows_this_run={len(ledger_rows)}")
+  main.py:1407:        # Write state (full rewrite for simplicity + safety)
+  main.py:1408:        out_rows = list(state_map.values())
+  main.py:1409:        if out_rows:
+  main.py:1413:            out = out.sort_values(["sport", "game_id", "market", "side"], kind="mergesort")
+  main.py:1414:            out.to_csv(state_path, index=False)
+  main.py:1415:
+> main.py:1416:        _append_signal_ledger(ledger_path, ledger_rows)
+  main.py:1417:    except Exception as e:
+  main.py:1418:        # never break report; but show traceback when debugging
+  main.py:1419:        try:
+  main.py:1420:            import os, traceback
+  main.py:1421:            if os.environ.get('METRICS_DEBUG','') == '1':
+> main.py:1422:                print(f"[metrics debug] EXCEPTION in update_row_state_and_signal_ledger: {repr(e)}")
+  main.py:1423:                print(traceback.format_exc())
+  main.py:1424:        except Exception:
+  main.py:1425:            pass
+  main.py:1426:        return
+  main.py:1427:
+  main.py:1428:# ---- end Step C metrics helpers ----
+  main.py:1429:
+  main.py:1430:# ---- kickoff wrappers (unchanged behavior) ----
+  main.py:1431:def espn_nfl_kickoff_map(games: list[str]) -> dict[str, str]:
+  main.py:1432:    return get_espn_kickoff_map("nfl", games)
+  main.py:2612:        if ss < 2:
+  main.py:2613:            return False
+  main.py:2614:
+> main.py:2615:        # Stability: last_score close to peak_score
+  main.py:2616:        try:
+> main.py:2617:            ls = float(row.get("last_score","0"))
+> main.py:2618:            ps = float(row.get("peak_score","0"))
+  main.py:2619:        except Exception:
+  main.py:2620:            return False
+  main.py:2621:
+  main.py:2622:        sport = str(row.get("sport","")).upper()
+  main.py:2623:        delta = 2.0 if sport == "NCAAB" else 3.0
+  main.py:2624:        if ls < (ps - delta):
+  main.py:2625:            return False
+  main.py:2626:
+  main.py:2627:        return True
+  main.py:2628:
+  main.py:3554:            import pandas as _pd
+  main.py:3555:            _dash = _pd.read_csv('data/dashboard.csv')
+  main.py:3556:            if not _dash.empty:
+> main.py:3557:                update_row_state_and_signal_ledger(_dash)
+  main.py:3558:        except Exception as e:
+  main.py:3559:            print('[metrics] post-dashboard failed:', repr(e))
+  main.py:3560:
+  main.py:3561:
+  main.py:3562:    except Exception as e:
+  main.py:3563:        print(f"[dash] wide html write failed: {repr(e)}")
+  main.py:3564:        # --- METRICS: post-dashboard (v1.1) ---
+  main.py:3565:        try:
+  main.py:3566:            import pandas as _pd
+  main.py:3567:            # Prefer in-memory rows if available; fallback to dashboard.csv
+  main.py:3568:            _latest2 = _pd.DataFrame(_rows) if ('_rows' in locals()) else None
+  main.py:3569:            if _latest2 is not None and not _latest2.empty:
+> main.py:3570:                update_row_state_and_signal_ledger(_latest2)
+  main.py:3571:            else:
+  main.py:3572:                _dash = _pd.read_csv('data/dashboard.csv')
+  main.py:3573:                if not _dash.empty:
+> main.py:3574:                    update_row_state_and_signal_ledger(_dash)
+  main.py:3575:        except Exception as e:
+  main.py:3576:            print('[metrics] wiring failed:', repr(e))
+  main.py:3577:        try:
+  main.py:3578:            import traceback
+  main.py:3579:            print(traceback.format_exc())
+  main.py:3580:        except Exception:
+  main.py:3581:            pass
+  main.py:3582:
+  main.py:3583:    # do NOT return early; let the rest of report logic run
+  main.py:3584:    # -----------------------------
+  main.py:3856:        print(f"[dash] net_edge post-fix failed: {repr(_e)}")
+  main.py:3857:
+  main.py:3858:    # -----------------------------
+> main.py:3859:    # METRICS: wire row_state + signal_ledger (instrumentation-only)
+  main.py:3860:    # Source of truth: data/dashboard.csv
+  main.py:3861:    # -----------------------------
+  main.py:3862:    try:
+  main.py:3863:        import pandas as _pd
+  main.py:3864:
+  main.py:3865:        _d = _pd.read_csv("data/dashboard.csv", keep_default_na=False, dtype=str)
+  main.py:3866:
+  main.py:3867:        _rows = []
+  main.py:3868:        for _m in ("SPREAD","TOTAL","MONEYLINE"):
+  main.py:3869:            _score_col = f"{_m}_model_score"
+  main.py:3909:        try:
+  main.py:3910:            _metrics_df = _pd.DataFrame(_rows)
+  main.py:3911:            if not _metrics_df.empty:
+> main.py:3912:                update_row_state_and_signal_ledger(_metrics_df)
+  main.py:3913:        except Exception as _e:
+  main.py:3914:            print("[metrics] per-market feed failed:", repr(_e))
+  main.py:3915:
+  main.py:3916:        _latest = _pd.DataFrame(_rows)
+  main.py:3917:        if not _latest.empty:
+> main.py:3918:            # Heartbeat removed: RUN_TICK is appended via RUN_TICK_APPEND_AFTER_UPDATE (csv append)
+  main.py:3919:            # metrics feed moved earlier (v1.1 fix)
+> main.py:3920:            # RUN_TICK_APPEND_AFTER_UPDATE: ensure signal_ledger proves metrics ran even without crossings
+  main.py:3921:            try:
+  main.py:3922:                import csv, os
+  main.py:3923:                from datetime import datetime, timezone
+  main.py:3924:                _now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+  main.py:3925:                _lv = locals().get("_logic_version", locals().get("logic_version", "v?"))
+> main.py:3926:                _ledger_path = "data/signal_ledger.csv"
+  main.py:3927:                _default_cols = ["ts","logic_version","event","from_bucket","to_bucket","sport","game_id","market","side","game","current_line","current_odds","bets_pct","money_pct","score","net_edge"]
+  main.py:3928:            
+  main.py:3929:                # Determine columns from existing header if present
+  main.py:3930:                if os.path.exists(_ledger_path) and os.path.getsize(_ledger_path) > 0:
+  main.py:3931:                    with open(_ledger_path, "r", encoding="utf-8", newline="") as _f:
+  main.py:3932:                        _hdr = _f.readline().strip()
+  main.py:3933:                    _cols = [c.strip() for c in _hdr.split(",") if c.strip()] or _default_cols
+  main.py:3934:                else:
+  main.py:3935:                    _cols = _default_cols
+  main.py:3936:                    os.makedirs(os.path.dirname(_ledger_path) or ".", exist_ok=True)
+  main.py:3942:                _row.update({
+  main.py:3943:                    "ts": _now,
+  main.py:3944:                    "logic_version": _lv,
+> main.py:3945:                    "event": "RUN_TICK",
+> main.py:3946:                    "sport": "RUN_TICK",
+  main.py:3947:                    "game_id": "0",
+> main.py:3948:                    "market": "RUN_TICK",
+> main.py:3949:                    "side": "RUN_TICK",
+> main.py:3950:                    "game": "RUN_TICK",
+  main.py:3951:                })
+  main.py:3952:            
+  main.py:3953:                with open(_ledger_path, "a", encoding="utf-8", newline="") as _f:
+  main.py:3954:                    _w = csv.DictWriter(_f, fieldnames=_cols)
+  main.py:3955:                    _w.writerow(_row)
+  main.py:3956:            except Exception:
+  main.py:3957:                pass
+  main.py:3958:
+> main.py:3959:            print(f"[metrics] updated row_state/signal_ledger rows={len(_latest)}")
+  main.py:3960:        else:
+  main.py:3961:            print("[metrics] dashboard metrics path disabled (per-market metrics already executed)")
+  main.py:3962:    except Exception as _e:
+  main.py:3963:        print(f"[metrics] metrics wiring failed: {repr(_e)}")
+  main.py:3964:
+  main.py:3965:
+  main.py:3966:    resolve_results_for_baseline()
+  main.py:3967:    build_color_baseline_summary()
+  main.py:3968:
+  main.py:3969:
+  main.py:4266:    if _BASELINE_SEEN_KEYS is None:
+  main.py:4267:        try:
+  main.py:4268:            import pandas as _pd
+> main.py:4269:            rs = _pd.read_csv("data/row_state.csv", keep_default_na=False, dtype=str)
+  main.py:4270:            cols = set(rs.columns)
+  main.py:4271:            sport_c = "sport" if "sport" in cols else None
+  main.py:4272:            game_c  = "game_id" if "game_id" in cols else None
+  main.py:4273:            mkt_c   = "market" if "market" in cols else ("market_display" if "market_display" in cols else ("_market_display" if "_market_display" in cols else None))
+  main.py:4274:            side_c  = "side" if "side" in cols else None
+> main.py:4275:            bucket_c = "last_bucket" if "last_bucket" in cols else ("score_bucket" if "score_bucket" in cols else None)
+  main.py:4276:
+  main.py:4277:            def _get(r, c):
+  main.py:4278:                return (str(r.get(c, "")).strip() if c else "")
+  main.py:4279:
+  main.py:4280:            seen = set()
+  main.py:4281:            for _, rr in rs.iterrows():
+  main.py:4282:                seen.add((
+  main.py:4283:                    _get(rr, sport_c).lower(),
+  main.py:4284:                    _get(rr, game_c),
+  main.py:4285:                    _get(rr, mkt_c).upper(),
+  main.py:4295:        _gid   = str(row.get("game_id","")).strip()
+  main.py:4296:        _mkt   = str(row.get("_market_display", row.get("market_display", row.get("market","")))).strip().upper()
+  main.py:4297:        _side  = str(row.get("side","")).strip()
+> main.py:4298:        _bucket = str(row.get("score_bucket", row.get("last_bucket",""))).strip()
+  main.py:4299:        _k = (_sport, _gid, _mkt, _side, _bucket)
+  main.py:4300:        if _k in _BASELINE_SEEN_KEYS:
+  main.py:4301:            return
+  main.py:4302:        _BASELINE_SEEN_KEYS.add(_k)
+  main.py:4303:    except Exception:
+  main.py:4304:        pass
+  main.py:4305:    import csv, os
+  main.py:4306:    from datetime import datetime, timezone
+  main.py:4307:
+  main.py:4308:    BASELINE_FILE = "data/signals_baseline.csv"
+
+

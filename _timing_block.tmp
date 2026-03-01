@@ -1,0 +1,49 @@
+    # ---- PARSE ISO -> NY datetime (used for filtering + display) ----
+    latest["game_time_ny"] = (
+        pd.to_datetime(latest["game_time_iso"], errors="coerce", utc=True)
+          .dt.tz_convert("America/New_York")
+    )        
+
+    # =========================
+    # TIMING CONTEXT (ADD-ONLY, DOES NOT TOUCH snapshot timestamps)
+    # =========================
+    now_ny = pd.Timestamp.now(tz="America/New_York")
+
+    # minutes_to_kickoff: positive = time until start; negative = already started
+    latest["minutes_to_kickoff"] = (
+        (latest["game_time_ny"] - now_ny).dt.total_seconds() / 60.0
+    ).round(0)
+
+    # timing_bucket (v1.1): game-day anchored windows
+    #   - NOT game day => EARLY (regardless of minutes, unless LIVE)
+    #   - game day => EARLY (>480), MID (60..480), LATE (0..60), LIVE (<0)
+    # NOTE: This is ADD-ONLY; does not touch snapshot timestamps or kickoff source.
+    latest["is_game_day"] = False
+    try:
+        # compare NY dates (kickoff vs now)
+        latest["is_game_day"] = (latest["game_time_ny"].dt.date == now_ny.date())
+    except Exception:
+        latest["is_game_day"] = False
+
+    def _timing_bucket_v11(m2k, is_game_day):
+        try:
+            if pd.isna(m2k):
+                return "UNKNOWN"
+            m2k = int(m2k)
+            if m2k < 0:
+                return "LIVE"
+            if not bool(is_game_day):
+                return "EARLY"
+            # game day: strict v1.1 windows
+            return compute_timing_bucket("", m2k)
+        except Exception:
+            return "UNKNOWN"
+
+    latest["timing_bucket"] = latest.apply(
+        lambda r: _timing_bucket_v11(
+            r.get("minutes_to_kickoff"),
+            r.get("is_game_day"),
+        ),
+        axis=1,
+    )
+

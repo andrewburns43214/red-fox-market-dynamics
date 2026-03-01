@@ -1,0 +1,815 @@
+﻿=== STRONG certification / gates / contradictions (main.py) ===
+
+  main.py:15:def _load_open_registry() -> dict:
+  main.py:16:    """
+  main.py:17:    Key: (sport, game_id, market, side) -> open_line string
+> main.py:18:    Persistent across runs so Open is stable even when lines move.
+  main.py:19:    """
+  main.py:20:    reg = {}
+  main.py:21:    if not OPEN_REG_PATH.exists():
+  main.py:22:        return reg
+  main.py:23:    import csv
+  main.py:24:    with OPEN_REG_PATH.open("r", encoding="utf-8", newline="") as f:
+  main.py:25:        r = csv.DictReader(f)
+  main.py:26:        for row in r:
+  main.py:144:        if pd.isna(game):
+  main.py:145:            return "", ""
+  main.py:146:    except Exception:
+> main.py:147:        pass
+  main.py:148:
+  main.py:149:    g = str(game).strip() if game is not None else ""
+  main.py:150:    if not g or g.lower() == "nan":
+  main.py:151:        return "", ""
+  main.py:152:
+  main.py:153:    # normalize separators
+  main.py:154:    g = re.sub(r"\s+vs\.?\s+|\s+v\.?\s+", " @ ", g, flags=re.IGNORECASE)
+  main.py:155:    if " @ " in g:
+  main.py:192:# - Flags only (explanatory / gating)
+  main.py:193:
+  main.py:194:# --- NCAAB ---
+> main.py:195:NCAAB_EARLY_STRONG_BLOCK = True          # early window cannot certify STRONG
+> main.py:196:NCAAB_STRONG_MIN_PERSIST = 3             # ≥3 consecutive snapshots ≥72
+> main.py:197:NCAAB_STRONG_STABILITY_DELTA = 2          # last ≥ peak − 2
+> main.py:198:NCAAB_LATE_STRONG_BLOCK = True            # never certify STRONG late
+> main.py:199:NCAAB_REQUIRE_MULTI_MARKET = True         # single-market dependency blocks STRONG
+  main.py:200:
+  main.py:201:# --- NCAAF ---
+> main.py:202:NCAAF_EARLY_INSTANT_STRONG_BLOCK = True   # no instant STRONG early
+> main.py:203:NCAAF_STRONG_STABILITY_DELTA = 3
+> main.py:204:NCAAF_LATE_NEW_STRONG_BLOCK = True        # late can hold, not create
+  main.py:205:
+  main.py:206:# --- GLOBAL ---
+> main.py:207:PUBLIC_DRIFT_BLOCKS_STRONG = True
+> main.py:208:FAST_SNAP_BLOCKS_STRONG = True
+  main.py:209:
+  main.py:210:
+  main.py:211:TEAM_ALIASES = {
+  main.py:212:    # Miami variations
+  main.py:213:    "miami fl": "miami",
+  main.py:214:    "miami (fl)": "miami",
+  main.py:215:    "miami florida": "miami",
+  main.py:216:
+  main.py:571:        try:
+  main.py:572:            candidates.append(_dk_game_to_espn_key(g))
+  main.py:573:        except Exception:
+> main.py:574:            pass
+  main.py:575:
+  main.py:576:        # 3) normalized DK->ESPN split using the local normalizer (kept for safety)
+  main.py:577:        a0, h0 = _split_game(g)
+  main.py:578:        if a0 and h0:
+  main.py:579:            candidates.append(f"{_norm_team(a0)} @ {_norm_team(h0)}")
+  main.py:580:
+  main.py:581:
+  main.py:582:        # Try exact + normalized candidate keys first
+  main.py:791:            if pd.isna(g):
+  main.py:792:                return "", ""
+  main.py:793:        except Exception:
+> main.py:794:            pass
+  main.py:795:    
+  main.py:796:        s = str(g).strip() if g is not None else ""
+  main.py:797:        if not s or s.lower() == "nan":
+  main.py:798:            return "", ""
+  main.py:799:        if " @ " in s:
+  main.py:800:            a, h = s.split(" @ ", 1)
+  main.py:801:            return a.strip(), h.strip()
+  main.py:802:        if " vs " in s:
+  main.py:967:    #   NO_BET < 60
+  main.py:968:    #   LEAN   60?65
+  main.py:969:    #   BET    66?71
+> main.py:970:    #   STRONG_BET >= 72
+  main.py:971:    try:
+  main.py:972:        s = float(score)
+  main.py:973:    except Exception:
+  main.py:974:        return "NO_BET"
+  main.py:975:    if s >= 72.0:
+> main.py:976:        return "STRONG_BET"
+  main.py:977:    if s >= 66.0:
+  main.py:978:        return "BET"
+  main.py:979:    if s >= 60.0:
+  main.py:980:        return "LEAN"
+  main.py:981:    return "NO_BET"
+  main.py:982:def _load_row_state(path: str):
+  main.py:983:    import pandas as pd
+  main.py:984:    import os
+  main.py:993:        ])
+  main.py:994:    try:
+  main.py:995:        df = pd.read_csv(path, keep_default_na=False, dtype=str)
+> main.py:996:        # Normalize instrumentation fields (avoid blank strong_streak from older rows)
+  main.py:997:        try:
+> main.py:998:            if "strong_streak" in df.columns:
+> main.py:999:                df["strong_streak"] = df["strong_streak"].astype(str).str.strip()
+> main.py:1000:                df.loc[df["strong_streak"] == "", "strong_streak"] = "0"
+  main.py:1001:        except Exception:
+> main.py:1002:            pass
+  main.py:1003:
+  main.py:1004:        if df.empty:
+  main.py:1005:            return pd.DataFrame(columns=[
+  main.py:1006:                "sport", "game_id", "market", "side",
+  main.py:1007:                "logic_version",
+  main.py:1008:                "last_score", "last_ts",
+  main.py:1009:                "peak_score", "peak_ts",
+  main.py:1010:                "last_bucket",
+  main.py:1011:                "last_net_edge", "last_net_edge_ts",
+  main.py:1012:            ])
+  main.py:1013:        # ensure cols exist
+> main.py:1014:        for c in ["sport","game_id","market","side","logic_version","last_score","last_ts","last_seen_tick","peak_score","peak_ts","last_bucket","last_net_edge","last_net_edge_ts","strong_streak"]:
+  main.py:1015:            if c not in df.columns:
+  main.py:1016:                df[c] = ""
+  main.py:1017:        return df
+  main.py:1018:    except Exception:
+  main.py:1019:        # if state file is corrupted, fail safe (do not break report)
+  main.py:1020:        return pd.DataFrame(columns=[
+  main.py:1021:            "sport", "game_id", "market", "side",
+  main.py:1022:            "logic_version",
+  main.py:1114:        if latest is None or len(latest) == 0:
+  main.py:1115:            return
+  main.py:1116:
+> main.py:1117:        # --- Metrics persistence key (DO NOT USE market_display for state keys) ---
+> main.py:1118:        # Persisted key schema MUST remain: sport | game_id | market | side
+> main.py:1119:        # We store the key label in latest['_metrics_market'] and always persist it under state field 'market'.
+  main.py:1120:        #
+  main.py:1121:        # Priority:
+  main.py:1122:        #   1) raw 'market' if it already looks like a real market (SPREAD/TOTAL/MONEYLINE)
+  main.py:1123:        #   2) else 'market_display' if present
+  main.py:1124:        #   3) else infer from current_line (when raw market is only 'splits' or blank)
+  main.py:1125:        def _infer_market_from_line(v):
+  main.py:1126:            try:
+  main.py:1127:                d = parse_line_and_odds(str(v))
+  main.py:1210:                if bool(_bad.any()):
+  main.py:1211:                    state_df = state_df[~_bad].copy()
+  main.py:1212:        except Exception:
+> main.py:1213:            pass
+  main.py:1214:        # --- end prune ---
+  main.py:1215:
+> main.py:1216:        # Build state index (PERSISTED row_state schema: sport, game_id, market, side)
+  main.py:1217:        if state_df is not None and not state_df.empty:
+  main.py:1218:            for c in ("sport","game_id","market","side"):
+  main.py:1219:                if c not in state_df.columns:
+  main.py:1220:                    state_df[c] = ""
+  main.py:1221:            idx_cols = ["sport","game_id","market","side"]
+  main.py:1222:            state_df["_k"] = state_df[idx_cols].fillna("").astype(str).agg("|".join, axis=1)
+  main.py:1223:        else:
+  main.py:1224:            state_df = None
+  main.py:1296:                    if _re.search(r"\s[+-]\d+(?:\.\d+)?\s*$", str(side).strip()):
+  main.py:1297:                        continue
+  main.py:1298:            except Exception:
+> main.py:1299:                pass
+  main.py:1300:            # --- end guardrail ---
+  main.py:1301:
+  main.py:1302:            if sport == "" or game_id == "" or market == "" or side == "":
+  main.py:1303:                continue
+  main.py:1304:
+  main.py:1305:            k = f"{sport}|{game_id}|{market}|{side}"
+  main.py:1306:
+  main.py:1307:            score = _metrics_float(r.get(score_col), default=None)
+  main.py:1316:
+  main.py:1317:            bucket = _score_bucket(score)
+  main.py:1318:
+> main.py:1319:            # --- v1.1 STRONG streak (instrumentation only) ---
+> main.py:1320:            # strong_streak = consecutive runs where score >= 72
+  main.py:1321:            prev = state_map.get(k, {})
+  main.py:1322:            prev_streak = 0
+  main.py:1323:            try:
+> main.py:1324:                prev_streak = int(str(prev.get("strong_streak","0")).strip() or "0")
+  main.py:1325:            except Exception:
+  main.py:1326:                prev_streak = 0
+  main.py:1327:            try:
+> main.py:1328:                strong_now = (str(bucket).strip().upper() == "STRONG_BET")
+  main.py:1329:            except Exception:
+> main.py:1330:                strong_now = False
+  main.py:1331:            # --- v1.1 FIX: streak must only advance on NEW snapshot tick (idempotent on repeated report runs)
+  main.py:1332:            cur_tick = _metrics_blank(r.get("ts") or r.get("snapshot_ts") or r.get("timestamp"))
+  main.py:1333:            prev_tick = _metrics_blank(prev.get("last_seen_tick") or prev.get("last_tick") or prev.get("last_ts"))
+  main.py:1334:            is_new_tick = (cur_tick != "" and cur_tick != prev_tick)
+  main.py:1335:
+  main.py:1336:            if not is_new_tick:
+> main.py:1337:                strong_streak = str(prev_streak if strong_now else 0)
+  main.py:1338:            else:
+> main.py:1339:                strong_streak = str((prev_streak + 1) if strong_now else 0)
+  main.py:1340:            # --- end v1.1 FIX ---
+  main.py:1341:            # --- end v1.1 ---
+  main.py:1342:
+  main.py:1343:            prev = state_map.get(k, {})
+  main.py:1344:            prev_bucket = _metrics_blank(prev.get("last_bucket"))
+  main.py:1345:
+  main.py:1346:            # peak tracking
+  main.py:1347:            prev_peak = _metrics_float(prev.get("peak_score"), default=None)
+  main.py:1349:            peak_ts = now_ts if (prev_peak is None or score > prev_peak) else _metrics_blank(prev.get("peak_ts"))
+  main.py:1350:
+  main.py:1351:            # threshold crossing logging
+> main.py:1352:            # Only log upward crossings into LEAN/BET/STRONG_BET (including brand-new rows)
+> main.py:1353:            rank = {"": 0, "NO_BET": 0, "LEAN": 1, "BET": 2, "STRONG_BET": 3}
+  main.py:1354:            pb = prev_bucket if prev_bucket in rank else "NO_BET"
+> main.py:1355:            cb = bucket if bucket in ("NO_BET", "LEAN", "BET", "STRONG_BET") else "NO_BET"
+> main.py:1356:            if rank.get(pb, 0) < rank.get(cb, 0) and cb in ("LEAN", "BET", "STRONG_BET"):
+  main.py:1357:                ledger
+  main.py:1358:                # --- METRICS FEED (v1.1): consume per-market rows immediately ---
+  main.py:1359:                try:
+  main.py:1360:                    _metrics_df = _pd.DataFrame(_rows)
+  main.py:1361:                    if not _metrics_df.empty:
+  main.py:1362:                        update_row_state_and_signal_ledger(_metrics_df)
+  main.py:1363:                except Exception as _e:
+  main.py:1364:                    print("[metrics] early feed failed:", repr(_e))
+  main.py:1398:                "peak_ts": peak_ts,
+  main.py:1399:                "last_bucket": bucket,
+  main.py:1400:                "timing_bucket": _metrics_blank(r.get("timing_bucket")),
+> main.py:1401:                "strong_streak": str(strong_streak),
+  main.py:1402:                "last_seen_tick": cur_tick,
+  main.py:1403:            }
+  main.py:1404:
+  main.py:1405:        if os.environ.get('METRICS_DEBUG','') == '1':
+  main.py:1406:            print(f"[metrics debug] processed_rows={processed} state_rows={len(state_map)} ledger_rows_this_run={len(ledger_rows)}")
+  main.py:1407:        # Write state (full rewrite for simplicity + safety)
+  main.py:1408:        out_rows = list(state_map.values())
+  main.py:1409:        if out_rows:
+  main.py:1422:                print(f"[metrics debug] EXCEPTION in update_row_state_and_signal_ledger: {repr(e)}")
+  main.py:1423:                print(traceback.format_exc())
+  main.py:1424:        except Exception:
+> main.py:1425:            pass
+  main.py:1426:        return
+  main.py:1427:
+  main.py:1428:# ---- end Step C metrics helpers ----
+  main.py:1429:
+  main.py:1430:# ---- kickoff wrappers (unchanged behavior) ----
+  main.py:1431:def espn_nfl_kickoff_map(games: list[str]) -> dict[str, str]:
+  main.py:1432:    return get_espn_kickoff_map("nfl", games)
+  main.py:1433:
+  main.py:1690:    """
+  main.py:1691:    Frozen v0.1 labels (tune later; not now).
+  main.py:1692:    """
+> main.py:1693:    # Public Drift: high-bet side AND market moved toward it (never green)
+  main.py:1694:    if is_high_bet_side and move_dir == +1 and meaningful_move:
+> main.py:1695:        return "Public Drift"
+  main.py:1696:
+> main.py:1697:    # Stealth Move: strong D+, low bets, and move toward side
+  main.py:1698:    if D >= 12 and (bets_pct is not None and bets_pct <= 40) and move_dir == +1 and meaningful_move:
+  main.py:1699:        return "Stealth Move"
+  main.py:1700:
+  main.py:1701:    # Aligned Sharp: D+ and move toward side
+  main.py:1702:    if D >= 8 and move_dir == +1 and meaningful_move:
+  main.py:1703:        return "Aligned Sharp"
+  main.py:1704:
+> main.py:1705:        # Reverse Pressure: D+ but market moved away (stronger than freeze)
+  main.py:1706:    if D >= 8 and move_dir == -1 and meaningful_move:
+  main.py:1707:        return "Reverse Pressure"
+  main.py:1708:
+  main.py:1709:    # Freeze Pressure: D+ but no meaningful move toward the side
+  main.py:1710:    if D >= 8 and (move_dir == 0 or not meaningful_move):
+  main.py:1711:        return "Freeze Pressure"
+  main.py:1712:    
+> main.py:1713:    # Contradiction: D- but market still moved toward side
+  main.py:1714:    if D <= -8 and move_dir == +1 and meaningful_move:
+> main.py:1715:        return "Contradiction"
+  main.py:1716:
+  main.py:1717:    return "Neutral"
+  main.py:1718:
+  main.py:1719:def add_market_read_to_latest(latest: pd.DataFrame) -> pd.DataFrame:
+  main.py:1720:    """
+  main.py:1721:    Additive only. Uses columns you already compute in build_dashboard():
+  main.py:1722:
+  main.py:1723:    # -----------------------------
+  main.py:1753:            winner = g2["bets_pct_num"].idxmax()
+  main.py:1754:            high_bet_idx.add(winner)
+  main.py:1755:        except Exception:
+> main.py:1756:            pass
+  main.py:1757:
+  main.py:1758:    # Movement + label + why
+  main.py:1759:    mr = []
+  main.py:1760:    favors = []
+  main.py:1761:    why = []
+  main.py:1762:    move_summary = []
+  main.py:1763:
+  main.py:1764:    for idx, r in df.iterrows():
+  main.py:1860:    if "espn_day" in df.columns:
+  main.py:1861:        pair_cols.append("espn_day")
+  main.py:1862:
+> main.py:1863:    sharp_pressure = {"Aligned Sharp", "Stealth Move", "Freeze Pressure", "Reverse Pressure", "Contradiction"}
+  main.py:1864:    # Optional debug mode to validate wiring (does not affect default behavior)
+  main.py:1865:    import os as _os
+  main.py:1866:    _pair_mode = (_os.environ.get('PAIR_CHECK_MODE','') or '').strip().upper()
+  main.py:1867:    if _pair_mode == 'LOOSE':
+> main.py:1868:        sharp_pressure = sharp_pressure.union({'Public Drift'})
+  main.py:1869:    df["market_pair_check"] = ""
+  main.py:1870:
+  main.py:1871:    # Debug only when PAIR_CHECK_MODE is set (never noisy by default)
+  main.py:1872:    try:
+  main.py:1873:        import os as _os
+  main.py:1874:        _dbg_pair = (_os.environ.get('PAIR_CHECK_MODE','') or '').strip()
+  main.py:1875:    except Exception:
+  main.py:1876:        _dbg_pair = ''
+  main.py:1897:            nflag = (df['market_pair_check'].fillna('').astype(str).str.strip() != '').sum()
+  main.py:1898:            print(f"[pair_check debug] mode={_dbg_pair} flagged_rows={int(nflag)}")
+  main.py:1899:    except Exception:
+> main.py:1900:        pass
+  main.py:1901:
+  main.py:1902:    return df
+  main.py:1903:
+  main.py:1904:
+  main.py:1905:# =========================
+  main.py:1906:# Settings (edit these)
+  main.py:1907:
+  main.py:1908:# Toggle noisy dashboard diagnostics
+  main.py:1948:    red_public_bets_min: int = 75
+  main.py:1949:    red_money_max: int = 55
+  main.py:1950:
+> main.py:1951:    # Line movement thresholds (optional, if you capture open/current)
+> main.py:1952:    meaningful_move_pts: float = 1.5  # used for â€œstrong line behaviorâ€
+  main.py:1953:
+  main.py:1954:    # â€œNo movementâ€ / resistance trigger (optional)
+  main.py:1955:    resistance_public_bets_min: int = 72
+  main.py:1956:    resistance_move_max: float = 0.25
+  main.py:1957:
+  main.py:1958:TH = Thresholds()
+  main.py:1959:
+  main.py:1960:
+  main.py:2145:
+  main.py:2146:    # Optional: line behavior (if you store open/current)
+  main.py:2147:    # We keep it conservative: without line info, we do NOT hand out Dark Green easily.
+> main.py:2148:    strong_line_signal = False
+  main.py:2149:    if open_line and current_line:
+  main.py:2150:        # Try to parse numeric spread points from lines like "-3.5" or "+6"
+  main.py:2151:        def parse_num(s: str) -> Optional[float]:
+  main.py:2152:            m = re.search(r"([+-]?\d+(\.\d+)?)", s)
+  main.py:2153:            return float(m.group(1)) if m else None
+  main.py:2154:
+  main.py:2155:        o = parse_num(open_line)
+  main.py:2156:        c = parse_num(current_line)
+  main.py:2157:        if o is not None and c is not None:
+  main.py:2158:            move = abs(c - o)
+  main.py:2159:            if move >= TH.meaningful_move_pts:
+> main.py:2160:                strong_line_signal = True
+  main.py:2161:
+> main.py:2162:        # Key number note can promote â€œstrong line behaviorâ€ (NFL)
+  main.py:2163:        if key_number_note and key_number_note.strip():
+> main.py:2164:            strong_line_signal = True
+  main.py:2165:
+> main.py:2166:    # DARK GREEN (rare): requires strong line behavior + strong money signal, AND no obvious news explanation
+> main.py:2167:    if strong_line_signal and dark_money_signal and not has_news:
+> main.py:2168:        return "DARK_GREEN", "Book behavior + strong money-vs-bets imbalance; no obvious news â†’ Market Edge Confirmed"
+  main.py:2169:
+> main.py:2170:    # If news explains it, keep in Light Green even if strong
+> main.py:2171:    if strong_line_signal and dark_money_signal and has_news:
+> main.py:2172:        return "LIGHT_GREEN", "Strong signals but major news present â†’ downgrade to Market Edge Developing" 
+  main.py:2173:
+> main.py:2174:    # LIGHT GREEN: money-vs-bets imbalance without strong line confirmation
+  main.py:2175:    if light_money_signal:
+  main.py:2176:        return "LIGHT_GREEN", "Money concentration vs bet count â†’ Market Edge Developing (watch for confirmation)"
+  main.py:2177:
+  main.py:2178:    # RED: avoid this side
+  main.py:2179:    if is_red:
+  main.py:2180:        return "RED", "Extremely public + weak money support â†’ Wrong Side / Trap (evaluate opposite side)"
+  main.py:2181:
+  main.py:2182:    # YELLOW: public-driven
+  main.py:2183:    if is_yellow:
+> main.py:2184:        return "YELLOW", "Public-heavy demand without strong money support â†’ Caution"
+  main.py:2185:
+> main.py:2186:    return "GREY", "No strong market signal on this side"
+  main.py:2187:
+  main.py:2188:
+  main.py:2189:# =========================
+  main.py:2190:# Snapshot storage + report
+  main.py:2191:# =========================
+  main.py:2192:
+  main.py:2193:SNAPSHOT_FIELDS = [
+  main.py:2194:    "timestamp", "sport", "game_id", "game", "side", "market",
+  main.py:2401:
+  main.py:2402:    # FIX: the merge creates open_line_first (because df already has open_line).
+  main.py:2403:
+> main.py:2404:    # Prefer persisted open_line (open_registry/snapshots). Only fill blanks from first_seen.
+  main.py:2405:
+  main.py:2406:    if "open_line_first" in df.columns:
+  main.py:2407:
+  main.py:2408:        ol = df["open_line"].fillna("").astype(str)
+  main.py:2409:
+  main.py:2410:        mask = ol.str.len().eq(0)
+  main.py:2411:
+  main.py:2412:        if mask.any():
+  main.py:2565:        if DASH_DEBUG:
+  main.py:2566:            print("[dash debug] after main-line filter: unique games =", latest["game_id"].nunique())
+  main.py:2567:    except Exception:
+> main.py:2568:        pass
+  main.py:2569:
+  main.py:2570:    # ========= END MAIN LINE FILTER =========
+  main.py:2571:
+  main.py:2572:
+  main.py:2573:    # Deltas
+  main.py:2574:    latest["odds_move_open"] = latest["current_odds"] - latest["open_odds"]
+  main.py:2575:    latest["line_move_open"] = latest["current_line_val"] - latest["open_line_val"]
+  main.py:2576:    latest["odds_move_prev"] = latest["current_odds"] - latest["prev_odds"]
+  main.py:2580:    latest = add_market_read_to_latest(latest)
+  main.py:2581:    latest = add_market_pair_checks(latest)
+  main.py:2582:
+> main.py:2583:    # --- v1.1 STRONG eligibility (Option B: structure + intent) ---
+> main.py:2584:    # STRONG eligible only if:
+  main.py:2585:    #   - score >= 72
+> main.py:2586:    #   - NOT Public Drift
+> main.py:2587:    #   - NO cross-market contradiction
+> main.py:2588:    def _is_strong_eligible(row):
+> main.py:2589:        # v1.1 STRONG eligibility (Option B + persistence + stability)
+  main.py:2590:        try:
+  main.py:2591:            s = float(row.get("model_score", row.get("confidence_score", 0)))
+  main.py:2592:        except Exception:
+  main.py:2593:            s = 0.0
+  main.py:2594:
+  main.py:2595:        if s < 72:
+  main.py:2596:            return False
+  main.py:2597:
+> main.py:2598:        # Intent: block Public Drift
+  main.py:2599:        mr = str(row.get("market_read","")).upper()
+> main.py:2600:        if mr == "PUBLIC DRIFT":
+  main.py:2601:            return False
+  main.py:2602:
+> main.py:2603:        # Structure: block cross-market contradiction
+  main.py:2604:        if str(row.get("market_pair_check","")).strip() != "":
+  main.py:2605:            return False
+  main.py:2606:
+> main.py:2607:        # Persistence: require >= 2 consecutive STRONG-eligible runs
+  main.py:2608:        try:
+> main.py:2609:            ss = int(str(row.get("strong_streak","0")).strip() or "0")
+  main.py:2610:        except Exception:
+  main.py:2611:            ss = 0
+  main.py:2612:        if ss < 2:
+  main.py:2613:            return False
+  main.py:2614:
+> main.py:2615:        # Stability: last_score close to peak_score
+  main.py:2616:        try:
+  main.py:2617:            ls = float(row.get("last_score","0"))
+  main.py:2618:            ps = float(row.get("peak_score","0"))
+  main.py:2619:        except Exception:
+  main.py:2620:            return False
+  main.py:2621:
+  main.py:2622:        sport = str(row.get("sport","")).upper()
+  main.py:2623:        delta = 2.0 if sport == "NCAAB" else 3.0
+  main.py:2631:            return False
+  main.py:2632:
+  main.py:2633:        mr = str(row.get("market_read","")).upper()
+> main.py:2634:        if mr == "PUBLIC DRIFT":
+  main.py:2635:            return False
+  main.py:2636:
+  main.py:2637:        if str(row.get("market_pair_check","")).strip() != "":
+  main.py:2638:            return False
+  main.py:2639:
+  main.py:2640:        return True
+  main.py:2641:
+> main.py:2642:    latest["strong_eligible"] = latest.apply(_is_strong_eligible, axis=1)
+  main.py:2643:
+  main.py:2644:
+  main.py:2645:    # TEMP DEBUG: distribution + spread-only samples (remove after validation)
+  main.py:2646:    if DASH_DEBUG:
+  main.py:2647:        print(
+  main.py:2648:            "[dash debug] market_read counts:",
+  main.py:2649:            latest["market_read"].value_counts(dropna=False).head(10).to_dict()
+  main.py:2650:        )
+  main.py:2702:            score += 10
+  main.py:2703:        elif mr == "Aligned Sharp":
+  main.py:2704:            score += 6
+> main.py:2705:        elif mr == "Contradiction":
+  main.py:2706:            score += 2
+> main.py:2707:        elif mr == "Public Drift":
+  main.py:2708:            score -= 10
+  main.py:2709:
+  main.py:2710:        try:
+  main.py:2711:            D = float(row.get("divergence_D")) if pd.notna(row.get("divergence_D")) else 0.0
+  main.py:2712:        except Exception:
+  main.py:2713:            D = 0.0
+  main.py:2714:        score += min(12.0, abs(D) * 0.4)
+  main.py:2715:
+  main.py:2736:            if str(row.get("sport", "")).strip().upper() == "NCAAB" and tb == "early":
+  main.py:2737:                score -= 4
+  main.py:2738:        except Exception:
+> main.py:2739:            pass
+  main.py:2740:        # --- end v1.1 ---
+  main.py:2741:
+  main.py:2742:        # --- v1.1 NCAAB single-market dependency penalty (governor; score adjustment) ---
+  main.py:2743:        # IMPORTANT: At this stage we are scoring SIDE rows (not the wide dashboard),
+  main.py:2744:        # so SPREAD_model_score/TOTAL_model_score do NOT exist yet.
+  main.py:2745:        # Use per-game market PRESENCE instead (built above as _mktcount).
+  main.py:2746:        try:
+  main.py:2747:            if str(row.get('sport','')).strip().upper() == 'NCAAB':
+  main.py:2750:                if gid and _mktcount.get(('NCAAB', gid), 0) <= 1:
+  main.py:2751:                    score -= 3
+  main.py:2752:        except Exception:
+> main.py:2753:            pass
+  main.py:2754:        # --- end v1.1 ---
+  main.py:2755:
+  main.py:2756:
+  main.py:2757:
+  main.py:2758:        if color == "DARK_GREEN":
+  main.py:2759:            score += 6
+  main.py:2760:        elif color == "LIGHT_GREEN":
+  main.py:2761:            score += 3
+  main.py:2778:            ):
+  main.py:2779:                expl = f"{expl} | âš ï¸ Big underdog moneyline (+{int(row['current_odds'])})"
+  main.py:2780:        except Exception:
+> main.py:2781:            pass
+  main.py:2782:
+  main.py:2783:        if (
+  main.py:2784:            mkt == "SPREAD"
+  main.py:2785:            and (game, side) in ml_green
+  main.py:2786:            and color not in ("DARK_GREEN", "LIGHT_GREEN")
+  main.py:2787:        ):
+  main.py:2788:            expl = f"{expl} | Sharp ML, margin risk â€” ML favored over spread"
+  main.py:2789:
+  main.py:2821:        try:
+  main.py:2822:            parsed = parsed.dt.tz_localize("America/New_York", nonexistent="shift_forward", ambiguous="NaT")
+  main.py:2823:        except Exception:
+> main.py:2824:            pass
+  main.py:2825:
+  main.py:2826:        # Store as ISO UTC (string)
+  main.py:2827:        latest.loc[m_not_iso, "game_time_iso"] = parsed.dt.tz_convert("UTC").dt.strftime("%Y-%m-%dT%H:%M:%SZ").fillna("")
+  main.py:2828:
+  main.py:2829:
+  main.py:2830:    try:
+  main.py:2831:        # ESPN kickoff enrichment disabled (DK dk_start_iso is source of truth).
+  main.py:2832:        # ESPN FINALS remains enabled via update_snapshots_with_espn_finals().
+> main.py:2833:        pass  # ESPN kickoff enrichment disabled (DK dk_start_iso is source of truth)
+  main.py:2834:        
+  main.py:2835:        latest["game"] = latest["game"].fillna("").astype(str)
+  main.py:2836:
+  main.py:2837:        all_kickoffs = {}
+  main.py:2838:        for sp in latest["sport"].dropna().astype(str).unique():
+  main.py:2839:            games = (
+  main.py:2840:                latest.loc[latest["sport"] == sp, "game"]
+  main.py:2841:                .dropna()
+  main.py:3096:        try:
+  main.py:3097:            latest["_sort_time"] = latest["_sort_time"].dt.tz_convert("America/New_York")
+  main.py:3098:        except Exception:
+> main.py:3099:            pass
+  main.py:3100:    else:
+  main.py:3101:        latest["_sort_time"] = pd.NaT
+  main.py:3102:
+  main.py:3103:    # Group markets together within each game in a consistent order:
+  main.py:3104:    # MONEYLINE -> SPREAD -> TOTAL -> everything else
+  main.py:3105:    market_order = {"MONEYLINE": 0, "SPREAD": 1, "TOTAL": 2}
+  main.py:3106:    latest["_mkt_rank"] = latest["market_display"].map(market_order).fillna(99).astype(int)
+  main.py:3107:
+  main.py:3174:
+  main.py:3175:    # -----------------------------
+  main.py:3176:    
+> main.py:3177:    # Game decision: BET requires strong score + meaningful net edge; otherwise LEAN/NO BET
+  main.py:3178:    def _game_decision(score, net_edge):
+  main.py:3179:        try:
+  main.py:3180:            s = float(score)
+  main.py:3181:        except Exception:
+  main.py:3182:            s = 50.0
+  main.py:3183:        try:
+  main.py:3184:            ne = float(net_edge)
+  main.py:3185:        except Exception:
+  main.py:3189:            return "BET"
+  main.py:3190:        if s >= 62:
+  main.py:3191:            return "LEAN"
+> main.py:3192:        return "NO BET"
+  main.py:3193:
+  main.py:3194:    game_view["game_decision"] = game_view.apply(lambda r: _game_decision(r.get("game_confidence", 50), r.get("net_edge", 0)), axis=1)
+  main.py:3195:    game_view["opp_weak"] = game_view["min_side_score"] <= 35.0
+  main.py:3196:    game_view["opp_weak_mark"] = game_view["opp_weak"].apply(lambda x: "!" if bool(x) else "")
+  main.py:3197:    # Sort for display: sport, game time, market order
+  main.py:3198:    if "_sort_time" in latest.columns:
+  main.py:3199:        time_map = (
+  main.py:3200:            latest.groupby(["sport", "game_id"])["_sort_time"]
+  main.py:3274:                    na_position="last"
+  main.py:3275:                ).reset_index(drop=True)
+  main.py:3276:        except Exception:
+> main.py:3277:            pass
+  main.py:3278:
+  main.py:3279:    except Exception:
+  main.py:3280:        # If anything goes wrong, keep the existing game_view to avoid breaking report
+> main.py:3281:        pass
+  main.py:3282:
+  main.py:3283:
+  main.py:3284:    # -----------------------------
+  main.py:3285:    # TABLE HEADERS + HYBRID ROW BUILD (UI ONLY)
+  main.py:3286:    # GAME rows visible; SIDE rows hidden + directly under their GAME row
+  main.py:3287:    # -----------------------------
+  main.py:3288:
+  main.py:3289:    # --- Game Time toggle (display-only) ---
+  main.py:3328:                    gt = gt.tz_convert("America/New_York")
+  main.py:3329:                return f"<td>{gt.strftime('%a %m/%d %I:%M %p ET')}</td>"
+  main.py:3330:        except Exception:
+> main.py:3331:            pass
+  main.py:3332:
+  main.py:3333:        # 2) SIDE ROW preferred: preformatted display if present
+  main.py:3334:        v = rr.get("game_time_display", "")
+  main.py:3335:        if isinstance(v, str) and v.strip():
+  main.py:3336:            return f"<td>{v}</td>"
+  main.py:3337:
+  main.py:3338:        # 3) SIDE ROW fallback: ISO -> ET
+  main.py:3339:        iso = rr.get("game_time_iso", "")
+  main.py:3344:                    dt = dt.tz_convert("America/New_York")
+  main.py:3345:                    return f"<td>{dt.strftime('%a %m/%d %I:%M %p ET')}</td>"
+  main.py:3346:            except Exception:
+> main.py:3347:                pass
+  main.py:3348:
+  main.py:3349:        # 4) Last resort: TBD is acceptable if truly missing
+  main.py:3350:        return "<td>TBD</td>"
+  main.py:3351:
+  main.py:3352:
+  main.py:3353:    # -----------------------------
+  main.py:3354:    # BUILD HTML ROWS (interleaved)
+  main.py:3355:    # -----------------------------
+  main.py:3393:            sg["_score_num"] = pd.to_numeric(sg["confidence_score"], errors="coerce").fillna(50.0)
+  main.py:3394:            sg = sg.sort_values("_score_num", ascending=False, kind="mergesort")
+  main.py:3395:        except Exception:
+> main.py:3396:            pass
+  main.py:3397:
+  main.py:3398:        for _, rr in sg.iterrows():
+  main.py:3399:            st = color_style(rr.get("color", "GREY"))
+  main.py:3400:
+  main.py:3401:            # display-only side label cleanup
+  main.py:3402:            mkt = rr.get("market_display", "")
+  main.py:3403:            side_disp = rr.get("side", "")
+  main.py:3404:            if mkt == "SPREAD":
+  main.py:3578:            import traceback
+  main.py:3579:            print(traceback.format_exc())
+  main.py:3580:        except Exception:
+> main.py:3581:            pass
+  main.py:3582:
+  main.py:3583:    # do NOT return early; let the rest of report logic run
+  main.py:3584:    # -----------------------------
+  main.py:3585:    # HEADERS
+  main.py:3586:    # -----------------------------
+  main.py:3587:    # Wide game-level dashboard (one row per game; grouped markets)
+  main.py:3588:
+  main.py:3589:    def _blank(x):
+  main.py:3593:            if pd.isna(x):
+  main.py:3594:                return ""
+  main.py:3595:        except Exception:
+> main.py:3596:            pass
+  main.py:3597:        return str(x)
+  main.py:3598:
+  main.py:3599:    def _fmt_int(x):
+  main.py:3600:        x = _blank(x)
+  main.py:3601:        if x == "":
+  main.py:3602:            return ""
+  main.py:3603:        try:
+  main.py:3604:            return f"{int(float(x))}"
+  main.py:3641:            latest[c] = ""
+  main.py:3642:
+  main.py:3643:    # Decide thresholds (UI-only label; does NOT change scoring)
+> main.py:3644:    def _decision(score, net_edge=None, sport=None, timing_bucket=None, strong_eligible=None):
+> main.py:3645:        # v1.1 decision discipline ? STRONG requires eligibility + timing
+  main.py:3646:        tb = str(timing_bucket or "").strip().upper()
+  main.py:3647:        sp = str(sport or "").strip().lower()
+  main.py:3648:        try:
+  main.py:3649:            s = float(score)
+  main.py:3650:        except Exception:
+  main.py:3651:            s = 0.0
+  main.py:3652:
+  main.py:3653:        # Timing hard blocks
+  main.py:3654:        if tb == "LATE":
+> main.py:3655:            return "BET" if s >= 68 else ("LEAN" if s >= 60 else "NO BET")
+  main.py:3656:        if sp == "ncaab" and tb in ("EARLY", "LATE"):
+> main.py:3657:            return "BET" if s >= 68 else ("LEAN" if s >= 60 else "NO BET")
+  main.py:3658:
+> main.py:3659:        # STRONG requires certification (eligibility already computed)
+> main.py:3660:        if s >= 72 and bool(strong_eligible):
+> main.py:3661:            return "STRONG BET"
+  main.py:3662:
+  main.py:3663:        if s >= 68:
+  main.py:3664:            return "BET"
+  main.py:3665:        if s >= 60:
+  main.py:3666:            return "LEAN"
+> main.py:3667:        return "NO BET"
+  main.py:3668:
+> main.py:3669:def _pretty_strong_elig(x):
+  main.py:3670:    s = str(x).strip().lower()
+  main.py:3671:    return "Y" if s in ("true","1","yes") else ""
+  main.py:3672:
+> main.py:3673:def _pretty_strong_block(x):
+  main.py:3674:    m = {
+  main.py:3675:        "score_lt_72": "score<72",
+  main.py:3676:        "net_edge_lt_10": "edge<10",
+  main.py:3677:        "net_edge_missing": "edge?",
+> main.py:3678:        "no_persistence": "persist",
+  main.py:3679:        "unstable": "unstable",
+  main.py:3680:        "late_block": "late",
+> main.py:3681:        "cross_market_contradiction": "x-mkt",
+  main.py:3682:        "public_drift_block": "pubdrift",
+  main.py:3683:    }
+  main.py:3684:    s = str(x).strip()
+  main.py:3685:    return m.get(s, s)
+  main.py:3686:
+> main.py:3687:def _strong_flags(row, market, pb_map=None):
+> main.py:3688:    """v1.1 STRONG certification gate."""
+  main.py:3689:    try:
+  main.py:3690:        m = str(market).strip().upper()
+  main.py:3691:        sp = str(row.get('sport','')).strip().upper()
+  main.py:3692:        game_id = str(row.get('game_id','')).strip()
+  main.py:3693:
+  main.py:3694:        score_col = f"{m}_model_score"
+  main.py:3695:        try:
+  main.py:3696:            score = float(str(row.get(score_col, '')).strip() or 'nan')
+  main.py:3699:        if not (score == score) or score < 72.0:
+  main.py:3700:            return False, 'score_lt_72'
+  main.py:3701:
+> main.py:3702:        # Net Edge requirement for STRONG (per dashboard legend): >= 10 when available
+  main.py:3703:        try:
+  main.py:3704:            ne_col = f"{m}_net_edge"
+  main.py:3705:            ne_raw = row.get(ne_col, "")
+  main.py:3706:            ne = float(str(ne_raw).strip() or "nan")
+  main.py:3707:            if not (ne == ne) or ne < 10.0:
+  main.py:3708:                return False, "net_edge_lt_10"
+  main.py:3709:        except Exception:
+> main.py:3710:            # If net edge is missing/unparseable, do NOT grant STRONG
+  main.py:3711:            return False, "net_edge_missing"
+  main.py:3712:
+  main.py:3713:        tb = str(row.get('timing_bucket','')).strip().upper()
+  main.py:3714:        if tb == 'LATE':
+  main.py:3715:            return False, 'late_block'
+  main.py:3716:
+> main.py:3717:        p_ok = row.get(f"{m}_persist_ok", False)
+  main.py:3718:        s_ok = row.get(f"{m}_stable_ok", False)
+  main.py:3719:
+  main.py:3720:        p_ok = bool(p_ok) if isinstance(p_ok,(bool,int)) else str(p_ok).lower() in ('true','1','yes')
+  main.py:3721:        s_ok = bool(s_ok) if isinstance(s_ok,(bool,int)) else str(s_ok).lower() in ('true','1','yes')
+  main.py:3722:
+  main.py:3723:        if not p_ok:
+> main.py:3724:            return False, 'no_persistence'
+  main.py:3725:        if not s_ok:
+  main.py:3726:            return False, 'unstable'
+  main.py:3727:
+  main.py:3728:        try:
+  main.py:3729:            side = str(row.get(f"{m}_side") or row.get(f"{m}_favored") or '').strip()
+  main.py:3730:            if pb_map and side and sp and game_id:
+  main.py:3731:                prev = pb_map.get(f"{sp}|{game_id}|{m}|{side}", '')
+  main.py:3732:        except Exception:
+> main.py:3733:            pass
+  main.py:3734:
+  main.py:3735:        spread_fav = str(row.get('SPREAD_favored','')).strip()
+  main.py:3736:        ml_fav = str(row.get('MONEYLINE_favored','')).strip()
+  main.py:3737:        if m in ('SPREAD','MONEYLINE') and spread_fav and ml_fav and spread_fav != ml_fav:
+> main.py:3738:            return False, 'cross_market_contradiction'
+  main.py:3739:
+  main.py:3740:        txt = " ".join(
+  main.py:3741:            str(row.get(c,"")).upper()
+  main.py:3742:            for c in (
+  main.py:3743:                f"{m}_market_read", f"{m}_market_why", f"{m}_why",
+  main.py:3744:                "market_read", "market_why", "why"
+  main.py:3745:            )
+  main.py:3746:        )
+> main.py:3747:        if "PUBLIC DRIFT" in txt or "LINE INFLATION" in txt:
+  main.py:3748:            return False, 'public_drift_block'
+  main.py:3749:
+  main.py:3750:        return True, ''
+  main.py:3751:    except Exception:
+> main.py:3752:        return False, 'strong_flags_exception'
+  main.py:3753:
+  main.py:3754:
+  main.py:3755:def cmd_snapshot(args):
+  main.py:3756:    # No hard skips here.
+  main.py:3757:    # If a sport has no games, dk_headless/get_splits should return 0 records,
+  main.py:3758:    # and we will print "[snapshot] no games available for <sport>" below.
+  main.py:3759:
+  main.py:3760:
+  main.py:3786:        logger.debug("json_records_found=%s", result.get("json_records_found"))
+  main.py:3787:        logger.debug("extracted_records=%d", len(rows))
+  main.py:3788:
+> main.py:3789:    # --- Model Open (persistent) ---
+  main.py:3790:    # DK Network Splits often has no true "open". We define open_line as the first observed current_line
+> main.py:3791:    # per (sport, game_id, market, side) and persist it across runs.
+  main.py:3792:    open_reg = _load_open_registry()
+  main.py:3793:    new_opens = 0
+  main.py:3794:    for r in rows:  
+  main.py:3795:        sport = str(r.get("sport","") or "")
+  main.py:3796:        game_id = str(r.get("game_id","") or "")
+  main.py:3797:        market = str(r.get("market","") or "")
+  main.py:3798:        side = str(r.get("side","") or "")
+  main.py:3799:        current_line = str(r.get("current_line","") or r.get("current","") or "").strip()
+  main.py:3954:                    _w = csv.DictWriter(_f, fieldnames=_cols)
+  main.py:3955:                    _w.writerow(_row)
+  main.py:3956:            except Exception:
+> main.py:3957:                pass
+  main.py:3958:
+  main.py:3959:            print(f"[metrics] updated row_state/signal_ledger rows={len(_latest)}")
+  main.py:3960:        else:
+  main.py:3961:            print("[metrics] dashboard metrics path disabled (per-market metrics already executed)")
+  main.py:3962:    except Exception as _e:
+  main.py:3963:        print(f"[metrics] metrics wiring failed: {repr(_e)}")
+  main.py:3964:
+  main.py:3965:
+  main.py:4097:        try:
+  main.py:4098:            is_high_bet_side = bets >= 50
+  main.py:4099:        except Exception:
+> main.py:4100:            pass
+  main.py:4101:
+  main.py:4102:        label = _classify_market_read(
+  main.py:4103:            D=D,
+  main.py:4104:            bets_pct=bets,
+  main.py:4105:            move_dir=move_dir,
+  main.py:4106:            meaningful_move=meaningful,
+  main.py:4107:            is_high_bet_side=is_high_bet_side
+  main.py:4108:        )
+  main.py:4301:            return
+  main.py:4302:        _BASELINE_SEEN_KEYS.add(_k)
+  main.py:4303:    except Exception:
+> main.py:4304:        pass
+  main.py:4305:    import csv, os
+  main.py:4306:    from datetime import datetime, timezone
+  main.py:4307:
+  main.py:4308:    BASELINE_FILE = "data/signals_baseline.csv"
+  main.py:4309:    market_key = row.get("market")
+  main.py:4310:
+  main.py:4311:    if os.path.exists(BASELINE_FILE):
+  main.py:4312:        with open(BASELINE_FILE, newline="", encoding="utf-8") as f:
+
+

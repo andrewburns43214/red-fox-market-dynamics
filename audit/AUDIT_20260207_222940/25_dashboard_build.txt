@@ -1,0 +1,1752 @@
+﻿=== Dashboard build / HTML emit / sorting / grouping hooks (main.py) ===
+
+  main.py:34:    with OPEN_REG_PATH.open("w", encoding="utf-8", newline="") as f:
+  main.py:35:        w = csv.writer(f)
+  main.py:36:        w.writerow(["sport","game_id","market","side","open_line"])
+> main.py:37:        for (sport, game_id, market, side), open_line in sorted(reg.items()):
+  main.py:38:            w.writerow([sport, game_id, market, side, open_line])
+  main.py:39:from dataclasses import dataclass
+  main.py:40:from typing import Dict, List, Optional, Tuple
+  main.py:41:
+  main.py:42:import requests
+  main.py:43:import pandas as pd
+  main.py:44:from bs4 import BeautifulSoup
+  main.py:45:from dk_headless import get_splits
+  main.py:46:from logging_utils import setup_logger
+  main.py:47:import logging
+  main.py:245:    "texas am commerce": "tx am commerce",
+  main.py:246:
+  main.py:247:    # NBA shorthand (DK-style city prefixes)
+> main.py:248:    "no pelicans": "new orleans pelicans",
+  main.py:249:    "la clippers": "los angeles clippers",
+  main.py:250:    "ny knicks": "new york knicks",
+  main.py:251:
+  main.py:252:    # ESPN shortDisplayName quirks
+  main.py:253:    "pittsburgh": "pitt",
+  main.py:254:    "western michigan": "w mich",
+  main.py:255:    "albany": "ualbany",
+  main.py:256:    "albany ny": "ualbany",
+  main.py:257:}
+  main.py:258:
+  main.py:369:        "sf 49ers": "san francisco 49ers",
+  main.py:370:        "tb buccaneers": "tampa bay buccaneers",
+  main.py:371:        "kc chiefs": "kansas city chiefs",
+> main.py:372:        "no saints": "new orleans saints",
+  main.py:373:        "ne patriots": "new england patriots",
+  main.py:374:        "gb packers": "green bay packers",
+  main.py:375:        "lv raiders": "las vegas raiders",
+  main.py:376:        "dal cowboys": "dallas cowboys",
+  main.py:377:        "cle browns": "cleveland browns",
+  main.py:378:        "cin bengals": "cincinnati bengals",
+  main.py:379:        "den broncos": "denver broncos",
+  main.py:380:        "atl falcons": "atlanta falcons",
+> main.py:381:        "no saints": "new orleans saints",
+  main.py:382:
+  main.py:383:    }
+  main.py:384:    for a, b in rep.items():
+  main.py:385:        s = s.replace(a, b)
+  main.py:386:
+  main.py:387:    return s
+  main.py:388:
+  main.py:389:def _espn_kickoff_map_date_range(scoreboard_url_base: str, games: list[str], days: int = 5) -> dict[str, str]:
+  main.py:390:    """
+  main.py:391:    Returns DK-game-keyed kickoff ISO map by querying ESPN scoreboard across a date range.
+  main.py:439:        d = start + timedelta(days=i)
+  main.py:440:        ymd = d.strftime("%Y%m%d")
+  main.py:441:
+> main.py:442:        # Sport-specific params (CBB + CFB need groups + bigger limits)
+  main.py:443:        extra = ""
+  main.py:444:        if "mens-college-basketball" in scoreboard_url_base:
+> main.py:445:            extra = "&groups=50&limit=500"
+  main.py:446:        elif "football/college-football" in scoreboard_url_base:
+> main.py:447:            extra = "&groups=80&limit=500"
+  main.py:448:        else:
+  main.py:449:            # avoid silent truncation on some scoreboards
+  main.py:450:            extra = "&limit=500"
+  main.py:451:
+  main.py:452:        url = f"{scoreboard_url_base}?dates={ymd}{extra}"
+  main.py:453:
+  main.py:454:                # --- ESPN fetch (instrumented; do not swallow errors) ---
+  main.py:455:        req = urllib.request.Request(
+  main.py:456:            url,
+  main.py:457:            headers={
+  main.py:588:            if iso:
+  main.py:589:                break
+  main.py:590:
+> main.py:591:        # Fuzzy fallback (LAST RESORT): token overlap against ESPN matchup keys.
+  main.py:592:        if not iso:
+  main.py:593:            ng = _norm_game_key(g)
+  main.py:594:            if "@" in ng:
+  main.py:595:                gtoks = set(t for t in ng.replace("@", " ").split() if len(t) >= 3)
+  main.py:596:                best_iso = ""
+  main.py:597:                best_score = 0
+  main.py:598:
+  main.py:599:                for k, v in espn_index.items():
+  main.py:600:                    if not v:
+  main.py:601:                        continue
+  main.py:775:
+  main.py:776:    # build finals maps per sport for the games present
+  main.py:777:    finals_by_sport = {}
+> main.py:778:    for sport, gdf in need.groupby("sport"):
+> main.py:779:        games = sorted(set(gdf["game"].dropna().astype(str).tolist()))
+  main.py:780:        if not games:
+  main.py:781:            continue
+  main.py:782:        finals_by_sport[sport] = get_espn_finals_map(sport, games)
+  main.py:783:
+  main.py:784:    if not finals_by_sport:
+  main.py:785:        return
+  main.py:786:
+  main.py:787:    def _split_game(g: str):
+  main.py:788:        # Defensive: allow NaN/float/None
+  main.py:789:        try:
+  main.py:964:def _score_bucket(score: float) -> str:
+  main.py:965:    # Instrumentation-only bucket (does NOT affect scoring logic)
+  main.py:966:    # Buckets:
+> main.py:967:    #   NO_BET < 60
+> main.py:968:    #   LEAN   60?65
+> main.py:969:    #   BET    66?71
+> main.py:970:    #   STRONG_BET >= 72
+  main.py:971:    try:
+  main.py:972:        s = float(score)
+  main.py:973:    except Exception:
+> main.py:974:        return "NO_BET"
+  main.py:975:    if s >= 72.0:
+> main.py:976:        return "STRONG_BET"
+  main.py:977:    if s >= 66.0:
+> main.py:978:        return "BET"
+  main.py:979:    if s >= 60.0:
+> main.py:980:        return "LEAN"
+> main.py:981:    return "NO_BET"
+  main.py:982:def _load_row_state(path: str):
+  main.py:983:    import pandas as pd
+  main.py:984:    import os
+  main.py:985:    if not os.path.exists(path):
+  main.py:986:        return pd.DataFrame(columns=[
+  main.py:987:            "sport", "game_id", "market", "side",
+  main.py:988:            "logic_version",
+  main.py:989:            "last_score", "last_ts",
+  main.py:990:            "peak_score", "peak_ts",
+  main.py:991:            "last_bucket",
+> main.py:992:            "last_net_edge", "last_net_edge_ts",
+  main.py:993:        ])
+  main.py:994:    try:
+  main.py:995:        df = pd.read_csv(path, keep_default_na=False, dtype=str)
+  main.py:996:        # Normalize instrumentation fields (avoid blank strong_streak from older rows)
+  main.py:997:        try:
+  main.py:998:            if "strong_streak" in df.columns:
+  main.py:999:                df["strong_streak"] = df["strong_streak"].astype(str).str.strip()
+  main.py:1000:                df.loc[df["strong_streak"] == "", "strong_streak"] = "0"
+  main.py:1001:        except Exception:
+  main.py:1002:            pass
+  main.py:1008:                "last_score", "last_ts",
+  main.py:1009:                "peak_score", "peak_ts",
+  main.py:1010:                "last_bucket",
+> main.py:1011:                "last_net_edge", "last_net_edge_ts",
+  main.py:1012:            ])
+  main.py:1013:        # ensure cols exist
+> main.py:1014:        for c in ["sport","game_id","market","side","logic_version","last_score","last_ts","last_seen_tick","peak_score","peak_ts","last_bucket","last_net_edge","last_net_edge_ts","strong_streak"]:
+  main.py:1015:            if c not in df.columns:
+  main.py:1016:                df[c] = ""
+  main.py:1017:        return df
+  main.py:1018:    except Exception:
+  main.py:1019:        # if state file is corrupted, fail safe (do not break report)
+  main.py:1020:        return pd.DataFrame(columns=[
+  main.py:1021:            "sport", "game_id", "market", "side",
+  main.py:1022:            "logic_version",
+  main.py:1023:            "last_score", "last_ts",
+  main.py:1024:            "peak_score", "peak_ts",
+  main.py:1025:            "last_bucket",
+> main.py:1026:            "last_net_edge", "last_net_edge_ts",
+  main.py:1027:        ])
+  main.py:1028:
+  main.py:1029:
+  main.py:1030:def _append_signal_ledger(path: str, rows: list[dict]):
+  main.py:1031:    import pandas as pd
+  main.py:1032:    import os
+  main.py:1033:
+  main.py:1034:    # Canonical ledger schema (stable across runs)
+  main.py:1035:    cols = [
+  main.py:1036:        "ts","logic_version","event","from_bucket","to_bucket",
+  main.py:1037:        "sport","game_id","market","side","game",
+> main.py:1038:        "current_line","current_odds","bets_pct","money_pct",
+> main.py:1039:        "score","net_edge"
+  main.py:1040:    ]
+  main.py:1041:
+  main.py:1042:    # Ensure directory exists
+  main.py:1043:    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+  main.py:1044:
+  main.py:1045:    # Ensure file exists AND has required columns (even if it already exists)
+  main.py:1046:    try:
+  main.py:1047:        if os.path.exists(path):
+  main.py:1048:            df0 = pd.read_csv(path, keep_default_na=False, dtype=str)
+  main.py:1049:            if df0.empty:
+  main.py:1241:            print(f"[metrics debug] now_ts={now_ts}")
+  main.py:1242:
+  main.py:1243:
+> main.py:1244:        # --- precompute net_edge per (sport, game_id, market) from latest rows (instrumentation only)
+> main.py:1245:        # Net Edge = max(score) - min(score) across sides within the same market.
+  main.py:1246:        # IMPORTANT: normalize keys exactly like the per-row loop uses.
+  main.py:1247:        edge_map = {}
+  main.py:1248:        try:
+  main.py:1249:            tmp = latest.copy()
+  main.py:1250:            tmp["_sport_k"] = tmp.get("sport", "").apply(_metrics_blank)
+  main.py:1251:            tmp["_gid_k"]   = tmp.get("game_id", "").apply(_metrics_blank)
+  main.py:1252:            tmp["_mkt_k"]   = tmp.get(market_col, "").apply(_metrics_blank)
+  main.py:1253:            tmp["_score_k"] = tmp[score_col].apply(lambda v: _metrics_float(v, default=None))
+  main.py:1254:
+  main.py:1255:            tmp = tmp[tmp["_score_k"].notna()]
+  main.py:1256:            if not tmp.empty:
+  main.py:1257:                g = (
+> main.py:1258:                    tmp.groupby(["_sport_k","_gid_k","_mkt_k"])["_score_k"]
+  main.py:1259:                       .agg(["max","min"])
+  main.py:1260:                       .reset_index()
+  main.py:1261:                )
+> main.py:1262:                g["net_edge"] = (g["max"] - g["min"]).astype(float)
+  main.py:1263:
+  main.py:1264:                for _, rr in g.iterrows():
+  main.py:1265:                    k = (str(rr["_sport_k"]), str(rr["_gid_k"]), str(rr["_mkt_k"]))
+> main.py:1266:                    edge_map[k] = float(rr["net_edge"])
+  main.py:1267:        except Exception:
+  main.py:1268:            edge_map = {}
+  main.py:1269:
+  main.py:1270:        # Iterate latest rows (instrumentation only)
+  main.py:1271:        for _, r in latest.iterrows():
+  main.py:1272:            sport = _metrics_blank(r.get('sport'))
+  main.py:1273:            game_id = _metrics_blank(r.get('game_id'))
+  main.py:1274:            market = _metrics_blank(r.get(market_col) or r.get("_metrics_market") or r.get("market_display") or "").upper()
+  main.py:1275:            side = _metrics_blank(r.get("side"))
+  main.py:1276:            current_line = _metrics_blank(r.get("current_line"))
+  main.py:1305:            k = f"{sport}|{game_id}|{market}|{side}"
+  main.py:1306:
+  main.py:1307:            score = _metrics_float(r.get(score_col), default=None)
+> main.py:1308:            # net_edge from precomputed market edge_map (fallback 0.0)
+> main.py:1309:            net_edge = _metrics_float(r.get('net_edge'), default=None)
+> main.py:1310:            if net_edge is None:
+> main.py:1311:                net_edge = float(edge_map.get((sport, game_id, market), 0.0) or 0.0)
+  main.py:1312:
+  main.py:1313:            if score is None:
+  main.py:1314:                continue
+  main.py:1315:            processed += 1
+  main.py:1316:
+  main.py:1317:            bucket = _score_bucket(score)
+  main.py:1318:
+  main.py:1319:            # --- v1.1 STRONG streak (instrumentation only) ---
+  main.py:1320:            # strong_streak = consecutive runs where score >= 72
+  main.py:1321:            prev = state_map.get(k, {})
+  main.py:1325:            except Exception:
+  main.py:1326:                prev_streak = 0
+  main.py:1327:            try:
+> main.py:1328:                strong_now = (str(bucket).strip().upper() == "STRONG_BET")
+  main.py:1329:            except Exception:
+  main.py:1330:                strong_now = False
+  main.py:1331:            # --- v1.1 FIX: streak must only advance on NEW snapshot tick (idempotent on repeated report runs)
+  main.py:1332:            cur_tick = _metrics_blank(r.get("ts") or r.get("snapshot_ts") or r.get("timestamp"))
+  main.py:1333:            prev_tick = _metrics_blank(prev.get("last_seen_tick") or prev.get("last_tick") or prev.get("last_ts"))
+  main.py:1334:            is_new_tick = (cur_tick != "" and cur_tick != prev_tick)
+  main.py:1335:
+  main.py:1336:            if not is_new_tick:
+  main.py:1337:                strong_streak = str(prev_streak if strong_now else 0)
+  main.py:1338:            else:
+  main.py:1349:            peak_ts = now_ts if (prev_peak is None or score > prev_peak) else _metrics_blank(prev.get("peak_ts"))
+  main.py:1350:
+  main.py:1351:            # threshold crossing logging
+> main.py:1352:            # Only log upward crossings into LEAN/BET/STRONG_BET (including brand-new rows)
+> main.py:1353:            rank = {"": 0, "NO_BET": 0, "LEAN": 1, "BET": 2, "STRONG_BET": 3}
+> main.py:1354:            pb = prev_bucket if prev_bucket in rank else "NO_BET"
+> main.py:1355:            cb = bucket if bucket in ("NO_BET", "LEAN", "BET", "STRONG_BET") else "NO_BET"
+> main.py:1356:            if rank.get(pb, 0) < rank.get(cb, 0) and cb in ("LEAN", "BET", "STRONG_BET"):
+  main.py:1357:                ledger
+  main.py:1358:                # --- METRICS FEED (v1.1): consume per-market rows immediately ---
+  main.py:1359:                try:
+  main.py:1360:                    _metrics_df = _pd.DataFrame(_rows)
+  main.py:1361:                    if not _metrics_df.empty:
+  main.py:1362:                        update_row_state_and_signal_ledger(_metrics_df)
+  main.py:1363:                except Exception as _e:
+  main.py:1364:                    print("[metrics] early feed failed:", repr(_e))
+  main.py:1365:
+  main.py:1366:                _rows.append({
+  main.py:1376:                    "game": _metrics_blank(r.get("game")),
+  main.py:1377:                    "current_line": _metrics_blank(r.get("current_line")),
+  main.py:1378:                    "current_odds": _metrics_blank(r.get("current_odds")),
+> main.py:1379:                    "bets_pct": _metrics_blank(r.get("bets_pct")),
+  main.py:1380:                    "money_pct": _metrics_blank(r.get("money_pct")),
+  main.py:1381:                    "score": f"{score:.2f}",
+> main.py:1382:                    "net_edge": f"{(net_edge or 0.0):.2f}",
+  main.py:1383:                })
+  main.py:1384:
+  main.py:1385:            # upsert state
+  main.py:1386:            state_map[k] = {
+  main.py:1387:                "sport": sport,
+  main.py:1388:                "game_id": game_id,
+  main.py:1389:                "market": market,
+  main.py:1390:                "side": side,
+  main.py:1391:                "logic_version": LOGIC_VERSION,
+  main.py:1392:                "last_score": f"{score:.2f}",
+  main.py:1393:                "last_ts": now_ts,
+> main.py:1394:                "last_net_edge": (f"{_metrics_float(net_edge, default=0.0):.2f}" if str(net_edge).strip() != "" else ""),
+> main.py:1395:                "last_net_edge_ts": (now_ts if str(net_edge).strip() != "" else ""),
+  main.py:1396:
+  main.py:1397:                "peak_score": f"{peak_score:.2f}",
+  main.py:1398:                "peak_ts": peak_ts,
+  main.py:1399:                "last_bucket": bucket,
+  main.py:1400:                "timing_bucket": _metrics_blank(r.get("timing_bucket")),
+  main.py:1401:                "strong_streak": str(strong_streak),
+  main.py:1402:                "last_seen_tick": cur_tick,
+  main.py:1403:            }
+  main.py:1404:
+  main.py:1405:        if os.environ.get('METRICS_DEBUG','') == '1':
+  main.py:1410:            out = pd.DataFrame(out_rows)
+  main.py:1411:            for c in out.columns:
+  main.py:1412:                out[c] = out[c].fillna("").astype(str)
+> main.py:1413:            out = out.sort_values(["sport", "game_id", "market", "side"], kind="mergesort")
+  main.py:1414:            out.to_csv(state_path, index=False)
+  main.py:1415:
+  main.py:1416:        _append_signal_ledger(ledger_path, ledger_rows)
+  main.py:1417:    except Exception as e:
+  main.py:1418:        # never break report; but show traceback when debugging
+  main.py:1419:        try:
+  main.py:1420:            import os, traceback
+  main.py:1421:            if os.environ.get('METRICS_DEBUG','') == '1':
+  main.py:1422:                print(f"[metrics debug] EXCEPTION in update_row_state_and_signal_ledger: {repr(e)}")
+  main.py:1423:                print(traceback.format_exc())
+  main.py:1502:SPORT_CONFIG = {
+  main.py:1503:    "nfl": {
+  main.py:1504:        "label": "NFL",
+> main.py:1505:        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=88808&tb_edate=n7days&tb_emt=0",
+  main.py:1506:    },
+  main.py:1507:    "nba": {
+  main.py:1508:        "label": "NBA",
+> main.py:1509:        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=42648&tb_edate=n7days&tb_emt=0",
+  main.py:1510:    },
+  main.py:1511:    "mlb": {
+  main.py:1512:        "label": "MLB",
+> main.py:1513:        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=84240&tb_edate=n7days&tb_emt=0",
+  main.py:1514:    },
+  main.py:1515:    "nhl": {
+  main.py:1516:        "label": "NHL",
+> main.py:1517:        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=42133&tb_edate=n7days&tb_emt=0",
+  main.py:1518:    },
+  main.py:1519:    "ncaaf": {
+  main.py:1520:        "label": "CFB",
+> main.py:1521:        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=87637&tb_edate=n7days&tb_emt=0",
+  main.py:1522:    },
+  main.py:1523:    "ncaab": {
+  main.py:1524:        "label": "NCAAB",
+> main.py:1525:        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=92483&tb_edate=n7days&tb_emt=0",
+  main.py:1526:    },
+  main.py:1527:    "ufc": {
+  main.py:1528:        "label": "UFC",
+> main.py:1529:        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=9034&tb_edate=n7days&tb_emt=0",
+  main.py:1530:    },
+  main.py:1531:}
+  main.py:1532:
+  main.py:1533:
+  main.py:1534:
+  main.py:1535:
+  main.py:1536:def parse_line_and_odds(s: str):
+  main.py:1537:    """
+  main.py:1538:    Input examples:
+  main.py:1539:      "ATL Falcons @ +280"
+  main.py:1551:
+  main.py:1552:    # odds at end: "@ -110" or "@ +280"
+  main.py:1553:    m_odds = re.search(r"@\s*([+-]?\d+)\s*$", txt)
+> main.py:1554:    odds = int(m_odds.group(1)) if m_odds else None
+  main.py:1555:
+  main.py:1556:    # totals: Over/Under N
+  main.py:1557:    m_total = re.search(r"^(Over|Under)\s+(\d+(\.\d+)?)", txt, flags=re.I)
+  main.py:1558:    if m_total:
+> main.py:1559:        return {"market_type": "total", "line_val": float(m_total.group(2)), "odds": odds}
+  main.py:1560:
+  main.py:1561:    # spreads: team ... +/- number
+  main.py:1562:    m_spread = re.search(r"\s([+-]\d+(\.\d+)?)\b", txt)
+  main.py:1563:    if m_spread:
+> main.py:1564:        return {"market_type": "spread", "line_val": float(m_spread.group(1)), "odds": odds}
+  main.py:1565:
+  main.py:1566:    # moneyline: has odds but no spread/total number
+  main.py:1567:    if odds is not None:
+  main.py:1568:        return {"market_type": "moneyline", "line_val": None, "odds": odds}
+  main.py:1569:
+  main.py:1570:    return {"market_type": "other", "line_val": None, "odds": None}
+  main.py:1571:
+  main.py:1572:# =========================
+  main.py:1573:# Market Read (Observation Mode, additive only)
+  main.py:1574:# =========================
+  main.py:1581:            return ""
+  main.py:1582:        a = float(prev_line)
+  main.py:1583:        b = float(now_line)
+> main.py:1584:        lo, hi = sorted([a, b])
+> main.py:1585:        for k in sorted(KEY_NUMBERS):
+  main.py:1586:            if lo < k < hi or abs(a - k) < 1e-9 or abs(b - k) < 1e-9:
+  main.py:1587:                return str(k)
+  main.py:1588:    except Exception:
+  main.py:1589:        return ""
+  main.py:1590:    return ""
+  main.py:1591:
+  main.py:1592:def _toward_side_by_odds(open_odds, cur_odds) -> int:
+  main.py:1593:    """
+> main.py:1594:    Returns +1 if price moved AGAINST bettor on this side (more expensive),
+  main.py:1595:            -1 if moved in favor (cheaper),
+  main.py:1596:             0 if unknown/no move.
+  main.py:1597:    Works for American odds where:
+  main.py:1598:      -120 -> -140 is more expensive (toward side)
+  main.py:1599:      +150 -> +130 is more expensive (toward side)
+  main.py:1600:    """
+  main.py:1601:    try:
+  main.py:1602:        if open_odds is None or cur_odds is None:
+  main.py:1603:            return 0
+  main.py:1604:        o = int(open_odds)
+  main.py:1639:def _toward_side_by_total(open_total, cur_total, side_label: str) -> int:
+  main.py:1640:    """
+  main.py:1641:    Totals:
+> main.py:1642:      Over benefits when total goes DOWN (better number), but market moving UP is "toward Over"
+  main.py:1643:      Under is opposite.
+> main.py:1644:    We define "toward side" as market moving in the direction that makes that side harder to bet:
+  main.py:1645:      Over: total increasing is toward Over
+  main.py:1646:      Under: total decreasing is toward Under
+  main.py:1647:    """
+  main.py:1648:    try:
+  main.py:1649:        if open_total is None or cur_total is None:
+  main.py:1650:            return 0
+  main.py:1651:        o = float(open_total)
+  main.py:1652:        c = float(cur_total)
+  main.py:1653:        if o == c:
+  main.py:1654:            return 0
+  main.py:1686:    except Exception:
+  main.py:1687:        return 0
+  main.py:1688:
+> main.py:1689:def _classify_market_read(D, bets_pct, move_dir, meaningful_move, is_high_bet_side):
+  main.py:1690:    """
+  main.py:1691:    Frozen v0.1 labels (tune later; not now).
+  main.py:1692:    """
+> main.py:1693:    # Public Drift: high-bet side AND market moved toward it (never green)
+> main.py:1694:    if is_high_bet_side and move_dir == +1 and meaningful_move:
+  main.py:1695:        return "Public Drift"
+  main.py:1696:
+> main.py:1697:    # Stealth Move: strong D+, low bets, and move toward side
+> main.py:1698:    if D >= 12 and (bets_pct is not None and bets_pct <= 40) and move_dir == +1 and meaningful_move:
+  main.py:1699:        return "Stealth Move"
+  main.py:1700:
+  main.py:1701:    # Aligned Sharp: D+ and move toward side
+  main.py:1702:    if D >= 8 and move_dir == +1 and meaningful_move:
+  main.py:1703:        return "Aligned Sharp"
+  main.py:1704:
+  main.py:1705:        # Reverse Pressure: D+ but market moved away (stronger than freeze)
+  main.py:1706:    if D >= 8 and move_dir == -1 and meaningful_move:
+  main.py:1707:        return "Reverse Pressure"
+  main.py:1708:
+  main.py:1718:
+  main.py:1719:def add_market_read_to_latest(latest: pd.DataFrame) -> pd.DataFrame:
+  main.py:1720:    """
+> main.py:1721:    Additive only. Uses columns you already compute in build_dashboard():
+  main.py:1722:
+  main.py:1723:    # -----------------------------
+> main.py:1724:          market_display, side, bets_pct, money_pct,
+  main.py:1725:      open_odds/current_odds, open_line_val/current_line_val,
+  main.py:1726:      odds_move_open/line_move_open
+  main.py:1727:    """
+  main.py:1728:    df = latest.copy()
+  main.py:1729:
+> main.py:1730:    # D (PERF): vectorized money_pct - bets_pct (avoid df.apply(axis=1))
+  main.py:1731:    # Treat missing/non-numeric as 0.0 to match prior behavior.
+  main.py:1732:    _money = pd.to_numeric(df.get("money_pct", 0), errors="coerce").fillna(0.0)
+> main.py:1733:    _bets  = pd.to_numeric(df.get("bets_pct", 0), errors="coerce").fillna(0.0)
+> main.py:1734:    df["divergence_D"] = _money - _bets
+  main.py:1735:
+> main.py:1736:    # Pairing: determine which side is "high-bet" within each (sport, game_id, market_display)
+  main.py:1737:    grp_cols = ["sport", "game_id", "market_display"]
+  main.py:1738:    if "espn_day" in df.columns:
+  main.py:1739:        grp_cols.append("espn_day")
+  main.py:1740:
+  main.py:1741:    df["_pair_key"] = df[grp_cols].astype(str).agg("|".join, axis=1)
+  main.py:1742:
+> main.py:1743:    # high bet by pair (2-sided assumption; safe fallback)
+> main.py:1744:    high_bet_idx = set()
+> main.py:1745:    for k, g in df.groupby("_pair_key"):
+  main.py:1746:        try:
+  main.py:1747:            if len(g) != 2:
+  main.py:1748:                continue
+  main.py:1749:            g2 = g.copy()
+> main.py:1750:            g2["bets_pct_num"] = pd.to_numeric(g2["bets_pct"], errors="coerce")
+> main.py:1751:            if g2["bets_pct_num"].isna().any():
+  main.py:1752:                continue
+> main.py:1753:            winner = g2["bets_pct_num"].idxmax()
+> main.py:1754:            high_bet_idx.add(winner)
+  main.py:1755:        except Exception:
+  main.py:1756:            pass
+  main.py:1757:
+  main.py:1758:    # Movement + label + why
+  main.py:1759:    mr = []
+  main.py:1760:    favors = []
+  main.py:1761:    why = []
+  main.py:1762:    move_summary = []
+  main.py:1763:
+  main.py:1764:    for idx, r in df.iterrows():
+  main.py:1765:        mkt = str(r.get("market_display", "")).upper()
+  main.py:1766:        side = str(r.get("side", "")).strip()
+> main.py:1767:        bets = pd.to_numeric(r.get("bets_pct"), errors="coerce")
+  main.py:1768:        money = pd.to_numeric(r.get("money_pct"), errors="coerce")
+  main.py:1769:        D = float(r.get("divergence_D", 0.0))
+  main.py:1770:
+> main.py:1771:        is_high_bet = idx in high_bet_idx
+  main.py:1772:
+  main.py:1773:        move_dir = 0
+  main.py:1774:        key_cross = ""
+  main.py:1775:        meaningful = False
+> main.py:1776:        # Pull deltas if they exist (already computed earlier in build_dashboard)
+  main.py:1777:        od_open = r.get("odds_move_open", None)
+  main.py:1778:        ln_open = r.get("line_move_open", None)
+  main.py:1779:
+  main.py:1780:        # Normalize numeric
+  main.py:1781:        try:
+  main.py:1782:            od_open_num = None if pd.isna(od_open) else float(od_open)
+  main.py:1783:        except Exception:
+  main.py:1784:            od_open_num = None
+  main.py:1785:
+  main.py:1786:        try:
+  main.py:1830:        else:
+  main.py:1831:            move_summary.append("Unknown market move")
+  main.py:1832:
+> main.py:1833:        label = _classify_market_read(D, None if pd.isna(bets) else float(bets), move_dir, meaningful, is_high_bet)
+  main.py:1834:
+  main.py:1835:        mr.append(label)
+  main.py:1836:        favors.append(side if side else "this side")
+  main.py:1837:
+> main.py:1838:        # explain string (clean, decision-intel only)
+> main.py:1839:        btxt = "n/a" if pd.isna(bets) else f"{float(bets):.1f}%"
+  main.py:1840:        mtxt = "n/a" if pd.isna(money) else f"{float(money):.1f}%"
+  main.py:1841:        why.append(
+> main.py:1842:            f"{label}: bets={btxt}, money={mtxt}, D={D:+.1f}; "
+  main.py:1843:            f"move_dir={move_dir}"
+  main.py:1844:            + (f", key={key_cross}" if key_cross else "")
+  main.py:1845:            + f". {move_summary[-1]}"
+  main.py:1846:        )
+  main.py:1847:
+  main.py:1848:    df["move_open_to_current"] = move_summary
+  main.py:1849:    df["market_read"] = mr
+  main.py:1850:    df["market_favors"] = favors
+  main.py:1851:    df["market_why"] = why
+  main.py:1852:
+  main.py:1875:    except Exception:
+  main.py:1876:        _dbg_pair = ''
+  main.py:1877:
+> main.py:1878:    for _, g in df.groupby(pair_cols):
+  main.py:1879:        if len(g) != 2:
+  main.py:1880:            continue
+  main.py:1881:
+  main.py:1882:        idx = list(g.index)
+  main.py:1883:        a = str(df.loc[idx[0], "market_read"] or "")
+  main.py:1884:        b = str(df.loc[idx[1], "market_read"] or "")
+  main.py:1885:
+  main.py:1886:        a_sp = (a in sharp_pressure)
+  main.py:1887:        b_sp = (b in sharp_pressure)
+  main.py:1888:        # Flag rare pairing anomaly: both sides sharp-pressure
+  main.py:1909:DASH_DEBUG = False
+  main.py:1910:# =========================
+  main.py:1911:
+> main.py:1912:# Put the DK Network betting splits URL you want to scrape here.
+  main.py:1913:# Example format might be a DK Network page that shows splits for NFL/NBA.
+> main.py:1914:SPLITS_URL = "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/"
+  main.py:1915:
+  main.py:1916:# Where we store historical snapshots
+  main.py:1917:DATA_DIR = "data"
+  main.py:1918:SNAPSHOT_CSV = os.path.join(DATA_DIR, "snapshots.csv")
+  main.py:1919:
+  main.py:1920:# Where we output the dashboard
+> main.py:1921:REPORT_HTML = os.path.join(DATA_DIR, "dashboard.html")
+  main.py:1922:
+  main.py:1923:# Use a polite user-agent
+  main.py:1924:HEADERS = {
+  main.py:1925:    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+  main.py:1926:                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+  main.py:1927:                  "Chrome/120.0 Safari/537.36"
+  main.py:1928:}
+  main.py:1929:
+  main.py:1930:TIMEZONE = "local"  # for display only
+  main.py:1931:
+  main.py:1936:
+  main.py:1937:@dataclass(frozen=True)
+  main.py:1938:class Thresholds:
+> main.py:1939:    # Money vs Bets
+  main.py:1940:    light_money_min: int = 65
+> main.py:1941:    light_bets_max: int = 45
+  main.py:1942:
+  main.py:1943:    dark_money_min: int = 70
+> main.py:1944:    dark_bets_max: int = 40
+  main.py:1945:
+  main.py:1946:    # Public pressure
+> main.py:1947:    yellow_public_bets_min: int = 70
+> main.py:1948:    red_public_bets_min: int = 75
+  main.py:1949:    red_money_max: int = 55
+  main.py:1950:
+  main.py:1951:    # Line movement thresholds (optional, if you capture open/current)
+  main.py:1952:    meaningful_move_pts: float = 1.5  # used for â€œstrong line behaviorâ€
+  main.py:1953:
+  main.py:1954:    # â€œNo movementâ€ / resistance trigger (optional)
+> main.py:1955:    resistance_public_bets_min: int = 72
+  main.py:1956:    resistance_move_max: float = 0.25
+  main.py:1957:
+  main.py:1958:TH = Thresholds()
+  main.py:1959:
+  main.py:1960:
+  main.py:1961:# =========================
+  main.py:1962:# Data model
+  main.py:1963:# =========================
+  main.py:1964:
+  main.py:1965:@dataclass
+  main.py:1969:    game: str
+  main.py:1970:    side: str  # team name or side label
+  main.py:1971:    market: str  # spread / total / moneyline (if available)
+> main.py:1972:    bets_pct: Optional[int]
+  main.py:1973:    money_pct: Optional[int]
+  main.py:1974:
+  main.py:1975:    # Optional line fields
+  main.py:1976:    open_line: Optional[str] = None
+  main.py:1977:    current_line: Optional[str] = None
+  main.py:1978:
+  main.py:1979:    # Optional context
+  main.py:1980:    injury_news: Optional[str] = None  # "yes"/"no"/None
+  main.py:1981:    key_number_note: Optional[str] = None  # any note
+  main.py:1982:
+  main.py:2008:    m = re.search(r"(\d{1,3})\s*%", str(x))
+  main.py:2009:    if not m:
+  main.py:2010:        return None
+> main.py:2011:    v = int(m.group(1))
+  main.py:2012:    if 0 <= v <= 100:
+  main.py:2013:        return v
+  main.py:2014:    return None
+  main.py:2015:
+  main.py:2016:
+  main.py:2017:def safe_text(el) -> str:
+  main.py:2018:    return el.get_text(" ", strip=True) if el else ""
+  main.py:2019:
+  main.py:2020:
+  main.py:2021:# =========================
+  main.py:2026:    """
+  main.py:2027:    Generic parser:
+  main.py:2028:    - Finds repeating â€œgame cardsâ€ or table rows
+> main.py:2029:    - Extracts game name, side/team labels, bets% and money% if present
+  main.py:2030:    This may need minor tweaks depending on DK Network page structure.
+  main.py:2031:    """
+  main.py:2032:    soup = BeautifulSoup(html, "lxml")
+  main.py:2033:
+  main.py:2034:    # Try tables first
+  main.py:2035:    rows_out: List[SideRow] = []
+  main.py:2036:
+  main.py:2037:    # --- Strategy A: parse table rows that contain percentages ---
+  main.py:2038:    table_rows = soup.select("tr")
+  main.py:2039:    if debug:
+  main.py:2056:
+  main.py:2057:        # Very loose assumptions:
+  main.py:2058:        # - One cell may contain game/team info
+> main.py:2059:        # - other cells contain bets% / money%
+  main.py:2060:        # We will attempt to pull two sides if we see two team names.
+  main.py:2061:        if debug and idx < 10:
+  main.py:2062:            print(f"[debug] row {idx}: {txt[:160]}...")
+  main.py:2063:
+  main.py:2064:        # Try to locate something that looks like "Team A vs Team B"
+  main.py:2065:        game_guess = txt
+  main.py:2066:        game_guess = re.sub(r"\s+", " ", game_guess).strip()
+  main.py:2067:
+> main.py:2068:        # Pull first 2 percentages as bets and money (may be per side; varies by site)
+  main.py:2069:        # This is why we may need to tweak once we see DK Network structure.
+> main.py:2070:        bets_pct = int(pcts[0]) if pcts else None
+  main.py:2071:        money_pct = int(pcts[1]) if len(pcts) > 1 else None
+  main.py:2072:
+  main.py:2073:        # Create a single â€œside rowâ€ record as a fallback
+  main.py:2074:        # We'll show it in output even if itâ€™s not perfectly split by team yet.
+  main.py:2075:        rows_out.append(SideRow(
+  main.py:2076:            sport=sport,
+  main.py:2077:            game_id=f"row-{idx}",
+  main.py:2078:            game=game_guess,
+  main.py:2079:            side="(unparsed side)",
+  main.py:2080:            market="unknown",
+> main.py:2081:            bets_pct=bets_pct,
+  main.py:2082:            money_pct=money_pct
+  main.py:2083:        ))
+  main.py:2084:
+  main.py:2085:    # --- Strategy B: card-like blocks (common on modern pages) ---
+  main.py:2086:    if not rows_out:
+  main.py:2087:        cards = soup.select("[class*='card'], [class*='split'], [class*='game']")
+  main.py:2088:        if debug:
+  main.py:2089:            print(f"[debug] no table rows parsed; found {len(cards)} card-ish elements")
+  main.py:2090:
+  main.py:2091:        for i, c in enumerate(cards):
+  main.py:2102:                game=txt[:140],
+  main.py:2103:                side="(unparsed side)",
+  main.py:2104:                market="unknown",
+> main.py:2105:                bets_pct=int(pcts[0]),
+  main.py:2106:                money_pct=int(pcts[1]),
+  main.py:2107:            ))
+  main.py:2108:
+  main.py:2109:    if debug:
+  main.py:2110:        print(f"[debug] parsed {len(rows_out)} records (generic)")
+  main.py:2111:
+  main.py:2112:    return rows_out
+  main.py:2113:
+  main.py:2114:
+  main.py:2115:# =========================
+  main.py:2117:# =========================
+  main.py:2118:
+  main.py:2119:def classify_side(
+> main.py:2120:    bets_pct: Optional[int],
+  main.py:2121:    money_pct: Optional[int],
+  main.py:2122:    open_line: Optional[str] = None,
+  main.py:2123:    current_line: Optional[str] = None,
+  main.py:2124:    injury_news: Optional[str] = None,
+  main.py:2125:    key_number_note: Optional[str] = None,
+  main.py:2126:) -> Tuple[str, str]:
+  main.py:2127:    """
+  main.py:2128:    Returns: (color, explanation)
+  main.py:2129:    color âˆˆ {"DARK_GREEN","LIGHT_GREEN","GREY","YELLOW","RED"}
+  main.py:2130:    """
+  main.py:2131:    # If we don't have percentages, we can't score well
+> main.py:2132:    if bets_pct is None or money_pct is None:
+> main.py:2133:        return "GREY", "Missing bet%/money% â†’ default Grey"
+  main.py:2134:
+  main.py:2135:    # Context modifiers
+  main.py:2136:    has_news = (injury_news or "").strip().lower() in {"yes", "y", "true", "1"}
+  main.py:2137:
+> main.py:2138:    # Basic money-vs-bets signals
+> main.py:2139:    light_money_signal = (money_pct >= TH.light_money_min and bets_pct <= TH.light_bets_max)
+> main.py:2140:    dark_money_signal = (money_pct >= TH.dark_money_min and bets_pct <= TH.dark_bets_max)
+  main.py:2141:
+  main.py:2142:    # Public-heavy signals
+> main.py:2143:    is_yellow = bets_pct >= TH.yellow_public_bets_min and money_pct < TH.light_money_min
+> main.py:2144:    is_red = bets_pct >= TH.red_public_bets_min and money_pct <= TH.red_money_max
+  main.py:2145:
+  main.py:2146:    # Optional: line behavior (if you store open/current)
+  main.py:2147:    # We keep it conservative: without line info, we do NOT hand out Dark Green easily.
+  main.py:2148:    strong_line_signal = False
+  main.py:2149:    if open_line and current_line:
+  main.py:2150:        # Try to parse numeric spread points from lines like "-3.5" or "+6"
+  main.py:2151:        def parse_num(s: str) -> Optional[float]:
+  main.py:2152:            m = re.search(r"([+-]?\d+(\.\d+)?)", s)
+> main.py:2153:            return float(m.group(1)) if m else None
+  main.py:2154:
+  main.py:2155:        o = parse_num(open_line)
+  main.py:2156:        c = parse_num(current_line)
+  main.py:2157:        if o is not None and c is not None:
+  main.py:2158:            move = abs(c - o)
+  main.py:2159:            if move >= TH.meaningful_move_pts:
+  main.py:2160:                strong_line_signal = True
+  main.py:2161:
+  main.py:2162:        # Key number note can promote â€œstrong line behaviorâ€ (NFL)
+  main.py:2163:        if key_number_note and key_number_note.strip():
+  main.py:2165:
+  main.py:2166:    # DARK GREEN (rare): requires strong line behavior + strong money signal, AND no obvious news explanation
+  main.py:2167:    if strong_line_signal and dark_money_signal and not has_news:
+> main.py:2168:        return "DARK_GREEN", "Book behavior + strong money-vs-bets imbalance; no obvious news â†’ Market Edge Confirmed"
+  main.py:2169:
+  main.py:2170:    # If news explains it, keep in Light Green even if strong
+  main.py:2171:    if strong_line_signal and dark_money_signal and has_news:
+  main.py:2172:        return "LIGHT_GREEN", "Strong signals but major news present â†’ downgrade to Market Edge Developing" 
+  main.py:2173:
+> main.py:2174:    # LIGHT GREEN: money-vs-bets imbalance without strong line confirmation
+  main.py:2175:    if light_money_signal:
+> main.py:2176:        return "LIGHT_GREEN", "Money concentration vs bet count â†’ Market Edge Developing (watch for confirmation)"
+  main.py:2177:
+  main.py:2178:    # RED: avoid this side
+  main.py:2179:    if is_red:
+  main.py:2180:        return "RED", "Extremely public + weak money support â†’ Wrong Side / Trap (evaluate opposite side)"
+  main.py:2181:
+  main.py:2182:    # YELLOW: public-driven
+  main.py:2183:    if is_yellow:
+  main.py:2184:        return "YELLOW", "Public-heavy demand without strong money support â†’ Caution"
+  main.py:2185:
+  main.py:2186:    return "GREY", "No strong market signal on this side"
+  main.py:2192:
+  main.py:2193:SNAPSHOT_FIELDS = [
+  main.py:2194:    "timestamp", "sport", "game_id", "game", "side", "market",
+> main.py:2195:    "bets_pct", "money_pct", "open_line", "current_line",
+  main.py:2196:    "injury_news", "key_number_note", "dk_start_iso"
+  main.py:2197:
+  main.py:2198:]
+  main.py:2199:
+  main.py:2200:def append_snapshot(rows, sport: str):
+  main.py:2201:    import csv
+  main.py:2202:    from datetime import datetime, timezone
+  main.py:2203:
+  main.py:2204:    ts = datetime.now(timezone.utc).isoformat()
+  main.py:2205:
+  main.py:2226:                "game": row.get("game"),
+  main.py:2227:                "side": row.get("side"),
+  main.py:2228:                "market": row.get("market"),
+> main.py:2229:                "bets_pct": row.get("bets_pct"),
+  main.py:2230:                "money_pct": row.get("money_pct"),
+  main.py:2231:                "open_line": row.get("open") or row.get("open_line"),
+  main.py:2232:                "current_line": row.get("current") or row.get("current_line"),
+  main.py:2233:                "injury_news": row.get("news"),
+  main.py:2234:                "key_number_note": row.get("key_number_note"),
+  main.py:2235:                "dk_start_iso": row.get("start_time_iso") or row.get("start_time") or row.get("startDate") or row.get("dk_start_iso") or row.get("game_time_iso") or row.get("game_time") or ""
+  main.py:2236:            })
+  main.py:2237:
+  main.py:2238:
+  main.py:2239:def infer_market_type(side_txt: str, line_txt: str) -> str:
+  main.py:2262:    if c == "YELLOW": return 1
+  main.py:2263:    return 0
+  main.py:2264:
+> main.py:2265:def build_dashboard():
+  main.py:2266:    ensure_data_dir()
+  main.py:2267:
+  main.py:2268:    if not os.path.exists(SNAPSHOT_CSV):
+  main.py:2269:        print(f"[warn] no snapshots yet: {SNAPSHOT_CSV}")
+  main.py:2270:        return
+  main.py:2271:
+  main.py:2272:    df = pd.read_csv(SNAPSHOT_CSV, keep_default_na=False, dtype=str)
+  main.py:2273:    if DASH_DEBUG:
+  main.py:2274:        print(f"[dash debug] rows after read_csv: {len(df)}")
+  main.py:2275:    if "sport" in df.columns:
+  main.py:2276:        if DASH_DEBUG:
+> main.py:2277:            print(f"[dash debug] sports present: {sorted(df['sport'].dropna().astype(str).unique().tolist())}")
+  main.py:2278:    else:
+  main.py:2279:        if DASH_DEBUG:
+  main.py:2280:            print("[dash debug] sports present: NO sport col")
+  main.py:2281:
+  main.py:2282:    # Normalize column names for dashboard
+  main.py:2283:    df = df.rename(columns={
+  main.py:2284:        "open": "open_line",
+  main.py:2285:        "current": "current_line",
+  main.py:2286:        "news": "injury_news",
+  main.py:2287:    })
+  main.py:2307:    df["sport_label"] = df["sport"].str.upper()
+  main.py:2308:
+  main.py:2309:
+> main.py:2310:    # Grouping keys must not be NaN
+  main.py:2311:    df["game_id"] = df["game_id"].fillna("").astype(str)
+  main.py:2312:    df["side"] = df["side"].fillna("").astype(str)
+  main.py:2313:    df["market"] = df["market"].fillna("unknown").astype(str)
+  main.py:2314:
+> main.py:2315:    # Clean DK â€œopens in a new tabâ€¦â€ junk if present
+  main.py:2316:    df["market"] = df["market"].astype(str).str.replace(r"\s+opens in a new tab.*$", "", regex=True)
+  main.py:2317:    df["game"] = df["game"].astype(str).str.replace(r"\s+opens in a new tab.*$", "", regex=True)
+  main.py:2318:
+  main.py:2319:    # ---------- Stable keys for OPEN/LATEST/PREV (prevents "open resets" when line changes) ----------
+  main.py:2320:    # market_display is consistent even if df["market"] varies (or contains alt labels).
+  main.py:2321:    # PERF: vectorize market_display (avoid df.apply(axis=1))
+  main.py:2322:    _cl = df.get("current_line", "").astype(str).str.lower()
+  main.py:2323:
+  main.py:2324:    # TOTAL: lines that look like o/u or contain over/under
+  main.py:2325:    _is_total = _cl.str.match(r"^\s*[ou]\s*\d") | _cl.str.contains(r"over|under", regex=True)
+  main.py:2386:    )
+  main.py:2387:
+  main.py:2388:    # --- OPEN = first seen current_line for that (sport, game_id, market_display, side_key)
+> main.py:2389:    df = df.sort_values("timestamp")
+  main.py:2390:    first_seen = (
+> main.py:2391:        df.groupby(["sport", "game_id", "market_display", "side_key"], as_index=False)
+  main.py:2392:          .first()[["sport", "game_id", "market_display", "side_key", "current_line"]]
+  main.py:2393:          .rename(columns={"current_line": "open_line"})
+  main.py:2394:    )
+  main.py:2395:    df = df.merge(
+  main.py:2396:        first_seen,
+  main.py:2397:        on=["sport", "game_id", "market_display", "side_key"],
+  main.py:2398:        how="left",
+  main.py:2399:        suffixes=("", "_first")
+  main.py:2400:    )
+  main.py:2401:
+  main.py:2420:
+  main.py:2421:    # --- LATEST row per selection
+  main.py:2422:    latest = (
+> main.py:2423:        df.groupby(["sport", "game_id", "market_display", "side_key"], as_index=False)
+  main.py:2424:          .tail(1)
+  main.py:2425:          .copy()
+  main.py:2426:          .reset_index(drop=True)
+  main.py:2427:    )
+  main.py:2428:    if DASH_DEBUG:
+  main.py:2429:        print(f"[dash debug] rows in latest: {len(latest)}")
+  main.py:2430:
+  main.py:2431:    # ---- FILTER: today and future games only (NY time) ----
+  main.py:2432:    today_ny = pd.Timestamp.now(tz="America/New_York").normalize()
+  main.py:2433:
+  main.py:2442:
+  main.py:2443:    # --- PREV = previous snapshot row per selection (2nd to last)
+  main.py:2444:    prev = (
+> main.py:2445:        df.groupby(["sport", "game_id", "market_display", "side_key"], as_index=False)
+  main.py:2446:          .nth(-2)
+  main.py:2447:          .rename(columns={"current_line": "prev_current_line"})
+  main.py:2448:          [["sport", "game_id", "market_display", "side_key", "prev_current_line"]]
+  main.py:2449:    )
+  main.py:2450:    latest = latest.merge(prev, on=["sport", "game_id", "market_display", "side_key"], how="left")
+  main.py:2451:    # --------------------------------------------------------------------
+  main.py:2452:
+  main.py:2453:
+  main.py:2454:    # Debug sample
+  main.py:2455:    if len(latest) > 0:
+  main.py:2501:    totals = latest[latest["market_display"] == "TOTAL"].copy()
+  main.py:2502:    if len(totals) > 0:
+  main.py:2503:        total_counts = (
+> main.py:2504:            totals.groupby(["sport", "game_id", "current_line_val"], as_index=False)
+  main.py:2505:                  .size()
+  main.py:2506:                  .rename(columns={"size": "n"})
+  main.py:2507:        )
+  main.py:2508:
+  main.py:2509:        # Tie-breaker: closest to median total for that game (stable + data-driven)
+  main.py:2510:        med = (
+> main.py:2511:            totals.groupby(["sport", "game_id"], as_index=False)["current_line_val"]
+  main.py:2512:                  .median()
+  main.py:2513:                  .rename(columns={"current_line_val": "med_total"})
+  main.py:2514:        )
+  main.py:2515:        total_counts = total_counts.merge(med, on=["sport", "game_id"], how="left")
+  main.py:2516:        total_counts["dist"] = (total_counts["current_line_val"] - total_counts["med_total"]).abs()
+  main.py:2517:
+  main.py:2518:        total_main = (
+> main.py:2519:            total_counts.sort_values(
+  main.py:2520:                ["sport", "game_id", "n", "dist", "current_line_val"],
+  main.py:2521:                ascending=[True, True, False, True, True]
+  main.py:2522:            )
+> main.py:2523:            .groupby(["sport", "game_id"], as_index=False)
+  main.py:2524:            .head(1)[["sport", "game_id", "current_line_val"]]
+  main.py:2525:            .rename(columns={"current_line_val": "main_total"})
+  main.py:2526:        )
+  main.py:2527:
+  main.py:2528:        totals = totals.merge(total_main, on=["sport", "game_id"], how="left")
+  main.py:2529:        totals = totals[totals["current_line_val"] == totals["main_total"]].drop(columns=["main_total"])
+  main.py:2530:
+  main.py:2531:    # --- SPREAD main number (mode of ABS(line))
+  main.py:2532:    spreads = latest[latest["market_display"] == "SPREAD"].copy()
+  main.py:2533:    if len(spreads) > 0:
+  main.py:2534:        spreads["abs_line"] = spreads["current_line_val"].abs()
+  main.py:2535:
+  main.py:2536:        spread_counts = (
+> main.py:2537:            spreads.groupby(["sport", "game_id", "abs_line"], as_index=False)
+  main.py:2538:                   .size()
+  main.py:2539:                   .rename(columns={"size": "n"})
+  main.py:2540:        )
+  main.py:2541:
+  main.py:2542:        spread_main = (
+> main.py:2543:            spread_counts.sort_values(
+  main.py:2544:                ["sport", "game_id", "n", "abs_line"],
+  main.py:2545:                ascending=[True, True, False, True]  # tie-breaker: closest to 0
+  main.py:2546:            )
+> main.py:2547:            .groupby(["sport", "game_id"], as_index=False)
+  main.py:2548:            .head(1)[["sport", "game_id", "abs_line"]]
+  main.py:2549:            .rename(columns={"abs_line": "main_abs_spread"})
+  main.py:2550:        )
+  main.py:2551:
+  main.py:2552:        spreads = spreads.merge(spread_main, on=["sport", "game_id"], how="left")
+  main.py:2553:        spreads = spreads[spreads["abs_line"] == spreads["main_abs_spread"]].drop(columns=["abs_line", "main_abs_spread"])
+  main.py:2554:
+  main.py:2555:    # MONEYLINE untouched; reassemble
+  main.py:2556:    money = latest[latest["market_display"] == "MONEYLINE"].copy()
+  main.py:2557:    other = latest[~latest["market_display"].isin(["TOTAL", "SPREAD", "MONEYLINE"])].copy()
+  main.py:2679:
+  main.py:2680:    for _, row in latest.iterrows():
+  main.py:2681:        color, expl = classify_side(
+> main.py:2682:            bets_pct=int(row["bets_pct"]) if pd.notna(row.get("bets_pct")) else None,
+  main.py:2683:            money_pct=int(row["money_pct"]) if pd.notna(row.get("money_pct")) else None,
+  main.py:2684:            open_line=row.get("open_line") if pd.notna(row.get("open_line")) else None,
+  main.py:2685:            current_line=row.get("current_line") if pd.notna(row.get("current_line")) else None,
+  main.py:2686:            injury_news=row.get("injury_news") if pd.notna(row.get("injury_news")) else None,
+  main.py:2687:            key_number_note=row.get("key_number_note") if pd.notna(row.get("key_number_note")) else None,
+  main.py:2688:        )
+  main.py:2689:
+  main.py:2690:        game = row.get("game")
+  main.py:2691:        side = row.get("side")
+  main.py:2692:        mkt = row.get("market_display")
+  main.py:3003:    key_th = "<th>Key # Note</th>" if show_key_note else ""
+  main.py:3004:
+  main.py:3005:    # Compute colspan from the EXACT columns we will render in the table header.
+> main.py:3006:    # Sort for display: kickoff time first (like the old dashboard), then group by game
+  main.py:3007:    if "game_time_iso" in latest.columns:
+  main.py:3008:        # --- Guardrail: DK Network kickoff is authoritative for filtering/display ---
+  main.py:3009:        # ESPN finals/kickoff enrichment is allowed for mapping/metrics, but must NOT overwrite DK kickoff time.
+  main.py:3010:        if "dk_start_iso" in latest.columns:
+  main.py:3011:            latest["game_time_iso"] = latest["dk_start_iso"].fillna("").astype(str)
+  main.py:3012:        
+> main.py:3013:        latest["_sort_time"] = pd.to_datetime(latest["game_time_iso"], errors="coerce", utc=True)
+  main.py:3014:
+  main.py:3015:        # --- Time bucket (prevents TBD from breaking logic) ---
+  main.py:3016:        now_utc = datetime.now(timezone.utc)
+  main.py:3017:
+  main.py:3018:        def _time_bucket(kick):
+  main.py:3019:            if pd.isna(kick):
+  main.py:3020:                return "TBD"
+  main.py:3021:            if kick >= now_utc:
+  main.py:3022:                return "FUTURE"
+  main.py:3023:            return "STALE"
+  main.py:3024:
+> main.py:3025:        latest["time_bucket"] = latest["_sort_time"].apply(_time_bucket)
+  main.py:3026:
+  main.py:3027:    
+> main.py:3028:        # --- HARD FILTER: drop stale games quickly (clean dashboard) ---
+  main.py:3029:        now_utc = datetime.now(timezone.utc)
+  main.py:3030:
+  main.py:3031:        # Policy:
+  main.py:3032:        # - Keep upcoming games through horizon_days
+  main.py:3033:        # - Drop games fast after kickoff (postgame_grace_hours)
+  main.py:3034:        # v1.1 dashboard rule: show ONLY upcoming games (no old DK n7days clutter)
+  main.py:3035:        # Keep games from now through horizon_days.
+  main.py:3036:        # If you want a tiny kickoff grace, change to: now_utc - timedelta(minutes=15)
+  main.py:3037:        horizon_days = 7
+  main.py:3038:
+  main.py:3040:        window_end   = now_utc + timedelta(days=horizon_days)
+  main.py:3041:
+  main.py:3042:        before = len(latest)
+> main.py:3043:        kick = latest["_sort_time"]
+  main.py:3044:        # --- kickoff window diagnostics (debug only) ---
+  main.py:3045:        try:
+  main.py:3046:            _kick_na = int(kick.isna().sum())
+  main.py:3047:        except Exception:
+  main.py:3048:            _kick_na = -1
+  main.py:3049:        try:
+  main.py:3050:            _kick_min = kick.min()
+  main.py:3051:            _kick_max = kick.max()
+  main.py:3052:        except Exception:
+  main.py:3053:            _kick_min = None
+  main.py:3080:        ].copy()
+  main.py:3081:        after = len(latest)
+  main.py:3082:
+> main.py:3083:        # Recompute sort time after filtering (keeps downstream stable)
+> main.py:3084:        latest["_sort_time"] = pd.to_datetime(latest["game_time_iso"], errors="coerce", utc=True)
+  main.py:3085:
+  main.py:3086:        if DASH_DEBUG:
+  main.py:3087:            print(
+  main.py:3088:
+  main.py:3089:            f"[dash debug] stale-kickoff filter: window_start={window_start.isoformat()} "
+  main.py:3090:            f"window_end={window_end.isoformat()} kept={after}/{before} dropped={before-after}"
+  main.py:3091:        )
+  main.py:3092:    else:
+> main.py:3093:        latest["_sort_time"] = pd.NaT
+> main.py:3094:    # Final display sort time (ET)
+> main.py:3095:    if "_sort_time" in latest.columns:
+  main.py:3096:        try:
+> main.py:3097:            latest["_sort_time"] = latest["_sort_time"].dt.tz_convert("America/New_York")
+  main.py:3098:        except Exception:
+  main.py:3099:            pass
+  main.py:3100:    else:
+> main.py:3101:        latest["_sort_time"] = pd.NaT
+  main.py:3102:
+> main.py:3103:    # Group markets together within each game in a consistent order:
+  main.py:3104:    # MONEYLINE -> SPREAD -> TOTAL -> everything else
+  main.py:3105:    market_order = {"MONEYLINE": 0, "SPREAD": 1, "TOTAL": 2}
+  main.py:3106:    latest["_mkt_rank"] = latest["market_display"].map(market_order).fillna(99).astype(int)
+  main.py:3107:
+> main.py:3108:    latest = latest.sort_values(
+> main.py:3109:        by=["sport_label", "_sort_time", "game", "_mkt_rank", "market_display", "side"],
+  main.py:3110:        ascending=[True, True, True, True, True, True],
+> main.py:3111:        kind="mergesort",
+  main.py:3112:    ).reset_index(drop=True)
+  main.py:3113:
+  main.py:3114:    latest = latest.drop(columns=["_mkt_rank"], errors="ignore")
+  main.py:3115:
+  main.py:3116:
+  main.py:3117:    # Ensure no duplicate column labels (can happen after merges)
+  main.py:3118:    latest = latest.loc[:, ~latest.columns.duplicated()].copy()
+  main.py:3119:    
+  main.py:3120:        # -----------------------------
+  main.py:3121:    # GAME-LEVEL AGGREGATION (interpretive only; no side flipping)
+  main.py:3141:        score_num = 0.0
+  main.py:3142:    try:
+  main.py:3143:        # simple buckets; adjust thresholds later if needed
+> main.py:3144:        score_bucket = 'DARK_GREEN' if score_num >= 75 else ('GREEN' if score_num >= 65 else ('LEAN' if score_num >= 55 else ''))
+  main.py:3145:    except Exception:
+  main.py:3146:        score_bucket = ''
+  main.py:3147:    # --- end score vars ---
+  main.py:3148:    
+  main.py:3149:    latest["_score_num"] = pd.to_numeric(latest["confidence_score"], errors="coerce").fillna(50.0)
+  main.py:3150:
+  main.py:3151:    # Favored side = max score within the game+market
+> main.py:3152:    idx_fav = latest.groupby(game_keys)["_score_num"].idxmax()
+  main.py:3153:    fav_rows = latest.loc[
+  main.py:3154:        idx_fav,
+  main.py:3155:        game_keys + ["game", "sport_label", "side", "_score_num"]
+  main.py:3156:    ].copy()
+  main.py:3157:
+  main.py:3158:    fav_rows = fav_rows.rename(columns={
+  main.py:3159:        "side": "favored_side",
+  main.py:3160:        "_score_num": "game_confidence"
+  main.py:3161:    })
+  main.py:3162:
+  main.py:3163:    # Min/Max side scores within each game+market
+> main.py:3164:    min_rows = latest.groupby(game_keys)["_score_num"].min().reset_index().rename(columns={"_score_num": "min_side_score"})
+> main.py:3165:    max_rows = latest.groupby(game_keys)["_score_num"].max().reset_index().rename(columns={"_score_num": "max_side_score"})
+  main.py:3166:
+  main.py:3167:    game_view = (
+  main.py:3168:        fav_rows
+  main.py:3169:        .merge(min_rows, on=game_keys, how="left")
+  main.py:3170:        .merge(max_rows, on=game_keys, how="left")
+  main.py:3171:    )
+  main.py:3172:
+> main.py:3173:    game_view["net_edge"] = (game_view["max_side_score"] - game_view["min_side_score"]).round(1)
+  main.py:3174:
+  main.py:3175:    # -----------------------------
+  main.py:3176:    
+> main.py:3177:    # Game decision: BET requires strong score + meaningful net edge; otherwise LEAN/NO BET
+> main.py:3178:    def _game_decision(score, net_edge):
+  main.py:3179:        try:
+  main.py:3180:            s = float(score)
+  main.py:3181:        except Exception:
+  main.py:3182:            s = 50.0
+  main.py:3183:        try:
+> main.py:3184:            ne = float(net_edge)
+  main.py:3185:        except Exception:
+  main.py:3186:            ne = 0.0
+  main.py:3187:
+  main.py:3188:        if s >= 72 and ne >= 10:
+> main.py:3189:            return "BET"
+  main.py:3190:        if s >= 62:
+> main.py:3191:            return "LEAN"
+> main.py:3192:        return "NO BET"
+  main.py:3193:
+> main.py:3194:    game_view["game_decision"] = game_view.apply(lambda r: _game_decision(r.get("game_confidence", 50), r.get("net_edge", 0)), axis=1)
+  main.py:3195:    game_view["opp_weak"] = game_view["min_side_score"] <= 35.0
+  main.py:3196:    game_view["opp_weak_mark"] = game_view["opp_weak"].apply(lambda x: "!" if bool(x) else "")
+> main.py:3197:    # Sort for display: sport, game time, market order
+> main.py:3198:    if "_sort_time" in latest.columns:
+  main.py:3199:        time_map = (
+> main.py:3200:            latest.groupby(["sport", "game_id"])["_sort_time"]
+  main.py:3201:            .min()
+  main.py:3202:            .reset_index()
+> main.py:3203:            .rename(columns={"_sort_time": "_game_time"})
+  main.py:3204:        )
+  main.py:3205:        game_view = game_view.merge(time_map, on=["sport", "game_id"], how="left")
+  main.py:3206:    else:
+  main.py:3207:        game_view["_game_time"] = pd.NaT
+  main.py:3208:
+  main.py:3209:    market_order = {"MONEYLINE": 0, "SPREAD": 1, "TOTAL": 2}
+  main.py:3210:    game_view["_game_mkt_rank"] = game_view["market_display"].map(market_order).fillna(99).astype(int)
+  main.py:3211:
+> main.py:3212:    game_view = game_view.sort_values(
+  main.py:3213:        ["sport_label", "_game_time", "_game_mkt_rank", "game"],
+  main.py:3214:        na_position="last"
+  main.py:3215:    ).reset_index(drop=True)
+  main.py:3216:
+  main.py:3217:    # -----------------------------
+> main.py:3218:    # RESHAPE (UI ONLY): one row per game with grouped SPREAD/ML/TOTAL columns
+  main.py:3219:    # -----------------------------
+  main.py:3220:    try:
+  main.py:3221:        base = ["sport", "game_id", "game", "sport_label", "game_time", "_game_time"]
+  main.py:3222:
+  main.py:3223:        tmp = game_view.copy()
+  main.py:3224:        tmp["market_display"] = tmp["market_display"].astype(str)
+  main.py:3225:
+  main.py:3226:        parts = []
+  main.py:3227:        for m in ("SPREAD", "MONEYLINE", "TOTAL"):
+  main.py:3228:            sub = tmp[tmp["market_display"] == m].copy()
+  main.py:3229:            if sub.empty:
+  main.py:3230:                continue
+  main.py:3231:
+> main.py:3232:            sub = sub[base + ["game_confidence", "favored_side", "net_edge", "game_decision"]].copy()
+  main.py:3233:            sub = sub.rename(columns={
+  main.py:3234:                "game_confidence": f"{m}_model_score",
+  main.py:3235:                "favored_side": f"{m}_favored",
+> main.py:3236:                "net_edge": f"{m}_net_edge",
+  main.py:3237:                "game_decision": f"{m}_decision",
+  main.py:3238:            })
+  main.py:3239:            parts.append(sub)
+  main.py:3240:
+  main.py:3241:        if parts:
+  main.py:3242:            game_view_wide = parts[0]
+  main.py:3243:            for pp in parts[1:]:
+  main.py:3244:                game_view_wide = game_view_wide.merge(pp, on=base, how="outer")
+  main.py:3245:        else:
+  main.py:3246:            game_view_wide = tmp[base].drop_duplicates().copy()
+  main.py:3247:
+> main.py:3248:        # Display Net Edge (single column): max of available market net edges
+> main.py:3249:        edge_cols = [c for c in game_view_wide.columns if c.endswith("_net_edge")]
+  main.py:3250:        if edge_cols:
+> main.py:3251:            game_view_wide["net_edge"] = (
+  main.py:3252:                pd.DataFrame({c: pd.to_numeric(game_view_wide[c], errors="coerce") for c in edge_cols})
+  main.py:3253:                .max(axis=1)
+  main.py:3254:                .fillna(0.0)
+  main.py:3255:                .round(1)
+  main.py:3256:            )
+  main.py:3257:        else:
+> main.py:3258:            game_view_wide["net_edge"] = 0.0
+  main.py:3259:
+  main.py:3260:        # Ensure expected columns exist (no NaN/None in UI)
+  main.py:3261:        for m in ("SPREAD", "MONEYLINE", "TOTAL"):
+  main.py:3262:            for c in (f"{m}_decision", f"{m}_model_score", f"{m}_favored"):
+  main.py:3263:                if c not in game_view_wide.columns:
+  main.py:3264:                    game_view_wide[c] = ""
+  main.py:3265:
+  main.py:3266:        game_view = game_view_wide.reset_index(drop=True)
+  main.py:3267:
+  main.py:3268:
+> main.py:3269:        # Re-sort after reshape (wide merge can scramble row order)
+  main.py:3270:        try:
+  main.py:3271:            if "_game_time" in game_view.columns:
+> main.py:3272:                game_view = game_view.sort_values(
+  main.py:3273:                    ["sport_label", "_game_time", "game"],
+  main.py:3274:                    na_position="last"
+  main.py:3275:                ).reset_index(drop=True)
+  main.py:3276:        except Exception:
+  main.py:3277:            pass
+  main.py:3278:
+  main.py:3279:    except Exception:
+  main.py:3280:        # If anything goes wrong, keep the existing game_view to avoid breaking report
+  main.py:3281:        pass
+  main.py:3282:
+  main.py:3298:            "SPREAD Decision","SPREAD Score","SPREAD Side",
+  main.py:3299:            "ML Decision","ML Score","ML Side",
+  main.py:3300:            "TOTAL Decision","TOTAL Score","TOTAL Side",
+> main.py:3301:            "Net Edge"
+  main.py:3302:        ]
+  main.py:3303:    )
+  main.py:3304:    colspan = len(header_cols)
+  main.py:3305:
+  main.py:3306:    # Build a fast lookup of SIDE rows by parent key so we can render children immediately under each game row
+  main.py:3307:    latest["_parent_gk"] = (
+  main.py:3308:        latest["sport"].astype(str) + "|" +
+  main.py:3309:        latest["game_id"].astype(str)
+  main.py:3310:    )
+> main.py:3311:    side_groups = {k: g.copy() for k, g in latest.groupby("_parent_gk", dropna=False)}
+  main.py:3312:
+  main.py:3313:        # ---- GAME TIME cell helper (GAME rows use game_view._game_time; SIDE rows use rr game_time_*) ----
+  main.py:3314:    def _time_cell(rr):
+  main.py:3315:        """
+  main.py:3316:        Returns a <td>...</td> for Game Time.
+  main.py:3317:        - For GAME rows (game_view), we use rr['_game_time'] if present.
+  main.py:3318:        - For SIDE rows (latest), we use rr['game_time_display'] then rr['game_time_iso'].
+  main.py:3319:        """
+  main.py:3320:        # 1) GAME VIEW preferred: _game_time is already a tz-aware Timestamp (NY)
+  main.py:3321:        gt = rr.get("_game_time", None)
+  main.py:3346:            except Exception:
+  main.py:3347:                pass
+  main.py:3348:
+> main.py:3349:        # 4) Last resort: TBD is acceptable if truly missing
+  main.py:3350:        return "<td>TBD</td>"
+  main.py:3351:
+  main.py:3352:
+  main.py:3353:    # -----------------------------
+  main.py:3354:    # BUILD HTML ROWS (interleaved)
+  main.py:3355:    # -----------------------------
+  main.py:3356:    rows_html = []
+  main.py:3357:
+  main.py:3358:    for _, gr in game_view.iterrows():
+  main.py:3359:        gk = f"{gr.get('sport','')}|{gr.get('game_id','')}"
+  main.py:3362:        gt = _time_cell(gr)
+  main.py:3363:
+  main.py:3364:        rows_html.append(f"""
+> main.py:3365:<tr class="game-row" data-gamekey="{gk}" onclick="toggleGroup('{gk}')">
+  main.py:3366:  <td>{gr.get("sport_label","")}</td>
+  main.py:3367:  <td><b>{gr.get("game","")}</b></td>
+  main.py:3368:  {gt}
+  main.py:3369:  <td>{("" if (gr.get("SPREAD_decision","") is None or str(gr.get("SPREAD_decision","")).lower()=="nan") else str(gr.get("SPREAD_decision","")))}</td>
+  main.py:3370:  <td>{("" if (gr.get("SPREAD_model_score","") is None or str(gr.get("SPREAD_model_score","")).strip()=="" or str(gr.get("SPREAD_model_score","")).lower()=="nan") else f"{float(gr.get('SPREAD_model_score')):.1f}")}</td>
+  main.py:3371:  <td>{("" if (gr.get("SPREAD_favored","") is None or str(gr.get("SPREAD_favored","")).lower()=="nan") else str(gr.get("SPREAD_favored","")))}</td>
+  main.py:3372:
+  main.py:3373:  <td>{("" if (gr.get("MONEYLINE_decision","") is None or str(gr.get("MONEYLINE_decision","")).lower()=="nan") else str(gr.get("MONEYLINE_decision","")))}</td>
+  main.py:3374:  <td>{("" if (gr.get("MONEYLINE_model_score","") is None or str(gr.get("MONEYLINE_model_score","")).strip()=="" or str(gr.get("MONEYLINE_model_score","")).lower()=="nan") else f"{float(gr.get('MONEYLINE_model_score')):.1f}")}</td>
+  main.py:3375:  <td>{("" if (gr.get("MONEYLINE_favored","") is None or str(gr.get("MONEYLINE_favored","")).lower()=="nan") else str(gr.get("MONEYLINE_favored","")))}</td>
+  main.py:3378:  <td>{("" if (gr.get("TOTAL_model_score","") is None or str(gr.get("TOTAL_model_score","")).strip()=="" or str(gr.get("TOTAL_model_score","")).lower()=="nan") else f"{float(gr.get('TOTAL_model_score')):.1f}")}</td>
+  main.py:3379:  <td>{("" if (gr.get("TOTAL_favored","") is None or str(gr.get("TOTAL_favored","")).lower()=="nan") else str(gr.get("TOTAL_favored","")))}</td>
+  main.py:3380:
+> main.py:3381:  <td><span class="pill edge">{round(float(gr.get("net_edge",0) or 0),1)}</span></td>
+  main.py:3382:</tr>
+  main.py:3383:""")
+  main.py:3384:
+  main.py:3385:        # --- SIDE ROWS (hidden by default, packed into GAME schema) ---
+> main.py:3386:        sg = side_groups.get(gk)
+  main.py:3387:        if sg is None or sg.empty:
+  main.py:3388:            continue
+  main.py:3389:
+  main.py:3390:        # Stable order: higher confidence first (UI only)
+  main.py:3391:        try:
+  main.py:3392:            sg = sg.copy()
+  main.py:3393:            sg["_score_num"] = pd.to_numeric(sg["confidence_score"], errors="coerce").fillna(50.0)
+> main.py:3394:            sg = sg.sort_values("_score_num", ascending=False, kind="mergesort")
+  main.py:3395:        except Exception:
+  main.py:3396:            pass
+  main.py:3397:
+  main.py:3398:        for _, rr in sg.iterrows():
+  main.py:3399:            st = color_style(rr.get("color", "GREY"))
+  main.py:3400:
+> main.py:3401:            # display-only side label cleanup
+  main.py:3402:            mkt = rr.get("market_display", "")
+  main.py:3403:            side_disp = rr.get("side", "")
+  main.py:3404:            if mkt == "SPREAD":
+  main.py:3405:                side_disp = re.sub(r"\s[+-]\d+(?:\.\d+)?\s*$", "", str(side_disp)).strip()
+  main.py:3406:
+  main.py:3407:            # Market cell
+  main.py:3408:            market_cell = f"{side_disp} â€” {rr.get('market_display','')}".strip(" â€”")
+  main.py:3409:
+> main.py:3410:            # Decision: Bets / Money
+> main.py:3411:            bets_cell = "" if pd.isna(rr.get("bets_pct")) else f"{int(rr['bets_pct'])}%"
+  main.py:3412:            money_cell = "" if pd.isna(rr.get("money_pct")) else f"{int(rr['money_pct'])}%"
+> main.py:3413:            decision_cell = f"B {bets_cell} / $ {money_cell}".strip()
+  main.py:3414:
+  main.py:3415:            # Open â†’ Current
+  main.py:3416:            o = "" if pd.isna(rr.get("open_line")) else str(rr.get("open_line"))
+  main.py:3417:            c = "" if pd.isna(rr.get("current_line")) else str(rr.get("current_line"))
+  main.py:3418:            oc_cell = (o + " â†’ " + c).strip(" â†’")
+  main.py:3419:
+  main.py:3420:            # Side model score
+  main.py:3421:            try:
+  main.py:3422:                sc = "" if pd.isna(rr.get("confidence_score")) else f"{float(rr.get('confidence_score')):.1f}"
+  main.py:3423:            except Exception:
+  main.py:3449:
+  main.py:3450:
+  main.py:3451:    # -----------------------------
+> main.py:3452:    # WRITE DASHBOARD HTML (WIDE ONE-ROW-PER-GAME)
+> main.py:3453:    # Source of truth: data/dashboard.csv (already normalized; no NaNs)
+  main.py:3454:    # -----------------------------
+  main.py:3455:    try:
+  main.py:3456:        import pandas as _pd
+  main.py:3457:
+> main.py:3458:        dash_html = _pd.read_csv("data/dashboard.csv", keep_default_na=False)
+  main.py:3459:
+> main.py:3460:        # Columns and display order = whatever is in dashboard.csv already
+  main.py:3461:        cols = list(dash_html.columns)
+  main.py:3462:
+  main.py:3463:        def esc(x):
+  main.py:3464:            s = "" if x is None else str(x)
+  main.py:3465:            return (
+  main.py:3466:                s.replace("&","&amp;")
+  main.py:3467:                 .replace("<","&lt;")
+  main.py:3468:                 .replace(">","&gt;")
+  main.py:3469:            )
+  main.py:3470:
+> main.py:3471:        # Build header with sortable th
+  main.py:3472:        ths = []
+  main.py:3473:        for idx, h in enumerate(cols):
+> main.py:3474:            ths.append(f'<th onclick="sortTable({idx})">{esc(h)}</th>')
+  main.py:3475:        thead = "<tr>" + "".join(ths) + "</tr>"
+  main.py:3476:
+  main.py:3477:        # Body
+  main.py:3478:        rows = []
+  main.py:3479:        for _, r in dash_html.iterrows():
+  main.py:3480:            tds = []
+  main.py:3481:            for c in cols:
+  main.py:3482:                v = r.get(c, "")
+  main.py:3483:                s = "" if v is None else str(v)
+  main.py:3484:                # never show "nan"
+  main.py:3501:    th {{ position: sticky; top: 0; background: #f7f7f7; z-index: 2; cursor: pointer; user-select: none; }}
+  main.py:3502:  </style>
+  main.py:3503:  <script>
+> main.py:3504:    // simple, stable sort for ALL columns
+> main.py:3505:    function sortTable(n) {{
+  main.py:3506:      var table = document.querySelector("table");
+  main.py:3507:      var tbody = table.tBodies[0];
+  main.py:3508:      var rows = Array.prototype.slice.call(tbody.rows, 0);
+> main.py:3509:      var asc = table.getAttribute("data-sort-col") != String(n) || table.getAttribute("data-sort-dir") != "asc";
+  main.py:3510:
+> main.py:3511:      rows.sort(function(a, b) {{
+  main.py:3512:        var A = a.cells[n].innerText.trim();
+  main.py:3513:        var B = b.cells[n].innerText.trim();
+  main.py:3514:
+  main.py:3515:        // numeric if possible
+  main.py:3516:        var An = parseFloat(A);
+  main.py:3517:        var Bn = parseFloat(B);
+  main.py:3518:        var AisNum = !isNaN(An) && A.match(/^-?[0-9]+([.][0-9]+)?$/);
+  main.py:3519:        var BisNum = !isNaN(Bn) && B.match(/^-?[0-9]+([.][0-9]+)?$/);
+  main.py:3520:
+  main.py:3521:        if (AisNum && BisNum) {{
+  main.py:3529:        tbody.appendChild(rows[i]);
+  main.py:3530:      }}
+  main.py:3531:
+> main.py:3532:      table.setAttribute("data-sort-col", String(n));
+> main.py:3533:      table.setAttribute("data-sort-dir", asc ? "asc" : "desc");
+  main.py:3534:    }}
+  main.py:3535:  </script>
+  main.py:3536:</head>
+  main.py:3537:<body>
+  main.py:3538:  <h2 style="margin: 0 0 10px 0;">Red Fox Market Dynamics</h2>
+  main.py:3539:  <table>
+  main.py:3540:    <thead>{thead}</thead>
+  main.py:3541:    <tbody>
+  main.py:3542:{tbody}
+  main.py:3543:    </tbody>
+  main.py:3552:# --- METRICS: post-dashboard FINAL (v1.1) ---
+  main.py:3553:        try:
+  main.py:3554:            import pandas as _pd
+> main.py:3555:            _dash = _pd.read_csv('data/dashboard.csv')
+  main.py:3556:            if not _dash.empty:
+  main.py:3557:                update_row_state_and_signal_ledger(_dash)
+  main.py:3558:        except Exception as e:
+  main.py:3559:            print('[metrics] post-dashboard failed:', repr(e))
+  main.py:3560:
+  main.py:3561:
+  main.py:3562:    except Exception as e:
+  main.py:3563:        print(f"[dash] wide html write failed: {repr(e)}")
+  main.py:3564:        # --- METRICS: post-dashboard (v1.1) ---
+  main.py:3565:        try:
+  main.py:3566:            import pandas as _pd
+> main.py:3567:            # Prefer in-memory rows if available; fallback to dashboard.csv
+  main.py:3568:            _latest2 = _pd.DataFrame(_rows) if ('_rows' in locals()) else None
+  main.py:3569:            if _latest2 is not None and not _latest2.empty:
+  main.py:3570:                update_row_state_and_signal_ledger(_latest2)
+  main.py:3571:            else:
+> main.py:3572:                _dash = _pd.read_csv('data/dashboard.csv')
+  main.py:3573:                if not _dash.empty:
+  main.py:3574:                    update_row_state_and_signal_ledger(_dash)
+  main.py:3575:        except Exception as e:
+  main.py:3576:            print('[metrics] wiring failed:', repr(e))
+  main.py:3577:        try:
+  main.py:3578:            import traceback
+  main.py:3579:            print(traceback.format_exc())
+  main.py:3580:        except Exception:
+  main.py:3581:            pass
+  main.py:3582:
+  main.py:3584:    # -----------------------------
+  main.py:3585:    # HEADERS
+  main.py:3586:    # -----------------------------
+> main.py:3587:    # Wide game-level dashboard (one row per game; grouped markets)
+  main.py:3588:
+  main.py:3589:    def _blank(x):
+  main.py:3590:        if x is None:
+  main.py:3591:            return ""
+  main.py:3592:        try:
+  main.py:3593:            if pd.isna(x):
+  main.py:3594:                return ""
+  main.py:3595:        except Exception:
+  main.py:3596:            pass
+  main.py:3597:        return str(x)
+  main.py:3641:            latest[c] = ""
+  main.py:3642:
+  main.py:3643:    # Decide thresholds (UI-only label; does NOT change scoring)
+> main.py:3644:    def _decision(score, net_edge=None, sport=None, timing_bucket=None, strong_eligible=None):
+  main.py:3645:        # v1.1 decision discipline ? STRONG requires eligibility + timing
+  main.py:3646:        tb = str(timing_bucket or "").strip().upper()
+  main.py:3647:        sp = str(sport or "").strip().lower()
+  main.py:3648:        try:
+  main.py:3649:            s = float(score)
+  main.py:3650:        except Exception:
+  main.py:3651:            s = 0.0
+  main.py:3652:
+  main.py:3653:        # Timing hard blocks
+  main.py:3654:        if tb == "LATE":
+> main.py:3655:            return "BET" if s >= 68 else ("LEAN" if s >= 60 else "NO BET")
+  main.py:3656:        if sp == "ncaab" and tb in ("EARLY", "LATE"):
+> main.py:3657:            return "BET" if s >= 68 else ("LEAN" if s >= 60 else "NO BET")
+  main.py:3658:
+  main.py:3659:        # STRONG requires certification (eligibility already computed)
+  main.py:3660:        if s >= 72 and bool(strong_eligible):
+> main.py:3661:            return "STRONG BET"
+  main.py:3662:
+  main.py:3663:        if s >= 68:
+> main.py:3664:            return "BET"
+  main.py:3665:        if s >= 60:
+> main.py:3666:            return "LEAN"
+> main.py:3667:        return "NO BET"
+  main.py:3668:
+  main.py:3669:def _pretty_strong_elig(x):
+  main.py:3670:    s = str(x).strip().lower()
+  main.py:3671:    return "Y" if s in ("true","1","yes") else ""
+  main.py:3672:
+  main.py:3673:def _pretty_strong_block(x):
+  main.py:3674:    m = {
+  main.py:3675:        "score_lt_72": "score<72",
+> main.py:3676:        "net_edge_lt_10": "edge<10",
+> main.py:3677:        "net_edge_missing": "edge?",
+  main.py:3678:        "no_persistence": "persist",
+  main.py:3679:        "unstable": "unstable",
+  main.py:3680:        "late_block": "late",
+  main.py:3681:        "cross_market_contradiction": "x-mkt",
+  main.py:3682:        "public_drift_block": "pubdrift",
+  main.py:3683:    }
+  main.py:3684:    s = str(x).strip()
+  main.py:3685:    return m.get(s, s)
+  main.py:3686:
+  main.py:3687:def _strong_flags(row, market, pb_map=None):
+  main.py:3699:        if not (score == score) or score < 72.0:
+  main.py:3700:            return False, 'score_lt_72'
+  main.py:3701:
+> main.py:3702:        # Net Edge requirement for STRONG (per dashboard legend): >= 10 when available
+  main.py:3703:        try:
+> main.py:3704:            ne_col = f"{m}_net_edge"
+  main.py:3705:            ne_raw = row.get(ne_col, "")
+  main.py:3706:            ne = float(str(ne_raw).strip() or "nan")
+  main.py:3707:            if not (ne == ne) or ne < 10.0:
+> main.py:3708:                return False, "net_edge_lt_10"
+  main.py:3709:        except Exception:
+> main.py:3710:            # If net edge is missing/unparseable, do NOT grant STRONG
+> main.py:3711:            return False, "net_edge_missing"
+  main.py:3712:
+  main.py:3713:        tb = str(row.get('timing_bucket','')).strip().upper()
+  main.py:3714:        if tb == 'LATE':
+  main.py:3715:            return False, 'late_block'
+  main.py:3716:
+  main.py:3717:        p_ok = row.get(f"{m}_persist_ok", False)
+  main.py:3718:        s_ok = row.get(f"{m}_stable_ok", False)
+  main.py:3719:
+  main.py:3720:        p_ok = bool(p_ok) if isinstance(p_ok,(bool,int)) else str(p_ok).lower() in ('true','1','yes')
+  main.py:3721:        s_ok = bool(s_ok) if isinstance(s_ok,(bool,int)) else str(s_ok).lower() in ('true','1','yes')
+  main.py:3817:    print(f"[ok] appended {len(rows)} rows to {SNAPSHOT_CSV}")
+  main.py:3818:
+  main.py:3819:
+> main.py:3820:    build_dashboard()
+  main.py:3821:    resolve_results_for_baseline()
+  main.py:3822:
+  main.py:3823:
+  main.py:3824:
+  main.py:3825:def cmd_report(_args):
+  main.py:3826:    # ESPN finals (results) update is best-effort; never block dashboard build
+  main.py:3827:    try:
+  main.py:3828:        update_snapshots_with_espn_finals()
+  main.py:3829:    except KeyboardInterrupt:
+  main.py:3830:        print("[espn finals] skipped (KeyboardInterrupt)")
+  main.py:3831:    except Exception as e:
+  main.py:3832:        print(f"[espn finals] skipped due to error: {repr(e)}")
+> main.py:3833:    build_dashboard()
+  main.py:3834:
+  main.py:3835:    # -----------------------------
+> main.py:3836:    # UI/CSV: ensure net_edge exists in data/dashboard.csv (instrumentation-only)
+> main.py:3837:    # NOTE: must run inside cmd_report AFTER build_dashboard() writes dashboard.csv
+  main.py:3838:    # -----------------------------
+  main.py:3839:    try:
+  main.py:3840:        import pandas as _pd
+> main.py:3841:        _dpath = "data/dashboard.csv"
+  main.py:3842:        _d = _pd.read_csv(_dpath, keep_default_na=False)
+  main.py:3843:
+> main.py:3844:        if "net_edge" not in _d.columns:
+> main.py:3845:            # Prefer any per-market net edge columns already present
+> main.py:3846:            _edge_cols = [c for c in _d.columns if c.endswith("_net_edge")]
+  main.py:3847:            if _edge_cols:
+  main.py:3848:                _tmp = _pd.DataFrame({c: _pd.to_numeric(_d[c], errors="coerce") for c in _edge_cols})
+> main.py:3849:                _d["net_edge"] = _tmp.max(axis=1).fillna(0.0).round(1)
+  main.py:3850:            else:
+> main.py:3851:                _d["net_edge"] = 0.0
+  main.py:3852:
+  main.py:3853:            _d.to_csv(_dpath, index=False)
+> main.py:3854:            print("[ok] added net_edge to data/dashboard.csv")
+  main.py:3855:    except Exception as _e:
+> main.py:3856:        print(f"[dash] net_edge post-fix failed: {repr(_e)}")
+  main.py:3857:
+  main.py:3858:    # -----------------------------
+  main.py:3859:    # METRICS: wire row_state + signal_ledger (instrumentation-only)
+> main.py:3860:    # Source of truth: data/dashboard.csv
+  main.py:3861:    # -----------------------------
+  main.py:3862:    try:
+  main.py:3863:        import pandas as _pd
+  main.py:3864:
+> main.py:3865:        _d = _pd.read_csv("data/dashboard.csv", keep_default_na=False, dtype=str)
+  main.py:3866:
+  main.py:3867:        _rows = []
+  main.py:3868:        for _m in ("SPREAD","TOTAL","MONEYLINE"):
+  main.py:3869:            _score_col = f"{_m}_model_score"
+  main.py:3870:            _side_col  = f"{_m}_favored"
+  main.py:3871:            _side_fallback_col = f"{_m}_side"
+  main.py:3872:            _dec_col   = f"{_m}_decision"
+> main.py:3873:            _edge_col  = f"{_m}_net_edge"
+  main.py:3874:
+  main.py:3875:            if _score_col not in _d.columns or _side_col not in _d.columns:
+  main.py:3876:                continue
+  main.py:3877:
+  main.py:3878:            for _, _r in _d.iterrows():
+  main.py:3879:                _score = str(_r.get(_score_col, "")).strip()
+  main.py:3880:                _side  = str(_r.get(_side_col, "")).strip()
+  main.py:3881:                if not _side:
+  main.py:3882:                    _side = str(_r.get(_side_fallback_col, "")).strip()
+  main.py:3883:                if not _score or not _side:
+  main.py:3885:
+  main.py:3886:                _net = str(_r.get(_edge_col, "")).strip()
+  main.py:3887:                if not _net:
+> main.py:3888:                    _net = str(_r.get("net_edge", "")).strip()
+  main.py:3889:
+  main.py:3890:                _rows.append({
+  main.py:3891:                    "sport": str(_r.get("sport","")).strip(),
+  main.py:3892:                    "game_id": str(_r.get("game_id","")).strip(),
+  main.py:3893:                    "game": str(_r.get("game","")).strip(),
+  main.py:3894:                    "market": _m,
+  main.py:3895:                    "side": _side,
+  main.py:3896:                    'timing_bucket': _metrics_blank(_r.get('timing_bucket')),
+  main.py:3897:
+  main.py:3898:                    "model_score": _score,
+  main.py:3899:                    "decision": str(_r.get(_dec_col,"")).strip(),
+  main.py:3900:                                        "current_line": str(_r.get(f"{_m}_current_line","")).strip(),
+  main.py:3901:                    "current_odds": str(_r.get(f"{_m}_current_price","")).strip(),
+> main.py:3902:                    "bets_pct": str(_r.get(f"{_m}_bets_pct","")).strip(),
+  main.py:3903:                    "money_pct": str(_r.get(f"{_m}_money_pct","")).strip(),
+> main.py:3904:"net_edge": _net,
+  main.py:3905:                })
+  main.py:3906:
+  main.py:3907:        
+  main.py:3908:        # --- METRICS FEED (v1.1): per-market rows before any aggregation ---
+  main.py:3909:        try:
+  main.py:3910:            _metrics_df = _pd.DataFrame(_rows)
+  main.py:3911:            if not _metrics_df.empty:
+  main.py:3912:                update_row_state_and_signal_ledger(_metrics_df)
+  main.py:3913:        except Exception as _e:
+  main.py:3914:            print("[metrics] per-market feed failed:", repr(_e))
+  main.py:3924:                _now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+  main.py:3925:                _lv = locals().get("_logic_version", locals().get("logic_version", "v?"))
+  main.py:3926:                _ledger_path = "data/signal_ledger.csv"
+> main.py:3927:                _default_cols = ["ts","logic_version","event","from_bucket","to_bucket","sport","game_id","market","side","game","current_line","current_odds","bets_pct","money_pct","score","net_edge"]
+  main.py:3928:            
+  main.py:3929:                # Determine columns from existing header if present
+  main.py:3930:                if os.path.exists(_ledger_path) and os.path.getsize(_ledger_path) > 0:
+  main.py:3931:                    with open(_ledger_path, "r", encoding="utf-8", newline="") as _f:
+  main.py:3932:                        _hdr = _f.readline().strip()
+  main.py:3933:                    _cols = [c.strip() for c in _hdr.split(",") if c.strip()] or _default_cols
+  main.py:3934:                else:
+  main.py:3935:                    _cols = _default_cols
+  main.py:3936:                    os.makedirs(os.path.dirname(_ledger_path) or ".", exist_ok=True)
+  main.py:3937:                    with open(_ledger_path, "w", encoding="utf-8", newline="") as _f:
+  main.py:4011:    snapshots["snapshot_time"] = pd.to_datetime(snapshots["snapshot_time"], utc=True)
+  main.py:4012:    signals["logged_at_utc"] = pd.to_datetime(signals["logged_at_utc"], utc=True)
+  main.py:4013:
+> main.py:4014:    # Sort for asof merge
+> main.py:4015:    snapshots = snapshots.sort_values("snapshot_time")
+> main.py:4016:    signals = signals.sort_values("logged_at_utc")
+  main.py:4017:
+  main.py:4018:    # Keep only join-relevant snapshot columns
+  main.py:4019:    snap_cols = [
+  main.py:4020:        "sport",
+  main.py:4021:        "game_id",
+  main.py:4022:        "side",
+  main.py:4023:        "snapshot_time",
+> main.py:4024:        "bets_pct",
+  main.py:4025:        "money_pct",
+  main.py:4026:        "open_line",
+  main.py:4027:        "current_line",
+  main.py:4028:        "key_number_note",
+  main.py:4029:    ]
+  main.py:4030:    snapshots_j = snapshots[snap_cols].copy()
+  main.py:4031:
+  main.py:4032:    print("[baseline_market_read_joined] performing asof join")
+  main.py:4033:
+  main.py:4034:    # Nearest snapshot at or before signal time
+  main.py:4052:    # =========================
+  main.py:4053:
+  main.py:4054:    # Compute divergence D
+> main.py:4055:    joined["divergence_D"] = joined["money_pct"] - joined["bets_pct"]
+  main.py:4056:
+  main.py:4057:    market_reads = []
+  main.py:4058:    market_whys = []
+  main.py:4059:
+  main.py:4060:    for _, r in joined.iterrows():
+  main.py:4061:        D = r["divergence_D"]
+> main.py:4062:        bets = r["bets_pct"]
+  main.py:4063:        money = r["money_pct"]
+  main.py:4064:
+  main.py:4065:        # Parse numeric spread values from line strings
+  main.py:4066:        try:
+  main.py:4067:            open_parsed = parse_line_and_odds(r.get("open_line"))
+  main.py:4068:            cur_parsed = parse_line_and_odds(r.get("current_line"))
+  main.py:4069:
+  main.py:4070:            open_val = open_parsed.get("line_val")
+  main.py:4071:            cur_val = cur_parsed.get("line_val")
+  main.py:4072:        except Exception:
+  main.py:4092:        )
+  main.py:4093:
+  main.py:4094:
+> main.py:4095:        # High-bet side check (simple, safe)
+> main.py:4096:        is_high_bet_side = False
+  main.py:4097:        try:
+> main.py:4098:            is_high_bet_side = bets >= 50
+  main.py:4099:        except Exception:
+  main.py:4100:            pass
+  main.py:4101:
+  main.py:4102:        label = _classify_market_read(
+  main.py:4103:            D=D,
+> main.py:4104:            bets_pct=bets,
+  main.py:4105:            move_dir=move_dir,
+  main.py:4106:            meaningful_move=meaningful,
+> main.py:4107:            is_high_bet_side=is_high_bet_side
+  main.py:4108:        )
+  main.py:4109:
+  main.py:4110:        market_reads.append(label)
+  main.py:4111:
+  main.py:4112:        market_whys.append(
+> main.py:4113:            f"{label}: bets={bets:.1f}%, money={money:.1f}%, "
+  main.py:4114:            f"D={D:+.1f}, move_dir={move_dir}"
+  main.py:4115:            + (f", key={key_cross}" if key_cross else "")
+  main.py:4116:        )
+  main.py:4117:
+  main.py:4118:    joined["market_read"] = market_reads
+  main.py:4119:    joined["market_why"] = market_whys
+  main.py:4120:
+  main.py:4121:    print(
+  main.py:4122:        "[baseline_market_read_joined] market_read distribution:",
+  main.py:4123:        joined["market_read"].value_counts().to_dict()
+  main.py:4130:        # Deduplicate outcomes: keep latest logged outcome per signal
+  main.py:4131:    results_latest = (
+  main.py:4132:        results
+> main.py:4133:        .sort_values("logged_at_utc")
+> main.py:4134:        .groupby(["sport", "game_id", "market", "side"], as_index=False)
+  main.py:4135:        .tail(1)
+  main.py:4136:    )
+  main.py:4137:
+  main.py:4138:
+  main.py:4139:    # Join deduplicated outcomes
+  main.py:4140:    joined = joined.merge(
+  main.py:4141:        results_latest,
+  main.py:4142:        on=["sport", "game_id", "market", "side"],
+  main.py:4143:        how="left"
+  main.py:4144:    )
+  main.py:4149:
+  main.py:4150:    summary = (
+  main.py:4151:        decided
+> main.py:4152:        .groupby("market_read")
+  main.py:4153:        .agg(
+  main.py:4154:            n=("outcome", "count"),
+  main.py:4155:            wins=("outcome", lambda x: (x == "WIN").sum()),
+  main.py:4156:            losses=("outcome", lambda x: (x == "LOSS").sum()),
+  main.py:4157:            pushes=("outcome", lambda x: (x == "PUSH").sum()),
+  main.py:4158:        )
+  main.py:4159:        .reset_index()
+  main.py:4160:    )
+  main.py:4161:
+  main.py:4162:    summary["win_rate_ex_push"] = (
+  main.py:4164:    )
+  main.py:4165:
+  main.py:4166:    print("\n[baseline_market_read_joined] performance by Market Read:")
+> main.py:4167:    print(summary.sort_values("n", ascending=False))
+  main.py:4168:
+  main.py:4169:
+  main.py:4170:
+  main.py:4171:
+  main.py:4172:
+  main.py:4173:def cmd_baseline_market_read(args):
+  main.py:4174:    import pandas as pd
+  main.py:4175:
+  main.py:4176:    # Inputs (ledgers)
+  main.py:4177:    sig = pd.read_csv("data/signals_baseline.csv")
+  main.py:4215:        print("[baseline_market_read] market_read not in signals_baseline.csv (expected). Running COLOR/MARKET baseline summary instead.")
+  main.py:4216:
+  main.py:4217:    summary = (
+> main.py:4218:        df.groupby(["market", "color"], dropna=False)
+  main.py:4219:          .agg(
+  main.py:4220:              n=("outcome", "size"),
+  main.py:4221:              wins=("outcome", lambda x: (x == "WIN").sum()),
+  main.py:4222:              losses=("outcome", lambda x: (x == "LOSS").sum()),
+  main.py:4223:              pushes=("outcome", lambda x: (x == "PUSH").sum()),
+  main.py:4224:              unresolved=("outcome", lambda x: (x == "UNRESOLVED").sum()),
+  main.py:4225:          )
+  main.py:4226:          .reset_index()
+  main.py:4227:    )
+  main.py:4228:    summary["decided"] = summary["wins"] + summary["losses"] + summary["pushes"]
+  main.py:4238:
+  main.py:4239:
+  main.py:4240:    summary = (
+> main.py:4241:        df.groupby(["market_read", "market", "color"], dropna=False)
+  main.py:4242:          .agg(
+  main.py:4243:              n=("outcome", "size"),
+  main.py:4244:              wins=("outcome", lambda x: (x == "WIN").sum()),
+  main.py:4245:              losses=("outcome", lambda x: (x == "LOSS").sum()),
+  main.py:4246:              pushes=("outcome", lambda x: (x == "PUSH").sum()),
+  main.py:4247:              unresolved=("outcome", lambda x: (x == "UNRESOLVED").sum()),
+  main.py:4248:          )
+  main.py:4249:          .reset_index()
+  main.py:4250:    )
+  main.py:4251:    summary["decided"] = summary["wins"] + summary["losses"] + summary["pushes"]
+  main.py:4336:
+  main.py:4337:    minutes_to_start = (game_time - datetime.now(timezone.utc)).total_seconds() / 60
+  main.py:4338:
+> main.py:4339:    # only log once between 30 and 25 minutes pregame
+  main.py:4340:    if minutes_to_start > 30 or minutes_to_start < 25:
+  main.py:4341:        return
+  main.py:4342:
+  main.py:4343:
+  main.py:4344:
+  main.py:4345:    # --- model score snapshot for result tracking ---
+  main.py:4346:    model_score_val = row.get("score_num")
+  main.py:4347:    if model_score_val is None:
+  main.py:4348:        model_score_val = row.get("_score_num")
+  main.py:4349:    if model_score_val is None:
+  main.py:4508:
+  main.py:4509:    summary = (
+  main.py:4510:        df.dropna(subset=["result"])
+> main.py:4511:          .groupby("color")["result"]
+  main.py:4512:          .value_counts()
+  main.py:4513:          .unstack(fill_value=0)
+  main.py:4514:          .reset_index()
+  main.py:4515:    )
+  main.py:4516:
+  main.py:4517:    summary["total"] = summary.sum(axis=1, numeric_only=True)
+  main.py:4518:    if "WIN" in summary.columns:
+  main.py:4519:        summary["win_pct"] = (summary["WIN"] / summary["total"]).round(3)
+  main.py:4520:
+  main.py:4521:    summary.to_csv(out, index=False)
+
+

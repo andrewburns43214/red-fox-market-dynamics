@@ -1,0 +1,89 @@
+﻿=== main.py FUNCTION INDEX (line numbers) ===
+     15  def _load_open_registry() -> dict:
+     31  def _save_open_registry(reg: dict) -> None:
+     62  def _parse_iso_dt(s: str):
+     78  def compute_minutes_to_kickoff(row: dict):
+     96  def compute_timing_bucket(sport: str, minutes_to_kickoff):
+    140  def _split_game(game) -> tuple[str, str]:
+    171  def _norm_team(s: str) -> str:
+    261  def normalize_team_name(name: str) -> str:
+    266  def lookup_time_from_game(game: str, kickoff_map: dict[str, str]) -> str:
+    284  def espn_cfb_kickoff_map(games: list[str]) -> dict[str, str]:
+    352  def _norm_game_key(s: str) -> str:
+    389  def _espn_kickoff_map_date_range(scoreboard_url_base: str, games: list[str], days: int = 5) -> dict[str, str]:
+    398  def _safe(x):
+    401  def _norm_team(x: str) -> str:
+    420  def _split_game(g: str):
+    620  def get_espn_kickoff_map(sport: str, games: list[str]) -> dict[str, str]:
+    641  def _espn_finals_map_date_range(scoreboard_url_base: str, games: list[str], days: int = 5) -> dict[str, tuple[int, int]]:
+    650  def _safe(x):
+    653  def _norm_team(x: str) -> str:
+    659  def _split_game(g: str):
+    723  def get_espn_finals_map(sport: str, games: list[str]) -> dict[str, tuple[int, int]]:
+    738  def update_snapshots_with_espn_finals():
+    787  def _split_game(g: str):
+    807  def _norm(x: str) -> str:
+    859  def _metrics_now_iso_utc() -> str:
+    865  def _canonical_market_side_for_state(market: str, side: str, current_line: str):
+    927  def _metrics_blank(x) -> str:
+    939  def _metrics_float(x, default=None):
+    949  def _metrics_key(row) -> tuple[str, str, str, str]:
+    964  def _score_bucket(score: float) -> str:
+    982  def _load_row_state(path: str):
+   1030  def _append_signal_ledger(path: str, rows: list[dict]):
+   1084  def update_row_state_and_signal_ledger(latest):
+   1125  def _infer_market_from_line(v):
+   1431  def espn_nfl_kickoff_map(games: list[str]) -> dict[str, str]:
+   1434  def espn_nba_kickoff_map(games: list[str]) -> dict[str, str]:
+   1440  def _normalize_team_name(s: str) -> str:
+   1456  def _dk_game_to_espn_key(game: str) -> str:
+   1480  def _infer_market_from_side_line(side: str, current_line: str) -> str:
+   1536  def parse_line_and_odds(s: str):
+   1578  def _crossed_key(prev_line, now_line) -> str:
+   1592  def _toward_side_by_odds(open_odds, cur_odds) -> int:
+   1618  def _toward_side_by_spread(open_line, cur_line) -> int:
+   1639  def _toward_side_by_total(open_total, cur_total, side_label: str) -> int:
+   1664  def _toward_side_by_juice(open_odds, cur_odds) -> int:
+   1689  def _classify_market_read(D, bets_pct, move_dir, meaningful_move, is_high_bet_side):
+   1719  def add_market_read_to_latest(latest: pd.DataFrame) -> pd.DataFrame:
+   1856  def add_market_pair_checks(latest: pd.DataFrame) -> pd.DataFrame:
+   1988  def now_iso() -> str:
+   1992  def ensure_data_dir() -> None:
+   1996  def fetch_html(url: str) -> str:
+   2005  def pct_to_int(x: str) -> Optional[int]:
+   2017  def safe_text(el) -> str:
+   2025  def parse_splits_generic(html: str, sport: str, debug: bool = False) -> List[SideRow]:
+   2119  def classify_side(
+   2151  def parse_num(s: str) -> Optional[float]:
+   2200  def append_snapshot(rows, sport: str):
+   2239  def infer_market_type(side_txt: str, line_txt: str) -> str:
+   2258  def _color_rank(c):
+   2265  def build_dashboard():
+   2464  def _safe_parse(series):
+   2465  def _one(x):
+   2588  def _is_strong_eligible(row):
+   2908  def _timing_bucket_v11(m2k, is_game_day):
+   2949  def color_style(c: str) -> str:
+   3018  def _time_bucket(kick):
+   3178  def _game_decision(score, net_edge):
+   3314  def _time_cell(rr):
+   3463  def esc(x):
+   3589  def _blank(x):
+   3599  def _fmt_int(x):
+   3608  def _fmt_pct(x):
+   3617  def _fmt_num(x):
+   3629  def _fmt_score(x):
+   3644  def _decision(score, net_edge=None, sport=None, timing_bucket=None, strong_eligible=None):
+   3669  def _pretty_strong_elig(x):
+   3673  def _pretty_strong_block(x):
+   3687  def _strong_flags(row, market, pb_map=None):
+   3755  def cmd_snapshot(args):
+   3825  def cmd_report(_args):
+   3971  def cmd_movement(args):
+   3978  def cmd_baseline_market_read_joined(args):
+   4173  def cmd_baseline_market_read(args):
+   4262  def log_baseline_signal(row):
+   4277  def _get(r, c):
+   4402  def resolve_results_for_baseline():
+   4446  def main():
+   4486  def build_color_baseline_summary():

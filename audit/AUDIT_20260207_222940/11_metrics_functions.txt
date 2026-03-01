@@ -1,0 +1,15 @@
+﻿=== metrics_update.py FUNCTION INDEX (line numbers) ===
+     41  def _now_iso_utc() -> str:
+     45  def _dashboard_content_tick(dash):
+     52  def _blank(x) -> str:
+     58  def _f(x, default=None):
+     67  def _ensure_csv(path: str, cols: list[str]):
+     73  def _read_csv(path: str) -> pd.DataFrame:
+     78  def _append_rows(path: str, cols: list[str], rows: list[dict]):
+     87  def _score_bucket_from_score(score: float) -> str:
+     98  def _bucket_from_row(row: dict, m: str, score: float) -> str:
+    112  def _tick_from_row(row: dict) -> str:
+    120  def _extract_market_rows(dash: pd.DataFrame) -> list[dict]:
+    175  def _metrics_key(r: dict) -> tuple[str,str,str,str]:
+    178  def run(dashboard_csv: str, debug: bool = False) -> int:
+    307  def main():

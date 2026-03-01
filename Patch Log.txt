@@ -1,0 +1,137 @@
+@'
+PATCH LOG — STRONG WIRING SESSION 2026-02-27
+=============================================
+
+PATCH 0 — COMPLETE (commit c37baa9)
+File: main.py
+Fix: signal_ledger schema bug
+- Added missing comma after "score"
+- Removed duplicate "net_edge" 
+- Removed wrong-grain fields (game_confidence, game_decision)
+- Added "timing_bucket" to schema
+Anchor fixed: _append_signal_ledger cols list line ~1138
+
+PATCH 1 — COMPLETE (pending commit)
+File: main.py
+Fix: Added normalize_side_key() function at line 1027
+- TOTAL -> TOTAL_OVER / TOTAL_UNDER
+- SPREAD/ML -> TEAM: + normalize_team_name(team_only)
+- Inserted after _canonical_market_side_for_state()
+- Compile verified
+
+PATCHES REMAINING (in order):
+==============================
+
+PATCH 2 — Migration script (migrate_row_state.py)
+- Standalone script, not in main.py
+- Load row_state.csv
+- Apply normalize_side_key() to every row
+- Handle collisions: keep highest strong_streak / most recent last_ts
+- Write row_state_migration_collisions.csv log
+- Save upgraded row_state.csv
+- Script makes its own backup before writing
+
+PATCH 3 — Step A: Fix strong_streak gate
+- File: main.py
+- Anchor: strong_now = (str(bucket).strip().upper() == "STRONG_BET")
+- Replace with true precheck gate:
+  score >= 72, not LATE, not PUBLIC DRIFT, 
+  no cross-market contradiction, sport early blocks
+- Also write strong_precheck_now to state_map
+- Persistence mode: Grace-1 (30 min cadence)
+- NCAAB streak threshold: 3, all others: 2
+
+PATCH 4 — Step B: Wire sport constants into _is_strong_eligible()
+- File: main.py
+- Anchor: def _is_strong_eligible(
+- Wire: NCAAB_STRONG_MIN_PERSIST, NCAAB_STRONG_STABILITY_DELTA
+- Wire: NCAAB_EARLY_STRONG_BLOCK, NCAAB_LATE_STRONG_BLOCK
+- Wire: NCAAF_EARLY_INSTANT_STRONG_BLOCK, NCAAF_STRONG_STABILITY_DELTA
+- Wire: NCAAF_LATE_NEW_STRONG_BLOCK, PUBLIC_DRIFT_BLOCKS_STRONG
+- Stability deltas: NCAAB=2, all others=3
+
+PATCH 5 — Step C: Join strong_eligible into game_view + fix _game_decision()
+- File: main.py
+- THREE connected sub-patches done together:
+  1. Build elig_map from latest using normalize_side_key()
+  2. Join strong_eligible onto game_view using normalize_side_key() on favored_side
+  3. Add join-miss diagnostic counter
+  4. Fix _game_decision() to accept strong_eligible, return "STRONG_BET"
+- Anchors needed:
+  def _game_decision(score, net_edge):
+  game_view["game_decision"] = game_view.apply(
+  Line after _is_strong_eligible runs on latest
+- HIGHEST RISK PATCH
+
+PATCH 6 — Step D: Write strong_certified + block reasons to row_state
+- File: main.py
+- Anchor: state_map[k] = {
+- Add to upsert dict:
+  strong_certified: "1" or "0"
+  strong_block_reason_side: why side eligibility failed
+  strong_block_reason_game: why game certification failed
+  last_seen_run_id: current tick
+  strong_gap_break: "1" if continuity broken
+
+PATCH 7 — Step E: Retire _strong_flags()
+- File: main.py
+- Anchor: def _strong_flags(row, market, pb_map=None):
+- Wrap body with tombstone comment
+- Function is never called -- zero risk
+
+PATCH 8 — String normalization
+- Change "STRONG BET" -> "STRONG_BET" everywhere in decision logic
+- Anchors: all occurrences of return "STRONG BET"
+- Also update _decision() UI renderer
+- KPI metric key becomes: decision_STRONG_BET_win_rate
+
+LOCKED DECISIONS:
+=================
+- Decision label: "STRONG_BET" (underscore, not space)
+- Persistence mode: Grace-1 (one missed tick allowed before streak resets)
+- Gap mode: Grace-1
+- Streak thresholds: standard=2, NCAAB=3
+- Stability deltas: standard peak-3, NCAAB peak-2
+- STRONG rarity target: 5-10% of BETs (acceptance test)
+- row_key format: sport|game_id|market|side_key_norm
+- TOTAL keys: TOTAL_OVER / TOTAL_UNDER (concept not line value)
+- TEAM keys: TEAM: prefix + normalize_team_name() output
+- Collision resolution: keep highest strong_streak, then most recent last_ts
+- normalize_side_key() is THE ONLY key function -- never raw strings
+
+KNOWN BUGS FIXED THIS SESSION:
+===============================
+- signal_ledger missing comma (net_edge concatenated with favored_side)
+- signal_ledger had duplicate net_edge column
+- signal_ledger had wrong-grain fields (game_confidence, game_decision)
+
+KNOWN BUGS NOT YET FIXED:
+==========================
+- _game_decision() hard ceiling is "BET" -- STRONG_BET never returned (fixed in Patch 5)
+- strong_streak gates on raw score bucket not true eligibility (fixed in Patch 3)
+- _strong_flags() dead code wrong data shape (retired in Patch 7)
+- strong_precheck_now / strong_certified / strong_block_reasons never written to row_state (Patch 6)
+- Sport dampener constants defined but never referenced (Patch 4)
+- strong_eligible computed in _is_strong_eligible() but never joined to game_view (Patch 5)
+
+BACKUPS CREATED THIS SESSION:
+==============================
+data/backups/premigration_20260227_234340/
+  - decision_freeze_ledger.csv (83919 bytes)
+  - row_state.csv (344722 bytes)  
+  - signal_ledger.csv (208404 bytes)
+bak/main.py.PATCH0_PRELIM_20260227_235602.ps1safe.py
+bak/main.py.PATCH1_PRELIM_20260227_235857.ps1safe.py
+
+ENVIRONMENT:
+============
+- Windows PowerShell, venv at .venv
+- Project root: C:\Users\Andrew\Desktop\Project
+- Python script approach works (PowerShell heredoc does NOT work)
+- Use: @'...'@ | Set-Content script.py then python script.py
+- Always backup before each patch
+- Always anchor-search before patching
+- Always py_compile + report after patching
+'@ | Set-Content "PATCH_LOG_20260227.txt" -Encoding UTF8
+
+Write-Host "Patch log saved"

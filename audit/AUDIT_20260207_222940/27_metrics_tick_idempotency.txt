@@ -1,0 +1,280 @@
+﻿=== metrics_update.py tick/idempotency (metrics_update.py) ===
+
+> metrics\metrics_update.py:1:dashboard_tick = ""
+  metrics\metrics_update.py:2:
+  metrics\metrics_update.py:3:import argparse
+  metrics\metrics_update.py:4:import csv
+  metrics\metrics_update.py:5:import os
+  metrics\metrics_update.py:6:import datetime as dt
+> metrics\metrics_update.py:7:import hashlib
+> metrics\metrics_update.py:8:import json
+  metrics\metrics_update.py:9:
+  metrics\metrics_update.py:10:try:
+  metrics\metrics_update.py:11:    import pandas as pd
+  metrics\metrics_update.py:12:except Exception as e:
+  metrics\metrics_update.py:13:    raise SystemExit(f"[FATAL] pandas required for metrics_update.py: {e}")
+  metrics\metrics_update.py:14:
+  metrics\metrics_update.py:15:LOGIC_VERSION = "v1.1"
+  metrics\metrics_update.py:16:
+  metrics\metrics_update.py:17:THRESH_LEAN = 60.0
+  metrics\metrics_update.py:18:THRESH_BET = 68.0
+  metrics\metrics_update.py:24:ROW_STATE_COLS = [
+  metrics\metrics_update.py:25:    "sport","game_id","market","side",
+  metrics\metrics_update.py:26:    "logic_version",
+> metrics\metrics_update.py:27:    "last_score","last_ts","last_bucket","last_bucket_ts",
+  metrics\metrics_update.py:28:    "peak_score","peak_ts",
+  metrics\metrics_update.py:29:    "last_net_edge","last_net_edge_ts",
+> metrics\metrics_update.py:30:    "last_seen_tick"
+  metrics\metrics_update.py:31:]
+  metrics\metrics_update.py:32:
+  metrics\metrics_update.py:33:LEDGER_COLS = [
+  metrics\metrics_update.py:34:    "ts_utc","logic_version","event","from_bucket","to_bucket",
+  metrics\metrics_update.py:35:    "sport","game_id","market","side",
+> metrics\metrics_update.py:36:    "game","current_line","current_odds","bets_pct","money_pct","score","net_edge","timing_bucket","tick"
+  metrics\metrics_update.py:37:]
+  metrics\metrics_update.py:38:
+  metrics\metrics_update.py:39:RANK = {"": 0, "NO BET": 0, "NO_BET": 0, "LEAN": 1, "BET": 2, "STRONG_BET": 3, "STRONG": 3}
+  metrics\metrics_update.py:40:
+  metrics\metrics_update.py:41:def _now_iso_utc() -> str:
+  metrics\metrics_update.py:42:    return dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+  metrics\metrics_update.py:43:
+  metrics\metrics_update.py:44:
+> metrics\metrics_update.py:45:def _dashboard_content_tick(dash):
+  metrics\metrics_update.py:46:    cols = sorted(dash.columns.tolist())
+  metrics\metrics_update.py:47:    payload = dash[cols].to_dict(orient="records")
+> metrics\metrics_update.py:48:    raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+> metrics\metrics_update.py:49:    h = hashlib.sha256(raw).hexdigest()[:16]
+  metrics\metrics_update.py:50:    return f"dash_{h}"
+  metrics\metrics_update.py:51:
+  metrics\metrics_update.py:52:def _blank(x) -> str:
+  metrics\metrics_update.py:53:    if x is None:
+  metrics\metrics_update.py:54:        return ""
+  metrics\metrics_update.py:55:    s = str(x)
+  metrics\metrics_update.py:56:    return "" if s.strip() == "" or s.strip().lower() in ("nan","none") else s.strip()
+  metrics\metrics_update.py:57:
+  metrics\metrics_update.py:58:def _f(x, default=None):
+  metrics\metrics_update.py:59:    try:
+  metrics\metrics_update.py:75:        return pd.DataFrame()
+  metrics\metrics_update.py:76:    return pd.read_csv(path, keep_default_na=False, dtype=str)
+  metrics\metrics_update.py:77:
+> metrics\metrics_update.py:78:def _append_rows(path: str, cols: list[str], rows: list[dict]):
+  metrics\metrics_update.py:79:    if not rows:
+  metrics\metrics_update.py:80:        return
+  metrics\metrics_update.py:81:    _ensure_csv(path, cols)
+  metrics\metrics_update.py:82:    with open(path, "a", newline="", encoding="utf-8") as f:
+  metrics\metrics_update.py:83:        w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
+  metrics\metrics_update.py:84:        for r in rows:
+  metrics\metrics_update.py:85:            w.writerow({c: _blank(r.get(c, "")) for c in cols})
+  metrics\metrics_update.py:86:
+> metrics\metrics_update.py:87:def _score_bucket_from_score(score: float) -> str:
+  metrics\metrics_update.py:88:    if score is None:
+  metrics\metrics_update.py:89:        return "NO BET"
+  metrics\metrics_update.py:90:    if score >= THRESH_STRONG:
+  metrics\metrics_update.py:91:        return "STRONG_BET"
+  metrics\metrics_update.py:92:    if score >= THRESH_BET:
+  metrics\metrics_update.py:93:        return "BET"
+  metrics\metrics_update.py:94:    if score >= THRESH_LEAN:
+  metrics\metrics_update.py:95:        return "LEAN"
+  metrics\metrics_update.py:96:    return "NO BET"
+  metrics\metrics_update.py:97:
+> metrics\metrics_update.py:98:def _bucket_from_row(row: dict, m: str, score: float) -> str:
+  metrics\metrics_update.py:99:    # Prefer the dashboard’s own decision/bucket fields if present (do NOT recompute if available)
+  metrics\metrics_update.py:100:    for key in (f"{m}_decision", f"{m}_bucket", f"{m}_score_bucket", f"{m}_label", "decision", "bucket"):
+  metrics\metrics_update.py:101:        v = _blank(row.get(key, ""))
+  metrics\metrics_update.py:102:        if v != "":
+  metrics\metrics_update.py:103:            v2 = v.upper().replace("_", " ")
+  metrics\metrics_update.py:104:            # normalize common forms
+  metrics\metrics_update.py:105:            if v2 in ("NO BET","NO_BET"): return "NO BET"
+  metrics\metrics_update.py:106:            if v2 in ("LEAN",): return "LEAN"
+  metrics\metrics_update.py:107:            if v2 in ("BET",): return "BET"
+  metrics\metrics_update.py:108:            if v2 in ("STRONG BET","STRONG_BET","STRONG"): return "STRONG_BET"
+  metrics\metrics_update.py:109:    # Fallback: compute from score only (used only if dashboard doesn't provide decision)
+> metrics\metrics_update.py:110:    return _score_bucket_from_score(score)
+  metrics\metrics_update.py:111:
+> metrics\metrics_update.py:112:def _tick_from_row(row: dict) -> str:
+  metrics\metrics_update.py:113:    # Prefer stable run/snapshot identifiers if present
+  metrics\metrics_update.py:114:    for k in ("snapshot_id","run_id","run_ts","snapshot_ts","ts","generated_ts"):
+  metrics\metrics_update.py:115:        v = _blank(row.get(k, ""))
+  metrics\metrics_update.py:116:        if v != "":
+  metrics\metrics_update.py:117:            return v
+> metrics\metrics_update.py:118:    return ""  # defer to dashboard-level tick
+  metrics\metrics_update.py:119:
+  metrics\metrics_update.py:120:def _extract_market_rows(dash: pd.DataFrame) -> list[dict]:
+  metrics\metrics_update.py:121:    # We expect a game-level dashboard with per-market columns like:
+  metrics\metrics_update.py:122:    # SPREAD_model_score, SPREAD_side, SPREAD_current_line, SPREAD_current_odds, SPREAD_bets_pct, SPREAD_money_pct, SPREAD_net_edge, etc.
+  metrics\metrics_update.py:123:    markets = []
+  metrics\metrics_update.py:124:    for m in ("SPREAD","TOTAL","MONEYLINE"):
+  metrics\metrics_update.py:125:        if f"{m}_model_score" in dash.columns or f"{m}_score" in dash.columns:
+> metrics\metrics_update.py:126:            markets.append(m)
+  metrics\metrics_update.py:127:
+  metrics\metrics_update.py:128:    out = []
+  metrics\metrics_update.py:129:    for _, rr in dash.iterrows():
+  metrics\metrics_update.py:130:        row = rr.to_dict()
+  metrics\metrics_update.py:131:        sport = _blank(row.get("sport","")).upper()
+  metrics\metrics_update.py:132:        game_id = _blank(row.get("game_id",""))
+  metrics\metrics_update.py:133:        game = _blank(row.get("game",""))
+  metrics\metrics_update.py:134:        timing_bucket = _blank(row.get("timing_bucket","")).upper()
+> metrics\metrics_update.py:135:        tick = dashboard_tick
+  metrics\metrics_update.py:136:
+  metrics\metrics_update.py:137:        # If sport/game_id absent, skip — metrics keys must be stable
+  metrics\metrics_update.py:138:        if sport == "" or game_id == "":
+  metrics\metrics_update.py:139:            continue
+  metrics\metrics_update.py:140:
+  metrics\metrics_update.py:141:        for m in markets:
+  metrics\metrics_update.py:142:            score = _f(row.get(f"{m}_model_score", row.get(f"{m}_score","")), default=None)
+  metrics\metrics_update.py:143:            side = _blank(row.get(f"{m}_side",""))
+  metrics\metrics_update.py:144:            if side == "":
+  metrics\metrics_update.py:145:                # if this dashboard is game-level and doesn’t include side, we cannot key state reliably
+  metrics\metrics_update.py:153:            # net_edge: prefer per-market, else fall back to global net_edge
+  metrics\metrics_update.py:154:            net_edge = _f(row.get(f"{m}_net_edge", row.get("net_edge","")), default=0.0)
+  metrics\metrics_update.py:155:
+> metrics\metrics_update.py:156:            bucket = _bucket_from_row(row, m, score)
+> metrics\metrics_update.py:157:            out.append({
+  metrics\metrics_update.py:158:                "sport": sport,
+  metrics\metrics_update.py:159:                "game_id": game_id,
+  metrics\metrics_update.py:160:                "market": m,
+  metrics\metrics_update.py:161:                "side": side,
+  metrics\metrics_update.py:162:                "game": game,
+  metrics\metrics_update.py:163:                "timing_bucket": timing_bucket,
+> metrics\metrics_update.py:164:                "tick": tick,
+  metrics\metrics_update.py:165:                "score": "" if score is None else f"{score:.2f}",
+  metrics\metrics_update.py:166:                "bucket": bucket,
+  metrics\metrics_update.py:167:                "net_edge": f"{(net_edge or 0.0):.2f}",
+  metrics\metrics_update.py:168:                "current_line": current_line,
+  metrics\metrics_update.py:169:                "current_odds": current_odds,
+  metrics\metrics_update.py:170:                "bets_pct": bets_pct,
+  metrics\metrics_update.py:171:                "money_pct": money_pct,
+  metrics\metrics_update.py:172:            })
+  metrics\metrics_update.py:173:    return out
+  metrics\metrics_update.py:174:
+  metrics\metrics_update.py:180:    _ensure_csv(SIGNAL_LEDGER_PATH, LEDGER_COLS)
+  metrics\metrics_update.py:181:
+  metrics\metrics_update.py:182:    dash = pd.read_csv(dashboard_csv, keep_default_na=False, dtype=str)
+> metrics\metrics_update.py:183:    dashboard_tick = _dashboard_content_tick(dash)
+  metrics\metrics_update.py:184:    if dash.empty:
+  metrics\metrics_update.py:185:        print("[metrics] dashboard empty; nothing to do")
+  metrics\metrics_update.py:186:        return 0
+  metrics\metrics_update.py:187:
+  metrics\metrics_update.py:188:    rows = _extract_market_rows(dash)
+  metrics\metrics_update.py:189:    if debug:
+  metrics\metrics_update.py:190:        print(f"[metrics] extracted per-market rows: {len(rows)}")
+  metrics\metrics_update.py:191:
+  metrics\metrics_update.py:192:    if not rows:
+  metrics\metrics_update.py:193:        print("[metrics] no per-market rows extracted (missing *_side or *_model_score cols?)")
+  metrics\metrics_update.py:198:        state_df = pd.DataFrame(columns=ROW_STATE_COLS)
+  metrics\metrics_update.py:199:
+  metrics\metrics_update.py:200:    # index existing state by stable key
+> metrics\metrics_update.py:201:    state_idx = {}
+  metrics\metrics_update.py:202:    for _, r in state_df.iterrows():
+  metrics\metrics_update.py:203:        key = (_blank(r.get("sport","")).upper(), _blank(r.get("game_id","")), _blank(r.get("market","")), _blank(r.get("side","")))
+  metrics\metrics_update.py:204:        if key[0] and key[1] and key[2] and key[3]:
+> metrics\metrics_update.py:205:            state_idx[key] = r.to_dict()
+  metrics\metrics_update.py:206:
+  metrics\metrics_update.py:207:    now_ts = _now_iso_utc()
+  metrics\metrics_update.py:208:    new_state_rows = []
+  metrics\metrics_update.py:209:    ledger_rows = []
+  metrics\metrics_update.py:210:
+  metrics\metrics_update.py:211:    for r in rows:
+  metrics\metrics_update.py:212:        key = _metrics_key(r)
+> metrics\metrics_update.py:213:        prev = state_idx.get(key, {})
+  metrics\metrics_update.py:214:
+> metrics\metrics_update.py:215:        tick = _blank(r.get("tick",""))
+> metrics\metrics_update.py:216:        prev_tick = _blank(prev.get("last_seen_tick",""))
+> metrics\metrics_update.py:217:        if tick != "" and prev_tick != "" and tick == prev_tick:
+> metrics\metrics_update.py:218:            # idempotent on repeated runs for same snapshot tick
+  metrics\metrics_update.py:219:            continue
+  metrics\metrics_update.py:220:
+  metrics\metrics_update.py:221:        score = _f(r.get("score",""), default=None)
+  metrics\metrics_update.py:222:        net_edge = _f(r.get("net_edge",""), default=0.0)
+  metrics\metrics_update.py:223:        bucket = _blank(r.get("bucket","")) or "NO BET"
+  metrics\metrics_update.py:224:
+  metrics\metrics_update.py:225:        prev_bucket = _blank(prev.get("last_bucket","")) or "NO BET"
+  metrics\metrics_update.py:226:        prev_rank = RANK.get(prev_bucket.replace(" ", "_"), RANK.get(prev_bucket, 0))
+  metrics\metrics_update.py:227:        cur_rank = RANK.get(bucket.replace(" ", "_"), RANK.get(bucket, 0))
+  metrics\metrics_update.py:228:
+  metrics\metrics_update.py:229:        prev_peak = _f(prev.get("peak_score",""), default=None)
+> metrics\metrics_update.py:230:        is_new_peak = (score is not None) and (prev_peak is None or score > prev_peak)
+  metrics\metrics_update.py:231:
+  metrics\metrics_update.py:232:        # crossing events: only upward into LEAN/BET/STRONG_BET
+  metrics\metrics_update.py:233:        if cur_rank > prev_rank and bucket in ("LEAN","BET","STRONG_BET"):
+> metrics\metrics_update.py:234:            ledger_rows.append({
+  metrics\metrics_update.py:235:                "ts_utc": now_ts,
+  metrics\metrics_update.py:236:                "logic_version": LOGIC_VERSION,
+> metrics\metrics_update.py:237:                "event": "BUCKET_UP",
+  metrics\metrics_update.py:238:                "from_bucket": prev_bucket,
+  metrics\metrics_update.py:239:                "to_bucket": bucket,
+  metrics\metrics_update.py:240:                "sport": r["sport"],
+  metrics\metrics_update.py:241:                "game_id": r["game_id"],
+  metrics\metrics_update.py:242:                "market": r["market"],
+  metrics\metrics_update.py:243:                "side": r["side"],
+  metrics\metrics_update.py:244:                "game": r.get("game",""),
+  metrics\metrics_update.py:245:                "current_line": r.get("current_line",""),
+  metrics\metrics_update.py:246:                "current_odds": r.get("current_odds",""),
+  metrics\metrics_update.py:247:                "bets_pct": r.get("bets_pct",""),
+  metrics\metrics_update.py:249:                "score": r.get("score",""),
+  metrics\metrics_update.py:250:                "net_edge": r.get("net_edge",""),
+  metrics\metrics_update.py:251:                "timing_bucket": r.get("timing_bucket",""),
+> metrics\metrics_update.py:252:                "tick": tick
+  metrics\metrics_update.py:253:            })
+  metrics\metrics_update.py:254:
+> metrics\metrics_update.py:255:        if is_new_peak:
+> metrics\metrics_update.py:256:            ledger_rows.append({
+  metrics\metrics_update.py:257:                "ts_utc": now_ts,
+  metrics\metrics_update.py:258:                "logic_version": LOGIC_VERSION,
+> metrics\metrics_update.py:259:                "event": "NEW_PEAK",
+  metrics\metrics_update.py:260:                "from_bucket": "",
+  metrics\metrics_update.py:261:                "to_bucket": bucket,
+  metrics\metrics_update.py:262:                "sport": r["sport"],
+  metrics\metrics_update.py:263:                "game_id": r["game_id"],
+  metrics\metrics_update.py:264:                "market": r["market"],
+  metrics\metrics_update.py:265:                "side": r["side"],
+  metrics\metrics_update.py:266:                "game": r.get("game",""),
+  metrics\metrics_update.py:267:                "current_line": r.get("current_line",""),
+  metrics\metrics_update.py:268:                "current_odds": r.get("current_odds",""),
+  metrics\metrics_update.py:269:                "bets_pct": r.get("bets_pct",""),
+  metrics\metrics_update.py:271:                "score": r.get("score",""),
+  metrics\metrics_update.py:272:                "net_edge": r.get("net_edge",""),
+  metrics\metrics_update.py:273:                "timing_bucket": r.get("timing_bucket",""),
+> metrics\metrics_update.py:274:                "tick": tick
+  metrics\metrics_update.py:275:            })
+  metrics\metrics_update.py:276:
+  metrics\metrics_update.py:277:        out = dict(prev) if prev else {c:"" for c in ROW_STATE_COLS}
+  metrics\metrics_update.py:278:        out.update({
+  metrics\metrics_update.py:279:            "sport": r["sport"],
+  metrics\metrics_update.py:280:            "game_id": r["game_id"],
+  metrics\metrics_update.py:281:            "market": r["market"],
+  metrics\metrics_update.py:282:            "side": r["side"],
+  metrics\metrics_update.py:283:            "logic_version": LOGIC_VERSION,
+  metrics\metrics_update.py:284:            "last_score": "" if score is None else f"{score:.2f}",
+  metrics\metrics_update.py:285:            "last_ts": now_ts,
+  metrics\metrics_update.py:286:            "last_bucket": bucket,
+> metrics\metrics_update.py:287:            "last_bucket_ts": now_ts,
+  metrics\metrics_update.py:288:            "last_net_edge": f"{(net_edge or 0.0):.2f}",
+  metrics\metrics_update.py:289:            "last_net_edge_ts": now_ts,
+> metrics\metrics_update.py:290:            "last_seen_tick": tick or now_ts
+  metrics\metrics_update.py:291:        })
+  metrics\metrics_update.py:292:
+> metrics\metrics_update.py:293:        if is_new_peak:
+  metrics\metrics_update.py:294:            out["peak_score"] = f"{score:.2f}"
+  metrics\metrics_update.py:295:            out["peak_ts"] = now_ts
+  metrics\metrics_update.py:296:
+> metrics\metrics_update.py:297:        new_state_rows.append(out)
+> metrics\metrics_update.py:298:        state_idx[key] = out
+  metrics\metrics_update.py:299:
+> metrics\metrics_update.py:300:    # Write outputs (append-only)
+> metrics\metrics_update.py:301:    _append_rows(ROW_STATE_PATH, ROW_STATE_COLS, new_state_rows)
+> metrics\metrics_update.py:302:    _append_rows(SIGNAL_LEDGER_PATH, LEDGER_COLS, ledger_rows)
+  metrics\metrics_update.py:303:
+> metrics\metrics_update.py:304:    print(f"[metrics] row_state appended={len(new_state_rows)} ledger_appended={len(ledger_rows)}")
+  metrics\metrics_update.py:305:    return 0
+  metrics\metrics_update.py:306:
+  metrics\metrics_update.py:307:def main():
+  metrics\metrics_update.py:308:    ap = argparse.ArgumentParser()
+  metrics\metrics_update.py:309:    ap.add_argument("--dashboard", default="data/dashboard.csv")
+  metrics\metrics_update.py:310:    ap.add_argument("--debug", action="store_true")
+  metrics\metrics_update.py:311:    args = ap.parse_args()
+  metrics\metrics_update.py:312:
+  metrics\metrics_update.py:313:    try:
+  metrics\metrics_update.py:314:        raise SystemExit(run(args.dashboard, debug=args.debug))
+
+

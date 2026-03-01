@@ -1,0 +1,10 @@
+﻿import pandas as pd
+df = pd.read_csv("data/dashboard.csv", keep_default_na=False)
+print("ROWS:", len(df))
+print("COLS:", len(df.columns))
+cols = list(df.columns)
+print("HAS SPREAD_model_score:", "SPREAD_model_score" in cols)
+print("HAS TOTAL_model_score:", "TOTAL_model_score" in cols)
+print("HAS MONEYLINE_model_score:", "MONEYLINE_model_score" in cols)
+print("HEAD COLS:", cols[:35])
+print("SAMPLE ROW KEYS:", df.iloc[0].to_dict().keys() if len(df) else "EMPTY")
