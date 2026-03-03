@@ -70,6 +70,12 @@ def fetch_rendered_html(url: str, timeout: int = 180) -> str:
         opts.add_argument("--disable-default-apps")
         opts.add_argument("--js-flags=--max-old-space-size=256")
         opts.add_argument("--window-size=1400,900")
+        opts.add_argument("--blink-settings=imagesEnabled=false")
+        opts.page_load_strategy = "eager"
+
+        # Block fonts, stylesheets, images via DevTools
+        prefs = {"profile.managed_default_content_settings.images": 2}
+        opts.add_experimental_option("prefs", prefs)
 
         driver = webdriver.Chrome(options=opts)
         try:

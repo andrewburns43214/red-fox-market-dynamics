@@ -20,7 +20,18 @@ PY="/opt/red-fox-market-dynamics/.venv/bin/python"
 
 echo "===== $(date) RUN START =====" >> "$LOG"
 
-for SPORT in nfl nba mlb nhl ncaaf ncaab ufc; do
+# Auto-detect active sports by month (skips off-season, no preseason)
+MONTH=$(date +%-m)
+SPORTS="nba nhl ncaab ufc"
+# NFL regular season: Sep-Feb
+if [ "$MONTH" -ge 9 ] || [ "$MONTH" -le 2 ]; then SPORTS="nfl $SPORTS"; fi
+# NCAAF: Sep-Jan
+if [ "$MONTH" -ge 9 ] || [ "$MONTH" -le 1 ]; then SPORTS="ncaaf $SPORTS"; fi
+# MLB regular season: Apr-Oct
+if [ "$MONTH" -ge 4 ] && [ "$MONTH" -le 10 ]; then SPORTS="mlb $SPORTS"; fi
+
+echo "--- active sports: $SPORTS ---" >> "$LOG"
+for SPORT in $SPORTS; do
   echo "--- $(date) snapshot --sport $SPORT ---" >> "$LOG"
   if "$PY" main.py snapshot --sport "$SPORT" >> "$LOG" 2>&1;
   then
@@ -28,13 +39,12 @@ for SPORT in nfl nba mlb nhl ncaaf ncaab ufc; do
   else
     echo "--- $(date) snapshot ERROR --sport $SPORT (continuing) ---" >> "$LOG"
   fi
-  sleep 10
+  sleep 3
 done
 
 echo "--- $(date) report ---" >> "$LOG"
 "$PY" main.py report >> "$LOG" 2>&1
 
-# publish
-cp -f data/dashboard.html /var/www/redfox/index.html >> "$LOG" 2>&1
+# publish (nginx serves directly from project dir)
 
 echo "===== $(date) RUN END =====" >> "$LOG"
