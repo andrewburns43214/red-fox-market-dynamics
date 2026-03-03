@@ -697,6 +697,49 @@ td { padding: 6px 10px; font-size: 12px; white-space: nowrap; vertical-align: mi
   font-family: var(--sans); font-style: italic;
 }
 
+/* ─── DRILLDOWN MODAL ─── */
+.drill-overlay {
+  display: none; position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(2px);
+  align-items: center; justify-content: center;
+}
+.drill-overlay.open { display: flex; animation: fadeUp .15s ease both; }
+.drill-modal {
+  background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius2);
+  width: 94vw; max-width: 1200px; max-height: 82vh; display: flex; flex-direction: column;
+  box-shadow: 0 8px 30px rgba(0,0,0,.25);
+}
+.drill-hdr {
+  display: flex; align-items: center; padding: 12px 16px; gap: 10px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.drill-title { flex: 1; font-family: var(--sans); font-size: 13px; font-weight: 700; color: var(--text); }
+.drill-btn {
+  background: var(--surface2); border: 1px solid var(--border2); border-radius: 4px;
+  color: var(--text2); font-size: 10px; font-weight: 600; padding: 4px 10px;
+  cursor: pointer; font-family: var(--sans);
+}
+.drill-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.drill-close {
+  background: none; border: none; color: var(--text3); font-size: 18px;
+  cursor: pointer; padding: 2px 6px; line-height: 1;
+}
+.drill-close:hover { color: var(--red); }
+.drill-body { overflow: auto; flex: 1; }
+.drill-tbl {
+  width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 10px;
+}
+.drill-tbl th {
+  position: sticky; top: 0; background: var(--bg4); z-index: 2;
+  font-size: 8px; font-weight: 700; text-transform: uppercase; color: var(--text4);
+  padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.drill-tbl td { padding: 5px 8px; border-bottom: 1px solid rgba(0,0,0,.04); vertical-align: middle; white-space: nowrap; }
+.drill-tbl tr:hover td { background: rgba(0,0,0,.02); }
+.stat-tbl tbody tr { cursor: pointer; }
+.stat-tbl tbody tr:hover td { background: rgba(0,0,0,.03); }
+
 /* ─── PANEL ─── */
 .panel {
   background: var(--bg3);
@@ -962,6 +1005,20 @@ th.th-game { text-align: left; }
     </div>
   </div>
 
+  <!-- DRILLDOWN MODAL -->
+  <div class="drill-overlay" id="drill-overlay" onclick="if(event.target===this)closeDrill()">
+    <div class="drill-modal">
+      <div class="drill-hdr">
+        <div class="drill-title" id="drill-title"></div>
+        <button class="drill-btn" id="drill-export" onclick="exportDrillCSV()">&#8681; CSV</button>
+        <button class="drill-close" onclick="closeDrill()">&times;</button>
+      </div>
+      <div class="drill-body">
+        <table class="drill-tbl" id="drill-tbl"></table>
+      </div>
+    </div>
+  </div>
+
   <!-- RESULTS -->
   <div class="tab-content" id="tab-results">
     <div class="full-tab">
@@ -1221,6 +1278,83 @@ const EDGE_BUCKETS = [
 ];
 const DECISION_ORDER = ['STRONG_BET','BET','LEAN','NO BET'];
 
+// ── Drilldown Modal ──
+let _drillRows = [];
+let _drillTitle = '';
+
+function confBucket(c) {
+  const v = parseFloat(c);
+  if (isNaN(v)) return '—';
+  for (const b of CONF_BUCKETS) { if (v >= b.min && v <= b.max) return b.label; }
+  return '—';
+}
+
+function openDrill(title, rows) {
+  _drillTitle = title;
+  _drillRows = rows;
+  const w = rows.filter(isWin).length, l = rows.length - w;
+  const wr = rows.length ? (100*w/rows.length).toFixed(1) : '—';
+  document.getElementById('drill-title').textContent = title + '  —  ' + w + 'W ' + l + 'L (' + wr + '%)';
+  const tbl = document.getElementById('drill-tbl');
+  let h = '<thead><tr>';
+  ['Date','Sport','Game','Market','Side','Line','Conf','Edge','Bucket','Timing','Mkt Read','Reg','Decision','Final','Result'].forEach(c => h += '<th>'+c+'</th>');
+  h += '</tr></thead><tbody>';
+  rows.sort((a,b) => new Date(b.resolved_at_utc||0) - new Date(a.resolved_at_utc||0)).forEach((r,i) => {
+    const bg = i%2===0 ? '' : 'background:rgba(0,0,0,.02);';
+    const dt = r.resolved_at_utc ? new Date(r.resolved_at_utc).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',timeZone:'America/New_York'}) : '--';
+    const dec = (r.game_decision||'').replace(/_/g,' ');
+    const decBadge = dec.toUpperCase().includes('STRONG') ? '<span class="decision dec-bet dec-strong">Strong Bet</span>' :
+      dec==='BET' ? '<span class="decision dec-bet">Bet</span>' :
+      dec==='LEAN' ? '<span class="decision dec-lean">Lean</span>' : '<span class="decision dec-no">'+dec+'</span>';
+    const win = (r.result||'').toUpperCase()==='WIN';
+    const res = win ? '<span style="color:#00965a;font-weight:800">WIN</span>' : '<span style="color:#d63020;font-weight:800">LOSS</span>';
+    const mrVal = (r.market_read||'').trim();
+    const mrBdg = mrVal ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#eef6ff;color:#2266aa;border:1px solid #c8ddf8">'+mrVal+'</span>' : '';
+    const tb = (r.timing_bucket||'').trim();
+    const tbBdg = tb ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:'+(tb==='EARLY'?'#e8f5e9':tb==='LIVE'?'#fff3e0':'#e3f2fd')+';color:'+(tb==='EARLY'?'#2e7d32':tb==='LIVE'?'#e65100':'#1565c0')+'">'+tb+'</span>' : '';
+    const sc1 = r.team1_score, sc2 = r.team2_score;
+    const final = (sc1!==undefined && sc1!=='') ? sc1+'–'+sc2 : '--';
+    h += '<tr style="'+bg+'"><td>'+dt+'</td><td>'+spChip(r.sport||'')+'</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">'+(r.game||r.side||'--')+'</td>';
+    h += '<td><span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#eef2ff;color:#2255cc">'+(r.market_display||'--')+'</span></td>';
+    h += '<td>'+(r.favored_side||r.side||'--')+'</td>';
+    h += '<td>'+(r.current_line||'--')+'</td>';
+    h += '<td style="font-weight:700">'+(r.game_confidence?Number(r.game_confidence).toFixed(1):'--')+'</td>';
+    h += '<td>'+(r.net_edge?Number(r.net_edge).toFixed(1):'--')+'</td>';
+    h += '<td>'+confBucket(r.game_confidence)+'</td>';
+    h += '<td>'+tbBdg+'</td><td>'+mrBdg+'</td>';
+    h += '<td style="font-weight:700">'+(r.regime||r._regime||'--')+'</td>';
+    h += '<td>'+decBadge+'</td><td style="font-weight:700">'+final+'</td><td>'+res+'</td></tr>';
+  });
+  h += '</tbody>';
+  tbl.innerHTML = h;
+  document.getElementById('drill-overlay').classList.add('open');
+}
+
+function closeDrill() {
+  document.getElementById('drill-overlay').classList.remove('open');
+}
+
+function exportDrillCSV() {
+  if (!_drillRows.length) return;
+  const cols = ['resolved_at_utc','sport','game','market_display','favored_side','current_line','game_confidence','net_edge','timing_bucket','market_read','regime','game_decision','team1','team1_score','team2','team2_score','result'];
+  let csv = cols.join(',') + '\n';
+  _drillRows.forEach(r => {
+    csv += cols.map(c => {
+      let v = (r[c]===undefined||r[c]===null) ? '' : String(r[c]);
+      if (v.includes(',') || v.includes('"')) v = '"'+v.replace(/"/g,'""')+'"';
+      return v;
+    }).join(',') + '\n';
+  });
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'redfox_' + _drillTitle.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/_+$/,'') + '.csv';
+  a.click();
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrill(); });
+
 function buildKPIs(){
   const graded = gradedRows(allResults);
   const sbRows = graded.filter(isHighConf);
@@ -1249,16 +1383,22 @@ function buildKPIs(){
   }
 
   // ── Build stat-table HTML ──
+  // Stash for drilldown row data
+  if (!window._drillStash) window._drillStash = [];
+  window._drillStash = [];
+
   function statPanel(el, title, rows) {
     let html = `<div class="panel-h"><span class="panel-t">${title}</span><span class="panel-m">${graded.length} graded</span></div>`;
     html += '<table class="stat-tbl"><thead><tr><th>Category</th><th></th><th>Win %</th><th>Record</th><th>N</th></tr></thead><tbody>';
     rows.forEach(r => {
+      const idx = window._drillStash.length;
+      window._drillStash.push({ title: title + ' — ' + r.label + ' (' + r.w + 'W-' + r.l + 'L)', rows: r._rows || [] });
       const pct = r.pct;
       const pctStr = pct !== null ? pct.toFixed(1) + '%' : '—';
       const cls = pctClass(pct);
       const clr = barClr(pct);
       const barW = pct !== null ? Math.max(2, pct) : 0;
-      html += `<tr>
+      html += `<tr onclick="openDrill(window._drillStash[${idx}].title, window._drillStash[${idx}].rows)">
         <td class="st-label">${r.label}</td>
         <td class="st-bar-cell"><div class="st-bar-wrap"><div class="st-bar-mark"></div><div class="st-bar-fill" style="width:${barW}%;background:${clr}"></div></div></td>
         <td class="st-pct ${cls}">${pctStr}</td>
@@ -1274,7 +1414,7 @@ function buildKPIs(){
     return arr.map(r => {
       const w = r.rows ? r.rows.filter(isWin).length : 0;
       const n = r.rows ? r.rows.length : 0;
-      return { label: r.label, pct: winRate(r.rows||[]), w, l: n-w, n };
+      return { label: r.label, pct: winRate(r.rows||[]), w, l: n-w, n, _rows: r.rows||[] };
     });
   }
 
@@ -1311,12 +1451,16 @@ function buildKPIs(){
     for (let i=0; i<sbData.length; i++) {
       const sb = sbData[i];
       const al = allData[i];
+      const idx = window._drillStash.length;
+      const alW = al._rows ? al._rows.filter(isWin).length : al.w;
+      const drillTitle = title + ' — ' + al.label + ' (' + alW + 'W-' + (al.n-alW) + 'L)';
+      window._drillStash.push({ title: drillTitle, rows: al._rows || [] });
       const sbStr = sb.pct !== null ? sb.pct.toFixed(1)+'%' : '—';
       const alStr = al.pct !== null ? al.pct.toFixed(1)+'%' : '—';
       const cls = pctClass(sb.pct);
       const clr = barClr(sb.pct);
       const barW = sb.pct !== null ? Math.max(2, sb.pct) : 0;
-      html += `<tr>
+      html += `<tr onclick="openDrill(window._drillStash[${idx}].title, window._drillStash[${idx}].rows)">
         <td class="st-label">${sb.label}</td>
         <td class="st-bar-cell"><div class="st-bar-wrap"><div class="st-bar-mark"></div><div class="st-bar-fill" style="width:${barW}%;background:${clr}"></div></div></td>
         <td class="st-pct ${cls}">${sbStr}</td>
@@ -1352,8 +1496,8 @@ function buildKPIs(){
 
   // build dual data for a set of keys
   function dualData(keys, sbMap, allMap) {
-    const sbD = keys.map(k => { const rows = sbMap[k]||[]; const w=rows.filter(isWin).length; return {label:k, pct:winRate(rows), w, l:rows.length-w, n:rows.length}; });
-    const alD = keys.map(k => { const rows = allMap[k]||[]; const w=rows.filter(isWin).length; return {label:k, pct:winRate(rows), w, l:rows.length-w, n:rows.length}; });
+    const sbD = keys.map(k => { const rows = sbMap[k]||[]; const w=rows.filter(isWin).length; return {label:k, pct:winRate(rows), w, l:rows.length-w, n:rows.length, _rows:rows}; });
+    const alD = keys.map(k => { const rows = allMap[k]||[]; const w=rows.filter(isWin).length; return {label:k, pct:winRate(rows), w, l:rows.length-w, n:rows.length, _rows:rows}; });
     return [sbD, alD];
   }
 
@@ -1394,14 +1538,16 @@ function buildKPIs(){
   } else {
     const mrMap = groupBy(mrRows, 'market_read', s=>s.trim());
     const mrKeys = Object.keys(mrMap).sort((a,b)=>(mrMap[b]||[]).length-(mrMap[a]||[]).length);
-    const mrData = mrKeys.map(k => { const rows=mrMap[k]||[]; const w=rows.filter(isWin).length; return {label:k, pct:winRate(rows), w, l:rows.length-w, n:rows.length}; });
+    const mrData = mrKeys.map(k => { const rows=mrMap[k]||[]; const w=rows.filter(isWin).length; return {label:k, pct:winRate(rows), w, l:rows.length-w, n:rows.length, _rows:rows}; });
     let html = `<div class="panel-h"><span class="panel-t">By Market Read</span><span class="panel-m">${mrRows.length} graded w/ read</span></div>`;
     html += '<table class="stat-tbl"><thead><tr><th>Read</th><th></th><th>Win %</th><th>Record</th><th>N</th></tr></thead><tbody>';
     mrData.forEach(r => {
+      const idx = window._drillStash.length;
+      window._drillStash.push({ title: 'Market Read — ' + r.label + ' (' + r.w + 'W-' + r.l + 'L)', rows: r._rows || [] });
       const pctStr = r.pct !== null ? r.pct.toFixed(1)+'%' : '—';
       const cls = pctClass(r.pct); const clr = barClr(r.pct);
       const barW = r.pct !== null ? Math.max(2, r.pct) : 0;
-      html += `<tr><td class="st-label">${r.label}</td><td class="st-bar-cell"><div class="st-bar-wrap"><div class="st-bar-mark"></div><div class="st-bar-fill" style="width:${barW}%;background:${clr}"></div></div></td><td class="st-pct ${cls}">${pctStr}</td><td class="st-rec">${r.w}W-${r.l}L</td><td class="st-n">${r.n}</td></tr>`;
+      html += `<tr onclick="openDrill(window._drillStash[${idx}].title, window._drillStash[${idx}].rows)"><td class="st-label">${r.label}</td><td class="st-bar-cell"><div class="st-bar-wrap"><div class="st-bar-mark"></div><div class="st-bar-fill" style="width:${barW}%;background:${clr}"></div></div></td><td class="st-pct ${cls}">${pctStr}</td><td class="st-rec">${r.w}W-${r.l}L</td><td class="st-n">${r.n}</td></tr>`;
     });
     html += '</tbody></table>';
     mrPanel.innerHTML = html;
