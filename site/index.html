@@ -268,39 +268,78 @@ section { padding: 100px 40px; }
   border-radius: var(--radius3);
   overflow: hidden;
   border: 1px solid var(--dark-border);
-  max-width: 1000px;
+  max-width: 1060px;
   margin: 0 auto;
 }
-.preview-img {
+.preview-board {
   width: 100%;
-  height: 400px;
-  background: #0a0e14;
-  filter: blur(3px);
-  opacity: .9;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px; color: #7a8899;
+  background: #080c12;
+  padding: 0;
   overflow: hidden;
 }
-.preview-img-inner {
-  width: 100%;
-  padding: 20px;
+.preview-topbar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 20px;
+  background: #0e131a;
+  border-bottom: 1px solid #1c2430;
   font-family: var(--mono);
-  font-size: 10px;
-  color: #6a7a8a;
-  line-height: 2;
-  text-align: left;
-  white-space: pre-wrap;
+  font-size: 11px;
 }
+.preview-topbar-item { color: #556; }
+.preview-topbar-item b { color: #ddd; font-weight: 600; }
+.preview-stats {
+  display: flex; gap: 1px; padding: 8px 12px;
+  background: #0a0f16;
+}
+.preview-stat {
+  flex: 1; text-align: center; padding: 10px 8px;
+  background: #0e131a; border-radius: 6px;
+}
+.preview-stat-val { font-family: var(--mono); font-size: 22px; font-weight: 700; color: #fff; }
+.preview-stat-label { font-size: 9px; color: #556; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+.preview-table {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 11px;
+  border-collapse: collapse;
+}
+.preview-table th {
+  text-align: left; padding: 8px 10px;
+  color: #556; font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .8px;
+  background: #0a0f16;
+  border-bottom: 1px solid #1c2430;
+}
+.preview-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #111820;
+  color: #c8cdd4;
+}
+.preview-table tr:hover { background: rgba(255,255,255,.02); }
+.p-sport { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px; color: #fff; }
+.p-nba { background: #1a5276; }
+.p-nfl { background: #6b2020; }
+.p-nhl { background: #1c4a2a; }
+.p-mlb { background: #5a3a1a; }
+.p-ncaab { background: #4a2060; }
+.p-bet { color: #2ecc71; font-weight: 700; }
+.p-strong { color: #00ff88; font-weight: 800; }
+.p-lean { color: #d4ac0d; font-weight: 600; }
+.p-nobet { color: #e74c3c; font-weight: 600; }
+.p-conf-hi { color: #2ecc71; }
+.p-conf-mid { color: #d4ac0d; }
+.p-conf-lo { color: #e74c3c; }
 .preview-overlay {
   position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(10,14,20,.15) 0%, rgba(10,14,20,.7) 100%);
+  background: linear-gradient(180deg, transparent 0%, transparent 30%, rgba(8,12,18,.6) 60%, rgba(8,12,18,.95) 100%);
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  gap: 16px;
+  align-items: center; justify-content: flex-end;
+  padding-bottom: 40px;
+  gap: 12px;
 }
 .preview-lock {
-  font-size: 32px;
-  opacity: .8;
+  font-size: 28px;
+  opacity: .9;
 }
 .preview-overlay-text {
   font-size: 18px;
@@ -548,16 +587,38 @@ section { padding: 100px 40px; }
 
 /* ─── RESPONSIVE ─── */
 @media (max-width: 768px) {
-  .nav { padding: 0 20px; }
+  .nav { padding: 0 16px; }
   .nav-sub { display: none; }
-  section { padding: 60px 20px; }
-  .hero { padding-top: 120px; }
-  .hero h1 { font-size: 32px; }
-  .hero-sub { font-size: 15px; }
+  .nav-actions { gap: 8px; }
+  .nav-actions .btn { padding: 7px 14px; font-size: 12px; }
+  section { padding: 60px 16px; }
+  .hero { padding-top: 110px; padding-bottom: 50px; }
+  .hero h1 { font-size: 28px; letter-spacing: -1px; }
+  .hero-sub { font-size: 14px; margin-bottom: 32px; }
+  .hero-badge { font-size: 10px; }
+  .hero-ctas { flex-direction: column; align-items: center; gap: 10px; }
+  .hero-ctas .btn-lg { width: 100%; max-width: 300px; padding: 12px 24px; font-size: 14px; }
   .features-grid { grid-template-columns: 1fr; gap: 20px; }
+  .feat-card { padding: 28px 22px; }
   .not-grid { grid-template-columns: 1fr; }
-  .pricing-grid { grid-template-columns: 1fr; }
-  .preview-img { height: 260px; }
+  .not-section h2 { font-size: 24px; margin-bottom: 32px; }
+  .preview h2 { font-size: 24px; }
+  .preview-topbar { font-size: 9px; gap: 8px; padding: 8px 12px; }
+  .preview-stats { padding: 6px 8px; }
+  .preview-stat { padding: 8px 4px; }
+  .preview-stat-val { font-size: 18px; }
+  .preview-stat-label { font-size: 8px; }
+  .preview-table { font-size: 9px; }
+  .preview-table th { font-size: 8px; padding: 6px 6px; }
+  .preview-table td { padding: 7px 6px; }
+  .preview-overlay { padding-bottom: 24px; }
+  .preview-overlay-text { font-size: 15px; }
+  .preview-overlay-sub { font-size: 11px; }
+  .pricing h2 { font-size: 24px; }
+  .pricing-grid { grid-template-columns: 1fr; gap: 16px; }
+  .price-card { padding: 32px 24px; }
+  .price-amount { font-size: 40px; }
+  .modal { padding: 28px 24px 24px; width: 95vw; }
 }
 </style>
 </head>
@@ -634,18 +695,31 @@ section { padding: 100px 40px; }
     <h2>Full Confidence + Regime View</h2>
     <p class="preview-sub">Real-time pressure classification, regime detection, and edge scoring across all active markets.</p>
     <div class="preview-wrap">
-      <div class="preview-img">
-        <div class="preview-img-inner">SPORT    GAME                    MARKET   CONF   EDGE   REGIME   DECISION   TIMING    MARKET READ
-NFL      KC Chiefs @ BAL Ravens  SPREAD    82     14.2   A        BET        EARLY     Confirmed
-NFL      DET Lions @ SF 49ers   TOTAL     76     11.8   C        LEAN       EARLY     Fading
-NBA      BOS Celtics @ MIL Bucks SPREAD   91     18.3   D        STRONG_BET LIVE      Steam
-NHL      TB Lightning @ FLA Pan  ML        67      8.4   B        LEAN       OPEN      Neutral
-MLB      NYY Yankees @ BOS Sox   SPREAD    84     15.1   A        BET        EARLY     Confirmed
-NBA      LAL Lakers @ PHX Suns   TOTAL     73     10.2   C        LEAN       LATE      Reversed
-NFL      BUF Bills @ MIA Dolphin SPREAD    88     16.7   D        STRONG_BET EARLY     Steam
-NCAAB    Duke @ UNC              SPREAD    71      9.8   B        LEAN       OPEN      Neutral
-UFC      Fighter A vs Fighter B  ML        79     12.4   A        BET        LIVE      Confirmed
-NHL      EDM Oilers @ VGK Knights TOTAL    68      7.9   C        NO BET     LATE      Fading</div>
+      <div class="preview-board">
+        <div class="preview-topbar">
+          <span class="preview-topbar-item"><b>Red Fox</b> Market Intelligence</span>
+          <span class="preview-topbar-item" style="margin-left:auto">v1.2</span>
+          <span class="preview-topbar-item">03:42:18 PM ET</span>
+        </div>
+        <div class="preview-stats">
+          <div class="preview-stat"><div class="preview-stat-val">42</div><div class="preview-stat-label">Current Games</div></div>
+          <div class="preview-stat"><div class="preview-stat-val">8</div><div class="preview-stat-label">Signals</div></div>
+          <div class="preview-stat"><div class="preview-stat-val">3</div><div class="preview-stat-label">Strong Bets</div></div>
+          <div class="preview-stat"><div class="preview-stat-val" style="color:#2ecc71">72</div><div class="preview-stat-label">Confidence</div></div>
+        </div>
+        <table class="preview-table">
+          <thead><tr><th>#</th><th>Game</th><th>Market</th><th>Conf</th><th>Decision</th><th>Edge</th><th>Regime</th></tr></thead>
+          <tbody>
+            <tr><td><span class="p-sport p-nba">NBA</span></td><td>BOS Celtics @ MIL Bucks</td><td>SPREAD</td><td class="p-conf-hi">91</td><td class="p-strong">STRONG_BET</td><td>18.3</td><td>D</td></tr>
+            <tr><td><span class="p-sport p-nfl">NFL</span></td><td>BUF Bills @ MIA Dolphins</td><td>SPREAD</td><td class="p-conf-hi">88</td><td class="p-strong">STRONG_BET</td><td>16.7</td><td>D</td></tr>
+            <tr><td><span class="p-sport p-mlb">MLB</span></td><td>NYY Yankees @ BOS Red Sox</td><td>SPREAD</td><td class="p-conf-hi">84</td><td class="p-bet">BET</td><td>15.1</td><td>A</td></tr>
+            <tr><td><span class="p-sport p-nfl">NFL</span></td><td>KC Chiefs @ BAL Ravens</td><td>SPREAD</td><td class="p-conf-hi">82</td><td class="p-bet">BET</td><td>14.2</td><td>A</td></tr>
+            <tr><td><span class="p-sport p-nba">NBA</span></td><td>LAL Lakers @ PHX Suns</td><td>TOTAL</td><td class="p-conf-mid">76</td><td class="p-lean">LEAN</td><td>10.2</td><td>C</td></tr>
+            <tr><td><span class="p-sport p-ncaab">NCAAB</span></td><td>Duke Blue Devils @ UNC</td><td>SPREAD</td><td class="p-conf-mid">73</td><td class="p-lean">LEAN</td><td>9.8</td><td>B</td></tr>
+            <tr><td><span class="p-sport p-nhl">NHL</span></td><td>EDM Oilers @ VGK Knights</td><td>TOTAL</td><td class="p-conf-lo">68</td><td class="p-nobet">NO BET</td><td>7.9</td><td>C</td></tr>
+            <tr><td><span class="p-sport p-nhl">NHL</span></td><td>TB Lightning @ FLA Panthers</td><td>ML</td><td class="p-conf-lo">67</td><td class="p-nobet">NO BET</td><td>8.4</td><td>B</td></tr>
+          </tbody>
+        </table>
       </div>
       <div class="preview-overlay">
         <div class="preview-lock">&#128274;</div>
