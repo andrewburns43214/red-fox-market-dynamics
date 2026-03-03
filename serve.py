@@ -13,6 +13,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.path = '/site/config.js'
         elif self.path.startswith('/auth.js'):
             self.path = '/site/auth.js'
+        elif self.path.startswith('/preview.png'):
+            self.path = '/site/preview.png'
+        elif self.path.startswith('/logo.png'):
+            self.path = '/site/logo.png'
         return super().do_GET()
     def log_message(self, format, *args):
         pass
