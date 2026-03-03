@@ -616,9 +616,14 @@ section { padding: 100px 40px; }
   .preview-table { font-size: 9px; }
   .preview-table th { font-size: 8px; padding: 6px 6px; }
   .preview-table td { padding: 7px 6px; }
-  .preview-overlay { padding-bottom: 24px; }
-  .preview-overlay-text { font-size: 15px; }
-  .preview-overlay-sub { font-size: 11px; }
+  .preview-sub { font-size: 13px; margin-bottom: 20px; }
+  .preview-overlay { padding-bottom: 20px; gap: 8px;
+    background: linear-gradient(180deg, transparent 0%, transparent 20%, rgba(30,33,40,.7) 50%, rgba(30,33,40,.97) 100%);
+  }
+  .preview-overlay-text { font-size: 14px; }
+  .preview-overlay-sub { display: none; }
+  .preview-lock { font-size: 22px; }
+  .preview-overlay .btn-lg { padding: 10px 24px; font-size: 13px; }
   .pricing h2 { font-size: 24px; }
   .pricing-grid { grid-template-columns: 1fr; gap: 16px; }
   .price-card { padding: 32px 24px; }
