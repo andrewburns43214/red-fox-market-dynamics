@@ -1637,7 +1637,7 @@ function updateStats(){
     return new Date(r._game_time).toLocaleDateString('en-US',{timeZone:'America/New_York'})===todayStr;
   });
   const src=allKPI.length?allKPI:allResults;
-  const resolved=src.filter(r=>['WIN','LOSS'].includes((r.result||'').toUpperCase()));
+  const resolved=gradedRows(src);
   const totalW=resolved.filter(r=>(r.result||'').toUpperCase()==='WIN').length;
   const pAll=resolved.length?Math.round(100*totalW/resolved.length):null;
   const todayConf=today.filter(r=>Number(r.game_confidence||0)>0);
