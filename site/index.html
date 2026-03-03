@@ -329,9 +329,14 @@ section { padding: 100px 40px; }
 .p-conf-hi { color: #2ecc71; }
 .p-conf-mid { color: #d4ac0d; }
 .p-conf-lo { color: #e74c3c; }
+.preview-screenshot {
+  width: 100%;
+  display: block;
+  border-radius: var(--radius3);
+}
 .preview-overlay {
   position: absolute; inset: 0;
-  background: linear-gradient(180deg, transparent 0%, transparent 30%, rgba(8,12,18,.6) 60%, rgba(8,12,18,.95) 100%);
+  background: linear-gradient(180deg, transparent 0%, transparent 40%, rgba(30,33,40,.5) 65%, rgba(30,33,40,.92) 100%);
   display: flex; flex-direction: column;
   align-items: center; justify-content: flex-end;
   padding-bottom: 40px;
@@ -695,32 +700,7 @@ section { padding: 100px 40px; }
     <h2>Full Confidence + Regime View</h2>
     <p class="preview-sub">Real-time pressure classification, regime detection, and edge scoring across all active markets.</p>
     <div class="preview-wrap">
-      <div class="preview-board">
-        <div class="preview-topbar">
-          <span class="preview-topbar-item"><b>Red Fox</b> Market Intelligence</span>
-          <span class="preview-topbar-item" style="margin-left:auto">v1.2</span>
-          <span class="preview-topbar-item">03:42:18 PM ET</span>
-        </div>
-        <div class="preview-stats">
-          <div class="preview-stat"><div class="preview-stat-val">42</div><div class="preview-stat-label">Current Games</div></div>
-          <div class="preview-stat"><div class="preview-stat-val">8</div><div class="preview-stat-label">Signals</div></div>
-          <div class="preview-stat"><div class="preview-stat-val">3</div><div class="preview-stat-label">Strong Bets</div></div>
-          <div class="preview-stat"><div class="preview-stat-val" style="color:#2ecc71">72</div><div class="preview-stat-label">Confidence</div></div>
-        </div>
-        <table class="preview-table">
-          <thead><tr><th>#</th><th>Game</th><th>Market</th><th>Conf</th><th>Decision</th><th>Edge</th><th>Regime</th></tr></thead>
-          <tbody>
-            <tr><td><span class="p-sport p-nba">NBA</span></td><td>BOS Celtics @ MIL Bucks</td><td>SPREAD</td><td class="p-conf-hi">91</td><td class="p-strong">STRONG_BET</td><td>18.3</td><td>D</td></tr>
-            <tr><td><span class="p-sport p-nfl">NFL</span></td><td>BUF Bills @ MIA Dolphins</td><td>SPREAD</td><td class="p-conf-hi">88</td><td class="p-strong">STRONG_BET</td><td>16.7</td><td>D</td></tr>
-            <tr><td><span class="p-sport p-mlb">MLB</span></td><td>NYY Yankees @ BOS Red Sox</td><td>SPREAD</td><td class="p-conf-hi">84</td><td class="p-bet">BET</td><td>15.1</td><td>A</td></tr>
-            <tr><td><span class="p-sport p-nfl">NFL</span></td><td>KC Chiefs @ BAL Ravens</td><td>SPREAD</td><td class="p-conf-hi">82</td><td class="p-bet">BET</td><td>14.2</td><td>A</td></tr>
-            <tr><td><span class="p-sport p-nba">NBA</span></td><td>LAL Lakers @ PHX Suns</td><td>TOTAL</td><td class="p-conf-mid">76</td><td class="p-lean">LEAN</td><td>10.2</td><td>C</td></tr>
-            <tr><td><span class="p-sport p-ncaab">NCAAB</span></td><td>Duke Blue Devils @ UNC</td><td>SPREAD</td><td class="p-conf-mid">73</td><td class="p-lean">LEAN</td><td>9.8</td><td>B</td></tr>
-            <tr><td><span class="p-sport p-nhl">NHL</span></td><td>EDM Oilers @ VGK Knights</td><td>TOTAL</td><td class="p-conf-lo">68</td><td class="p-nobet">NO BET</td><td>7.9</td><td>C</td></tr>
-            <tr><td><span class="p-sport p-nhl">NHL</span></td><td>TB Lightning @ FLA Panthers</td><td>ML</td><td class="p-conf-lo">67</td><td class="p-nobet">NO BET</td><td>8.4</td><td>B</td></tr>
-          </tbody>
-        </table>
-      </div>
+      <img src="preview.png" alt="Red Fox Dashboard" class="preview-screenshot">
       <div class="preview-overlay">
         <div class="preview-lock">&#128274;</div>
         <div class="preview-overlay-text">Full Board Available After Login</div>
