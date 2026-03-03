@@ -1648,9 +1648,12 @@ function updateStats(){
   if(el('t-games'))  el('t-games').textContent=upcoming.length;
   if(el('t-active')) el('t-active').textContent=sigs.length;
   if(el('t-sb'))     el('t-sb').textContent=hc.length;
-  if(el('t-wr'))     el('t-wr').textContent=pAll!==null?pAll+'%':'--';
+  const sbResolved=resolved.filter(isHighConf);
+  const sbW=sbResolved.filter(r=>(r.result||'').toUpperCase()==='WIN').length;
+  const pSBtop=sbResolved.length?Math.round(100*sbW/sbResolved.length):null;
+  if(el('t-wr'))     el('t-wr').textContent=pSBtop!==null?pSBtop+'%':'--';
   if(el('m-active')) el('m-active').textContent=sigs.length;
-  if(el('m-wr'))     el('m-wr').textContent=pAll!==null?pAll+'%':'--';
+  if(el('m-wr'))     el('m-wr').textContent=pSBtop!==null?pSBtop+'%':'--';
   if(el('m-today'))  el('m-today').textContent=today.length;
 
   // Avg conf metric
