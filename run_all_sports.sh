@@ -23,13 +23,35 @@ echo "===== $(date) RUN START =====" >> "$LOG"
 # Auto-detect active sports by month+day (skips preseason)
 MONTH=$(date +%-m)
 DAY=$(date +%-d)
-SPORTS="nba nhl ncaab ufc"
-# NFL: late Aug (8) through Feb — covers week-before + playoffs
-if [ "$MONTH" -ge 8 ] || [ "$MONTH" -le 2 ]; then SPORTS="nfl $SPORTS"; fi
-# NCAAF: late Aug (8) through Jan — covers week-before + bowls
-if [ "$MONTH" -ge 8 ] || [ "$MONTH" -le 1 ]; then SPORTS="ncaaf $SPORTS"; fi
-# MLB: Mar 26 through Oct — skip spring training
-if { [ "$MONTH" -eq 3 ] && [ "$DAY" -ge 26 ]; } || { [ "$MONTH" -ge 4 ] && [ "$MONTH" -le 10 ]; }; then SPORTS="mlb $SPORTS"; fi
+MMDD="${MONTH}$(printf '%02d' $DAY)"  # e.g. "307" for Mar 7, "1122" for Nov 22
+
+SPORTS="ufc"  # UFC always on
+
+# Helper: check if today is within a date range (handles year-wrap)
+# Usage: in_season START_MMDD END_MMDD
+in_season() {
+  local s=$1 e=$2
+  if [ "$s" -le "$e" ]; then
+    # same-year range (e.g. Mar 26 – Nov 6)
+    [ "$MMDD" -ge "$s" ] && [ "$MMDD" -le "$e" ]
+  else
+    # wraps around year (e.g. Sep 7 – Feb 25)
+    [ "$MMDD" -ge "$s" ] || [ "$MMDD" -le "$e" ]
+  fi
+}
+
+# NFL: Sep 7 – Feb 25
+if in_season 907 225; then SPORTS="nfl $SPORTS"; fi
+# NCAAF: Aug 24 – Feb 1
+if in_season 824 201; then SPORTS="ncaaf $SPORTS"; fi
+# MLB: Mar 26 – Nov 6
+if in_season 326 1106; then SPORTS="mlb $SPORTS"; fi
+# NBA: Oct 22 – Jul 5
+if in_season 1022 705; then SPORTS="nba $SPORTS"; fi
+# NHL: Oct 10 – Jul 5
+if in_season 1010 705; then SPORTS="nhl $SPORTS"; fi
+# NCAAB: Nov 5 – Apr 10
+if in_season 1105 410; then SPORTS="ncaab $SPORTS"; fi
 
 echo "--- active sports: $SPORTS ---" >> "$LOG"
 for SPORT in $SPORTS; do
