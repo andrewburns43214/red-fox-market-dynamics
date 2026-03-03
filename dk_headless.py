@@ -42,7 +42,7 @@ def _set_tb_page(url: str, page: int) -> str:
     return urlunparse((p.scheme, p.netloc, p.path, p.params, new_query, p.fragment))
 
 
-def fetch_rendered_html(url: str, timeout: int = 90) -> str:
+def fetch_rendered_html(url: str, timeout: int = 180) -> str:
     """Render a URL using Selenium.
     - Never hang indefinitely
     - Never return None (returns "" on failure)
