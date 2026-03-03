@@ -1193,8 +1193,18 @@ function isBetPlus(r) {
   return d==='STRONG BET'||d==='STRONG_BET'||d==='BET';
 }
 
+// ── v1.2 epoch: only count results resolved on or after this date ──
+const V12_EPOCH = '2026-03-03';
+
 // ── Shared denominator helpers (single source of truth) ──
-function gradedRows(data) { return data.filter(r => ['WIN','LOSS'].includes((r.result||r.outcome||'').toUpperCase())); }
+function gradedRows(data) {
+  return data.filter(r => {
+    if (!['WIN','LOSS'].includes((r.result||r.outcome||'').toUpperCase())) return false;
+    const ts = r.resolved_at_utc || '';
+    if (ts && ts < V12_EPOCH) return false;   // pre-v1.2 data excluded
+    return true;
+  });
+}
 function mrEligible(data) { return gradedRows(data).filter(r => (r.market_read||'').trim() !== ''); }
 function isWin(r) { return (r.result||r.outcome||'').toUpperCase()==='WIN'; }
 function winRate(rows) { return rows.length ? parseFloat((100*rows.filter(isWin).length/rows.length).toFixed(1)) : null; }
@@ -1707,8 +1717,11 @@ function renderResults(){
   const el=document.getElementById('tab-results');
   if(!el) return;
   const src=allKPI.length?allKPI:allResults;
-  const resolved=src.filter(r=>['WIN','LOSS'].includes((r.result||'').toUpperCase()))
-    .sort((a,b)=>new Date(b.resolved_at_utc||0)-new Date(a.resolved_at_utc||0));
+  const resolved=src.filter(r=>{
+    if(!['WIN','LOSS'].includes((r.result||'').toUpperCase())) return false;
+    const ts=r.resolved_at_utc||'';
+    return !(ts && ts < V12_EPOCH);
+  }).sort((a,b)=>new Date(b.resolved_at_utc||0)-new Date(a.resolved_at_utc||0));
   if(!resolved.length){
     const inner=el.querySelector('.full-tab')||el;
     inner.innerHTML='<div style="padding:40px;text-align:center;color:#8892aa">No resolved results yet</div>';
