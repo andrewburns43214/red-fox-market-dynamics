@@ -27,8 +27,8 @@ SPORTS="nba nhl ncaab ufc"
 if [ "$MONTH" -ge 8 ] || [ "$MONTH" -le 2 ]; then SPORTS="nfl $SPORTS"; fi
 # NCAAF: late Aug (8) through Jan — covers week-before + bowls
 if [ "$MONTH" -ge 8 ] || [ "$MONTH" -le 1 ]; then SPORTS="ncaaf $SPORTS"; fi
-# MLB: late Mar (3) through Oct — covers week-before + postseason
-if [ "$MONTH" -ge 3 ] && [ "$MONTH" -le 10 ]; then SPORTS="mlb $SPORTS"; fi
+# MLB: Apr through Oct — skip spring training
+if [ "$MONTH" -ge 4 ] && [ "$MONTH" -le 10 ]; then SPORTS="mlb $SPORTS"; fi
 
 echo "--- active sports: $SPORTS ---" >> "$LOG"
 for SPORT in $SPORTS; do
