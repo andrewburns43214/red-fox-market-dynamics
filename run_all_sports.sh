@@ -20,15 +20,16 @@ PY="/opt/red-fox-market-dynamics/.venv/bin/python"
 
 echo "===== $(date) RUN START =====" >> "$LOG"
 
-# Auto-detect active sports by month (starts ~1 week before season)
+# Auto-detect active sports by month+day (skips preseason)
 MONTH=$(date +%-m)
+DAY=$(date +%-d)
 SPORTS="nba nhl ncaab ufc"
 # NFL: late Aug (8) through Feb — covers week-before + playoffs
 if [ "$MONTH" -ge 8 ] || [ "$MONTH" -le 2 ]; then SPORTS="nfl $SPORTS"; fi
 # NCAAF: late Aug (8) through Jan — covers week-before + bowls
 if [ "$MONTH" -ge 8 ] || [ "$MONTH" -le 1 ]; then SPORTS="ncaaf $SPORTS"; fi
-# MLB: Apr through Oct — skip spring training
-if [ "$MONTH" -ge 4 ] && [ "$MONTH" -le 10 ]; then SPORTS="mlb $SPORTS"; fi
+# MLB: Mar 26 through Oct — skip spring training
+if { [ "$MONTH" -eq 3 ] && [ "$DAY" -ge 26 ]; } || { [ "$MONTH" -ge 4 ] && [ "$MONTH" -le 10 ]; }; then SPORTS="mlb $SPORTS"; fi
 
 echo "--- active sports: $SPORTS ---" >> "$LOG"
 for SPORT in $SPORTS; do
