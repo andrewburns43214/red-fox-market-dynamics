@@ -61,11 +61,15 @@ def fetch_rendered_html(url: str, timeout: int = 25) -> str:
 
     try:
         opts = Options()
-        # Match your working smoketest pattern
         opts.add_argument("--headless=new")
         opts.add_argument("--disable-gpu")
+        opts.add_argument("--no-sandbox")
+        opts.add_argument("--disable-dev-shm-usage")
+        opts.add_argument("--disable-extensions")
+        opts.add_argument("--disable-background-networking")
+        opts.add_argument("--disable-default-apps")
+        opts.add_argument("--js-flags=--max-old-space-size=256")
         opts.add_argument("--window-size=1400,900")
-        # Windows: do NOT set binary_location. Linux can be set elsewhere (guarded).
 
         driver = webdriver.Chrome(options=opts)
         try:
