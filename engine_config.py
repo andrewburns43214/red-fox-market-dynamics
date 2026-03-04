@@ -1,0 +1,129 @@
+"""
+Centralized configuration for the Red Fox engine.
+All magic numbers, file paths, API keys, and layer weights in one place.
+"""
+import os
+
+# ─── VERSION ───
+LOGIC_VERSION = "v2.0"
+
+# ─── FILE PATHS ───
+DATA_DIR = "data"
+SNAPSHOT_CSV = os.path.join(DATA_DIR, "snapshots.csv")
+OPEN_REGISTRY_CSV = os.path.join(DATA_DIR, "open_registry.csv")
+ROW_STATE_CSV = os.path.join(DATA_DIR, "row_state.csv")
+SIGNAL_LEDGER_CSV = os.path.join(DATA_DIR, "signal_ledger.csv")
+DASHBOARD_CSV = os.path.join(DATA_DIR, "dashboard.csv")
+DASHBOARD_HTML = os.path.join(DATA_DIR, "dashboard.html")
+
+# Layer 1/2 data files
+L1_SHARP_CSV = os.path.join(DATA_DIR, "l1_sharp.csv")
+L1_OPEN_REGISTRY_CSV = os.path.join(DATA_DIR, "l1_open_registry.csv")
+L2_CONSENSUS_CSV = os.path.join(DATA_DIR, "l2_consensus.csv")
+L2_CONSENSUS_AGG_CSV = os.path.join(DATA_DIR, "l2_consensus_agg.csv")
+L1_CACHE_JSON = os.path.join(DATA_DIR, "l1_cache.json")
+L2_CACHE_JSON = os.path.join(DATA_DIR, "l2_cache.json")
+MATCH_FAILURES_CSV = os.path.join(DATA_DIR, "match_failures.csv")
+SCORE_COMPARISON_CSV = os.path.join(DATA_DIR, "score_comparison.csv")
+
+# ─── API CONFIGURATION ───
+ODDS_API_KEY = os.environ.get("ODDS_API_KEY", "")
+ODDS_API_BASE_URL = "https://api.the-odds-api.com/v4"
+
+# Maps our sport keys to The-Odds-API sport keys
+API_SPORT_MAP = {
+    "nba": "basketball_nba",
+    "nfl": "americanfootball_nfl",
+    "ncaaf": "americanfootball_ncaaf",
+    "ncaab": "basketball_ncaab",
+    "nhl": "icehockey_nhl",
+    "mlb": "baseball_mlb",
+    "ufc": "mma_mixed_martial_arts",
+}
+
+# Reverse map
+API_SPORT_MAP_REVERSE = {v: k for k, v in API_SPORT_MAP.items()}
+
+# Sharp books for Layer 1 (order = priority)
+L1_SHARP_BOOKS = ["pinnacle"]
+
+# All US books for Layer 2 consensus
+L2_CONSENSUS_REGIONS = ["us"]
+
+# Cache TTL (seconds) - use cached data if API fails and cache is this fresh
+CACHE_TTL_SECONDS = 1800  # 30 minutes
+
+# ─── SCORING WEIGHTS ───
+
+# Layer contribution ranges
+L1_MAX_CONTRIBUTION = 18.0
+L2_MAX_POSITIVE = 10.0
+L2_MAX_NEGATIVE = -8.0
+L3_MAX_POSITIVE = 10.0
+L3_MAX_NEGATIVE = -10.0
+
+# Layer mode score caps
+SCORE_CAP_L123 = 100
+SCORE_CAP_L13 = 85
+SCORE_CAP_L23 = 80
+SCORE_CAP_L3_ONLY = 75
+
+# Pattern bonuses/penalties
+PATTERN_EFFECTS = {
+    "A": {"bonus": 5, "strong_eligible": True, "label": "SHARP_VS_PUBLIC"},
+    "B": {"cap": 70, "strong_eligible": False, "label": "RETAIL_ALIGNMENT"},
+    "C": {"bonus": -5, "strong_eligible": False, "label": "RETAIL_ALIGNMENT"},
+    "D": {"bonus": 4, "strong_eligible": True, "label": "STALE_PRICE"},
+    "E": {"bonus": -6, "cap": 65, "strong_eligible": False, "label": "CONSENSUS_REJECTS"},
+    "F": {"bonus": -8, "strong_eligible": False, "label": "LATE_SNAP_WARNING"},
+}
+
+# ─── DK RULES THRESHOLDS (v2.0) ───
+
+# ML instrument credibility (was 0.80 in v1.2, now 0.60)
+DK_ML_INST_MULT = 0.60
+
+# DK divergence thresholds (higher than v1.2 because DK is retail)
+DK_DIVERGENCE_THRESHOLD = 15       # was 8 in v1.2
+DK_ML_DIVERGENCE_THRESHOLD = 20    # ML needs even stronger divergence
+
+# Retail alignment penalty threshold
+DK_RETAIL_ALIGN_BETS_MIN = 70
+DK_RETAIL_ALIGN_MONEY_MIN = 70
+DK_RETAIL_ALIGN_PENALTY = -5
+
+# ML-only penalty (ML moved, spread didn't)
+DK_ML_ONLY_PENALTY = -3
+
+# ─── MOVE SPEED THRESHOLDS (Layer 1) ───
+FAST_SNAP_SPEED = 2.0       # pts/hour for spreads
+SLOW_GRIND_SPEED = 0.5      # pts/hour for spreads
+FAST_SNAP_EARLY_BONUS = 3
+FAST_SNAP_LATE_PENALTY = -4
+SLOW_GRIND_PENALTY = -2
+
+# ─── DISPERSION THRESHOLDS (Layer 2) ───
+DISPERSION_TIGHT_SPREAD = 0.3
+DISPERSION_TIGHT_TOTAL = 0.5
+DISPERSION_WIDE_SPREAD = 1.0
+DISPERSION_WIDE_TOTAL = 1.5
+DISPERSION_VERY_WIDE_SPREAD = 2.0
+DISPERSION_VERY_WIDE_TOTAL = 3.0
+
+DISPERSION_TIGHT_MULT = 1.20
+DISPERSION_NORMAL_MULT = 1.00
+DISPERSION_WIDE_MULT = 0.70
+DISPERSION_VERY_WIDE_MULT = 0.40
+
+# ─── DECISION THRESHOLDS ───
+STRONG_BET_SCORE = 70
+BET_SCORE = 67
+LEAN_SCORE = 60
+NET_EDGE_MIN_SIDES = 10
+NET_EDGE_MIN_TOTAL = 12
+
+# ─── KEY NUMBERS ───
+KEY_NUMBERS = {3, 7, 10, 14, 17}
+
+# ─── STALE ROW CLEANUP ───
+STALE_TICK_THRESHOLD = 3  # expire rows not seen in this many ticks
