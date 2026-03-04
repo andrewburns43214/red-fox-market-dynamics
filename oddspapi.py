@@ -344,6 +344,10 @@ def fetch_fixtures(sport: str, date_from: str = None, date_to: str = None) -> di
         if not f.get("hasOdds", False):
             continue
 
+        # Only prematch — skip live (statusId=1) and finished (statusId=2)
+        if f.get("statusId", 0) != 0:
+            continue
+
         home = f.get("participant1Name") or ""
         away = f.get("participant2Name") or ""
 
@@ -634,6 +638,10 @@ def fetch_odds(sport: str, fixture_ids: list = None) -> dict:
             all_parsed.extend(parsed)
             all_raw.append(cached_data)
             continue
+
+        # Small delay between odds calls to avoid rate limiting
+        if all_raw or errors:
+            time.sleep(0.5)
 
         result = _api_get("/odds", params={"fixtureId": fid})
         if result["error"]:
