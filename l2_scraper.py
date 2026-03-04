@@ -280,228 +280,38 @@ def scrape_l2(sport: str) -> dict:
 
 def scrape_l1_and_l2(sport: str) -> dict:
     """
-    Single API call that populates BOTH L1 and L2 data.
-    More efficient than calling l1_scraper + l2_scraper separately
-    (saves an API request).
+    Scrape both L1 (sharp) and L2 (consensus) data for a sport.
+
+    L1: OddsPapi (6 sharp books, timestamps, limits) → fallback to The-Odds-API Pinnacle
+    L2: The-Odds-API (31 US+EU books for consensus)
+
+    These are now SEPARATE API calls to different services with independent budgets.
 
     Returns combined result dict.
     """
-    if sport.lower() not in API_SPORT_MAP:
-        return {"error": f"Unknown sport: {sport}"}
+    from l1_scraper import scrape_l1_auto
 
-    # One API call gets everything
-    result = fetch_odds_with_cache(
-        sport=sport,
-        cache_path=L2_CACHE_JSON,
-        markets=["spreads", "totals", "h2h"],
-    )
+    # L1: OddsPapi first, The-Odds-API fallback
+    l1_result = scrape_l1_auto(sport)
 
-    if result["error"]:
-        return {
-            "l1": {"rows_written": 0, "games_found": 0, "error": result["error"]},
-            "l2": {"rows_written": 0, "agg_rows": 0, "games_found": 0, "error": result["error"]},
-            "from_cache": result["from_cache"],
-            "remaining_requests": result.get("remaining_requests"),
-        }
-
-    now_ts = datetime.now(timezone.utc).isoformat()
-    sport_lower = sport.lower()
-    sharp_books_set = set(b.lower() for b in L1_SHARP_BOOKS)
-
-    l1_rows = []
-    l2_rows = []
-    l1_games = set()
-    l2_games = set()
-    books_seen = set()
-
-    for event in result["events"]:
-        parsed = parse_event_odds(event)
-        for row in parsed:
-            canon_key = build_canonical_key(
-                row["away_team"], row["home_team"],
-                sport_lower, row["commence_time"],
-            )
-            if not canon_key:
-                continue
-
-            bm = row["bookmaker"].lower()
-            books_seen.add(bm)
-
-            home_norm = normalize_team_name(row["home_team"])
-            away_norm = normalize_team_name(row["away_team"])
-
-            side = row["side"]
-            if row["market"] == "TOTAL":
-                side = side.lower()
-            else:
-                side = normalize_team_name(side)
-
-            line_val = row["line"] if row["line"] is not None else ""
-
-            # L2: ALL books
-            l2_games.add(canon_key)
-            l2_rows.append({
-                "timestamp": now_ts,
-                "sport": sport_lower,
-                "canonical_key": canon_key,
-                "commence_time": row["commence_time"],
-                "market": row["market"],
-                "side": side,
-                "bookmaker": bm,
-                "line": line_val,
-                "odds_american": row["odds_american"],
-            })
-
-            # L1: sharp books only
-            if bm in sharp_books_set:
-                l1_games.add(canon_key)
-                l1_rows.append({
-                    "timestamp": now_ts,
-                    "sport": sport_lower,
-                    "canonical_key": canon_key,
-                    "bookmaker": bm,
-                    "home_team_norm": home_norm,
-                    "away_team_norm": away_norm,
-                    "commence_time": row["commence_time"],
-                    "market": row["market"],
-                    "side": side,
-                    "line": line_val,
-                    "odds_american": row["odds_american"],
-                })
-
-    # Write L1
-    l1_written = 0
-    if l1_rows:
-        from l1_scraper import L1_SHARP_COLUMNS, _load_l1_open_registry, _save_l1_open_registry
-        write_header = not os.path.exists(L2_CONSENSUS_CSV.replace("l2_consensus", "l1_sharp"))
-        from engine_config import L1_SHARP_CSV
-        write_header = not os.path.exists(L1_SHARP_CSV)
-        os.makedirs(os.path.dirname(L1_SHARP_CSV) or ".", exist_ok=True)
-        with open(L1_SHARP_CSV, "a", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=L1_SHARP_COLUMNS)
-            if write_header:
-                w.writeheader()
-            for row in l1_rows:
-                w.writerow(row)
-        l1_written = len(l1_rows)
-
-        # Update L1 open registry
-        open_reg = _load_l1_open_registry()
-        for row in l1_rows:
-            reg_key = (row["sport"], row["canonical_key"], row["bookmaker"],
-                       row["market"], row["side"])
-            if reg_key not in open_reg:
-                open_reg[reg_key] = {
-                    "open_line": str(row["line"]),
-                    "open_odds": str(row["odds_american"]),
-                    "first_seen": now_ts,
-                }
-        _save_l1_open_registry(open_reg)
-
-    # Write L2 raw
-    l2_written = 0
-    if l2_rows:
-        write_header = not os.path.exists(L2_CONSENSUS_CSV)
-        os.makedirs(os.path.dirname(L2_CONSENSUS_CSV) or ".", exist_ok=True)
-        with open(L2_CONSENSUS_CSV, "a", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=L2_RAW_COLUMNS)
-            if write_header:
-                w.writeheader()
-            for row in l2_rows:
-                w.writerow(row)
-        l2_written = len(l2_rows)
-
-    # Build L2 aggregation
-    prev_agg = _load_prev_agg()
-    groups = {}
-    for row in l2_rows:
-        gk = (row["sport"], row["canonical_key"], row["market"], row["side"])
-        if gk not in groups:
-            groups[gk] = {"lines": [], "odds": [], "pinn_line": None, "pinn_odds": None}
-        try:
-            lv = float(row["line"]) if row["line"] != "" else None
-        except (ValueError, TypeError):
-            lv = None
-        try:
-            ov = int(row["odds_american"])
-        except (ValueError, TypeError):
-            ov = None
-        if lv is not None:
-            groups[gk]["lines"].append(lv)
-        if ov is not None:
-            groups[gk]["odds"].append(ov)
-        if row["bookmaker"] in sharp_books_set:
-            if lv is not None:
-                groups[gk]["pinn_line"] = lv
-            if ov is not None:
-                groups[gk]["pinn_odds"] = ov
-
-    agg_rows = []
-    for (sport_k, canon, market, side), data in sorted(groups.items()):
-        n_books = len(data["lines"]) if data["lines"] else len(data["odds"])
-        if n_books == 0:
-            continue
-        consensus_line = ""
-        line_std = ""
-        if data["lines"]:
-            consensus_line = f"{statistics.median(data['lines']):.1f}"
-            line_std = f"{statistics.stdev(data['lines']):.3f}" if len(data["lines"]) >= 2 else "0.000"
-        consensus_odds = ""
-        if data["odds"]:
-            consensus_odds = str(int(statistics.median(data["odds"])))
-        pinn_vs = ""
-        pinn_line_str = ""
-        pinn_odds_str = ""
-        if data["pinn_line"] is not None:
-            pinn_line_str = f"{data['pinn_line']:.1f}"
-            if consensus_line:
-                pinn_vs = f"{data['pinn_line'] - float(consensus_line):.2f}"
-        if data["pinn_odds"] is not None:
-            pinn_odds_str = str(data["pinn_odds"])
-        consensus_dir = ""
-        if data["lines"] and market in ("SPREAD", "TOTAL"):
-            med = statistics.median(data["lines"])
-            consensus_dir = "positive" if med > 0 else ("negative" if med < 0 else "neutral")
-        prev_key = (sport_k, canon, market, side)
-        line_std_prev = f"{prev_agg[prev_key]:.3f}" if prev_key in prev_agg else ""
-
-        agg_rows.append({
-            "timestamp": now_ts,
-            "sport": sport_k,
-            "canonical_key": canon,
-            "market": market,
-            "side": side,
-            "n_books": n_books,
-            "consensus_line": consensus_line,
-            "consensus_odds": consensus_odds,
-            "line_std": line_std,
-            "line_std_prev": line_std_prev,
-            "pinn_vs_consensus": pinn_vs,
-            "consensus_direction": consensus_dir,
-            "pinn_line": pinn_line_str,
-            "pinn_odds": pinn_odds_str,
-        })
-
-    if agg_rows:
-        with open(L2_CONSENSUS_AGG_CSV, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=L2_AGG_COLUMNS)
-            w.writeheader()
-            for row in agg_rows:
-                w.writerow(row)
+    # L2: Always The-Odds-API (irreplaceable for 31-book consensus)
+    l2_result = scrape_l2(sport)
 
     return {
         "l1": {
-            "rows_written": l1_written,
-            "games_found": len(l1_games),
-            "error": None if l1_rows else "No sharp book data (Pinnacle may not cover this sport)",
+            "rows_written": l1_result.get("rows_written", 0),
+            "games_found": l1_result.get("games_found", 0),
+            "books_found": l1_result.get("books_found", []),
+            "error": l1_result.get("error"),
+            "source": l1_result.get("source", "unknown"),
         },
         "l2": {
-            "rows_written": l2_written,
-            "agg_rows": len(agg_rows),
-            "games_found": len(l2_games),
-            "books_seen": sorted(books_seen),
-            "error": None,
+            "rows_written": l2_result.get("rows_written", 0),
+            "agg_rows": l2_result.get("agg_rows", 0),
+            "games_found": l2_result.get("games_found", 0),
+            "books_seen": l2_result.get("books_seen", []),
+            "error": l2_result.get("error"),
         },
-        "from_cache": result["from_cache"],
-        "remaining_requests": result.get("remaining_requests"),
+        "from_cache": l1_result.get("from_cache", False) or l2_result.get("from_cache", False),
+        "remaining_requests": l2_result.get("remaining_requests"),
     }
