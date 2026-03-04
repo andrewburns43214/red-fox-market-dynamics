@@ -27,15 +27,15 @@ from engine_config import (
 )
 
 
-# OddsPapi sport IDs (from /sports endpoint)
+# OddsPapi sport IDs (from /v4/sports endpoint)
 ODDSPAPI_SPORT_MAP = {
-    "nba": 2,       # Basketball
-    "ncaab": 2,     # Basketball (same sport, different tournament)
-    "nhl": 4,       # Ice Hockey
-    "mlb": 3,       # Baseball
-    "nfl": 1,       # American Football
-    "ncaaf": 1,     # American Football (same sport, different tournament)
-    "ufc": 9,       # MMA
+    "nba": 11,      # Basketball
+    "ncaab": 11,    # Basketball (same sport, different tournament)
+    "nhl": 15,      # Ice Hockey
+    "mlb": 13,      # Baseball
+    "nfl": 14,      # American Football
+    "ncaaf": 14,    # American Football (same sport, different tournament)
+    "ufc": 20,      # MMA
 }
 
 # OddsPapi market type IDs
@@ -57,6 +57,19 @@ MARKET_ID_MAP = {
 # Persists to disk so cron runs (separate processes) share the cache
 _FIXTURE_CACHE_DIR = os.path.join("data", "oddspapi_fixture_cache")
 FIXTURE_CACHE_TTL = 43200  # 12 hours — fixtures don't change within a day
+ODDS_CACHE_TTL = 7200      # 2 hours — per-fixture odds cache
+MAX_FIXTURE_ODDS_PER_PULL = 5  # budget guard: max /odds calls per snapshot
+
+# Bookmaker key aliases — OddsPapi may use abbreviated keys
+BOOK_ALIASES = {
+    "pin": "pinnacle", "pinnacle": "pinnacle",
+    "sin": "singbet", "singbet": "singbet",
+    "sbo": "sbobet", "sbobet": "sbobet",
+    "betcris": "betcris", "bcr": "betcris",
+    "circa": "circasports", "circasports": "circasports", "cir": "circasports",
+    "bookmaker": "bookmaker.eu", "bookmakereu": "bookmaker.eu",
+    "beu": "bookmaker.eu", "bookmaker.eu": "bookmaker.eu",
+}
 
 
 def _get_api_key() -> str:
@@ -75,11 +88,13 @@ def _api_get(endpoint: str, params: dict = None) -> dict:
     if not api_key:
         return {"data": None, "error": "ODDSPAPI_KEY not set"}
 
-    headers = {"X-Api-Key": api_key}
     url = f"{ODDSPAPI_BASE_URL}{endpoint}"
+    if params is None:
+        params = {}
+    params["apiKey"] = api_key
 
     try:
-        resp = requests.get(url, params=params, headers=headers, timeout=30)
+        resp = requests.get(url, params=params, timeout=30)
 
         if resp.status_code == 401:
             return {"data": None, "error": "Invalid OddsPapi API key"}
@@ -255,107 +270,249 @@ def fetch_fixtures(sport: str, date_from: str = None, date_to: str = None) -> di
     return fetch_result
 
 
-def fetch_odds(sport: str, fixture_ids: list = None) -> dict:
+def _resolve_bookmaker(bk_key: str) -> str:
+    """Resolve OddsPapi bookmaker key to our canonical name."""
+    key_lower = bk_key.lower().strip()
+    if key_lower in {b.lower() for b in ODDSPAPI_SHARP_BOOKS}:
+        return key_lower
+    return BOOK_ALIASES.get(key_lower, key_lower)
+
+
+def _classify_market(mkt_id_str: str) -> str:
+    """Classify OddsPapi market ID into MONEYLINE / SPREAD / TOTAL."""
+    try:
+        mkt_id = int(mkt_id_str)
+    except (ValueError, TypeError):
+        return None
+    # Exact match (1, 2, 3)
+    if mkt_id in MARKET_MAP:
+        return MARKET_MAP[mkt_id]
+    # First-digit heuristic for multi-digit IDs (1XX→ML, 2XX→Spread, 3XX→Total)
+    if mkt_id >= 100:
+        first = mkt_id // 100
+    elif mkt_id >= 10:
+        first = mkt_id // 10
+    else:
+        return None
+    return MARKET_MAP.get(first)
+
+
+def _resolve_side(market_name: str, outcome_id: str, home: str, away: str) -> str:
+    """Map OddsPapi outcome ID to human-readable side."""
+    try:
+        out_num = int(outcome_id)
+    except (ValueError, TypeError):
+        return outcome_id
+    last_digit = out_num % 10
+    if market_name == "TOTAL":
+        return "Over" if last_digit % 2 == 1 else "Under"
+    # Moneyline / Spread: odd outcome = participant1 (home), even = participant2 (away)
+    return home if last_digit % 2 == 1 else away
+
+
+def _load_odds_cache(fid: str):
+    """Load cached odds for a specific fixture. Returns data or None."""
+    safe_fid = str(fid).replace("/", "_").replace("\\", "_")
+    cache_file = os.path.join(_FIXTURE_CACHE_DIR, f"odds_{safe_fid}.json")
+    if not os.path.exists(cache_file):
+        return None
+    try:
+        with open(cache_file, "r") as f:
+            cached = json.load(f)
+        cache_ts = datetime.fromisoformat(cached["timestamp"])
+        age = (datetime.now(timezone.utc) - cache_ts).total_seconds()
+        if age < ODDS_CACHE_TTL:
+            return cached["data"]
+    except Exception:
+        pass
+    return None
+
+
+def _save_odds_cache(fid: str, data):
+    """Save per-fixture odds data to disk cache."""
+    try:
+        safe_fid = str(fid).replace("/", "_").replace("\\", "_")
+        os.makedirs(_FIXTURE_CACHE_DIR, exist_ok=True)
+        cache_file = os.path.join(_FIXTURE_CACHE_DIR, f"odds_{safe_fid}.json")
+        with open(cache_file, "w") as f:
+            json.dump({
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": data,
+            }, f)
+    except Exception:
+        pass
+
+
+def _parse_odds_response(fid: str, raw, fixture_map: dict, sharp_set: set) -> list:
     """
-    Fetch sharp book odds from OddsPapi.
+    Parse the nested OddsPapi /odds response for a single fixture.
 
-    Gets odds from all 6 sharp books for the given sport/tournament.
-    Returns flat list of outcome dicts ready for L1 processing.
-
-    Args:
-        sport: Our sport key
-        fixture_ids: Optional list of specific fixture IDs to filter
-
-    Returns:
-        dict with:
-            "odds": list of parsed outcome dicts
-            "raw": raw API response (for caching)
-            "error": str or None
+    Response structure:
+        bookmakerOdds → {bookmaker_key} → markets → {market_id}
+            → outcomes → {outcome_id} → players → {index} → {price, changedAt, limit}
     """
-    sport_lower = sport.lower()
-
-    tid_result = discover_tournament_id(sport_lower)
-    if tid_result["error"]:
-        return {"odds": [], "raw": None, "error": tid_result["error"]}
-
-    tournament_id = tid_result["tournament_id"]
-
-    # Request odds for sharp books
-    params = {
-        "tournamentId": tournament_id,
-        "oddType": "prematch",
-    }
-
-    result = _api_get("/odds-by-tournaments", params=params)
-    if result["error"]:
-        return {"odds": [], "raw": None, "error": result["error"]}
-
-    raw_data = result["data"]
-    if not isinstance(raw_data, list):
-        return {"odds": [], "raw": raw_data, "error": "Unexpected odds response format"}
-
-    # Parse odds into flat structure
     parsed = []
-    sharp_set = set(b.lower() for b in ODDSPAPI_SHARP_BOOKS)
 
-    for fixture in raw_data:
-        fid = str(fixture.get("fixtureId") or fixture.get("id") or "")
-        if not fid:
+    if isinstance(raw, list):
+        # If response is a list, find the matching fixture
+        for item in raw:
+            if isinstance(item, dict) and str(item.get("fixtureId", "")) == str(fid):
+                raw = item
+                break
+        else:
+            raw = raw[0] if raw and isinstance(raw[0], dict) else {}
+
+    if not isinstance(raw, dict):
+        return parsed
+
+    fx_info = fixture_map.get(str(fid), {})
+    home_team = fx_info.get("home", "Home")
+    away_team = fx_info.get("away", "Away")
+
+    bookmaker_odds = raw.get("bookmakerOdds", {})
+    if not isinstance(bookmaker_odds, dict):
+        return parsed
+
+    for bk_key, bk_data in bookmaker_odds.items():
+        bk_norm = _resolve_bookmaker(bk_key)
+        if bk_norm not in sharp_set:
             continue
 
-        # Filter to specific fixtures if requested
-        if fixture_ids and fid not in [str(x) for x in fixture_ids]:
+        if not isinstance(bk_data, dict):
+            continue
+        if not bk_data.get("bookmakerIsActive", True):
             continue
 
-        for odds_entry in fixture.get("odds", []):
-            bookmaker = (odds_entry.get("bookmakerName") or
-                        odds_entry.get("bookmaker") or "").lower()
+        markets = bk_data.get("markets", {})
+        if not isinstance(markets, dict):
+            continue
 
-            # Filter to sharp books only
-            if bookmaker not in sharp_set:
-                continue
-
-            market_id = odds_entry.get("marketTypeId") or odds_entry.get("marketId")
-            market_name = MARKET_MAP.get(market_id)
+        for mkt_id_str, mkt_data in markets.items():
+            market_name = _classify_market(mkt_id_str)
             if not market_name:
                 continue
+            if not isinstance(mkt_data, dict):
+                continue
 
-            for outcome in odds_entry.get("outcomes", []):
-                name = outcome.get("name") or outcome.get("outcomeName") or ""
-                line = outcome.get("point") or outcome.get("line") or outcome.get("handicap")
-                price = outcome.get("price") or outcome.get("odds")
-                changed_at = outcome.get("changedAt") or outcome.get("updatedAt") or ""
-                limit = outcome.get("limit") or outcome.get("maxBet")
+            outcomes = mkt_data.get("outcomes", {})
+            if not isinstance(outcomes, dict):
+                continue
 
-                if price is None:
+            for out_id_str, out_data in outcomes.items():
+                if not isinstance(out_data, dict):
                     continue
 
-                # Convert decimal odds to American
+                players = out_data.get("players", {})
+                if not isinstance(players, dict):
+                    continue
+
+                # Take primary line (index "0"), fall back to first available
+                p_data = players.get("0") or players.get(0)
+                if not isinstance(p_data, dict):
+                    for p_key in sorted(players.keys(), key=str):
+                        if isinstance(players[p_key], dict):
+                            p_data = players[p_key]
+                            break
+
+                if not isinstance(p_data, dict):
+                    continue
+
+                price = p_data.get("price")
+                if price is None:
+                    continue
+                if not p_data.get("active", True):
+                    continue
+
+                changed_at = p_data.get("changedAt", "")
+                limit = p_data.get("limit")
+                handicap = (p_data.get("handicap") or p_data.get("line")
+                            or p_data.get("point") or p_data.get("specialBetValue"))
+
+                side = _resolve_side(market_name, out_id_str, home_team, away_team)
+
                 try:
-                    price_float = float(price)
-                    odds_american = _decimal_to_american(price_float)
+                    odds_american = _decimal_to_american(float(price))
                 except (ValueError, TypeError):
                     odds_american = 0
 
-                # Determine side label
-                if market_name == "TOTAL":
-                    side = name  # "Over" / "Under"
-                else:
-                    side = name  # team name
-
                 parsed.append({
-                    "fixture_id": fid,
-                    "bookmaker": bookmaker,
+                    "fixture_id": str(fid),
+                    "bookmaker": bk_norm,
                     "market": market_name,
                     "side": side,
-                    "line": line,
+                    "line": handicap,
                     "odds_decimal": price,
                     "odds_american": odds_american,
                     "changed_at": changed_at,
                     "limit": limit,
                 })
 
-    return {"odds": parsed, "raw": raw_data, "error": None}
+    return parsed
+
+
+def fetch_odds(sport: str, fixture_ids: list = None) -> dict:
+    """
+    Fetch sharp book odds from OddsPapi.
+
+    Calls /odds per fixture (fixtureId required by API).
+    Uses per-fixture caching to stay within monthly budget.
+
+    Args:
+        sport: Our sport key
+        fixture_ids: Optional list of specific fixture IDs to fetch
+
+    Returns:
+        dict with:
+            "odds": list of parsed outcome dicts
+            "raw": list of raw API responses (for caching)
+            "error": str or None
+    """
+    sport_lower = sport.lower()
+
+    # Fetch fixtures for IDs and team names
+    fix_result = fetch_fixtures(sport_lower)
+    if fix_result["error"] and not fixture_ids:
+        return {"odds": [], "raw": None, "error": fix_result["error"]}
+
+    fixture_map = fix_result.get("fixture_map", {})
+
+    if fixture_ids is None:
+        fixture_ids = list(fixture_map.keys())
+
+    if not fixture_ids:
+        return {"odds": [], "raw": None, "error": f"No fixtures found for {sport}"}
+
+    # Budget guard: limit per-fixture calls
+    fixture_ids = fixture_ids[:MAX_FIXTURE_ODDS_PER_PULL]
+
+    all_parsed = []
+    all_raw = []
+    errors = []
+    sharp_set = set(b.lower() for b in ODDSPAPI_SHARP_BOOKS)
+
+    for fid in fixture_ids:
+        # Check per-fixture odds cache first
+        cached_data = _load_odds_cache(fid)
+        if cached_data is not None:
+            parsed = _parse_odds_response(fid, cached_data, fixture_map, sharp_set)
+            all_parsed.extend(parsed)
+            all_raw.append(cached_data)
+            continue
+
+        result = _api_get("/odds", params={"fixtureId": fid})
+        if result["error"]:
+            errors.append(f"fixture {fid}: {result['error']}")
+            continue
+
+        raw = result["data"]
+        if raw is not None:
+            _save_odds_cache(fid, raw)
+            all_raw.append(raw)
+            parsed = _parse_odds_response(fid, raw, fixture_map, sharp_set)
+            all_parsed.extend(parsed)
+
+    error = "; ".join(errors) if errors and not all_parsed else None
+    return {"odds": all_parsed, "raw": all_raw, "error": error}
 
 
 def fetch_odds_with_cache(sport: str) -> dict:
@@ -399,7 +556,7 @@ def fetch_odds_with_cache(sport: str) -> dict:
             if age <= CACHE_TTL_SECONDS and cache_data.get("sport") == sport:
                 # Re-parse from cached raw data
                 return {
-                    "odds": _parse_cached_odds(cache_data["raw"]),
+                    "odds": _parse_cached_odds(cache_data["raw"], sport),
                     "raw": cache_data["raw"],
                     "error": None,
                     "from_cache": True,
@@ -411,60 +568,28 @@ def fetch_odds_with_cache(sport: str) -> dict:
     return result
 
 
-def _parse_cached_odds(raw_data: list) -> list:
-    """Re-parse odds from cached raw API response."""
-    parsed = []
-    sharp_set = set(b.lower() for b in ODDSPAPI_SHARP_BOOKS)
-
+def _parse_cached_odds(raw_data, sport: str = None) -> list:
+    """Re-parse odds from cached raw API responses (new per-fixture format)."""
     if not isinstance(raw_data, list):
-        return parsed
+        return []
 
-    for fixture in raw_data:
-        fid = str(fixture.get("fixtureId") or fixture.get("id") or "")
-        if not fid:
+    # Need fixture map for team names — fetch from cache
+    fixture_map = {}
+    if sport:
+        fix_result = fetch_fixtures(sport)
+        fixture_map = fix_result.get("fixture_map", {})
+
+    sharp_set = set(b.lower() for b in ODDSPAPI_SHARP_BOOKS)
+    all_parsed = []
+
+    for item in raw_data:
+        if not isinstance(item, dict):
             continue
+        fid = str(item.get("fixtureId", ""))
+        if fid:
+            all_parsed.extend(_parse_odds_response(fid, item, fixture_map, sharp_set))
 
-        for odds_entry in fixture.get("odds", []):
-            bookmaker = (odds_entry.get("bookmakerName") or
-                        odds_entry.get("bookmaker") or "").lower()
-            if bookmaker not in sharp_set:
-                continue
-
-            market_id = odds_entry.get("marketTypeId") or odds_entry.get("marketId")
-            market_name = MARKET_MAP.get(market_id)
-            if not market_name:
-                continue
-
-            for outcome in odds_entry.get("outcomes", []):
-                name = outcome.get("name") or outcome.get("outcomeName") or ""
-                line = outcome.get("point") or outcome.get("line") or outcome.get("handicap")
-                price = outcome.get("price") or outcome.get("odds")
-                changed_at = outcome.get("changedAt") or outcome.get("updatedAt") or ""
-                limit = outcome.get("limit") or outcome.get("maxBet")
-
-                if price is None:
-                    continue
-
-                try:
-                    odds_american = _decimal_to_american(float(price))
-                except (ValueError, TypeError):
-                    odds_american = 0
-
-                side = name
-
-                parsed.append({
-                    "fixture_id": fid,
-                    "bookmaker": bookmaker,
-                    "market": market_name,
-                    "side": side,
-                    "line": line,
-                    "odds_decimal": price,
-                    "odds_american": odds_american,
-                    "changed_at": changed_at,
-                    "limit": limit,
-                })
-
-    return parsed
+    return all_parsed
 
 
 def build_fixture_map(fixtures_result: dict) -> dict:
