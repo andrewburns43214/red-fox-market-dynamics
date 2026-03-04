@@ -62,6 +62,51 @@ SITUATIONAL_DEFAULTS = {
 }
 
 
+def _infer_market_type(row) -> str:
+    """
+    Infer market type from DK side column.
+    DK stores all markets as 'splits' with the type embedded in the side:
+      "Over 221.5" / "Under 221.5" → TOTAL
+      "OKC Thunder -4.5"           → SPREAD
+      "NY Knicks"                  → MONEYLINE
+    """
+    side = str(row.get("side", "")).strip()
+    existing = str(row.get("market", "")).strip().upper()
+    # If already properly tagged, keep it
+    if existing in ("SPREAD", "MONEYLINE", "TOTAL"):
+        return existing
+    if not side:
+        return existing
+    side_lower = side.lower()
+    if side_lower.startswith("over ") or side_lower.startswith("under "):
+        return "TOTAL"
+    # Check for line number (e.g., "-4.5", "+7.5")
+    import re
+    if re.search(r'[+-]\d+\.?\d*$', side):
+        return "SPREAD"
+    return "MONEYLINE"
+
+
+def _clean_side_for_matching(side: str, market: str) -> str:
+    """
+    Clean DK side for matching against L1/L2 keys.
+    Strips line numbers and normalizes team names.
+      "OKC Thunder -4.5" → "oklahoma city thunder"
+      "Over 221.5"       → "over"
+      "NY Knicks"        → "new york knicks"
+    """
+    import re
+    side = side.strip()
+    if not side:
+        return ""
+    if market == "TOTAL":
+        # "Over 221.5" → "over", "Under 142.5" → "under"
+        return side.split()[0].lower() if side else ""
+    # Strip trailing line number: "OKC Thunder -4.5" → "OKC Thunder"
+    cleaned = re.sub(r'\s*[+-]\d+\.?\d*$', '', side).strip()
+    return normalize_team_name(cleaned)
+
+
 def _determine_layer_mode(l1_available: bool, l2_available: bool) -> str:
     """Determine layer mode based on data availability."""
     if l1_available and l2_available:
@@ -152,15 +197,17 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
         else:
             dk_df["canonical_key"] = ""
 
-    # Ensure market column exists
+    # Ensure market column has standard values (SPREAD/MONEYLINE/TOTAL)
+    # DK snapshots store market as "splits" with market type embedded in side column
     if "market" not in dk_df.columns and "market_key" in dk_df.columns:
         dk_df["market"] = dk_df["market_key"]
+    if "side" in dk_df.columns:
+        dk_df["market"] = dk_df.apply(lambda r: _infer_market_type(r), axis=1)
 
-    # Normalize side for matching
+    # Normalize side for matching: strip line numbers, normalize team name
     if "side" in dk_df.columns:
         dk_df["_side_norm"] = dk_df.apply(
-            lambda r: r["side"].lower() if str(r.get("market", "")) == "TOTAL"
-            else normalize_team_name(str(r.get("side", ""))),
+            lambda r: _clean_side_for_matching(str(r.get("side", "")), str(r.get("market", ""))),
             axis=1,
         )
     else:
