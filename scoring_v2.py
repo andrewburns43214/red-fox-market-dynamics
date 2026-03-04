@@ -29,6 +29,9 @@ from engine_config import (
     FAST_SNAP_EARLY_BONUS,
     FAST_SNAP_LATE_PENALTY,
     SLOW_GRIND_PENALTY,
+    RLM_BETS_THRESHOLD,
+    RLM_MONEY_GAP_MIN,
+    RLM_L2_AGREEMENT_MIN,
 )
 from dk_rules import compute_l3_contribution
 
@@ -179,6 +182,46 @@ def compute_l2_contribution(row: dict) -> dict:
     }
 
 
+# ─── REVERSE LINE MOVEMENT ───
+
+def _detect_rlm(row: dict) -> dict:
+    """
+    Detect Reverse Line Movement from cross-layer data.
+
+    RLM = public bets heavy on one side + money NOT following +
+          sharp books moved + consensus confirms.
+
+    Returns {"detected": bool, "strength": float, "bets_money_gap": float}
+    """
+    bets_pct = _safe_float(row.get("bets_pct", row.get("dk_bets_pct", 50)))
+    money_pct = _safe_float(row.get("money_pct", row.get("dk_money_pct", 50)))
+    l1_dir = _safe_int(row.get("l1_move_dir"))
+    l1_strength = _safe_float(row.get("l1_sharp_strength"))
+    l2_agreement = _safe_float(row.get("l2_consensus_agreement"))
+
+    bets_money_gap = bets_pct - money_pct
+
+    detected = (
+        bets_pct >= RLM_BETS_THRESHOLD and
+        bets_money_gap >= RLM_MONEY_GAP_MIN and
+        l1_dir != 0 and
+        l2_agreement >= RLM_L2_AGREEMENT_MIN
+    )
+
+    if not detected:
+        return {"detected": False, "strength": 0.0, "bets_money_gap": bets_money_gap}
+
+    # RLM strength (0 to 1):
+    # - Larger bets-money gap = stronger signal
+    # - Stronger sharp move = more confirmed
+    # - Higher consensus = more validated
+    gap_factor = min(bets_money_gap / 30.0, 1.0)
+    strength = gap_factor * max(l1_strength, 0.3) * max(l2_agreement, 0.5)
+    strength = min(1.0, strength)
+
+    return {"detected": True, "strength": round(strength, 3), "bets_money_gap": round(bets_money_gap, 1)}
+
+
 # ─── INTERACTION PATTERNS ───
 
 def detect_interaction_pattern(row: dict) -> dict:
@@ -208,6 +251,19 @@ def detect_interaction_pattern(row: dict) -> dict:
             "label": "LATE_SNAP_WARNING",
             "explanation": "Rapid sharp movement in final hour — information or chaos",
         }
+
+    # Pattern G: Reverse Line Movement
+    # Public bets heavy on one side but money + line moving the other way
+    if l1_available and l1_dir != 0:
+        rlm = _detect_rlm(row)
+        if rlm["detected"]:
+            return {
+                "pattern": "G",
+                "label": "REVERSE_LINE_MOVE",
+                "explanation": f"Public bets heavy but line moved opposite — sharp money confirmed (gap: {rlm['bets_money_gap']}%)",
+                "rlm_strength": rlm["strength"],
+                "rlm_gap": rlm["bets_money_gap"],
+            }
 
     # Pattern A: Sharp vs Public (best edge)
     if l1_available and l1_dir != 0 and l2_agreement >= 0.5 and dk_public_heavy:
@@ -314,6 +370,7 @@ def score_floor(pattern: str, layer_mode: str) -> float:
     floors = {
         "A": 50.0,
         "D": 50.0,
+        "G": 50.0,
         "B": 45.0,
         "C": 40.0,
         "E": 40.0,
@@ -412,7 +469,7 @@ def compute_3layer_score(row: dict) -> dict:
         strong_eligible and
         layer_mode == "L123" and
         final_score >= 70 and
-        pattern in ("A", "D")
+        pattern in ("A", "D", "G")
     )
 
     # Collect flags
@@ -446,6 +503,10 @@ def compute_3layer_score(row: dict) -> dict:
             "l2": l2_result.get("l2_details", {}),
             "l3": l3_result.get("l3_details", {}),
             "pattern": pattern_result,
+            "rlm": {
+                "strength": pattern_result.get("rlm_strength", 0),
+                "gap": pattern_result.get("rlm_gap", 0),
+            } if pattern == "G" else None,
             "raw_score": round(raw_score, 2),
             "cap": cap,
             "floor": floor,

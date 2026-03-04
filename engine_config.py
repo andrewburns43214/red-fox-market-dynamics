@@ -76,7 +76,13 @@ PATTERN_EFFECTS = {
     "D": {"bonus": 4, "strong_eligible": True, "label": "STALE_PRICE"},
     "E": {"bonus": -6, "cap": 65, "strong_eligible": False, "label": "CONSENSUS_REJECTS"},
     "F": {"bonus": -8, "strong_eligible": False, "label": "LATE_SNAP_WARNING"},
+    "G": {"bonus": 4, "strong_eligible": True, "label": "REVERSE_LINE_MOVE"},
 }
+
+# ─── RLM THRESHOLDS ───
+RLM_BETS_THRESHOLD = 60     # bets% must be at least this on one side
+RLM_MONEY_GAP_MIN = 15      # minimum bets% - money% gap for RLM
+RLM_L2_AGREEMENT_MIN = 0.5  # L2 must agree at this level
 
 # ─── DK RULES THRESHOLDS (v2.0) ───
 
