@@ -168,7 +168,10 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
 
     # Join L1 features
     for col, default in L1_DEFAULTS.items():
-        dk_df[col] = default
+        if isinstance(default, (list, dict)):
+            dk_df[col] = [default.copy() if isinstance(default, (list, dict)) else default for _ in range(len(dk_df))]
+        else:
+            dk_df[col] = default
 
     for idx, row in dk_df.iterrows():
         canon = row.get("canonical_key", "")
@@ -184,7 +187,10 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
 
     # Join L2 features
     for col, default in L2_DEFAULTS.items():
-        dk_df[col] = default
+        if isinstance(default, (list, dict)):
+            dk_df[col] = [default.copy() for _ in range(len(dk_df))]
+        else:
+            dk_df[col] = default
 
     for idx, row in dk_df.iterrows():
         canon = row.get("canonical_key", "")
