@@ -475,8 +475,8 @@ td { padding: 6px 10px; font-size: 12px; white-space: nowrap; vertical-align: mi
 .tLIVE  { background: #fff0f0; color: #cc1818; border: 1px solid #f8b8b8; animation: glr 1.2s ease-in-out infinite; }
 @keyframes glr { 0%,100%{box-shadow:0 0 4px rgba(229,57,53,.3)}50%{box-shadow:0 0 12px rgba(229,57,53,.6)} }
 
-/* MARKET READ (v1.2) */
-.td-mr { text-align: center; width: 80px; padding: 6px 4px; }
+/* RETAIL TREND (was Market Read v1.2) */
+.td-mr { text-align: center; width: 72px; padding: 6px 4px; }
 .mr {
   display: inline-block; padding: 2px 5px; border-radius: 3px;
   font-family: var(--mono); font-size: 7.5px; font-weight: 600; letter-spacing: .3px;
@@ -1000,8 +1000,8 @@ th.th-game { text-align: left; }
                 <th onclick="sortBy('v2_pattern',this)">Pattern</th>
                 <th onclick="sortBy('layer_mode',this)">Layer</th>
                 <th onclick="sortBy('timing_bucket',this)">Timing</th>
-                <th onclick="sortBy('market_read',this)">Mkt Read</th>
-                <th onclick="sortBy('regime',this)">Reg</th>
+                <th onclick="sortBy('market_read',this)">Retail Read</th>
+                <th onclick="sortBy('regime',this)">Regime</th>
                 <th>Decision</th>
                 <th>Play</th>
               </tr>
@@ -1189,10 +1189,10 @@ function cC(c){ return c>=72?'hi':c>=60?'md':'lo'; }
 function decInfo(d){ const s=(d||'').toUpperCase(); if(s==='STRONG_BET') return['Strong Bet','dec-bet dec-strong']; if(s==='BET') return['Bet','dec-bet']; if(s==='LEAN') return['Lean','dec-lean']; return['No Bet','dec-no']; }
 function spChip(s){ const k=(s||'').toLowerCase(); return `<span class="sport-chip sc-${k}">${(s||'').toUpperCase()}</span>`; }
 function timBadge(b){ const k=(b||'EARLY').toUpperCase(); return `<span class="tim t${k}">${k}</span>`; }
-function mrBadge(m){ const s=(m||'').trim(); if(!s||s==='-') return '-'; const lu=s.toUpperCase(); const map={'STEALTH MOVE':'mr-stealth','FREEZE PRESSURE':'mr-freeze','ALIGNED SHARP':'mr-aligned','REVERSE PRESSURE':'mr-reverse','CONTRADICTION':'mr-contra','PUBLIC DRIFT':'mr-public','NEUTRAL':'mr-neutral'}; const cls=map[lu]||'mr-neutral'; return `<span class="mr ${cls}">${s}</span>`; }
-function regBadge(r){ const k=(r||'N').toUpperCase().trim(); if(!k||k==='-') return '-'; const cls='reg-'+(k.charAt(0)||'N'); return `<span class="reg ${cls}">${k}</span>`; }
+function mrBadge(m){ const s=(m||'').trim(); if(!s||s==='-') return '-'; const lu=s.toUpperCase(); const map={'STEALTH MOVE':'mr-stealth','FREEZE PRESSURE':'mr-freeze','ALIGNED SHARP':'mr-aligned','REVERSE PRESSURE':'mr-reverse','CONTRADICTION':'mr-contra','PUBLIC DRIFT':'mr-public','NEUTRAL':'mr-neutral'}; const cls=map[lu]||'mr-neutral'; const labels={'STEALTH MOVE':'Hidden $','FREEZE PRESSURE':'$ No Move','ALIGNED SHARP':'$ + Move','REVERSE PRESSURE':'$ vs Line','CONTRADICTION':'Mixed','PUBLIC DRIFT':'Crowd Push','NEUTRAL':'Flat'}; const tips={'STEALTH MOVE':'Money flowing in quietly — low bets, significant money','FREEZE PRESSURE':'Big money divergence but line not moving yet','ALIGNED SHARP':'Money and line movement both pointing same direction','REVERSE PRESSURE':'Money pushing one way, line moved opposite','CONTRADICTION':'Signals conflict — money says one thing, line says another','PUBLIC DRIFT':'High public bet volume pushing the line — no edge','NEUTRAL':'No meaningful money or line signal detected'}; return `<span class="mr ${cls}" title="${tips[lu]||''}">${labels[lu]||s}</span>`; }
+function regBadge(r){ const k=(r||'N').toUpperCase().trim(); if(!k||k==='-') return '-'; const cls='reg-'+(k.charAt(0)||'N'); const labels={A:"Stealth",B:"Fade",C:"Weak Push",D:"Surge",N:"Flat"}; const tips={A:"Low bets, high money, line moved against",B:"High bets + money, line fading",C:"Weak public push amplified",D:"Strong money divergence into the side",N:"No clear regime detected"}; return `<span class="reg ${cls}" title="${tips[k]||''}">${labels[k]||k}</span>`; }
 function patBadge(p){ const k=(p||'').toUpperCase().trim(); if(!k) return '-'; const tips={G:'Reverse Line Movement',A:'Sharp vs Public',D:'Stale Price',B:'Aligned',F:'Late Snap',C:'Public Only',E:'Consensus Rejects',N:'Neutral'}; const labels={G:'RLM',A:'SHRP',D:'STALE',B:'ALGN',F:'SNAP',C:'PUB',E:'REJ',N:'NEU'}; return `<span class="pat pat-${k}" title="${tips[k]||k}">${labels[k]||k}</span>`; }
-function lyrBadge(l){ const k=(l||'').trim(); if(!k) return '-'; const labels={L123:'FULL',L13:'PARTIAL',L23:'PARTIAL',L3_ONLY:'LIMITED'}; const tips={L123:'Sharp + Consensus + DK (3-layer)',L13:'Sharp + DK (no consensus)',L23:'Consensus + DK (no sharp)',L3_ONLY:'DK only (retail data)'}; return `<span class="lyr lyr-${k}" title="${tips[k]||k}">${labels[k]||k}</span>`; }
+function lyrBadge(l){ const k=(l||'').trim(); if(!k) return '-'; const labels={L123:'FULL',L13:'PARTIAL',L23:'PARTIAL',L3_ONLY:'LIMITED'}; const tips={L123:'All 3 data layers active',L13:'2 of 3 layers (missing consensus)',L23:'2 of 3 layers (missing primary)',L3_ONLY:'Single layer — limited confidence'}; return `<span class="lyr lyr-${k}" title="${tips[k]||k}">${labels[k]||k}</span>`; }
 function wrCol(p){ return p>=65?'g':p>=55?'a':'r'; }
 function wrClr(p){ return p>=65?'var(--green2)':p>=55?'var(--gold2)':'var(--red2)'; }
 
