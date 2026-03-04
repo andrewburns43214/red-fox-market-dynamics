@@ -1299,8 +1299,10 @@ function isBetPlus(r) {
   return d==='STRONG BET'||d==='STRONG_BET'||d==='BET';
 }
 
-// ── v1.2 epoch: only count results resolved on or after this date ──
-const V12_EPOCH = '2026-03-03T05:00:00';  // midnight Mar 3 EST in UTC
+// ── v2.0 epoch: only count results resolved on or after this date ──
+// Reset to v2.0 launch — 3-layer scoring went live Mar 4
+const V2_EPOCH = '2026-03-05T05:00:00';  // midnight Mar 5 EST in UTC (fresh start)
+const V12_EPOCH = V2_EPOCH;
 
 // ── Shared denominator helpers (single source of truth) ──
 function gradedRows(data) {
@@ -1308,6 +1310,8 @@ function gradedRows(data) {
     if (!['WIN','LOSS'].includes((r.result||r.outcome||'').toUpperCase())) return false;
     const ts = r.resolved_at_utc || '';
     if (ts && ts < V12_EPOCH) return false;   // pre-v1.2 data excluded
+    // Only count the picked side — both sides exist in CSV, skip the non-pick
+    if (r.side && r.favored_side && r.side.trim() !== r.favored_side.trim()) return false;
     return true;
   });
 }
@@ -1918,7 +1922,10 @@ function renderResults(){
   const resolved=src.filter(r=>{
     if(!['WIN','LOSS'].includes((r.result||'').toUpperCase())) return false;
     const ts=r.resolved_at_utc||'';
-    return !(ts && ts < V12_EPOCH);
+    if(ts && ts < V12_EPOCH) return false;
+    // Only show the picked side
+    if(r.side && r.favored_side && r.side.trim() !== r.favored_side.trim()) return false;
+    return true;
   }).sort((a,b)=>new Date(b.resolved_at_utc||0)-new Date(a.resolved_at_utc||0));
   if(!resolved.length){
     const inner=el.querySelector('.full-tab')||el;
