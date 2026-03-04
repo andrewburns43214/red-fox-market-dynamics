@@ -127,3 +127,45 @@ KEY_NUMBERS = {3, 7, 10, 14, 17}
 
 # ─── STALE ROW CLEANUP ───
 STALE_TICK_THRESHOLD = 3  # expire rows not seen in this many ticks
+
+# ─── SPORT SEASON CALENDAR ───
+# (start_month, end_month) — wraps around year boundary (e.g. Oct-Jun = 10,6)
+SPORT_SEASONS = {
+    "ufc":   (1, 12),   # year-round
+    "nba":   (10, 6),
+    "nhl":   (10, 6),
+    "mlb":   (3, 11),
+    "ncaab": (11, 4),
+    "ncaaf": (8, 1),
+    "nfl":   (9, 2),
+}
+
+
+# ─── API BUDGET ───
+API_MONTHLY_BUDGET = 500          # free tier limit
+API_BUDGET_RESERVE = 30           # stop pulling if fewer than this remain
+API_PULLS_PER_DAY_DEFAULT = 3     # weekdays + non-NFL Sundays
+API_PULLS_NFL_SUNDAY = 4          # NFL Sundays get an extra pull
+
+# Pull schedule (ET hours) — used by cron documentation, not enforced in code
+# Weekdays:     11:30, 15:30, 18:30
+# NFL Sundays:  11:00, 12:15, 15:30, 18:30
+
+
+def get_active_sports(month: int = None) -> list:
+    """Return list of sport keys active for the given month (1-12)."""
+    if month is None:
+        from datetime import datetime, timezone
+        month = datetime.now(timezone.utc).month
+
+    active = []
+    for sport, (start, end) in SPORT_SEASONS.items():
+        if start <= end:
+            # Normal range (e.g. Mar-Nov)
+            if start <= month <= end:
+                active.append(sport)
+        else:
+            # Wraps around year (e.g. Oct-Jun = 10,6)
+            if month >= start or month <= end:
+                active.append(sport)
+    return active
