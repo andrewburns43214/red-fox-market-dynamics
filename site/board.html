@@ -514,6 +514,33 @@ td { padding: 6px 10px; font-size: 12px; white-space: nowrap; vertical-align: mi
 .dec-lean { background: #fffbee; color: #8a5a00; border: 1px solid #f0dc80; }
 .dec-no   { background: #f4f5f7; color: #9aa0b4; border: 1px solid #dde0e8; }
 
+/* V2 PATTERN BADGE */
+.td-pat { text-align: center; width: 56px; padding: 6px 4px; }
+.pat {
+  display: inline-block; padding: 2px 6px; border-radius: 3px;
+  font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: .4px;
+  cursor: default;
+}
+.pat-G { background: #f3eeff; color: #7c3aed; border: 1px solid #c4b5fd; }
+.pat-A { background: #edfff5; color: #006e40; border: 1px solid #b0e8cc; }
+.pat-D { background: #fff2f2; color: #c03800; border: 1px solid #f8c0a8; }
+.pat-B { background: #eef5ff; color: #1a6fd4; border: 1px solid #b8d4f8; }
+.pat-F { background: #fff8ee; color: #b06000; border: 1px solid #f0d8a0; }
+.pat-C { background: #fffbee; color: #8a5a00; border: 1px solid #f0dc80; }
+.pat-E { background: #fff4ee; color: #b84400; border: 1px solid #f8c8a0; }
+.pat-N { background: #f4f5f7; color: #8892aa; border: 1px solid #dde0e8; }
+
+/* LAYER MODE BADGE */
+.td-layer { text-align: center; width: 44px; padding: 6px 4px; }
+.lyr {
+  display: inline-block; padding: 2px 5px; border-radius: 3px;
+  font-family: var(--mono); font-size: 7.5px; font-weight: 700; letter-spacing: .3px;
+}
+.lyr-L123    { background: #edfff5; color: #006e40; border: 1px solid #b0e8cc; }
+.lyr-L13     { background: #fff8ee; color: #b06000; border: 1px solid #f0d8a0; }
+.lyr-L23     { background: #eef5ff; color: #1a6fd4; border: 1px solid #b8d4f8; }
+.lyr-L3_ONLY { background: #f4f5f7; color: #8892aa; border: 1px solid #dde0e8; }
+
 .td-pick {
   font-family: var(--sans);
   font-size: 12px; font-weight: 600;
@@ -970,6 +997,8 @@ th.th-game { text-align: left; }
                 <th onclick="sortBy('net_edge',this)">Edge</th>
                 <th onclick="sortBy('game_confidence',this)">Conf</th>
                 <th>Bucket</th>
+                <th onclick="sortBy('v2_pattern',this)">Pattern</th>
+                <th onclick="sortBy('layer_mode',this)">Layer</th>
                 <th onclick="sortBy('timing_bucket',this)">Timing</th>
                 <th onclick="sortBy('market_read',this)">Mkt Read</th>
                 <th onclick="sortBy('regime',this)">Reg</th>
@@ -1162,6 +1191,8 @@ function spChip(s){ const k=(s||'').toLowerCase(); return `<span class="sport-ch
 function timBadge(b){ const k=(b||'EARLY').toUpperCase(); return `<span class="tim t${k}">${k}</span>`; }
 function mrBadge(m){ const s=(m||'').trim(); if(!s||s==='-') return '-'; const lu=s.toUpperCase(); const map={'STEALTH MOVE':'mr-stealth','FREEZE PRESSURE':'mr-freeze','ALIGNED SHARP':'mr-aligned','REVERSE PRESSURE':'mr-reverse','CONTRADICTION':'mr-contra','PUBLIC DRIFT':'mr-public','NEUTRAL':'mr-neutral'}; const cls=map[lu]||'mr-neutral'; return `<span class="mr ${cls}">${s}</span>`; }
 function regBadge(r){ const k=(r||'N').toUpperCase().trim(); if(!k||k==='-') return '-'; const cls='reg-'+(k.charAt(0)||'N'); return `<span class="reg ${cls}">${k}</span>`; }
+function patBadge(p){ const k=(p||'').toUpperCase().trim(); if(!k) return '-'; const tips={G:'Reverse Line Movement',A:'Sharp vs Public',D:'Stale Price',B:'Aligned',F:'Late Snap',C:'Public Only',E:'Consensus Rejects',N:'Neutral'}; const labels={G:'RLM',A:'SHRP',D:'STALE',B:'ALGN',F:'SNAP',C:'PUB',E:'REJ',N:'NEU'}; return `<span class="pat pat-${k}" title="${tips[k]||k}">${labels[k]||k}</span>`; }
+function lyrBadge(l){ const k=(l||'').trim(); if(!k) return '-'; const labels={L123:'L123',L13:'L13',L23:'L23',L3_ONLY:'L3'}; const tips={L123:'Sharp + Consensus + DK (full model)',L13:'Sharp + DK',L23:'Consensus + DK',L3_ONLY:'DK only'}; return `<span class="lyr lyr-${k}" title="${tips[k]||k}">${labels[k]||k}</span>`; }
 function wrCol(p){ return p>=65?'g':p>=55?'a':'r'; }
 function wrClr(p){ return p>=65?'var(--green2)':p>=55?'var(--gold2)':'var(--red2)'; }
 
@@ -1185,11 +1216,12 @@ function renderBoard(){
   document.getElementById('board-meta').textContent=`${data.length} rows · sorted by ${sortCol.replace(/_/g,' ')}`;
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
   data.forEach((r,i)=>{
-    const conf=Number(r.game_confidence)||0, edge=Math.round(Number(r.net_edge)||0);
+    const v2s=Number(r.v2_score)||0;
+    const conf=v2s>0?v2s:(Number(r.game_confidence)||0), edge=Math.round(Number(r.net_edge)||0);
     const[dt,dc]=decInfo(r.game_decision); const bk=confBkt(conf);
     const lc=r.current_line&&r.open_line&&String(r.current_line).trim()!==String(r.open_line).trim();
     const tr=document.createElement('tr');
-    if((r.game_decision||'').toUpperCase()==='STRONG_BET') tr.classList.add('row-strong'); else if(conf>=70) tr.classList.add('row-hi'); else tr.classList.add('row-mid');
+    if((r.game_decision||'').toUpperCase()==='STRONG_BET') tr.classList.add('row-strong'); else if(conf>=70) tr.classList.add('row-hi'); else if(conf>=60) tr.classList.add('row-mid');
     tr.innerHTML=`
       <td class="td-rank">${i+1}</td>
       <td class="td-game">
@@ -1234,6 +1266,8 @@ function renderBoard(){
       <td class="td-edge"><span class="ev ${eC(edge)}">${edge}</span></td>
       <td class="td-conf"><span class="cv ${cC(conf)}">${conf.toFixed(1)}</span></td>
       <td class="td-bkt"><span class="bkt ${bk.c}">${bk.l}</span></td>
+      <td class="td-pat">${patBadge(r.v2_pattern)}</td>
+      <td class="td-layer">${lyrBadge(r.layer_mode)}</td>
       <td class="td-tim">${timBadge(r.timing_bucket)}</td>
       <td class="td-mr">${mrBadge(r.market_read)}</td>
       <td class="td-reg">${regBadge(r.regime)}</td>
