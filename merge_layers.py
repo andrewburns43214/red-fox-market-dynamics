@@ -141,8 +141,13 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
     if "canonical_key" not in dk_df.columns:
         # Try to build from game column
         if "game" in dk_df.columns:
-            dk_df["canonical_key"] = dk_df["game"].apply(
-                lambda g: build_canonical_key_from_dk(g) if pd.notna(g) else ""
+            dk_df["canonical_key"] = dk_df.apply(
+                lambda r: build_canonical_key_from_dk(
+                    r["game"],
+                    r.get("sport", sport or ""),
+                    r.get("dk_start_iso", ""),
+                ) if pd.notna(r.get("game")) else "",
+                axis=1,
             )
         else:
             dk_df["canonical_key"] = ""
