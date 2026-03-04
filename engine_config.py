@@ -143,7 +143,7 @@ SPORT_SEASONS = {
 
 # ─── ODDSPAPI CONFIGURATION (Layer 1 primary) ───
 ODDSPAPI_KEY = os.environ.get("ODDSPAPI_KEY", "")
-ODDSPAPI_BASE_URL = "https://api.oddspapi.io/api/v1"
+ODDSPAPI_BASE_URL = "https://api.oddspapi.io/v4"
 ODDSPAPI_CACHE_JSON = os.path.join(DATA_DIR, "oddspapi_cache.json")
 
 # OddsPapi tournament IDs (discovered via /tournaments endpoint)
