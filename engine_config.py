@@ -47,8 +47,8 @@ API_SPORT_MAP_REVERSE = {v: k for k, v in API_SPORT_MAP.items()}
 # Sharp books for Layer 1 (order = priority)
 L1_SHARP_BOOKS = ["pinnacle"]
 
-# All US books for Layer 2 consensus
-L2_CONSENSUS_REGIONS = ["us"]
+# Regions to fetch — us for domestic books, eu for Pinnacle/offshore sharp books
+L2_CONSENSUS_REGIONS = ["us", "eu"]
 
 # Cache TTL (seconds) - use cached data if API fails and cache is this fresh
 CACHE_TTL_SECONDS = 1800  # 30 minutes
