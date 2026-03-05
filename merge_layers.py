@@ -214,20 +214,34 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
         except Exception:
             situational = None
 
-    # Ensure canonical_key column exists
+    # Ensure canonical_key column exists and is populated
+    # If canonical_key is missing or empty, try to build from game column
+    def _build_canon(r):
+        if pd.notna(r.get("game")) and str(r.get("game", "")).strip():
+            game_str = str(r["game"])
+            row_sport = r.get("sport", sport or "")
+            # Use dk_start_iso, or fall back to snapshot timestamp for date
+            start_iso = str(r.get("dk_start_iso", "") or "").strip()
+            if not start_iso:
+                # Try snapshot timestamp as date fallback
+                start_iso = str(r.get("timestamp", "") or "").strip()
+            if not start_iso:
+                # Last resort: use today's date
+                from datetime import datetime, timezone
+                start_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            return build_canonical_key_from_dk(game_str, row_sport, start_iso)
+        return ""
+
     if "canonical_key" not in dk_df.columns:
-        # Try to build from game column
         if "game" in dk_df.columns:
-            dk_df["canonical_key"] = dk_df.apply(
-                lambda r: build_canonical_key_from_dk(
-                    r["game"],
-                    r.get("sport", sport or ""),
-                    r.get("dk_start_iso", ""),
-                ) if pd.notna(r.get("game")) else "",
-                axis=1,
-            )
+            dk_df["canonical_key"] = dk_df.apply(_build_canon, axis=1)
         else:
             dk_df["canonical_key"] = ""
+    else:
+        # Fill in any empty canonical keys
+        empty_mask = dk_df["canonical_key"].isna() | (dk_df["canonical_key"] == "")
+        if empty_mask.any() and "game" in dk_df.columns:
+            dk_df.loc[empty_mask, "canonical_key"] = dk_df.loc[empty_mask].apply(_build_canon, axis=1)
 
     # Ensure market column has standard values (SPREAD/MONEYLINE/TOTAL)
     # DK snapshots store market as "splits" with market type embedded in side column

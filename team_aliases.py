@@ -294,6 +294,28 @@ TEAM_ALIASES = {
     "north texas": "north texas",
     "middle tennessee": "middle tenn",
     "middle tenn": "middle tenn",
+    "long beach state": "long beach st",
+    "long beach st": "long beach st",
+    "cal state fullerton": "cs fullerton",
+    "cal st fullerton": "cs fullerton",
+    "california baptist": "cal baptist",
+    "abilene christian": "abilene christian",
+    "jacksonville state": "jacksonville st",
+    "jacksonville st": "jacksonville st",
+    "new mexico state": "new mexico st",
+    "new mexico st": "new mexico st",
+    "kennesaw state": "kennesaw st",
+    "kennesaw st": "kennesaw st",
+    "south dakota state": "south dakota st",
+    "south dakota st": "south dakota st",
+    "north dakota state": "north dakota st",
+    "north dakota st": "north dakota st",
+    "ut arlington": "ut arlington",
+    "texas-arlington": "ut arlington",
+    "missouri state": "missouri st",
+    "missouri st": "missouri st",
+    "sam houston": "sam houston",
+    "sam houston state": "sam houston",
 
     # ─── NBA shorthand (DK -> Odds-API full names) ───
     "atl hawks": "atlanta hawks",
@@ -466,6 +488,8 @@ API_TEAM_ALIASES = {
     "jesus santos aguilar": "jesus aguilar",
     "su mudaerji": "sumudaerji",
     "sumudaerji sumudaerji": "sumudaerji",
+    "raul rosas jr.": "raul rosas jr",
+    "raul rosas jr": "raul rosas jr",
 }
 
 
