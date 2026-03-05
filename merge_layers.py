@@ -562,6 +562,14 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
         except Exception as e:
             print(f"  NCAAB rankings skipped: {e}")
 
+    # UFC: filter out non-MONEYLINE markets (UFC only has 2-way moneyline)
+    if _sport_str == "ufc" and "market" in dk_df.columns:
+        _pre_ufc = len(dk_df)
+        dk_df = dk_df[~dk_df["market"].astype(str).str.upper().isin(["SPREAD", "TOTAL"])].copy()
+        _post_ufc = len(dk_df)
+        if _pre_ufc != _post_ufc:
+            print(f"  UFC: filtered {_pre_ufc - _post_ufc} non-MONEYLINE rows")
+
     # Clean up temp column
     if "_side_norm" in dk_df.columns:
         dk_df.drop(columns=["_side_norm"], inplace=True)

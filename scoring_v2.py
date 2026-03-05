@@ -35,6 +35,14 @@ from engine_config import (
     RLM_BETS_THRESHOLD,
     RLM_MONEY_GAP_MIN,
     RLM_L2_AGREEMENT_MIN,
+    SCORE_FLOORS,
+    PUBLIC_HEAVY_THRESHOLD,
+    CROSS_CHECK_CONSISTENT,
+    CROSS_CHECK_CONTRADICTION,
+    DECAY_FLAT_TICK_START,
+    DECAY_MAX,
+    B2B_SINGLE_ADJ,
+    LINE_DIFF_ENABLED,
 )
 
 
@@ -132,8 +140,9 @@ def compute_l1_adjustment(row: dict) -> dict:
     elif speed_label == "SLOW_GRIND":
         speed_bonus = SLOW_GRIND_PENALTY  # -2
 
-    # Key number crossing bonus
-    key_bonus = 2.0 if key_cross else 0.0
+    # Key number crossing bonus (football only — key numbers are NFL/NCAAF specific)
+    _sport = str(row.get("sport", "")).upper()
+    key_bonus = 2.0 if key_cross and _sport in ("NFL", "NCAAF") else 0.0
 
     # Limit confidence multiplier
     limit_mult = 1.0
@@ -349,7 +358,7 @@ def detect_interaction_pattern(row: dict) -> dict:
     speed_label = str(row.get("l1_speed_label", ""))
 
     dk_bets = _safe_float(row.get("bets_pct", row.get("dk_bets_pct", 50)))
-    dk_public_heavy = dk_bets > 65 or dk_bets < 35
+    dk_public_heavy = dk_bets > PUBLIC_HEAVY_THRESHOLD or dk_bets < (100 - PUBLIC_HEAVY_THRESHOLD)
 
     hours_to_game = _safe_float(row.get("hours_to_game", row.get("time_to_start_hours", 4)))
 
@@ -410,7 +419,7 @@ def detect_interaction_pattern(row: dict) -> dict:
     if (not l1_available or l1_dir == 0) and dk_public_heavy:
         return {
             "pattern": "C",
-            "label": "RETAIL_ALIGNMENT",
+            "label": "RETAIL_ONLY",
             "explanation": "No sharp movement, heavy public action — pure retail bias",
         }
 
@@ -436,9 +445,9 @@ def spread_total_cross_check(row: dict) -> float:
         return 0.0
 
     if (spread_dir > 0) == (total_dir > 0):
-        return 1.0  # Consistent
+        return CROSS_CHECK_CONSISTENT
     else:
-        return -2.0  # Contradiction
+        return CROSS_CHECK_CONTRADICTION
 
 
 # ─── MOMENTUM DECAY ───
@@ -451,8 +460,8 @@ def momentum_decay(row: dict) -> float:
     """
     flat_ticks = _safe_int(row.get("flat_ticks", row.get("score_flat_count", 0)))
 
-    if flat_ticks >= 4:
-        return max(-3.0, -(flat_ticks - 3) * 1.0)
+    if flat_ticks >= DECAY_FLAT_TICK_START:
+        return max(DECAY_MAX, -(flat_ticks - (DECAY_FLAT_TICK_START - 1)) * 1.0)
 
     return 0.0
 
@@ -463,13 +472,7 @@ def score_floor(pattern: str, layer_mode: str) -> float:
     """Minimum score based on signal quality."""
     if layer_mode == "L3_ONLY":
         return 0.0
-
-    floors = {
-        "A": 50.0, "D": 50.0, "G": 50.0,
-        "B": 45.0, "C": 40.0, "E": 40.0,
-        "F": 40.0, "N": 40.0,
-    }
-    return floors.get(pattern, 0.0)
+    return SCORE_FLOORS.get(pattern, 0.0)
 
 
 # ─── MAIN SCORING FUNCTION ───
@@ -524,10 +527,8 @@ def compute_unified_score(row: dict) -> dict:
     # Cross-market check
     cross_adj = spread_total_cross_check(row)
 
-    # Line differential bonus — DISABLED: 3x/day L2 data too stale for
-    # precise line-vs-line comparisons. L2 directional validation (agreement,
-    # dispersion) still active. Re-enable when real-time feeds available.
-    line_diff = 0.0
+    # Line differential bonus (disabled via config — L2 data too stale for line-vs-line)
+    line_diff = compute_line_differential_bonus(row) if LINE_DIFF_ENABLED else 0.0
 
     # Momentum decay (now for ALL rows)
     decay = momentum_decay(row)
@@ -536,7 +537,9 @@ def compute_unified_score(row: dict) -> dict:
     b2b_adj = 0.0
     b2b_flag = str(row.get("b2b_flag", ""))
     if b2b_flag in ("HOME_B2B", "AWAY_B2B"):
-        b2b_adj = -1.0
+        b2b_adj = B2B_SINGLE_ADJ
+    elif b2b_flag == "BOTH_B2B":
+        b2b_adj = 0.0  # Both teams B2B — effects cancel
 
     # Context layers (injuries, weather, sport-specific) are UI-only.
     # The books already price in injuries, pitching, goalies, park factors, etc.

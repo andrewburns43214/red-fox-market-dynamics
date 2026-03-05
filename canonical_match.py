@@ -138,8 +138,11 @@ def fuzzy_match_key(key1: str, key2: str, date_tolerance_days: int = 1) -> float
         if name1_a == name2_a and name1_b == name2_b:
             score += 0.7
         elif name1_a == name2_b and name1_b == name2_a:
-            # Reversed order (can happen with UFC or data quirks)
-            score += 0.65
+            # Reversed order — only valid for UFC (fighter order is arbitrary)
+            if sport1.lower() == "ufc":
+                score += 0.65
+            else:
+                score += 0.0  # Non-UFC: reversed away/home is a different game
         else:
             # Token overlap matching
             tokens1_a = set(name1_a.split())

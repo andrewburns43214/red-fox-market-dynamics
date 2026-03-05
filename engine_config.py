@@ -78,8 +78,8 @@ SCORE_CAP_L3_ONLY = 75
 # Pattern bonuses/penalties
 PATTERN_EFFECTS = {
     "A": {"bonus": 5, "strong_eligible": True, "label": "SHARP_VS_PUBLIC"},
-    "B": {"cap": 70, "strong_eligible": False, "label": "RETAIL_ALIGNMENT"},
-    "C": {"bonus": -5, "strong_eligible": False, "label": "RETAIL_ALIGNMENT"},
+    "B": {"bonus": 0, "cap": 70, "strong_eligible": False, "label": "RETAIL_ALIGNMENT"},
+    "C": {"bonus": -5, "strong_eligible": False, "label": "RETAIL_ONLY"},
     "D": {"bonus": 4, "strong_eligible": True, "label": "STALE_PRICE"},
     "E": {"bonus": -6, "cap": 65, "strong_eligible": False, "label": "CONSENSUS_REJECTS"},
     "F": {"bonus": -8, "strong_eligible": False, "label": "LATE_SNAP_WARNING"},
@@ -137,6 +137,30 @@ NET_EDGE_MIN_TOTAL = 12
 
 # ─── KEY NUMBERS ───
 KEY_NUMBERS = {3, 7, 10, 14, 17}
+
+# Score floors by pattern (minimum score based on signal quality)
+SCORE_FLOORS = {
+    "A": 50.0, "D": 50.0, "G": 50.0,
+    "B": 45.0, "C": 40.0, "E": 40.0,
+    "F": 40.0, "N": 40.0,
+}
+
+# Public heavy threshold (bets% above or below this = "public heavy")
+PUBLIC_HEAVY_THRESHOLD = 65
+
+# Cross-market check values
+CROSS_CHECK_CONSISTENT = 1.0
+CROSS_CHECK_CONTRADICTION = -2.0
+
+# Momentum decay
+DECAY_FLAT_TICK_START = 4
+DECAY_MAX = -3.0
+
+# B2B adjustment
+B2B_SINGLE_ADJ = -1.0
+
+# Line diff feature flag
+LINE_DIFF_ENABLED = False
 
 # ─── STALE ROW CLEANUP ───
 STALE_TICK_THRESHOLD = 3  # expire rows not seen in this many ticks
