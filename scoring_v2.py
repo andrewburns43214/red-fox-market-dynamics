@@ -538,54 +538,13 @@ def compute_unified_score(row: dict) -> dict:
     if b2b_flag in ("HOME_B2B", "AWAY_B2B"):
         b2b_adj = -1.0
 
-    # Injury situational adjustment (NBA/NHL/NFL only — college rosters too deep)
-    injury_adj = 0.0
-    _inj_sport = str(row.get("sport", "")).lower()
-    if _inj_sport in ("nba", "nhl", "nfl"):
-        _home_inj = int(row.get("home_injury_count", 0) or 0)
-        _away_inj = int(row.get("away_injury_count", 0) or 0)
-        _side = str(row.get("side", "")).lower()
-        _home_norm = str(row.get("home_team_norm", "")).lower()
-        _away_norm = str(row.get("away_team_norm", "")).lower()
-        _mkt = str(row.get("market_display", "")).upper()
-
-        if _mkt == "TOTAL":
-            # Totals: heavy injuries on either side reduce confidence
-            _total_inj = _home_inj + _away_inj
-            if _total_inj >= 4:
-                injury_adj = -1.5
-            elif _total_inj >= 2:
-                injury_adj = -0.5
-        else:
-            # ML/SPREAD: determine which team we're on
-            _on_home = _home_norm and _home_norm in _side
-            _on_away = _away_norm and _away_norm in _side
-            if _on_home:
-                _our_inj, _opp_inj = _home_inj, _away_inj
-            elif _on_away:
-                _our_inj, _opp_inj = _away_inj, _home_inj
-            else:
-                _our_inj, _opp_inj = 0, 0
-
-            # Our team has injuries → dampen confidence
-            if _our_inj >= 3:
-                injury_adj = -2.0
-            elif _our_inj >= 2:
-                injury_adj = -1.0
-            # Opponent has injuries → slight edge for us
-            if _opp_inj >= 3:
-                injury_adj += 1.0
-            elif _opp_inj >= 2:
-                injury_adj += 0.5
-
-    # Weather situational adjustment (outdoor sports only — from merge_layers)
-    weather_adj = float(row.get("weather_adj", 0) or 0)
-
-    # Sport-specific context adjustment (MLB pitching/park, NHL goalie, NCAAB rankings)
-    sport_context_adj = float(row.get("sport_context_adj", 0) or 0)
+    # Context layers (injuries, weather, sport-specific) are UI-only.
+    # The books already price in injuries, pitching, goalies, park factors, etc.
+    # Adjusting the score double-counts what's already in the lines we read.
+    # These values are still displayed on the dashboard for human judgment.
 
     # Compute raw score: dk_base + adjustments
-    raw_score = dk_base + l1_adj + l2_adj + pattern_bonus + cross_adj + line_diff + decay + b2b_adj + injury_adj + weather_adj + sport_context_adj
+    raw_score = dk_base + l1_adj + l2_adj + pattern_bonus + cross_adj + line_diff + decay + b2b_adj
 
     # Apply layer mode cap
     layer_caps = {
@@ -620,14 +579,9 @@ def compute_unified_score(row: dict) -> dict:
         all_flags.append(f"PATTERN_{pattern}")
     if b2b_adj != 0:
         all_flags.append(b2b_flag)
-    if injury_adj != 0:
-        all_flags.append(f"INJ_ADJ:{injury_adj:+.1f}")
     _wx_flag = str(row.get("weather_flag", ""))
     if _wx_flag:
         all_flags.append(f"WX:{_wx_flag}")
-    _sc_flag = str(row.get("sport_context_flag", ""))
-    if _sc_flag:
-        all_flags.append(f"CTX:{_sc_flag}")
     if cross_adj > 0:
         all_flags.append("CROSS_MKT_CONFIRM")
     elif cross_adj < 0:
@@ -649,9 +603,6 @@ def compute_unified_score(row: dict) -> dict:
         "line_diff_bonus": round(line_diff, 2),
         "decay": decay,
         "b2b_adj": b2b_adj,
-        "injury_adj": injury_adj,
-        "weather_adj": weather_adj,
-        "sport_context_adj": sport_context_adj,
         "flags": all_flags,
         "strong_eligible": strong_ok,
         "details": {
