@@ -221,10 +221,12 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
             game_str = str(r["game"])
             row_sport = r.get("sport", sport or "")
             # Use dk_start_iso, or fall back to snapshot timestamp for date
-            start_iso = str(r.get("dk_start_iso", "") or "").strip()
+            raw_start = r.get("dk_start_iso", "")
+            start_iso = str(raw_start).strip() if pd.notna(raw_start) and raw_start else ""
             if not start_iso:
                 # Try snapshot timestamp as date fallback
-                start_iso = str(r.get("timestamp", "") or "").strip()
+                raw_ts = r.get("timestamp", "")
+                start_iso = str(raw_ts).strip() if pd.notna(raw_ts) and raw_ts else ""
             if not start_iso:
                 # Last resort: use today's date
                 from datetime import datetime, timezone
