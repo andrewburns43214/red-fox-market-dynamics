@@ -242,6 +242,12 @@ def fetch_probable_pitchers(sport: str = "mlb", date: str = None) -> dict:
             away_pitcher = ""
             home_hand = ""
             away_hand = ""
+            home_era = None
+            away_era = None
+            home_wins = 0
+            away_wins = 0
+            home_losses = 0
+            away_losses = 0
 
             for team_info in comp.get("competitors", []):
                 team_name = team_info.get("team", {}).get("displayName", "")
@@ -265,12 +271,41 @@ def fetch_probable_pitchers(sport: str = "mlb", date: str = None) -> dict:
                     elif "Right" in str(athlete.get("hand", {}).get("displayValue", "")):
                         hand = "R"
 
+                    # Extract ERA, W, L from statistics array
+                    era = None
+                    wins = 0
+                    losses = 0
+                    for stat in probable.get("statistics", []):
+                        abbr = stat.get("abbreviation", "").upper()
+                        val = stat.get("displayValue", "")
+                        if abbr == "ERA":
+                            try:
+                                era = float(val)
+                            except (ValueError, TypeError):
+                                pass
+                        elif abbr == "W":
+                            try:
+                                wins = int(val)
+                            except (ValueError, TypeError):
+                                pass
+                        elif abbr == "L":
+                            try:
+                                losses = int(val)
+                            except (ValueError, TypeError):
+                                pass
+
                     if is_home:
                         home_pitcher = pitcher_name
                         home_hand = hand
+                        home_era = era
+                        home_wins = wins
+                        home_losses = losses
                     else:
                         away_pitcher = pitcher_name
                         away_hand = hand
+                        away_era = era
+                        away_wins = wins
+                        away_losses = losses
 
             # Build a matchup key if we have both teams
             if home_team and away_team:
@@ -286,6 +321,12 @@ def fetch_probable_pitchers(sport: str = "mlb", date: str = None) -> dict:
                     "home_pitcher": home_pitcher,
                     "away_hand": away_hand,
                     "home_hand": home_hand,
+                    "away_pitcher_era": away_era,
+                    "away_pitcher_wins": away_wins,
+                    "away_pitcher_losses": away_losses,
+                    "home_pitcher_era": home_era,
+                    "home_pitcher_wins": home_wins,
+                    "home_pitcher_losses": home_losses,
                     "home_team_norm": home_norm,
                     "away_team_norm": away_norm,
                 }
@@ -396,4 +437,111 @@ def fetch_all_situational(sport: str) -> dict:
         if not pitch.get("error"):
             result["pitchers"] = pitch["pitchers"]
 
+    # Goalies (NHL only)
+    if sport.lower() == "nhl":
+        goalies = fetch_probable_goalies()
+        if not goalies.get("error"):
+            result["goalies"] = goalies["goalies"]
+
     return result
+
+
+def fetch_probable_goalies(sport: str = "nhl", date: str = None) -> dict:
+    """Fetch probable starting goalies from ESPN NHL scoreboard."""
+    if sport.lower() != "nhl":
+        return {"goalies": {}, "error": "Goalies only for NHL"}
+
+    params = {}
+    if date:
+        params["dates"] = date
+
+    result = _espn_get(sport, "scoreboard", params=params)
+    if result["error"]:
+        return {"goalies": {}, "error": result["error"]}
+
+    data = result["data"]
+    goalies = {}
+
+    for event in data.get("events", []):
+        for comp in event.get("competitions", []):
+            home_team = ""
+            away_team = ""
+            home_goalie = ""
+            away_goalie = ""
+            home_goalie_status = ""
+            away_goalie_status = ""
+            home_goalie_record = ""
+            away_goalie_record = ""
+
+            for team_info in comp.get("competitors", []):
+                team_name = team_info.get("team", {}).get("displayName", "")
+                is_home = team_info.get("homeAway") == "home"
+
+                if is_home:
+                    home_team = team_name
+                else:
+                    away_team = team_name
+
+                for probable in team_info.get("probables", []):
+                    athlete = probable.get("athlete", {})
+                    goalie_name = athlete.get("displayName") or athlete.get("fullName", "")
+                    status_info = probable.get("status", {})
+                    status = status_info.get("name", "") if isinstance(status_info, dict) else ""
+                    record = probable.get("record", "") or ""
+
+                    if is_home:
+                        home_goalie = goalie_name
+                        home_goalie_status = status
+                        home_goalie_record = record
+                    else:
+                        away_goalie = goalie_name
+                        away_goalie_status = status
+                        away_goalie_record = record
+
+            if home_team and away_team:
+                home_norm = normalize_team_name(home_team)
+                away_norm = normalize_team_name(away_team)
+                match_key = f"{away_norm} @ {home_norm}"
+
+                goalies[match_key] = {
+                    "home_goalie": home_goalie,
+                    "away_goalie": away_goalie,
+                    "home_goalie_status": home_goalie_status,
+                    "away_goalie_status": away_goalie_status,
+                    "home_goalie_record": home_goalie_record,
+                    "away_goalie_record": away_goalie_record,
+                    "home_team_norm": home_norm,
+                    "away_team_norm": away_norm,
+                }
+
+    return {"goalies": goalies, "error": None}
+
+
+def fetch_ncaab_rankings() -> dict:
+    """Fetch NCAAB rankings (AP/NET) from ESPN."""
+    result = _espn_get("ncaab", "rankings")
+    if result["error"]:
+        return {"rankings": {}, "error": result["error"]}
+
+    data = result["data"]
+    rankings = {}
+
+    for ranking_group in data.get("rankings", []):
+        rank_name = ranking_group.get("name", "")
+        # Prefer AP Top 25 or NET Rankings
+        if "AP" not in rank_name and "NET" not in rank_name and "Poll" not in rank_name:
+            continue
+
+        for rank_entry in ranking_group.get("ranks", []):
+            rank_num = rank_entry.get("current", 0)
+            team_info = rank_entry.get("team", {})
+            team_name = team_info.get("displayName", "") or team_info.get("name", "")
+            if team_name:
+                team_norm = normalize_team_name(team_name)
+                if team_norm and team_norm not in rankings:
+                    rankings[team_norm] = rank_num
+
+        if rankings:
+            break  # Use first valid ranking set
+
+    return {"rankings": rankings, "error": None}

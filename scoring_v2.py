@@ -581,8 +581,11 @@ def compute_unified_score(row: dict) -> dict:
     # Weather situational adjustment (outdoor sports only — from merge_layers)
     weather_adj = float(row.get("weather_adj", 0) or 0)
 
+    # Sport-specific context adjustment (MLB pitching/park, NHL goalie, NCAAB rankings)
+    sport_context_adj = float(row.get("sport_context_adj", 0) or 0)
+
     # Compute raw score: dk_base + adjustments
-    raw_score = dk_base + l1_adj + l2_adj + pattern_bonus + cross_adj + line_diff + decay + b2b_adj + injury_adj + weather_adj
+    raw_score = dk_base + l1_adj + l2_adj + pattern_bonus + cross_adj + line_diff + decay + b2b_adj + injury_adj + weather_adj + sport_context_adj
 
     # Apply layer mode cap
     layer_caps = {
@@ -622,6 +625,9 @@ def compute_unified_score(row: dict) -> dict:
     _wx_flag = str(row.get("weather_flag", ""))
     if _wx_flag:
         all_flags.append(f"WX:{_wx_flag}")
+    _sc_flag = str(row.get("sport_context_flag", ""))
+    if _sc_flag:
+        all_flags.append(f"CTX:{_sc_flag}")
     if cross_adj > 0:
         all_flags.append("CROSS_MKT_CONFIRM")
     elif cross_adj < 0:
@@ -645,6 +651,7 @@ def compute_unified_score(row: dict) -> dict:
         "b2b_adj": b2b_adj,
         "injury_adj": injury_adj,
         "weather_adj": weather_adj,
+        "sport_context_adj": sport_context_adj,
         "flags": all_flags,
         "strong_eligible": strong_ok,
         "details": {

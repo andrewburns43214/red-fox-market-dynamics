@@ -14,8 +14,10 @@ from canonical_match import build_canonical_key_from_dk, fuzzy_match_key
 from team_aliases import normalize_team_name
 from l1_features import compute_l1_features
 from l2_features import compute_l2_features
-from espn_situational import fetch_all_situational
+from espn_situational import fetch_all_situational, fetch_ncaab_rankings
 from weather import get_weather_for_game
+from mlb_context import get_mlb_context
+from nhl_context import get_nhl_context
 
 
 # Default feature values when a layer is unavailable
@@ -69,6 +71,27 @@ SITUATIONAL_DEFAULTS = {
     "precip_prob": 0,
     "weather_flag": "",
     "weather_adj": 0.0,
+    # Sport-specific context
+    "sport_context_adj": 0.0,
+    "sport_context_flag": "",
+    # MLB
+    "sp_era_home": None,
+    "sp_era_away": None,
+    "sp_name_home": "",
+    "sp_name_away": "",
+    "sp_hand_home": "",
+    "sp_hand_away": "",
+    "sp_flag_home": "",
+    "sp_flag_away": "",
+    "park_factor": 1.0,
+    # NHL
+    "goalie_home": "",
+    "goalie_away": "",
+    "goalie_flag_home": "",
+    "goalie_flag_away": "",
+    # NCAAB
+    "rank_home": 0,
+    "rank_away": 0,
 }
 
 
@@ -431,6 +454,99 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
                 dk_df.at[idx, col] = wx[col]
     if _wx_cache:
         print(f"  Weather: fetched for {len(_wx_cache)} unique game/venue combos")
+
+    # ─── Sport-specific context (MLB pitching, NHL goalie, NCAAB rankings) ───
+    _sport_str = str(sport).lower() if sport else ""
+
+    if _sport_str == "mlb":
+        for idx, row in dk_df.iterrows():
+            try:
+                ctx = get_mlb_context(row.to_dict())
+                for col, val in ctx.items():
+                    dk_df.at[idx, col] = val
+                dk_df.at[idx, "sport_context_adj"] = ctx.get("mlb_adj", 0.0)
+                flags = []
+                if ctx.get("sp_flag_home"):
+                    flags.append(f"H:{ctx['sp_flag_home']}")
+                if ctx.get("sp_flag_away"):
+                    flags.append(f"A:{ctx['sp_flag_away']}")
+                if ctx.get("park_factor", 1.0) >= 1.05 or ctx.get("park_factor", 1.0) <= 0.95:
+                    flags.append(f"PF:{ctx['park_factor']:.2f}")
+                dk_df.at[idx, "sport_context_flag"] = "|".join(flags)
+            except Exception:
+                pass
+        print(f"  MLB context: pitcher stats + park factors applied")
+
+    elif _sport_str == "nhl":
+        # Join goalie data from situational fetch
+        if situational and "goalies" in situational:
+            _goalies = situational["goalies"]
+            for idx, row in dk_df.iterrows():
+                home = row.get("home_team_norm", "")
+                away = row.get("away_team_norm", "")
+                match_key = f"{away} @ {home}"
+                goalie_info = _goalies.get(match_key)
+                if not goalie_info:
+                    for gk, gv in _goalies.items():
+                        if gv.get("home_team_norm") == home and gv.get("away_team_norm") == away:
+                            goalie_info = gv
+                            break
+                if goalie_info:
+                    dk_df.at[idx, "goalie_matchup"] = goalie_info
+                try:
+                    ctx = get_nhl_context(dk_df.loc[idx].to_dict())
+                    for col, val in ctx.items():
+                        dk_df.at[idx, col] = val
+                    dk_df.at[idx, "sport_context_adj"] = ctx.get("nhl_adj", 0.0)
+                    flags = []
+                    if ctx.get("goalie_flag_home"):
+                        flags.append(f"H:{ctx['goalie_flag_home']}")
+                    if ctx.get("goalie_flag_away"):
+                        flags.append(f"A:{ctx['goalie_flag_away']}")
+                    dk_df.at[idx, "sport_context_flag"] = "|".join(flags)
+                except Exception:
+                    pass
+            print(f"  NHL context: goalie status applied")
+
+    elif _sport_str == "ncaab":
+        try:
+            _rankings = fetch_ncaab_rankings()
+            if not _rankings.get("error"):
+                _rank_map = _rankings.get("rankings", {})
+                for idx, row in dk_df.iterrows():
+                    home = row.get("home_team_norm", "")
+                    away = row.get("away_team_norm", "")
+                    h_rank = _rank_map.get(home, 0)
+                    a_rank = _rank_map.get(away, 0)
+                    dk_df.at[idx, "rank_home"] = h_rank
+                    dk_df.at[idx, "rank_away"] = a_rank
+
+                    # Rank differential scoring
+                    rank_adj = 0.0
+                    if h_rank > 0 and a_rank > 0:
+                        diff = a_rank - h_rank  # positive = home ranked higher
+                        if abs(diff) >= 15:
+                            rank_adj = 1.0 if diff > 0 else -1.0
+                        elif abs(diff) >= 8:
+                            rank_adj = 0.5 if diff > 0 else -0.5
+                    elif h_rank > 0 and a_rank == 0:
+                        rank_adj = 0.5   # Ranked vs unranked home advantage
+                    elif a_rank > 0 and h_rank == 0:
+                        rank_adj = -0.5  # Unranked home vs ranked away
+
+                    # Apply relative to side
+                    side = str(row.get("side", "")).lower()
+                    home_lower = str(home).lower()
+                    if home_lower and home_lower in side:
+                        dk_df.at[idx, "sport_context_adj"] = rank_adj
+                    else:
+                        dk_df.at[idx, "sport_context_adj"] = -rank_adj
+
+                    if h_rank > 0 or a_rank > 0:
+                        dk_df.at[idx, "sport_context_flag"] = f"H:#{h_rank or'NR'}|A:#{a_rank or'NR'}"
+                print(f"  NCAAB context: {len(_rank_map)} ranked teams applied")
+        except Exception as e:
+            print(f"  NCAAB rankings skipped: {e}")
 
     # Clean up temp column
     if "_side_norm" in dk_df.columns:
