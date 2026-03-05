@@ -534,6 +534,22 @@ td { padding: 6px 10px; font-size: 12px; white-space: nowrap; vertical-align: mi
 .lyr-L23     { background: #eef5ff; color: #1a6fd4; border: 1px solid #b8d4f8; }
 .lyr-L3_ONLY { background: #f4f5f7; color: #8892aa; border: 1px solid #dde0e8; }
 
+/* SHARP CERTIFIED BADGE */
+.td-sharp { text-align: center; width: 64px; padding: 6px 4px; }
+.sharp-cert {
+  display: inline-block; padding: 2px 6px; border-radius: 3px;
+  font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: .3px;
+  white-space: nowrap;
+}
+.sc-full { background: #edfff5; color: #006e40; border: 1px solid #b0e8cc; animation: sharpPulse 2s ease-in-out infinite; }
+.sc-half { background: #fff8ee; color: #b06000; border: 1px solid #f0d8a0; }
+.sharp-meter {
+  display: inline-block; padding: 1px 5px; border-radius: 3px;
+  font-family: var(--mono); font-size: 8px; font-weight: 600; color: #5a6480;
+  background: #f0f1f4; border: 1px solid #dde0e8;
+}
+@keyframes sharpPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+
 .td-pick {
   font-family: var(--sans);
   font-size: 12px; font-weight: 600;
@@ -992,6 +1008,7 @@ th.th-game { text-align: left; }
                 <th>Bucket</th>
                 <th onclick="sortBy('v2_pattern',this)">Pattern</th>
                 <th onclick="sortBy('layer_mode',this)">Layer</th>
+                <th onclick="sortBy('sharp_cert_tier',this)">Sharp</th>
                 <th onclick="sortBy('timing_bucket',this)">Timing</th>
                 <th onclick="sortBy('market_read',this)">DK Signal</th>
                 <th>Breakdown</th>
@@ -1186,6 +1203,7 @@ function mrBadge(m){ const s=(m||'').trim(); if(!s||s==='-') return '-'; const l
 function regBadge(r){ const k=(r||'N').toUpperCase().trim(); if(!k||k==='-') return '-'; const cls='reg-'+(k.charAt(0)||'N'); const labels={A:"Stealth",B:"Fade",C:"Weak Push",D:"Surge",N:"Flat"}; const tips={A:"Low bets, high money, line moved against",B:"High bets + money, line fading",C:"Weak public push amplified",D:"Strong money divergence into the side",N:"No clear regime detected"}; return `<span class="reg ${cls}" title="${tips[k]||''}">${labels[k]||k}</span>`; }
 function patBadge(p){ const k=(p||'').toUpperCase().trim(); if(!k) return '-'; const tips={G:'Reverse Line Movement',A:'Sharp vs Public',D:'Stale Price',B:'Aligned',F:'Late Snap',C:'Public Only',E:'Consensus Rejects',N:'Neutral'}; const labels={G:'RLM',A:'SHRP',D:'STALE',B:'ALGN',F:'SNAP',C:'PUB',E:'REJ',N:'NEU'}; return `<span class="pat pat-${k}" title="${tips[k]||k}">${labels[k]||k}</span>`; }
 function lyrBadge(l){ const k=(l||'').trim(); if(!k) return '-'; const labels={L123:'FULL',L13:'PARTIAL',L23:'PARTIAL',L3_ONLY:'LIMITED'}; const tips={L123:'All 3 data layers active',L13:'2 of 3 layers (missing consensus)',L23:'2 of 3 layers (missing primary)',L3_ONLY:'Single layer — limited confidence'}; return `<span class="lyr lyr-${k}" title="${tips[k]||k}">${labels[k]||k}</span>`; }
+function sharpBadge(r){ const tier=(r.sharp_cert_tier||'').toUpperCase().trim(); const nBooks=Number(r.l1_n_books)||0; let html=''; if(tier==='FULL') html='<span class="sharp-cert sc-full" title="Sharp Certified: multiple sharp books confirm">SHARP &#x2713;</span>'; else if(tier==='HALF') html='<span class="sharp-cert sc-half" title="Sharp Lean: Pinnacle moved meaningfully">SHARP ~</span>'; else if(nBooks>0){ const pct=Math.round(nBooks/6*100); html=`<span class="sharp-meter" title="${nBooks} of 6 sharp books">${pct}%</span>`; } else html='<span style="color:#aab2c4">—</span>'; return html; }
 function wrCol(p){ return p>=65?'g':p>=55?'a':'r'; }
 function wrClr(p){ return p>=65?'var(--green2)':p>=55?'var(--gold2)':'var(--red2)'; }
 
@@ -1261,6 +1279,7 @@ function renderBoard(){
       <td class="td-bkt"><span class="bkt ${bk.c}">${bk.l}</span></td>
       <td class="td-pat">${patBadge(r.v2_pattern)}</td>
       <td class="td-layer">${lyrBadge(r.layer_mode)}</td>
+      <td class="td-sharp">${sharpBadge(r)}</td>
       <td class="td-tim">${timBadge(r.timing_bucket)}</td>
       <td class="td-mr">${mrBadge(r.market_read)}</td>
       <td class="td-bkdn">${(()=>{
