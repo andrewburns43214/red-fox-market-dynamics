@@ -47,12 +47,13 @@ def _norm_team(s: str) -> str:
 # Sorted by length descending at runtime for greedy matching.
 NCAAB_MASCOTS = {
     # Multi-word mascots (MUST be checked first)
-    "fighting irish", "fighting illini", "fighting hawks",
+    "fighting irish", "fighting illini", "fighting hawks", "fighting camels",
+    "fighting leathernecks", "fighting scots",
     "yellow jackets", "golden eagles", "golden gophers",
     "golden bears", "golden flashes", "golden griffins",
     "golden knights", "golden panthers", "golden hurricane",
     "blue devils", "blue demons", "blue raiders", "blue jays",
-    "blue hose", "blazing speed",
+    "blue hose", "blue hens", "blazing speed",
     "red storm", "red raiders", "red foxes", "red flash",
     "red wolves",
     "green wave", "mean green",
@@ -78,8 +79,10 @@ NCAAB_MASCOTS = {
     "tribe", "pride",
 
     # Single-word mascots (alphabetical)
+    "49ers",
     "aggies", "anteaters", "aztecs",
     "badgers", "banana slugs", "bandits", "battlers",
+    "beacons", "bearkats",
     "bears", "beavers", "bearcats", "bengals", "bighornss",
     "billikens", "bison", "blazers", "blue jays",
     "bobcats", "boilermakers", "bonnies", "boxers",
@@ -122,7 +125,7 @@ NCAAB_MASCOTS = {
     "scarlet", "seahawks", "seawolves",
     "seminoles", "senators", "sharks",
     "shockers", "skyhawks", "sooners", "spartans",
-    "spiders", "stags", "stallions", "statesmen",
+    "spiders", "stags", "stallions", "statesmen", "sycamores",
     "stormy petrels",
     "terrapins", "terriers", "texans", "thunderbirds",
     "tigers", "titans", "tommies", "toads",
