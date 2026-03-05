@@ -58,14 +58,11 @@ L2_DEFAULTS = {
 }
 
 SITUATIONAL_DEFAULTS = {
-    "home_injuries": [],
-    "away_injuries": [],
     "home_injury_count": 0,
     "away_injury_count": 0,
     "home_rest_days": 1,
     "away_rest_days": 1,
     "b2b_flag": "",
-    "pitcher_matchup": None,
     "wind_mph": 0,
     "temp_f": 70,
     "precip_prob": 0,
@@ -401,6 +398,10 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
     for col, default in SITUATIONAL_DEFAULTS.items():
         dk_df[col] = default if not isinstance(default, list) else [default.copy() for _ in range(len(dk_df))]
 
+    # Lookup dicts for dict-valued data (can't store dicts in DataFrame cells)
+    _pitcher_lookup = {}   # idx -> pitcher_info dict
+    _goalie_lookup = {}    # idx -> goalie_info dict
+
     if situational:
         injuries = situational.get("injuries", {})
         rest_days = situational.get("rest_days", {})
@@ -411,12 +412,8 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
             away = row.get("away_team_norm", "")
 
             # Injuries
-            home_inj = injuries.get(home, [])
-            away_inj = injuries.get(away, [])
-            dk_df.at[idx, "home_injuries"] = home_inj
-            dk_df.at[idx, "away_injuries"] = away_inj
-            dk_df.at[idx, "home_injury_count"] = len(home_inj)
-            dk_df.at[idx, "away_injury_count"] = len(away_inj)
+            dk_df.at[idx, "home_injury_count"] = len(injuries.get(home, []))
+            dk_df.at[idx, "away_injury_count"] = len(injuries.get(away, []))
 
             # Rest days
             dk_df.at[idx, "home_rest_days"] = rest_days.get(home, 1)
@@ -432,18 +429,17 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
             elif away_b2b:
                 dk_df.at[idx, "b2b_flag"] = "AWAY_B2B"
 
-            # Pitchers (MLB)
+            # Pitchers (MLB) — store in lookup dict, not DataFrame
             if pitchers:
                 match_key = f"{away} @ {home}"
                 pitcher_info = pitchers.get(match_key)
                 if not pitcher_info:
-                    # Try fuzzy match
                     for pk, pv in pitchers.items():
                         if pv.get("home_team_norm") == home and pv.get("away_team_norm") == away:
                             pitcher_info = pv
                             break
                 if pitcher_info:
-                    dk_df.at[idx, "pitcher_matchup"] = pitcher_info
+                    _pitcher_lookup[idx] = pitcher_info
 
     # ─── Weather data (outdoor sports only) ───
     _wx_cache = {}  # cache per (home_team, game_time) to avoid duplicate API calls
@@ -474,7 +470,10 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
     if _sport_str == "mlb":
         for idx, row in dk_df.iterrows():
             try:
-                ctx = get_mlb_context(row.to_dict())
+                row_dict = row.to_dict()
+                if idx in _pitcher_lookup:
+                    row_dict["pitcher_matchup"] = _pitcher_lookup[idx]
+                ctx = get_mlb_context(row_dict)
                 for col, val in ctx.items():
                     dk_df.at[idx, col] = val
                 dk_df.at[idx, "sport_context_adj"] = ctx.get("mlb_adj", 0.0)
@@ -504,10 +503,12 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
                         if gv.get("home_team_norm") == home and gv.get("away_team_norm") == away:
                             goalie_info = gv
                             break
-                if goalie_info:
-                    dk_df.at[idx, "goalie_matchup"] = goalie_info
                 try:
-                    ctx = get_nhl_context(dk_df.loc[idx].to_dict())
+                    # Build row dict with goalie_matchup for nhl_context
+                    row_dict = row.to_dict()
+                    if goalie_info:
+                        row_dict["goalie_matchup"] = goalie_info
+                    ctx = get_nhl_context(row_dict)
                     for col, val in ctx.items():
                         dk_df.at[idx, col] = val
                     dk_df.at[idx, "sport_context_adj"] = ctx.get("nhl_adj", 0.0)
