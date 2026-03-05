@@ -578,8 +578,11 @@ def compute_unified_score(row: dict) -> dict:
             elif _opp_inj >= 2:
                 injury_adj += 0.5
 
+    # Weather situational adjustment (outdoor sports only — from merge_layers)
+    weather_adj = float(row.get("weather_adj", 0) or 0)
+
     # Compute raw score: dk_base + adjustments
-    raw_score = dk_base + l1_adj + l2_adj + pattern_bonus + cross_adj + line_diff + decay + b2b_adj + injury_adj
+    raw_score = dk_base + l1_adj + l2_adj + pattern_bonus + cross_adj + line_diff + decay + b2b_adj + injury_adj + weather_adj
 
     # Apply layer mode cap
     layer_caps = {
@@ -616,6 +619,9 @@ def compute_unified_score(row: dict) -> dict:
         all_flags.append(b2b_flag)
     if injury_adj != 0:
         all_flags.append(f"INJ_ADJ:{injury_adj:+.1f}")
+    _wx_flag = str(row.get("weather_flag", ""))
+    if _wx_flag:
+        all_flags.append(f"WX:{_wx_flag}")
     if cross_adj > 0:
         all_flags.append("CROSS_MKT_CONFIRM")
     elif cross_adj < 0:
@@ -638,6 +644,7 @@ def compute_unified_score(row: dict) -> dict:
         "decay": decay,
         "b2b_adj": b2b_adj,
         "injury_adj": injury_adj,
+        "weather_adj": weather_adj,
         "flags": all_flags,
         "strong_eligible": strong_ok,
         "details": {

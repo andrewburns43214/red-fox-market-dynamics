@@ -15,6 +15,7 @@ from team_aliases import normalize_team_name
 from l1_features import compute_l1_features
 from l2_features import compute_l2_features
 from espn_situational import fetch_all_situational
+from weather import get_weather_for_game
 
 
 # Default feature values when a layer is unavailable
@@ -63,6 +64,11 @@ SITUATIONAL_DEFAULTS = {
     "away_rest_days": 1,
     "b2b_flag": "",
     "pitcher_matchup": None,
+    "wind_mph": 0,
+    "temp_f": 70,
+    "precip_prob": 0,
+    "weather_flag": "",
+    "weather_adj": 0.0,
 }
 
 
@@ -402,6 +408,29 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
                             break
                 if pitcher_info:
                     dk_df.at[idx, "pitcher_matchup"] = pitcher_info
+
+    # ─── Weather data (outdoor sports only) ───
+    _wx_cache = {}  # cache per (home_team, game_time) to avoid duplicate API calls
+    for idx, row in dk_df.iterrows():
+        _sport = str(row.get("sport", "")).lower()
+        if _sport not in ("nfl", "ncaaf", "mlb"):
+            continue
+        home = row.get("home_team_norm", "")
+        game_time = str(row.get("dk_start_iso", ""))
+        if not home or not game_time:
+            continue
+        _wx_key = (home, game_time)
+        if _wx_key not in _wx_cache:
+            try:
+                _wx_cache[_wx_key] = get_weather_for_game(_sport, home, game_time)
+            except Exception:
+                _wx_cache[_wx_key] = {}
+        wx = _wx_cache[_wx_key]
+        for col in ("wind_mph", "temp_f", "precip_prob", "weather_flag", "weather_adj"):
+            if col in wx:
+                dk_df.at[idx, col] = wx[col]
+    if _wx_cache:
+        print(f"  Weather: fetched for {len(_wx_cache)} unique game/venue combos")
 
     # Clean up temp column
     if "_side_norm" in dk_df.columns:
