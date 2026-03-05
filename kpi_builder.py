@@ -128,6 +128,74 @@ for b, g in k.groupby("edge_bucket"):
 
 pd.DataFrame(bucket_rows).to_csv("data/kpi_bucket_summary.csv", index=False)
 
+# -------------------------------------------------
+# CLV ANALYSIS (v2.1)
+# -------------------------------------------------
+if "clv" in k.columns:
+    k["clv_num"] = pd.to_numeric(k["clv"], errors="coerce")
+    _clv_valid = k[k["clv_num"].notna()].copy()
+
+    if len(_clv_valid) > 0:
+        # Average CLV overall
+        summary_rows.append({
+            "metric": "avg_clv",
+            "value": round(_clv_valid["clv_num"].mean(), 4),
+            "n": len(_clv_valid)
+        })
+
+        # Average CLV by decision level
+        for d, g in _clv_valid.groupby("game_decision"):
+            if len(g) >= 2:
+                summary_rows.append({
+                    "metric": f"avg_clv_{d}",
+                    "value": round(g["clv_num"].mean(), 4),
+                    "n": len(g)
+                })
+
+        # Average CLV by sport
+        for sp, g in _clv_valid.groupby("sport"):
+            if len(g) >= 2:
+                summary_rows.append({
+                    "metric": f"avg_clv_sport_{sp}",
+                    "value": round(g["clv_num"].mean(), 4),
+                    "n": len(g)
+                })
+
+        # Average CLV by market
+        for m, g in _clv_valid.groupby("market_display"):
+            if len(g) >= 2:
+                summary_rows.append({
+                    "metric": f"avg_clv_market_{m}",
+                    "value": round(g["clv_num"].mean(), 4),
+                    "n": len(g)
+                })
+
+        # CLV buckets
+        def clv_bucket(x):
+            if x < -2: return "<-2"
+            if x < 0: return "-2 to 0"
+            if x <= 1: return "0 to +1"
+            if x <= 3: return "+1 to +3"
+            return "3+"
+
+        _clv_valid["clv_bucket"] = _clv_valid["clv_num"].apply(clv_bucket)
+        for b, g in _clv_valid.groupby("clv_bucket"):
+            bucket_rows.append({
+                "bucket_type": "clv",
+                "bucket": b,
+                "win_rate": round((g["result"] == "WIN").mean(), 4),
+                "n": len(g)
+            })
+
+        # Re-write with CLV data included
+        pd.DataFrame(summary_rows).to_csv("data/kpi_summary.csv", index=False)
+        pd.DataFrame(bucket_rows).to_csv("data/kpi_bucket_summary.csv", index=False)
+        print(f"[kpi] CLV analysis: {len(_clv_valid)} rows, avg CLV = {_clv_valid['clv_num'].mean():.4f}")
+    else:
+        print("[kpi] no valid CLV data yet (pre-v2.1 decisions)")
+else:
+    print("[kpi] CLV column not in results (pre-v2.1)")
+
 print("[kpi] build complete.")
 print("[kpi] summary rows:", len(summary_rows))
 print("[kpi] bucket rows:", len(bucket_rows))
