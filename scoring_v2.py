@@ -249,17 +249,24 @@ def compute_line_differential_bonus(row: dict) -> float:
     consensus_bonus = 0.0
     if consensus_line and dk_line:
         consensus_gap = abs(dk_line - consensus_line)
-        # Scale by market: totals need bigger gaps to matter
-        if market == "TOTAL":
-            consensus_bonus = min(consensus_gap * 1.5, 4.0)
-        else:
-            consensus_bonus = min(consensus_gap * 2.0, 4.0)
+        # Dead zone: DK is sharp — small gaps are noise, not edge
+        # Spreads: ignore < 1.0 pt, Totals: ignore < 2.0 pt
+        dead_zone = 2.0 if market == "TOTAL" else 1.0
+        if consensus_gap >= dead_zone:
+            effective_gap = consensus_gap - dead_zone
+            if market == "TOTAL":
+                consensus_bonus = min(effective_gap * 1.5, 4.0)
+            else:
+                consensus_bonus = min(effective_gap * 2.0, 4.0)
 
     pinn_bonus = 0.0
     if pinn_line and dk_line:
         pinn_gap = abs(dk_line - pinn_line)
-        # Pinnacle is sharpest book — gap is more valuable
-        pinn_bonus = min(pinn_gap * 2.5, 4.0)
+        # Pinnacle is sharpest — same dead zone, but higher multiplier
+        dead_zone_p = 1.5 if market == "TOTAL" else 0.5
+        if pinn_gap >= dead_zone_p:
+            effective_pinn = pinn_gap - dead_zone_p
+            pinn_bonus = min(effective_pinn * 2.5, 4.0)
 
     return min(consensus_bonus + pinn_bonus, LINE_DIFF_MAX_BONUS)
 
