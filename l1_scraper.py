@@ -40,6 +40,23 @@ L1_OPEN_REG_COLUMNS = [
 ]
 
 
+def _ensure_l1_header():
+    """One-time check: if L1 CSV header doesn't match current schema, fix it."""
+    if not os.path.exists(L1_SHARP_CSV):
+        return
+    with open(L1_SHARP_CSV, "r", encoding="utf-8") as f:
+        header_line = f.readline().strip()
+    existing_cols = [c.strip().strip('"').replace('\ufeff', '') for c in header_line.split(',')]
+    if existing_cols == list(L1_SHARP_COLUMNS):
+        return
+    print(f"  [L1] Header mismatch ({len(existing_cols)} cols -> {len(L1_SHARP_COLUMNS)}) — rewriting header")
+    with open(L1_SHARP_CSV, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    lines[0] = ",".join(f'"{c}"' for c in L1_SHARP_COLUMNS) + "\n"
+    with open(L1_SHARP_CSV, "w", encoding="utf-8", newline="") as f:
+        f.writelines(lines)
+
+
 def _load_l1_open_registry() -> dict:
     """Load existing open registry. Key: (sport, canonical_key, bookmaker, market, side)."""
     reg = {}
@@ -396,6 +413,8 @@ def scrape_l1_auto(sport: str) -> dict:
     Returns:
         Combined result dict with source indicator.
     """
+    _ensure_l1_header()
+
     # Try OddsPapi first (6 sharp books, timestamps, limits)
     result = scrape_l1_oddspapi(sport)
 

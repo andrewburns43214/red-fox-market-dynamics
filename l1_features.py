@@ -80,8 +80,9 @@ def _load_latest_l1() -> dict:
             reader = csv.DictReader(f, restval="", restkey="_extra")
             for row in reader:
                 try:
-                    if "_extra" in row:
-                        continue  # skip malformed rows with extra fields
+                    # Normalize keys: strip BOM + quotes from header
+                    row = {k.strip().strip('"').replace('\ufeff', ''): v
+                           for k, v in row.items() if k != '_extra'}
                     k = (
                         row.get("canonical_key", ""),
                         row.get("market", ""),
