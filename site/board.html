@@ -385,20 +385,20 @@ tbody tr.row-mid {
 td { padding: 6px 10px; font-size: 12px; white-space: nowrap; vertical-align: middle; }
 
 /* TD TYPES */
-.td-rank { font-family: var(--mono); font-size: 10px; color: var(--text3); text-align: center; width: 30px; padding: 6px 6px; }
+.td-rank { font-family: var(--mono); font-size: 10px; color: var(--text3); text-align: center; width: 36px; padding: 6px 4px; vertical-align: top; padding-top: 10px; }
 
-.td-game { width: 260px; max-width: 260px; overflow: hidden; padding: 6px 10px; vertical-align: middle; white-space: normal; }
-.game-row1 { display: flex; align-items: center; gap: 7px; }
+.td-game { width: 290px; max-width: 290px; overflow: hidden; padding: 8px 10px 6px; vertical-align: middle; white-space: normal; }
+.game-row1 { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .game-name {
   font-family: var(--sans);
   font-weight: 700; font-size: 12px;
-  color: #0f1428; letter-spacing: .1px;
+  color: var(--text); letter-spacing: .1px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  max-width: 170px;
+  flex: 1; min-width: 0;
 }
 .sport-chip {
   display: inline-flex; align-items: center;
-  padding: 1px 5px; border-radius: 3px;
+  padding: 2px 6px; border-radius: 4px;
   font-family: var(--mono);
   font-size: 8px; font-weight: 700;
   letter-spacing: .5px; flex-shrink: 0;
@@ -408,7 +408,7 @@ td { padding: 6px 10px; font-size: 12px; white-space: nowrap; vertical-align: mi
 .sc-ncaab { background: #fff5ee; color: #c04800; border: 1px solid #f8caa8; }
 .sc-mlb   { background: #fff0f0; color: #c01818; border: 1px solid #f8c0c0; }
 .sc-nhl   { background: #eefbff; color: #0a6a80; border: 1px solid #a8e4f0; }
-/* .game-time replaced by .game-row2 in chip styles */
+.sc-ufc   { background: #f5f0ff; color: #6633aa; border: 1px solid #d8c8f0; }
 
 .td-mkt {
   font-family: var(--mono);
@@ -547,22 +547,36 @@ td { padding: 6px 10px; font-size: 12px; white-space: nowrap; vertical-align: mi
 @keyframes sharpPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
 
 /* Game inline badges (B2B, injury, weather) */
-.gchip { display: inline-block; padding: 1px 5px; border-radius: 3px; font-family: var(--mono); font-size: 8px; font-weight: 600; letter-spacing: .2px; vertical-align: middle; margin-right: 3px; }
+.gchip { display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 4px; font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: .2px; vertical-align: middle; line-height: 1.2; }
 .gc-b2b { background: #fff2f2; color: #d63020; border: 1px solid #ffd0d0; }
 .gc-inj { background: #fff8ee; color: #b06000; border: 1px solid #f0d8a0; }
 .gc-wx { background: #eef5ff; color: #2266aa; border: 1px solid #c8ddf8; }
 .gc-sp { background: #fff0f0; color: #c01818; border: 1px solid #f8c0c0; }
 .gc-gl { background: #eefbff; color: #0a6a80; border: 1px solid #a8e4f0; }
 .gc-pf { background: #f5f0ff; color: #6633aa; border: 1px solid #d8c8f0; }
-.game-row2 { font-family: var(--mono); font-size: 9px; color: var(--text3); margin-top: 2px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.info-btn { cursor: pointer; font-size: 11px; color: var(--text4); opacity: 0.5; margin-left: 4px; transition: opacity .15s; }
-.info-btn:hover { opacity: 1; color: var(--accent); }
-.td-rank { position: relative; }
-/* Group toggle styles */
-.grp-on { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
+.game-row2 { font-family: var(--mono); font-size: 9px; color: var(--text3); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.game-row2-time { color: var(--text4); font-weight: 600; margin-right: 2px; }
+.info-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--surface2); border: 1px solid var(--border);
+  cursor: pointer; font-size: 9px; font-weight: 700; font-style: italic; font-family: Georgia, serif;
+  color: var(--text3); transition: all .15s; margin-top: 4px;
+}
+.info-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+/* Group button in pane header */
+.grp-btn {
+  padding: 3px 10px; border-radius: 4px; font-family: var(--sans);
+  font-size: 10px; font-weight: 600; cursor: pointer; transition: all .12s;
+  background: var(--surface2); border: 1px solid var(--border2); color: var(--text3);
+}
+.grp-btn:hover { border-color: var(--accent); color: var(--accent); }
+.grp-btn.grp-on { background: var(--accent); color: #fff; border-color: var(--accent); }
+/* Grouped sub-rows */
 .row-grp-sub td { background: rgba(0,0,0,.015); }
 .row-grp-sub .game-name { visibility: hidden; }
 .row-grp-sub .game-row2 { visibility: hidden; }
+.row-grp-first td { border-top: 2px solid var(--border2); }
 
 .td-pick {
   font-family: var(--sans);
@@ -967,7 +981,6 @@ th.th-game { text-align: left; }
     <div class="schip" onclick="setSport('MLB',this)">MLB</div>
     <div class="schip" onclick="setSport('NHL',this)">NHL</div>
     <div class="schip" onclick="setSport('UFC',this)">UFC</div>
-    <div class="schip" id="grp-toggle" onclick="toggleGroup(this)">Group</div>
   </div>
 </nav>
 
@@ -1017,7 +1030,10 @@ th.th-game { text-align: left; }
     <div class="board">
       <div class="lpane">
         <div class="pane-hdr">
-          <span class="pane-title" id="board-title">Current Games</span>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="pane-title" id="board-title">Current Games</span>
+            <button class="grp-btn" id="grp-toggle" onclick="toggleGroup(this)">Group by Game</button>
+          </div>
           <span class="pane-meta" id="board-meta">—</span>
         </div>
         <div class="tscroll">
@@ -1294,14 +1310,14 @@ function setTab(el){
 function setSport(s,el){ sport=s; document.querySelectorAll('.sfilters .schip:not(#grp-toggle)').forEach(x=>x.classList.remove('on')); el.classList.add('on'); renderBoard(); }
 function sortBy(col,th){ if(sortCol===col) sortAsc=!sortAsc; else{sortCol=col;sortAsc=false;} document.querySelectorAll('thead th').forEach(t=>t.classList.remove('sorted','asc')); th.classList.add('sorted'); if(sortAsc) th.classList.add('asc'); renderBoard(); }
 let groupMode=false;
-function toggleGroup(el){ groupMode=!groupMode; el.classList.toggle('grp-on',groupMode); renderBoard(); }
+function toggleGroup(el){ groupMode=!groupMode; el.classList.toggle('grp-on',groupMode); el.textContent=groupMode?'Ungroup':'Group by Game'; renderBoard(); }
 
 function filtered(){ const now=new Date(); let d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now); if(filter==='signals') d=d.filter(r=>Number(r.game_confidence)>=65); if(filter==='highconf') d=d.filter(r=>(r.game_decision||'').toUpperCase()==='STRONG_BET'); if(filter==='today') d=allDash.filter(r=>isToday(r._game_time)); return d.sort((a,b)=>{ let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
 
 window._boardRows=[];
 function renderBoard(){
   let data=filtered();
-  data.forEach(r=>{ r._grpSub=false; });
+  data.forEach(r=>{ r._grpSub=false; r._grpFirst=false; });
   // Group mode: group by game_id, sort groups by best total_score
   if(groupMode){
     const gMap=new Map();
@@ -1318,7 +1334,7 @@ function renderBoard(){
     });
     groups.sort((a,b)=>b.best-a.best);
     data=[];
-    groups.forEach(g=>{ g.rows.forEach((r,j)=>{ r._grpSub=j>0; data.push(r); }); });
+    groups.forEach(g=>{ g.rows.forEach((r,j)=>{ r._grpSub=j>0; r._grpFirst=j===0&&g.rows.length>1; data.push(r); }); });
   }
   window._boardRows=data;
   const titles={all:'Current Games',signals:'Signals ≥65',highconf:'Strong Bets',today:"Today's Games"};
@@ -1333,11 +1349,12 @@ function renderBoard(){
     const tr=document.createElement('tr');
     if((r.game_decision||'').toUpperCase()==='STRONG_BET') tr.classList.add('row-strong'); else if(conf>=70) tr.classList.add('row-hi'); else if(conf>=60) tr.classList.add('row-mid');
     if(r._grpSub) tr.classList.add('row-grp-sub');
+    if(r._grpFirst) tr.classList.add('row-grp-first');
     tr.innerHTML=`
-      <td class="td-rank">${i+1} <span class="info-btn" onclick="event.stopPropagation();openGameDetail(window._boardRows[${i}])" title="Game detail">&#x2139;</span></td>
+      <td class="td-rank">${i+1}<br><span class="info-btn" onclick="event.stopPropagation();openGameDetail(window._boardRows[${i}])" title="Game detail">i</span></td>
       <td class="td-game">
         <div class="game-row1">${spChip(r.sport)}<span class="game-name">${r.game||'-'}</span></div>
-        <div class="game-row2">${etT(r._game_time)} ${gameChips(r)}</div>
+        <div class="game-row2"><span class="game-row2-time">${etT(r._game_time)}</span>${gameChips(r)}</div>
       </td>
       <td class="td-mkt">${r.market_display||'-'}</td>
       <td class="td-split">
