@@ -64,8 +64,8 @@ def _load_consensus_agg() -> dict:
                     row.get("side", ""),
                 )
                 result[k] = row
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[WARN] l2 consensus agg load: {repr(e)}")
     return result
 
 
@@ -93,7 +93,8 @@ def _load_raw_consensus_latest() -> dict:
                 ts = row.get("timestamp", "")
                 if k not in latest or ts > latest[k]["timestamp"]:
                     latest[k] = row
-    except Exception:
+    except Exception as e:
+        print(f"[WARN] l2 raw consensus load: {repr(e)}")
         return {}
 
     # Group by (canonical_key, market, side)

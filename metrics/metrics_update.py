@@ -176,6 +176,7 @@ def _metrics_key(r: dict) -> tuple[str,str,str,str]:
     return (r["sport"], r["game_id"], r["market"], r["side"])
 
 def run(dashboard_csv: str, debug: bool = False) -> int:
+    global dashboard_tick
     _ensure_csv(ROW_STATE_PATH, ROW_STATE_COLS)
     _ensure_csv(SIGNAL_LEDGER_PATH, LEDGER_COLS)
 

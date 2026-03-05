@@ -22,6 +22,14 @@
 - NHL gets goalie confirmation/backup detection from ESPN
 - NCAAB gets AP/NET ranking differential scoring
 - Dashboard badges for all new signals (pitcher ERA, goalie status, park factor, weather, rankings)
+- **Scoring recalibration:** `effective_move_mag` combines line number movement + juice/odds movement into a single magnitude. 45% of DK line changes were juice-only (e.g., -115→-105) where the line NUMBER didn't change but odds shifted — the engine was blind to these. Juice converted to line-equivalent: `min(3.0, abs(odds_move) / 15.0)`.
+- **Boosted confirmed signals:** Divergence cap 12→16 (sides), Color bonus 8→12 (DARK_GREEN+book), Line trajectory bonuses doubled, 2-tier line movement multiplier (small moves 2.5x, large moves 3.0x)
+- **Layer mode caps removed:** All modes use universal cap of 100. Layers contribute via adjustments, not ceilings.
+- **STRONG_BET 3 paths:** Pattern-driven, Sharp Certified, Score-only (higher bar). L3_ONLY explicitly guarded.
+- **Silent failure logging:** All bare `except: pass` blocks now print warnings. Layer merge failure is loud.
+- **Score decomposition:** Dashboard now includes `v2_dk_base`, `v2_pattern_bonus`, `v2_decay` for full auditability.
+- **Tick shadowing fix:** `metrics_update.py` `dashboard_tick` now uses `global` keyword correctly.
+- **5 invariant tests:** `test_invariants.py` — score 0-100, no STRONG without edge, L3_ONLY guard, decision monotonicity, merge failure logging.
 
 ---
 
@@ -367,14 +375,16 @@ HOME_B2B or AWAY_B2B → -1.0 slight penalty.
 
 ## 6. SCORE CAPS AND FLOORS
 
-### Layer Mode Caps
+### Layer Mode Caps — REMOVED (v2.1)
+
+Layer-based caps were removed in v2.1. All layer modes now use the universal cap of 100. Layers contribute to the score through adjustments — more layers = more adjustment components that can fire — but they no longer artificially limit the ceiling. An L3_ONLY row with strong DK signals can theoretically reach 100, though in practice it rarely exceeds ~70 without L1/L2 confirmation.
 
 | Mode | Cap | Who Gets It |
 |------|-----|-------------|
 | L123 | 100 | Sharp + Consensus + DK (best data) |
-| L13 | 85 | Sharp + DK (no consensus validation) |
-| L23 | 80 | Consensus + DK (no sharp signal) |
-| L3_ONLY | 75 | DK only (v1.2 behavior, retail-only) |
+| L13 | 100 | Sharp + DK (no consensus validation) |
+| L23 | 100 | Consensus + DK (no sharp signal) |
+| L3_ONLY | 100 | DK only (retail-only, limited upside in practice) |
 
 ### Pattern Floors
 
@@ -400,22 +410,43 @@ HOME_B2B or AWAY_B2B → -1.0 slight penalty.
 | **LEAN** | ≥ 60 | any | any | — |
 | **NO BET** | < 60 | any | any | — |
 
-### STRONG_BET Eligibility (all gates must pass)
+### STRONG_BET Eligibility — 3 Paths (v2.1)
+
+STRONG_BET can be awarded through 3 independent paths. All paths share common gates (score, edge, persistence), but differ in how eligibility is established.
+
+**Common gates (all paths):**
 
 | Gate | Condition |
 |------|-----------|
-| Layer Mode | L123 only (full 3-layer) |
-| Pattern | A, D, or G only |
 | Score | ≥ 70 |
 | Net Edge | ≥ 10 (SPREAD/ML) or ≥ 12 (TOTAL) |
+| Persistence | strong_streak ≥ 2 |
+| Layer Mode | NOT L3_ONLY (v2.1 guard — L3_ONLY can never produce STRONG) |
+
+**Path 1: Pattern-driven** (most common)
+- Pattern A, D, or G (strong signal patterns)
+- Pattern's `strong_eligible` flag is True
+
+**Path 2: Sharp Certified FULL**
+- `sharp_cert_tier` = "FULL" (L1 sharp books strongly confirm)
+- Does not require specific pattern
+
+**Path 3: Score-only** (higher bar)
+- Score ≥ 75 (STRONG_SCORE_ONLY_MIN)
+- Net Edge ≥ 12 (STRONG_SCORE_ONLY_EDGE)
+- strong_streak ≥ 3 (STRONG_SCORE_ONLY_PERSIST)
+
+**Additional gates in main.py _is_strong_eligible():**
+
+| Gate | Condition |
+|------|-----------|
 | Timing | ≠ LATE |
 | Market Read | ≠ "Public Drift" |
 | Cross-Market | No contradiction |
-| Persistence | strong_streak ≥ 2 (NCAAB: ≥ 3) |
 | Stability | last_score within delta of peak (NCAAB: 2pts, others: 3pts) |
 | Early Block | NCAAB/NCAAF: timing ≠ EARLY |
 
-**STRONG_BET requires L123 mode** — cannot be awarded without both sharp and consensus data confirming.
+**L3_ONLY STRONG guard:** Encoded directly in `scoring_v2.compute_unified_score()` — L3_ONLY rows always have `strong_eligible=False` regardless of score or edge. This is tested in `test_invariants.py::test_l3_only_no_strong`.
 
 ---
 
@@ -653,8 +684,8 @@ No duplicate writers allowed.
 2. **L2 validates.** Consensus either confirms or rejects L1. This determines confidence.
 3. **L3 modifies.** DK retail behavior adjusts score within bounds, never overrides L1/L2.
 4. **Patterns classify.** Every scored row gets exactly one pattern (A-G or N). Patterns control floors, caps, and STRONG eligibility.
-5. **Layer mode caps.** More data = higher ceiling. L3-only rows cannot exceed 75.
-6. **STRONG requires FULL.** STRONG_BET needs all 3 layers (L123) + Pattern A/D/G.
+5. **Layers contribute, not limit.** More layers = more adjustment components. No layer-based caps (removed v2.1). L3_ONLY rows have limited upside in practice, not by artificial cap.
+6. **STRONG requires confirmation.** STRONG_BET has 3 paths (pattern, sharp certified, score-only) but L3_ONLY can NEVER produce STRONG — enforced in code.
 7. **Scoring happens once.** No downstream layer recomputes scores.
 8. **Freeze is permanent.** Decisions freeze at dashboard build time; never downgraded.
 9. **Outcomes grade only.** Post-game results do not influence scoring or decisions.
@@ -675,7 +706,7 @@ No duplicate writers allowed.
 | v1.2 Rebalance | 2026-03-02 | NCAAB -4 removed (redundant), NCAAF -2 added, NHL puck line governor -3, decision thresholds lowered (LEAN 60, BET 67, STRONG 70). |
 | v2.0 | 2026-03-04 | 3-Layer architecture. L1 sharp (OddsPapi), L2 consensus (The-Odds-API), L3 DK (retail). New modules: scoring_v2.py, dk_rules.py, l1_features.py, l2_features.py, merge_layers.py. Pattern detection (A-G). Cross-layer RLM (Pattern G). Layer mode caps (100/85/80/75). STRONG requires L123 + Pattern A/D/G. DK demoted to modifier (-10 to +10). 61 NBA/NHL team aliases. Dashboard pattern + layer badges. |
 | v2.0.1 | 2026-03-05 | Scoring signal overhaul: book response philosophy (read the BOOK not bettors), continuous divergence signals, ML vs Spread cross-check, line trajectory tracking. |
-| **v2.1** | **2026-03-05** | **CLV tracking (decision line + closing line + CLV calculation). ESPN injury counts wired into scoring (-2 to +1). Weather integration via Open-Meteo (wind/rain/cold dampening, 62 stadiums). MLB context: SP quality from ERA with sample gates + park factors (30 teams). NHL context: goalie confirmation scoring (starter/backup from W-L-OT). NCAAB context: AP/NET ranking differential. Score formula now has 11 adjustment components. Dashboard badges for all new signals.** |
+| **v2.1** | **2026-03-05** | **CLV tracking. ESPN injury + weather + sport context. Scoring recalibration: effective_move_mag (juice/odds movement detection), boosted confirmed signals, 2-tier line movement multipliers, line trajectory bonuses doubled. Silent failure logging. L3_ONLY STRONG guard. Score decomposition columns (dk_base, pattern_bonus, decay). 5 invariant tests. Tick shadowing fix.** |
 
 ---
 

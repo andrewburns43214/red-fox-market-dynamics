@@ -240,7 +240,8 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
     if sport:
         try:
             situational = fetch_all_situational(sport)
-        except Exception:
+        except Exception as e:
+            print(f"[WARN] situational fetch for {sport}: {repr(e)}")
             situational = None
 
     # Ensure canonical_key column exists and is populated
@@ -458,7 +459,8 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
         if _wx_key not in _wx_cache:
             try:
                 _wx_cache[_wx_key] = get_weather_for_game(_sport, home, game_time)
-            except Exception:
+            except Exception as e:
+                print(f"[WARN] weather fetch for {_wx_key}: {repr(e)}")
                 _wx_cache[_wx_key] = {}
         wx = _wx_cache[_wx_key]
         for col in ("wind_mph", "temp_f", "precip_prob", "weather_flag", "weather_adj"):
@@ -488,8 +490,8 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
                 if ctx.get("park_factor", 1.0) >= 1.05 or ctx.get("park_factor", 1.0) <= 0.95:
                     flags.append(f"PF:{ctx['park_factor']:.2f}")
                 dk_df.at[idx, "sport_context_flag"] = "|".join(flags)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[WARN] MLB context for row {idx}: {repr(e)}")
         print(f"  MLB context: pitcher stats + park factors applied")
 
     elif _sport_str == "nhl":
@@ -521,8 +523,8 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
                     if ctx.get("goalie_flag_away"):
                         flags.append(f"A:{ctx['goalie_flag_away']}")
                     dk_df.at[idx, "sport_context_flag"] = "|".join(flags)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[WARN] NHL goalie context for row {idx}: {repr(e)}")
             print(f"  NHL context: goalie status applied")
 
     elif _sport_str == "ncaab":

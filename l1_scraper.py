@@ -63,8 +63,8 @@ def _load_l1_open_registry() -> dict:
                     "changed_at": row.get("changed_at", ""),
                     "limit": row.get("limit", ""),
                 }
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[WARN] l1 open registry load: {repr(e)}")
     return reg
 
 
@@ -95,8 +95,8 @@ def _log_match_failure(sport: str, source: str, home: str, away: str, reason: st
                 datetime.now(timezone.utc).isoformat(),
                 sport, source, home, away, reason,
             ])
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[WARN] l1 match failure log: {repr(e)}")
 
 
 def scrape_l1_oddspapi(sport: str) -> dict:

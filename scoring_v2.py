@@ -605,18 +605,20 @@ def compute_unified_score(row: dict) -> dict:
     _ne_min = NET_EDGE_MIN_TOTAL if _market == "TOTAL" else NET_EDGE_MIN_SIDES
 
     strong_ok = False
-    # Path 1: Pattern-driven (existing)
-    if (strong_eligible and pattern in ("A", "D", "G") and
-            final_score >= STRONG_BET_SCORE and _net_edge >= _ne_min and _persist >= 2):
-        strong_ok = True
-    # Path 2: Sharp Certified FULL
-    elif (sharp_cert_tier == "FULL" and
-            final_score >= STRONG_BET_SCORE and _net_edge >= _ne_min and _persist >= 2):
-        strong_ok = True
-    # Path 3: Score-only (higher bar)
-    elif (final_score >= STRONG_SCORE_ONLY_MIN and
-            _net_edge >= STRONG_SCORE_ONLY_EDGE and _persist >= STRONG_SCORE_ONLY_PERSIST):
-        strong_ok = True
+    # L3_ONLY cannot produce STRONG — no sharp/consensus confirmation
+    if layer_mode != "L3_ONLY":
+        # Path 1: Pattern-driven (existing)
+        if (strong_eligible and pattern in ("A", "D", "G") and
+                final_score >= STRONG_BET_SCORE and _net_edge >= _ne_min and _persist >= 2):
+            strong_ok = True
+        # Path 2: Sharp Certified FULL
+        elif (sharp_cert_tier == "FULL" and
+                final_score >= STRONG_BET_SCORE and _net_edge >= _ne_min and _persist >= 2):
+            strong_ok = True
+        # Path 3: Score-only (higher bar)
+        elif (final_score >= STRONG_SCORE_ONLY_MIN and
+                _net_edge >= STRONG_SCORE_ONLY_EDGE and _persist >= STRONG_SCORE_ONLY_PERSIST):
+            strong_ok = True
 
     # Collect flags
     all_flags = []
