@@ -1319,7 +1319,8 @@ function sortBy(col,th){ if(sortCol===col) sortAsc=!sortAsc; else{sortCol=col;so
 let groupMode=false;
 function toggleGroup(el){ groupMode=!groupMode; el.classList.toggle('grp-on',groupMode); el.textContent=groupMode?'Ungroup':'Group by Game'; renderBoard(); }
 
-function filtered(){ const now=new Date(); let d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now); if(filter==='signals') d=d.filter(r=>Number(r.game_confidence)>=65); if(filter==='highconf') d=d.filter(r=>(r.game_decision||'').toUpperCase()==='STRONG_BET'); if(filter==='today') d=allDash.filter(r=>isToday(r._game_time)); return d.sort((a,b)=>{ let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
+function _decRank(d){ const k=(d||'').toUpperCase(); if(k==='STRONG_BET') return 0; if(k==='BET') return 1; return 2; }
+function filtered(){ const now=new Date(); let d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now); if(filter==='signals') d=d.filter(r=>Number(r.game_confidence)>=65); if(filter==='highconf') d=d.filter(r=>(r.game_decision||'').toUpperCase()==='STRONG_BET'); if(filter==='today') d=allDash.filter(r=>isToday(r._game_time)); return d.sort((a,b)=>{ const da=_decRank(a.game_decision),db=_decRank(b.game_decision); if(da!==db) return da-db; let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
 
 window._boardRows=[];
 function renderBoard(){
