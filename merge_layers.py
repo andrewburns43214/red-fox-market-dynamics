@@ -38,6 +38,9 @@ L1_DEFAULTS = {
     "l1_n_books": 0,
     "l1_books": [],
     "l1_available": False,
+    "sharp_cert_tier": "NONE",
+    "sharp_cert_strength": 0.0,
+    "sharp_cert_detail": "",
 }
 
 L2_DEFAULTS = {

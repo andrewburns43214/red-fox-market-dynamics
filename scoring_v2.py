@@ -8,13 +8,15 @@ Score = dk_base (from dk_scoring.py)
   + cross_adj (-2 to +1): spread/total consistency
   + line_diff_bonus (0 to +8): DK vs consensus/Pinnacle differential
   + momentum_decay (-3 to 0): flat tick penalty (ALL rows)
-  Clamped to [floor, cap] by layer_mode
+  Clamped to [floor, 100] universally (layer caps removed in v2.1)
 
-Layer modes:
-  L123 (full): cap 100, STRONG eligible
-  L13 (no consensus): cap 85, no STRONG
-  L23 (no sharp): cap 80, no STRONG
-  L3_ONLY: cap 75, no STRONG (dk_base only)
+Layer modes (UI badge only, no score caps):
+  L123 / L13 / L23 / L3_ONLY
+
+STRONG_BET — 3 paths:
+  Path 1 (Pattern): A/D/G + score>=70 + edge>=10 + persist>=2
+  Path 2 (Sharp Certified FULL): score>=70 + edge>=10 + persist>=2
+  Path 3 (Score-only): score>=75 + edge>=12 + persist>=3
 """
 import math
 
@@ -24,10 +26,7 @@ from engine_config import (
     L2_MAX_POSITIVE_ADJ,
     L2_MAX_NEGATIVE_ADJ,
     LINE_DIFF_MAX_BONUS,
-    SCORE_CAP_L123,
-    SCORE_CAP_L13,
-    SCORE_CAP_L23,
-    SCORE_CAP_L3_ONLY,
+    SCORE_CAP_UNIVERSAL,
     PATTERN_EFFECTS,
     FAST_SNAP_EARLY_BONUS,
     FAST_SNAP_LATE_PENALTY,
@@ -43,6 +42,19 @@ from engine_config import (
     DECAY_MAX,
     B2B_SINGLE_ADJ,
     LINE_DIFF_ENABLED,
+    SHARP_CERT_HALF_BONUS_MIN,
+    SHARP_CERT_HALF_BONUS_MAX,
+    SHARP_CERT_FULL_BONUS_MIN,
+    SHARP_CERT_FULL_BONUS_MAX,
+    SHARP_CERT_DK_RESPONSE_AMP,
+    SHARP_CERT_BONUS_HARD_CAP,
+    STRONG_BET_SCORE,
+    BET_SCORE,
+    STRONG_SCORE_ONLY_MIN,
+    STRONG_SCORE_ONLY_EDGE,
+    STRONG_SCORE_ONLY_PERSIST,
+    NET_EDGE_MIN_SIDES,
+    NET_EDGE_MIN_TOTAL,
 )
 
 
@@ -180,8 +192,31 @@ def compute_l1_adjustment(row: dict) -> dict:
     # Clamp to [L1_MIN_ADJUSTMENT, L1_MAX_ADJUSTMENT]
     adjustment = max(L1_MIN_ADJUSTMENT, min(L1_MAX_ADJUSTMENT, raw))
 
+    # Sharp Certified override — replaces normal l1_adjustment when active
+    sharp_cert_tier = str(row.get("sharp_cert_tier", "NONE")).upper()
+    sharp_cert_bonus = 0.0
+    if sharp_cert_tier == "FULL":
+        cert_strength = _safe_float(row.get("sharp_cert_strength"), 0.5)
+        sharp_cert_bonus = SHARP_CERT_FULL_BONUS_MIN + (SHARP_CERT_FULL_BONUS_MAX - SHARP_CERT_FULL_BONUS_MIN) * cert_strength
+        # DK book response amplifier
+        dk_dir = _safe_float(row.get("dk_move_dir", row.get("move_dir", row.get("line_last_dir", 0))))
+        if dk_dir != 0 and direction != 0 and (dk_dir > 0) == (direction > 0):
+            sharp_cert_bonus *= SHARP_CERT_DK_RESPONSE_AMP
+        sharp_cert_bonus = min(sharp_cert_bonus, SHARP_CERT_BONUS_HARD_CAP)
+        adjustment = round(sharp_cert_bonus, 2)  # OVERRIDE normal adjustment
+    elif sharp_cert_tier == "HALF":
+        cert_strength = _safe_float(row.get("sharp_cert_strength"), 0.5)
+        sharp_cert_bonus = SHARP_CERT_HALF_BONUS_MIN + (SHARP_CERT_HALF_BONUS_MAX - SHARP_CERT_HALF_BONUS_MIN) * cert_strength
+        dk_dir = _safe_float(row.get("dk_move_dir", row.get("move_dir", row.get("line_last_dir", 0))))
+        if dk_dir != 0 and direction != 0 and (dk_dir > 0) == (direction > 0):
+            sharp_cert_bonus *= SHARP_CERT_DK_RESPONSE_AMP
+        sharp_cert_bonus = min(sharp_cert_bonus, SHARP_CERT_FULL_BONUS_MIN)  # cap HALF at FULL minimum
+        adjustment = round(sharp_cert_bonus, 2)  # OVERRIDE normal adjustment
+
     return {
         "l1_adjustment": round(adjustment, 2),
+        "sharp_cert_tier": sharp_cert_tier,
+        "sharp_cert_bonus": round(sharp_cert_bonus, 2),
         "l1_details": {
             "base": round(base, 3),
             "stability_mult": round(stab_mult, 3),
@@ -549,16 +584,8 @@ def compute_unified_score(row: dict) -> dict:
     # Compute raw score: dk_base + adjustments
     raw_score = dk_base + l1_adj + l2_adj + pattern_bonus + cross_adj + line_diff + decay + b2b_adj
 
-    # Apply layer mode cap
-    layer_caps = {
-        "L123": SCORE_CAP_L123,
-        "L13": SCORE_CAP_L13,
-        "L23": SCORE_CAP_L23,
-        "L3_ONLY": SCORE_CAP_L3_ONLY,
-    }
-    cap = layer_caps.get(layer_mode, SCORE_CAP_L3_ONLY)
-
-    # Apply pattern-specific cap
+    # Universal cap (no layer-based caps — layers contribute to score, don't limit it)
+    cap = SCORE_CAP_UNIVERSAL
     if pattern_cap is not None:
         cap = min(cap, pattern_cap)
 
@@ -568,13 +595,28 @@ def compute_unified_score(row: dict) -> dict:
     # Clamp
     final_score = int(max(floor, min(cap, raw_score)))
 
-    # STRONG eligibility (basic check — full check in dk_scoring.is_strong_eligible)
-    strong_ok = (
-        strong_eligible and
-        layer_mode == "L123" and
-        final_score >= 70 and
-        pattern in ("A", "D", "G")
-    )
+    # Sharp Certified status (from l1_features, passed through merge)
+    sharp_cert_tier = str(row.get("sharp_cert_tier", "NONE")).upper()
+
+    # STRONG eligibility — 3 paths (basic pre-check; full check in main.py _is_strong_eligible)
+    _persist = _safe_int(row.get("strong_streak", 0))
+    _net_edge = _safe_float(row.get("net_edge", 0))
+    _market = str(row.get("market", row.get("market_display", ""))).upper()
+    _ne_min = NET_EDGE_MIN_TOTAL if _market == "TOTAL" else NET_EDGE_MIN_SIDES
+
+    strong_ok = False
+    # Path 1: Pattern-driven (existing)
+    if (strong_eligible and pattern in ("A", "D", "G") and
+            final_score >= STRONG_BET_SCORE and _net_edge >= _ne_min and _persist >= 2):
+        strong_ok = True
+    # Path 2: Sharp Certified FULL
+    elif (sharp_cert_tier == "FULL" and
+            final_score >= STRONG_BET_SCORE and _net_edge >= _ne_min and _persist >= 2):
+        strong_ok = True
+    # Path 3: Score-only (higher bar)
+    elif (final_score >= STRONG_SCORE_ONLY_MIN and
+            _net_edge >= STRONG_SCORE_ONLY_EDGE and _persist >= STRONG_SCORE_ONLY_PERSIST):
+        strong_ok = True
 
     # Collect flags
     all_flags = []
@@ -591,11 +633,15 @@ def compute_unified_score(row: dict) -> dict:
         all_flags.append("CROSS_MKT_CONTRADICT")
     if line_diff > 0:
         all_flags.append(f"LINE_DIFF_+{line_diff:.1f}")
+    if sharp_cert_tier in ("HALF", "FULL"):
+        all_flags.append(f"SHARP_{sharp_cert_tier}")
 
     return {
         "score": final_score,
         "dk_base_score": round(dk_base, 2),
         "layer_mode": layer_mode,
+        "sharp_cert_tier": sharp_cert_tier,
+        "sharp_cert_bonus": l1_result.get("sharp_cert_bonus", 0.0),
         "pattern": pattern,
         "pattern_label": pattern_label,
         "edge_type": edge_type,

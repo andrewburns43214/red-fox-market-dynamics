@@ -1,11 +1,49 @@
 """
 Centralized configuration for the Red Fox engine.
 All magic numbers, file paths, API keys, and layer weights in one place.
+
+CHANGELOG
+---------
+v2.1 (2026-03-05) — Layer Trust + Sharp Certified + STRONG_BET Rework
+  - Removed hard layer caps (L123=100, L13=85, L23=80, L3_ONLY=75).
+    Layer mode is now UI badge only; all rows capped at 100 universally.
+  - Sharp Certified signal (NONE / HALF / FULL):
+      HALF: Pinnacle moved meaningfully (mag>=0.3) in clear direction.
+      FULL: Pinnacle + 1 other sharp book agree. Bonus +8-12, replaces l1_adj.
+      DK response amplifier (1.3x) when DK moved same direction.
+  - STRONG_BET 3 paths:
+      Path 1 (Pattern): A/D/G + score>=70 + edge>=10 + persist>=2
+      Path 2 (Sharp Certified FULL): score>=70 + edge>=10 + persist>=2
+      Path 3 (Score-only): score>=75 + edge>=12 + persist>=3
+  - Dashboard: green pulsing "SHARP check" badge (FULL), yellow "SHARP ~" (HALF)
+
+v2.0 (2026-03-05) — Scoring Signal Overhaul
+  - 3-layer scoring: L1 (Pinnacle sharp) + L2 (31-book consensus) + L3 (DK retail)
+  - Book response philosophy: read the BOOK's line movement, not DK bettors' money
+  - Continuous signals, line trajectory, ML vs Spread cross-check
+  - Pattern detection A-G with floors/caps/STRONG gates
+
+v2.0 Audit (2026-03-05) — 6 files, 14 fixes
+  Critical (P1):
+    - Outcome resolution (main.py): deterministic team1=away, team2=home ordering
+    - Key number bonus (scoring_v2.py): restricted to NFL/NCAAF only
+    - MLB team aliases (team_aliases.py): added 30 abbreviation entries
+  High (P2):
+    - Reversed team match (canonical_match.py): non-UFC scores 0.0 for reversed order
+    - Config extraction: moved score floors, public heavy, cross-check, decay, B2B to config
+    - Budget guard (main.py): actually stops pulls when budget exhausted
+    - Timezone validation (main.py): _validate_iso_tz() appends Z to naive datetimes
+  Medium (P3):
+    - BOTH_B2B (scoring_v2.py): explicitly handled with 0 adjustment
+    - UFC market filter (merge_layers.py): strips SPREAD/TOTAL rows for UFC
+    - Pattern B/C (engine_config.py): B gets explicit bonus:0, C renamed RETAIL_ONLY
+    - Bare except (main.py): replaced with except (ValueError, TypeError)
+  Verified non-issues: stale detection on fuzzy L2, NCAAB string formatting
 """
 import os
 
 # ─── VERSION ───
-LOGIC_VERSION = "v2.0"
+LOGIC_VERSION = "v2.1"
 
 # ─── FILE PATHS ───
 DATA_DIR = "data"
@@ -69,11 +107,11 @@ L2_MAX_NEGATIVE = L2_MAX_NEGATIVE_ADJ
 L3_MAX_POSITIVE = 10.0
 L3_MAX_NEGATIVE = -10.0
 
-# Layer mode score caps
-SCORE_CAP_L123 = 100
-SCORE_CAP_L13 = 85
-SCORE_CAP_L23 = 80
-SCORE_CAP_L3_ONLY = 75
+# Layer mode score caps — REMOVED (v2.1)
+# Layers now contribute to score but don't cap it. Layer mode is UI-only.
+# Old values preserved for reference:
+# SCORE_CAP_L123 = 100, SCORE_CAP_L13 = 85, SCORE_CAP_L23 = 80, SCORE_CAP_L3_ONLY = 75
+SCORE_CAP_UNIVERSAL = 100
 
 # Pattern bonuses/penalties
 PATTERN_EFFECTS = {
@@ -161,6 +199,28 @@ B2B_SINGLE_ADJ = -1.0
 
 # Line diff feature flag
 LINE_DIFF_ENABLED = False
+
+# ─── SHARP CERTIFIED ───
+# Tier thresholds
+SHARP_CERT_MIN_MAGNITUDE = 0.30       # normalized move size (0-1)
+SHARP_CERT_LEADER_BOOKS = {"pinnacle", "betcris", "bookmaker.eu", "bookmaker"}  # sharpest books
+SHARP_CERT_FULL_MIN_AGREEMENT = 2     # Pinnacle + at least 1 other sharp book
+# Bonus ranges (replaces l1_adjustment when active)
+SHARP_CERT_HALF_BONUS_MIN = 4.0
+SHARP_CERT_HALF_BONUS_MAX = 6.0
+SHARP_CERT_FULL_BONUS_MIN = 8.0
+SHARP_CERT_FULL_BONUS_MAX = 12.0
+# DK book response amplifier
+SHARP_CERT_DK_RESPONSE_AMP = 1.3     # multiply bonus when DK moved same direction
+SHARP_CERT_BONUS_HARD_CAP = 15.0     # absolute max after amplification
+
+# ─── STRONG_BET PATHS ───
+# Path 1 (Pattern): existing A/D/G + score ≥70 + edge ≥10 + persist ≥2
+# Path 2 (Sharp Certified): SHARP FULL + score ≥70 + edge ≥10 + persist ≥2
+# Path 3 (Score-only): score ≥75 + edge ≥12 + persist ≥3
+STRONG_SCORE_ONLY_MIN = 75
+STRONG_SCORE_ONLY_EDGE = 12
+STRONG_SCORE_ONLY_PERSIST = 3
 
 # ─── STALE ROW CLEANUP ───
 STALE_TICK_THRESHOLD = 3  # expire rows not seen in this many ticks

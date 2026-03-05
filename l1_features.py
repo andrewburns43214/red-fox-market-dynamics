@@ -22,6 +22,9 @@ from engine_config import (
     KEY_NUMBERS,
     FAST_SNAP_SPEED,
     SLOW_GRIND_SPEED,
+    SHARP_CERT_MIN_MAGNITUDE,
+    SHARP_CERT_LEADER_BOOKS,
+    SHARP_CERT_FULL_MIN_AGREEMENT,
 )
 
 
@@ -340,6 +343,18 @@ def compute_l1_features(sport: str = None) -> dict:
             speed_label, key_cross, max_limit,
         )
 
+        # 11. Sharp Certified (None / Half / Full)
+        cert_result = _compute_sharp_certified(
+            leader_book=leader_book,
+            agreement=agreement,
+            majority_dir=majority_dir,
+            normalized_mag=normalized_mag,
+            stability=stability,
+            speed_label=speed_label,
+            max_limit=max_limit,
+            book_moves=book_moves,
+        )
+
         features[(canon, market, side)] = {
             "l1_move_dir": majority_dir,
             "l1_move_magnitude": round(normalized_mag, 3),
@@ -357,9 +372,83 @@ def compute_l1_features(sport: str = None) -> dict:
             "l1_n_books": len(book_moves),
             "l1_books": sorted(set(bm["bookmaker"] for bm in book_moves)),
             "l1_available": True,
+            "sharp_cert_tier": cert_result["tier"],
+            "sharp_cert_strength": cert_result["strength"],
+            "sharp_cert_detail": cert_result["detail"],
         }
 
     return features
+
+
+def _compute_sharp_certified(leader_book: str, agreement: int,
+                             majority_dir: int, normalized_mag: float,
+                             stability: float, speed_label: str,
+                             max_limit: float, book_moves: list) -> dict:
+    """
+    Determine Sharp Certified tier: NONE / HALF / FULL.
+
+    HALF (SHARP LEAN): A leader sharp book (Pinnacle/BetCris/Bookmaker.eu)
+        moved meaningfully (magnitude >= 0.3) in a clear direction.
+        1 sharp book confirmed the move.
+
+    FULL (SHARP CERTIFIED): HALF criteria + at least 1 additional sharp book
+        agrees on the same direction (2+ sharp books total).
+
+    Book reaction (DK responding) is checked later in scoring_v2.py, not here.
+    """
+    result = {"tier": "NONE", "strength": 0.0, "detail": ""}
+
+    # Must have a clear direction
+    if majority_dir == 0:
+        result["detail"] = "no_direction"
+        return result
+
+    # Must meet minimum magnitude threshold
+    if normalized_mag < SHARP_CERT_MIN_MAGNITUDE:
+        result["detail"] = f"mag={normalized_mag:.2f}<{SHARP_CERT_MIN_MAGNITUDE}"
+        return result
+
+    # Leader must be a recognized sharp book
+    if leader_book.lower() not in SHARP_CERT_LEADER_BOOKS:
+        result["detail"] = f"leader={leader_book} not sharp"
+        return result
+
+    # Count how many sharp books agree on the majority direction
+    sharp_agreeing = 0
+    for bm in book_moves:
+        if (bm["bookmaker"].lower() in SHARP_CERT_LEADER_BOOKS
+                and bm["direction"] == majority_dir):
+            sharp_agreeing += 1
+
+    if sharp_agreeing < 1:
+        result["detail"] = "no sharp books agree"
+        return result
+
+    # --- At least HALF: one sharp book moved meaningfully ---
+
+    # Compute strength (0-1) based on how far above thresholds
+    # Factors: magnitude overshoot, stability, speed, agreement count
+    mag_factor = min((normalized_mag - SHARP_CERT_MIN_MAGNITUDE) / 0.4, 1.0)
+    stab_factor = stability
+    speed_factor = {"FAST_SNAP": 1.0, "NORMAL": 0.6, "SLOW_GRIND": 0.3}.get(speed_label, 0.4)
+    agree_factor = min(sharp_agreeing / 4.0, 1.0)  # more sharp books = stronger
+
+    strength = (mag_factor * 0.35 + stab_factor * 0.25
+                + speed_factor * 0.20 + agree_factor * 0.20)
+    strength = round(min(max(strength, 0.0), 1.0), 3)
+
+    if sharp_agreeing >= SHARP_CERT_FULL_MIN_AGREEMENT:
+        # FULL: 2+ sharp books agree
+        result["tier"] = "FULL"
+        result["strength"] = strength
+        result["detail"] = f"{sharp_agreeing} sharp books agree, mag={normalized_mag:.2f}"
+    else:
+        # HALF: only 1 sharp book
+        result["tier"] = "HALF"
+        result["strength"] = strength
+        result["detail"] = f"1 sharp book ({leader_book}), mag={normalized_mag:.2f}"
+
+    return result
 
 
 def _compute_sharp_strength(magnitude: float, agreement_mult: float,
