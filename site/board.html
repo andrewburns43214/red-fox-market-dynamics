@@ -550,6 +550,13 @@ td { padding: 6px 10px; font-size: 12px; white-space: nowrap; vertical-align: mi
 }
 @keyframes sharpPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
 
+/* Game inline badges (B2B, injury, weather) */
+.gbdg { display: inline-block; padding: 0 4px; border-radius: 3px; font-family: var(--mono); font-size: 7px; font-weight: 700; letter-spacing: .2px; vertical-align: middle; margin-left: 3px; }
+.gbdg-b2b { background: #fff2f2; color: #d63020; border: 1px solid #ffd0d0; }
+.gbdg-inj { background: #fff8ee; color: #b06000; border: 1px solid #f0d8a0; }
+.gbdg-wx { background: #eef5ff; color: #2266aa; border: 1px solid #c8ddf8; }
+.ctx-line { font-family: var(--mono); font-size: 8px; color: var(--text3); margin-left: 6px; }
+
 .td-pick {
   font-family: var(--sans);
   font-size: 12px; font-weight: 600;
@@ -1201,9 +1208,41 @@ function spChip(s){ const k=(s||'').toLowerCase(); return `<span class="sport-ch
 function timBadge(b){ const k=(b||'EARLY').toUpperCase(); return `<span class="tim t${k}">${k}</span>`; }
 function mrBadge(m){ const s=(m||'').trim(); if(!s||s==='-') return '-'; const lu=s.toUpperCase(); const map={'STEALTH MOVE':'mr-stealth','FREEZE PRESSURE':'mr-freeze','ALIGNED SHARP':'mr-aligned','REVERSE PRESSURE':'mr-reverse','CONTRADICTION':'mr-contra','PUBLIC DRIFT':'mr-public','NEUTRAL':'mr-neutral'}; const cls=map[lu]||'mr-neutral'; const labels={'STEALTH MOVE':'Hidden $','FREEZE PRESSURE':'$ No Move','ALIGNED SHARP':'$ + Move','REVERSE PRESSURE':'$ vs Line','CONTRADICTION':'Mixed','PUBLIC DRIFT':'Crowd Push','NEUTRAL':'Flat'}; const tips={'STEALTH MOVE':'Money flowing in quietly — low bets, significant money','FREEZE PRESSURE':'Big money divergence but line not moving yet','ALIGNED SHARP':'Money and line movement both pointing same direction','REVERSE PRESSURE':'Money pushing one way, line moved opposite','CONTRADICTION':'Signals conflict — money says one thing, line says another','PUBLIC DRIFT':'High public bet volume pushing the line — no edge','NEUTRAL':'No meaningful money or line signal detected'}; return `<span class="mr ${cls}" title="${tips[lu]||''}">${labels[lu]||s}</span>`; }
 function regBadge(r){ const k=(r||'N').toUpperCase().trim(); if(!k||k==='-') return '-'; const cls='reg-'+(k.charAt(0)||'N'); const labels={A:"Stealth",B:"Fade",C:"Weak Push",D:"Surge",N:"Flat"}; const tips={A:"Low bets, high money, line moved against",B:"High bets + money, line fading",C:"Weak public push amplified",D:"Strong money divergence into the side",N:"No clear regime detected"}; return `<span class="reg ${cls}" title="${tips[k]||''}">${labels[k]||k}</span>`; }
-function patBadge(p){ const k=(p||'').toUpperCase().trim(); if(!k) return '-'; const tips={G:'Reverse Line Movement',A:'Sharp vs Public',D:'Stale Price',B:'Aligned',F:'Late Snap',C:'Public Only',E:'Consensus Rejects',N:'Neutral'}; const labels={G:'RLM',A:'SHRP',D:'STALE',B:'ALGN',F:'SNAP',C:'PUB',E:'REJ',N:'NEU'}; return `<span class="pat pat-${k}" title="${tips[k]||k}">${labels[k]||k}</span>`; }
+function patBadge(p,et){ const k=(p||'').toUpperCase().trim(); if(!k) return '-'; const tips={G:'Reverse Line Movement',A:'Sharp vs Public',D:'Stale Price',B:'Aligned',F:'Late Snap',C:'Public Only',E:'Consensus Rejects',N:'Neutral'}; const labels={G:'RLM',A:'SHRP',D:'STALE',B:'ALGN',F:'SNAP',C:'PUB',E:'REJ',N:'NEU'}; const etStr=et&&et!=='nan'?' | '+et:''; return `<span class="pat pat-${k}" title="${(tips[k]||k)+etStr}">${labels[k]||k}</span>`; }
 function lyrBadge(l){ const k=(l||'').trim(); if(!k) return '-'; const labels={L123:'FULL',L13:'PARTIAL',L23:'PARTIAL',L3_ONLY:'LIMITED'}; const tips={L123:'All 3 data layers active',L13:'2 of 3 layers (missing consensus)',L23:'2 of 3 layers (missing primary)',L3_ONLY:'Single layer — limited confidence'}; return `<span class="lyr lyr-${k}" title="${tips[k]||k}">${labels[k]||k}</span>`; }
 function sharpBadge(r){ const tier=(r.sharp_cert_tier||'').toUpperCase().trim(); const nBooks=Number(r.l1_n_books)||0; let html=''; if(tier==='FULL') html='<span class="sharp-cert sc-full" title="Sharp Certified: multiple sharp books confirm">SHARP &#x2713;</span>'; else if(tier==='HALF') html='<span class="sharp-cert sc-half" title="Sharp Lean: Pinnacle moved meaningfully">SHARP ~</span>'; else if(nBooks>0){ const pct=Math.round(nBooks/6*100); html=`<span class="sharp-meter" title="${nBooks} of 6 sharp books">${pct}%</span>`; } else html='<span style="color:#aab2c4">—</span>'; return html; }
+function gameBadges(r){
+  let h='';
+  const b2b=(r.b2b_flag||'').trim();
+  if(b2b&&b2b!=='nan'){const lbl={HOME_B2B:'H-B2B',AWAY_B2B:'A-B2B',BOTH_B2B:'B2B'}; h+=' <span class="gbdg gbdg-b2b" title="Back-to-back">'+(lbl[b2b]||b2b)+'</span>';}
+  const hi=Number(r.home_injury_count)||0, ai=Number(r.away_injury_count)||0;
+  if(hi>=2) h+=' <span class="gbdg gbdg-inj" title="Home '+hi+' injuries">H:'+hi+'inj</span>';
+  if(ai>=2) h+=' <span class="gbdg gbdg-inj" title="Away '+ai+' injuries">A:'+ai+'inj</span>';
+  const wx=(r.weather_flag||'').trim();
+  if(wx&&wx!=='nan'&&wx!=='DOME'){
+    const wind=Number(r.wind_mph)||0, temp=Number(r.temp_f)||70, prec=Number(r.precip_prob)||0;
+    const tip=temp+'F '+wind+'mph'+(prec>0?' '+prec+'%rain':'');
+    const icon=wx.includes('RAIN')?'&#x1F327;':wx.includes('WIND')?'&#x1F32C;':wx.includes('COLD')?'&#x2744;':'';
+    h+=' <span class="gbdg gbdg-wx" title="'+tip+'">'+icon+wx.replace(/\|/g,'/')+'</span>';
+  }
+  return h;
+}
+function contextLine(r){
+  const sp=(r.sport||'').toLowerCase(); let parts=[];
+  if(sp==='mlb'){
+    const h=r.sp_name_home, a=r.sp_name_away;
+    if(h&&h!=='nan') parts.push((r.sp_hand_home||'').charAt(0)+'HP: '+h+(r.sp_era_home?' '+r.sp_era_home:''));
+    if(a&&a!=='nan') parts.push((r.sp_hand_away||'').charAt(0)+'AP: '+a+(r.sp_era_away?' '+r.sp_era_away:''));
+    const pf=Number(r.park_factor)||1; if(pf>=1.05||pf<=0.95) parts.push('PF:'+pf.toFixed(2));
+  } else if(sp==='nhl'){
+    const gh=r.goalie_home, ga=r.goalie_away;
+    if(gh&&gh!=='nan'){const st=(r.goalie_flag_home||'').includes('CONFIRMED')?'&#x2705;':'&#x2753;'; parts.push(st+' H:'+gh.split(' ').pop());}
+    if(ga&&ga!=='nan'){const st=(r.goalie_flag_away||'').includes('CONFIRMED')?'&#x2705;':'&#x2753;'; parts.push(st+' A:'+ga.split(' ').pop());}
+  }
+  const ctx=(r.sport_context_flag||'').trim();
+  if(ctx&&ctx!=='nan'&&!parts.length) parts.push(ctx);
+  return parts.length?' <span class="ctx-line">'+parts.join(' · ')+'</span>':'';
+}
 function wrCol(p){ return p>=65?'g':p>=55?'a':'r'; }
 function wrClr(p){ return p>=65?'var(--green2)':p>=55?'var(--gold2)':'var(--red2)'; }
 
@@ -1236,8 +1275,8 @@ function renderBoard(){
     tr.innerHTML=`
       <td class="td-rank">${i+1}</td>
       <td class="td-game">
-        <div class="game-row1">${spChip(r.sport)}<span class="game-name">${r.game||'-'}</span></div>
-        <div class="game-time">${et(r._game_time)}</div>
+        <div class="game-row1">${spChip(r.sport)}<span class="game-name">${r.game||'-'}</span>${gameBadges(r)}</div>
+        <div class="game-time">${et(r._game_time)}${contextLine(r)}</div>
       </td>
       <td class="td-mkt">${r.market_display||'-'}</td>
       <td class="td-split">
@@ -1277,7 +1316,7 @@ function renderBoard(){
       <td class="td-edge"><span class="ev ${eC(edge)}">${edge}</span></td>
       <td class="td-conf"><span class="cv ${cC(conf)}">${conf.toFixed(1)}</span></td>
       <td class="td-bkt"><span class="bkt ${bk.c}">${bk.l}</span></td>
-      <td class="td-pat">${patBadge(r.v2_pattern)}</td>
+      <td class="td-pat">${patBadge(r.v2_pattern,r.v2_edge_type)}</td>
       <td class="td-layer">${lyrBadge(r.layer_mode)}</td>
       <td class="td-sharp">${sharpBadge(r)}</td>
       <td class="td-tim">${timBadge(r.timing_bucket)}</td>
@@ -1288,11 +1327,14 @@ function renderBoard(){
         const l1=Number(r.v2_l1_contrib)||0;
         const l2=Number(r.v2_l2_contrib)||0;
         const ld=Number(r.v2_line_diff)||0;
+        const disp=(r.l2_dispersion_label||'').trim();
+        const nb=Number(r.l2_n_books)||0;
         if(dk) parts.push('DK:'+Math.round(dk));
-        if(l1) parts.push('L1:'+(l1>0?'+':'')+Math.round(l1));
-        if(l2) parts.push('L2:'+(l2>0?'+':'')+Math.round(l2));
-        if(ld>0) parts.push('LD:+'+Math.round(ld));
-        return parts.length?'<span style="font-size:9px;color:#5a6480">'+parts.join(' ')+'</span>':'—';
+        if(l1) parts.push('<span style="color:'+(l1>0?'#00965a':'#d63020')+'">L1:'+(l1>0?'+':'')+Math.round(l1)+'</span>');
+        if(l2) parts.push('<span style="color:'+(l2>0?'#00965a':'#d63020')+'">L2:'+(l2>0?'+':'')+Math.round(l2)+'</span>');
+        if(ld>0) parts.push('<span style="color:#00965a">LD:+'+Math.round(ld)+'</span>');
+        if(nb>0&&disp) parts.push('<span style="color:#8892aa">'+nb+'bk/'+disp.charAt(0)+'</span>');
+        return parts.length?'<span style="font-size:9px">'+parts.join(' ')+'</span>':'—';
       })()}</td>
       <td class="td-dec"><span class="dec ${dc}">${dt}</span></td>
       <td class="td-pick">${r.favored_side||'-'}</td>
