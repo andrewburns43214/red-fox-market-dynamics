@@ -1063,6 +1063,12 @@ th.th-game { text-align: left; }
         <div class="panel" id="pnl-mread"></div>
       </div>
 
+      <!-- CLV Analysis -->
+      <div class="perf-trend-row">
+        <div class="panel" id="pnl-clv"></div>
+        <div class="panel" id="pnl-clv-detail"></div>
+      </div>
+
     </div>
   </div>
 
@@ -1764,6 +1770,58 @@ function buildKPIs(){
     }
   });
 
+  // ── 9. CLV Analysis ──
+  const clvPanel = document.getElementById('pnl-clv');
+  const clvDetailPanel = document.getElementById('pnl-clv-detail');
+  const clvRows = graded.filter(r => r.clv && r.clv !== '' && !isNaN(parseFloat(r.clv)));
+  if (clvPanel) {
+    if (clvRows.length === 0) {
+      clvPanel.innerHTML = `<div class="panel-h"><span class="panel-t">Closing Line Value</span><span class="panel-m">awaiting data</span></div><div style="padding:20px;text-align:center;color:#8892aa;font-size:12px">CLV data will appear once games with decision lines resolve</div>`;
+    } else {
+      const clvVals = clvRows.map(r => parseFloat(r.clv));
+      const avgCLV = clvVals.reduce((s,v)=>s+v, 0) / clvVals.length;
+      const posCLV = clvVals.filter(v => v > 0).length;
+      const negCLV = clvVals.filter(v => v < 0).length;
+      const zeroCLV = clvVals.filter(v => v === 0).length;
+      const beatPct = clvRows.length > 0 ? (100 * posCLV / clvRows.length).toFixed(1) : '0';
+      const avgClr = avgCLV > 0 ? '#00965a' : avgCLV < 0 ? '#d63020' : '#8892aa';
+      let html = `<div class="panel-h"><span class="panel-t">Closing Line Value</span><span class="panel-m">${clvRows.length} tracked</span></div>`;
+      html += `<div style="display:flex;gap:16px;padding:12px 14px;flex-wrap:wrap">`;
+      html += `<div style="text-align:center;flex:1"><div style="font-size:22px;font-weight:800;color:${avgClr};font-family:var(--mono)">${avgCLV > 0 ? '+' : ''}${avgCLV.toFixed(2)}</div><div style="font-size:10px;color:#8892aa;margin-top:2px">Avg CLV</div></div>`;
+      html += `<div style="text-align:center;flex:1"><div style="font-size:22px;font-weight:800;color:#1a6fd4;font-family:var(--mono)">${beatPct}%</div><div style="font-size:10px;color:#8892aa;margin-top:2px">Beat Close</div></div>`;
+      html += `<div style="text-align:center;flex:1"><div style="font-size:14px;font-weight:700;font-family:var(--mono)"><span style="color:#00965a">${posCLV}</span> / <span style="color:#8892aa">${zeroCLV}</span> / <span style="color:#d63020">${negCLV}</span></div><div style="font-size:10px;color:#8892aa;margin-top:2px">Beat / Push / Lost</div></div>`;
+      html += `</div>`;
+      clvPanel.innerHTML = html;
+    }
+  }
+  // CLV by decision type
+  if (clvDetailPanel) {
+    if (clvRows.length === 0) {
+      clvDetailPanel.innerHTML = `<div class="panel-h"><span class="panel-t">CLV by Decision</span></div><div style="padding:20px;text-align:center;color:#8892aa;font-size:12px">--</div>`;
+    } else {
+      const clvByDec = {};
+      clvRows.forEach(r => {
+        const d = (r.game_decision||'').toUpperCase().replace(/_/g,' ');
+        if (!clvByDec[d]) clvByDec[d] = [];
+        clvByDec[d].push(parseFloat(r.clv));
+      });
+      let html = `<div class="panel-h"><span class="panel-t">CLV by Decision</span><span class="panel-m">positive = beat the close</span></div>`;
+      html += '<table class="stat-tbl"><thead><tr><th>Decision</th><th>Avg CLV</th><th>Beat %</th><th>N</th></tr></thead><tbody>';
+      ['STRONG BET','BET','LEAN','NO BET'].forEach(d => {
+        const vals = clvByDec[d] || [];
+        if (vals.length === 0) return;
+        const avg = vals.reduce((s,v)=>s+v,0)/vals.length;
+        const beat = vals.filter(v=>v>0).length;
+        const beatP = (100*beat/vals.length).toFixed(1);
+        const clr = avg > 0 ? '#00965a' : avg < 0 ? '#d63020' : '#8892aa';
+        const label = d === 'STRONG BET' ? 'Strong Bet' : d === 'NO BET' ? 'No Bet' : d.charAt(0)+d.slice(1).toLowerCase();
+        html += `<tr><td class="st-label">${label}</td><td style="font-family:var(--mono);font-weight:700;color:${clr}">${avg>0?'+':''}${avg.toFixed(2)}</td><td style="font-family:var(--mono)">${beatP}%</td><td class="st-n">${vals.length}</td></tr>`;
+      });
+      html += '</tbody></table>';
+      clvDetailPanel.innerHTML = html;
+    }
+  }
+
   // ── Summary row ──
   const totalW = graded.filter(isWin).length;
   const totalL = graded.length - totalW;
@@ -1784,6 +1842,7 @@ function buildKPIs(){
     {label:'BET+ Win %', val: pBP !== null ? pBP.toFixed(1)+'%' : '—', sub: 'Bet + Strong Bet', cls: pBP!==null?pctClass(pBP):''},
     {label:'Overall Record', val: `${totalW}–${totalL}`, sub: `${graded.length} graded`, cls:''},
     {label:'Overall Win %', val: pAll !== null ? pAll.toFixed(1)+'%' : '—', sub: 'all plays', cls: pAll!==null?pctClass(pAll):''},
+    {label:'Avg CLV', val: (()=>{const cv=clvRows.map(r=>parseFloat(r.clv));if(!cv.length) return '—';const a=cv.reduce((s,v)=>s+v,0)/cv.length;return (a>0?'+':'')+a.toFixed(2);})(), sub: clvRows.length+' tracked', cls: (()=>{const cv=clvRows.map(r=>parseFloat(r.clv));if(!cv.length) return '';const a=cv.reduce((s,v)=>s+v,0)/cv.length;return a>0?'g':a<0?'r':'';})()},
   ].forEach(item => {
     const d = document.createElement('div');
     d.className = 'perf-summary-cell';
@@ -2018,13 +2077,14 @@ function renderResults(){
       <td style="padding:7px 10px;font-family:var(--mono)">${r.net_edge?Number(r.net_edge).toFixed(1):'--'}</td>
       <td style="padding:7px 10px">${mrVal?mrBadge(mrVal):'--'}</td>
       <td style="padding:7px 10px">${res}</td>
+      <td style="padding:7px 10px;font-family:var(--mono);font-size:11px;white-space:nowrap">${(()=>{const cv=parseFloat(r.clv);if(isNaN(cv)||!r.clv) return '<span style="color:#aab">--</span>';const clr=cv>0?'#00965a':cv<0?'#d63020':'#8892aa';return '<span style="color:'+clr+';font-weight:700">'+(cv>0?'+':'')+cv.toFixed(1)+'</span>';})()}</td>
     </tr>`;
   });
   const inner=el.querySelector('.full-tab')||el;
   inner.innerHTML=`<div style="overflow-x:auto">
     <div style="padding:10px 14px;font-size:11px;color:#8892aa;border-bottom:1px solid #eee">${resolved.length} resolved plays</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px">
-    <thead><tr style="background:#f4f5f7;text-align:left">${['Date','Sport','Game','Market','Side','Decision','Conf','Edge','DK Signal','Result'].map(c=>'<th style="padding:8px 10px;border-bottom:2px solid #dde0e8;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#5a6480;white-space:nowrap">'+c+'</th>').join('')}</tr></thead>
+    <thead><tr style="background:#f4f5f7;text-align:left">${['Date','Sport','Game','Market','Side','Decision','Conf','Edge','DK Signal','Result','CLV'].map(c=>'<th style="padding:8px 10px;border-bottom:2px solid #dde0e8;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#5a6480;white-space:nowrap">'+c+'</th>').join('')}</tr></thead>
     <tbody>${trs}</tbody></table></div>`;
 }
 
