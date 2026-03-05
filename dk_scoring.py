@@ -273,14 +273,20 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
     details["line_movement"] = round(lm_bonus, 2)
 
     # ── 7. KEY NUMBER CROSSING ──
+    # Key numbers (3, 7, 10, 14) only matter for football (NFL/NCAAF).
+    # NBA/NCAAB spreads are continuous — crossing 7 means nothing.
+    # NHL/MLB puck/run lines are fixed ±1.5 — no key number concept.
     kn_bonus = 0
-    if str(row.get("key_number_note", "")).strip():
-        if mkt_upper == "SPREAD":
-            kn_bonus = 6
-        else:
-            kn_bonus = 3
-        score += kn_bonus
-        flags.append(f"key_number:+{kn_bonus}")
+    kn_note = str(row.get("key_number_note", "")).strip()
+    if kn_note:
+        if sport_upper in ("NFL", "NCAAF") and mkt_upper == "SPREAD":
+            kn_bonus = 6  # Football key numbers are massive (3, 7)
+            flags.append(f"key_number:+{kn_bonus} ({kn_note})")
+        elif sport_upper in ("NFL", "NCAAF") and mkt_upper == "TOTAL":
+            kn_bonus = 3  # Totals key numbers matter less
+            flags.append(f"key_number:+{kn_bonus}")
+        # NBA/NCAAB/NHL/MLB/UFC: no key number bonus
+    score += kn_bonus
     details["key_number"] = kn_bonus
 
     # ── 8. TIMING BUCKET ──
