@@ -16,6 +16,8 @@ Layer modes:
   L23 (no sharp): cap 80, no STRONG
   L3_ONLY: cap 75, no STRONG (dk_base only)
 """
+import math
+
 from engine_config import (
     L1_MAX_ADJUSTMENT,
     L1_MIN_ADJUSTMENT,
@@ -34,6 +36,15 @@ from engine_config import (
     RLM_MONEY_GAP_MIN,
     RLM_L2_AGREEMENT_MIN,
 )
+
+
+def _bets_money_intensity(bets_pct: float, money_pct: float) -> float:
+    """Continuous 0.0-1.0 intensity from bets/money split."""
+    if bets_pct <= 0:
+        return 0.5
+    ratio = money_pct / bets_pct
+    intensity = 1.0 / (1.0 + math.exp(-2.0 * (ratio - 1.3)))
+    return round(max(0.0, min(1.0, intensity)), 3)
 
 
 def _safe_float(val, default=0.0) -> float:
@@ -141,14 +152,21 @@ def compute_l1_adjustment(row: dict) -> dict:
            * L1_MAX_ADJUSTMENT) + speed_bonus + key_bonus + leader_bonus
 
     # BIDIRECTIONAL: check if sharp direction matches DK favored side
-    # move_dir from DK perspective: +1 = sharp confirms DK side, -1 = sharp opposes
-    # When direction is positive: adjustment stays positive (confirms)
-    # When direction is negative (already factored into magnitude sign): penalize
-    # Note: l1_move_dir already encodes direction relative to this side,
-    # so negative direction naturally produces negative base
     if direction < 0:
         # Sharp opposes this side — invert to penalty range
         raw = -abs(raw) * 0.5  # Penalty is 50% of absolute value
+
+    # GAP 5: DK money confirmation — cross-check L1 with bets/money context
+    money_pct = _safe_float(row.get("money_pct"))
+    bets_pct = _safe_float(row.get("bets_pct"))
+    if money_pct > 0 and bets_pct > 0:
+        bm_ratio = money_pct / bets_pct
+        if direction > 0 and bm_ratio >= 1.5:
+            raw *= 1.15  # Sharps AND money agree -> boost
+        elif direction > 0 and bm_ratio < 0.7:
+            raw *= 0.75  # Sharps say yes but money says no -> dampen
+        elif direction < 0 and bm_ratio >= 1.5:
+            raw *= 0.70  # Sharps oppose but money concentrated -> soften penalty
 
     # Clamp to [L1_MIN_ADJUSTMENT, L1_MAX_ADJUSTMENT]
     adjustment = max(L1_MIN_ADJUSTMENT, min(L1_MAX_ADJUSTMENT, raw))
@@ -202,6 +220,12 @@ def compute_l2_adjustment(row: dict) -> dict:
     if agreement >= 0.6:
         # Market confirms — positive adjustment
         raw = validation * disp_mult * book_scale * L2_MAX_POSITIVE_ADJ + trend_bonus
+        # GAP 5: DK divergence context — strong D confirms L2 consensus
+        D = abs(_safe_float(row.get("divergence_D")))
+        if D >= 15 and raw > 0:
+            raw *= 1.10  # Strong DK divergence + L2 consensus = amplify
+        elif D <= 5 and raw > 0:
+            raw *= 0.85  # Weak DK signal + L2 consensus = modest dampening
         adjustment = max(0.0, min(L2_MAX_POSITIVE_ADJ, raw))
     elif agreement <= 0.3:
         # Market rejects — negative adjustment
@@ -301,7 +325,8 @@ def _detect_rlm(row: dict) -> dict:
         return {"detected": False, "strength": 0.0, "bets_money_gap": bets_money_gap}
 
     gap_factor = min(bets_money_gap / 30.0, 1.0)
-    strength = gap_factor * max(l1_strength, 0.3) * max(l2_agreement, 0.5)
+    bm_intensity = _bets_money_intensity(bets_pct, money_pct)
+    strength = gap_factor * max(l1_strength, 0.3) * max(l2_agreement, 0.5) * (0.7 + bm_intensity * 0.6)
     strength = min(1.0, strength)
 
     return {"detected": True, "strength": round(strength, 3), "bets_money_gap": round(bets_money_gap, 1)}

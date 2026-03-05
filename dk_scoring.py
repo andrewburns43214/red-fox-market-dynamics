@@ -25,16 +25,130 @@ Components (in order):
 
 Changes from v1.2 raw extraction:
   - Market read bonuses halved (was ±10, now ±5) — overlap with color classification
+  - Market read scaled by D magnitude — D=25 gets bigger bonus than D=9
   - RLM reduced 50% when Pattern G fires — Pattern G is superior version
   - SPREAD line movement x2.0 (was x3.0) — root cause fix for SPREAD dampening
-  - Late timing: -1 (was +0) — late splits are liability balancing, not signal
   - SPREAD dampening REMOVED (no longer needed with x2.0 line movement)
-  - Color classification enhanced with L1/L2 direction confirmation
+  - Color classification adaptive to D intensity + L1/L2 confirmation
+  - Divergence scaled by bets/money intensity (continuous signal)
+  - Smooth sample confidence curve (sigmoid replaces 3-bucket cliff)
+  - ML vs Spread implied probability cross-check (+4/-3)
 """
 import math
 import pandas as pd
 
 from engine_config import DK_ML_INST_MULT
+
+
+def _bets_money_intensity(bets_pct: float, money_pct: float) -> float:
+    """Continuous 0.0-1.0 intensity from bets/money split.
+    Higher = stronger smart-money signal (money concentrated relative to bets).
+    Ratio 1.0->0.5, 1.5->0.73, 2.0->0.88, 2.5->0.95"""
+    if bets_pct <= 0:
+        return 0.5  # No data — neutral
+    ratio = money_pct / bets_pct
+    intensity = 1.0 / (1.0 + math.exp(-2.0 * (ratio - 1.3)))
+    return round(max(0.0, min(1.0, intensity)), 3)
+
+
+def _implied_prob(odds: float) -> float:
+    """Convert American odds to implied probability."""
+    if odds > 0:
+        return 100.0 / (odds + 100.0)
+    elif odds < 0:
+        return abs(odds) / (abs(odds) + 100.0)
+    return 0.5
+
+
+def classify_line_movement(row: dict) -> dict:
+    """
+    Classify DK's line movement trajectory into a pattern.
+
+    Uses tick-by-tick tracking from row_state to detect HOW the book
+    moved, not just WHERE it ended up.
+
+    Patterns:
+      MOVE_AND_HOLD: Book moved early, then settled (found its number)
+      FLAT: No movement at all (book confident at opening price)
+      STEADY_DRIFT: Continuous same-direction movement (book adjusting)
+      REVERSE: Direction changed once (book uncertain or tested)
+      VOLATILE: Multiple direction changes (high uncertainty)
+
+    Returns:
+      {"pattern": str, "bonus": float, "explanation": str}
+    """
+    settled = int(_safe_float(row.get("line_settled_ticks"), 0))
+    dir_changes = int(_safe_float(row.get("line_dir_changes"), 0))
+    lm = abs(_safe_float(row.get("line_move_open")))
+    move_dir = int(_safe_float(row.get("move_dir")))
+    tb = str(row.get("timing_bucket", "")).lower()
+    D = _safe_float(row.get("divergence_D"))
+
+    # Not enough ticks yet to classify
+    if settled == 0 and dir_changes == 0 and tb == "early":
+        return {"pattern": "EARLY", "bonus": 0.0, "explanation": "Too early to classify"}
+
+    if dir_changes >= 2:
+        # Multiple direction changes — book is uncertain
+        return {
+            "pattern": "VOLATILE",
+            "bonus": -2.0,
+            "explanation": f"Line reversed {dir_changes}x — book uncertain at this price",
+        }
+
+    if dir_changes == 1:
+        # Changed direction once
+        if lm < 0.3:
+            # Reversed back near open — book tested and returned
+            return {
+                "pattern": "SNAP_BACK",
+                "bonus": 1.0,
+                "explanation": "Line reversed back to open — book tested market, confident at original",
+            }
+        else:
+            return {
+                "pattern": "REVERSE",
+                "bonus": -1.0,
+                "explanation": "Line changed direction — follow final position but lower confidence",
+            }
+
+    # No direction changes from here down
+    if lm < 0.3 and settled >= 3:
+        # No meaningful movement, stable for 3+ ticks
+        bonus = 1.5 if tb in ("mid", "late") else 0.5
+        return {
+            "pattern": "FLAT",
+            "bonus": bonus,
+            "explanation": f"Line hasn't moved ({settled} ticks) — DK confident at this price",
+        }
+
+    if lm >= 0.3 and settled >= 3:
+        # Moved, then held for 3+ ticks — book found its number
+        # If book moved WITH money and holds: confirms the action
+        # If book moved AGAINST money and holds: strong fade signal (already in book_fades)
+        if move_dir == 1 and D > 5:
+            bonus = 2.5  # Book moved with concentrated money AND holds — strong confirm
+        elif move_dir == 1:
+            bonus = 1.5  # Book moved with action and holds
+        elif move_dir == -1:
+            bonus = 1.0  # Book moved against and holds (fade already scored, just add hold confidence)
+        else:
+            bonus = 1.0
+        return {
+            "pattern": "MOVE_AND_HOLD",
+            "bonus": bonus,
+            "explanation": f"Line moved then held ({settled} ticks) — DK found its number",
+        }
+
+    if lm >= 0.3 and settled < 3:
+        # Still actively moving
+        return {
+            "pattern": "ACTIVE",
+            "bonus": 0.0,
+            "explanation": "Line still moving — wait for settlement",
+        }
+
+    return {"pattern": "UNKNOWN", "bonus": 0.0, "explanation": "Insufficient data"}
 
 
 # ─── Sport-specific STRONG eligibility config ───
@@ -118,27 +232,36 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
         score = 50.0
     details["dynamic_base"] = score
 
-    # ── 2. MARKET READ BONUSES (halved from v1.2: max ±5) ──
+    # ── 2. MARKET READ BONUSES — "read the book, not the bettors" ──
+    # Positive bonuses ONLY when the book's line movement CONFIRMS the money.
+    # When book holds or moves against money → book disagrees → fade signal.
+    # DK is a retail book — money there is recreational, not sharp.
     mr = str(row.get("market_read", "")).strip()
-    mr_bonus = 0
-    if mr == "Stealth Move":
-        mr_bonus = 4
-    elif mr == "Freeze Pressure":
-        mr_bonus = 5
-    elif mr == "Aligned Sharp":
-        mr_bonus = 3
-    elif mr == "Reverse Pressure":
-        mr_bonus = 4
-    elif mr == "Contradiction":
-        mr_bonus = -2
-    elif mr == "Neutral":
-        mr_bonus = -1
-    elif mr == "Public Drift":
-        mr_bonus = -5
+    _MR_MAP = {
+        "Stealth Move": 4,      # Concentrated money + book confirms → genuine edge
+        "Aligned Sharp": 2,     # D≥8 + book confirms → decent but might be priced in
+        "Freeze Pressure": -2,  # Money in, book HOLDS → book comfortable on other side
+        "Reverse Pressure": -4, # Money in, book moves AGAINST → book actively fading
+        "Contradiction": -3,    # Conflicting signals
+        "Neutral": -1,
+        "Public Drift": -5,     # Public momentum, likely wrong
+    }
+    mr_bonus_base = _MR_MAP.get(mr, 0)
+    D_abs = abs(_safe_float(row.get("divergence_D")))
+    if mr_bonus_base > 0 and D_abs > 0:
+        # Scale positive bonuses by D intensity: D=8->x0.8, D=15->x1.0, D=25->x1.25
+        d_scale = min(0.5 + (D_abs / 20.0), 1.25)
+        mr_bonus = round(mr_bonus_base * d_scale, 1)
+    elif mr_bonus_base < 0:
+        # Negative signals get STRONGER with higher D
+        d_scale = min(0.7 + (D_abs / 25.0), 1.3)
+        mr_bonus = round(mr_bonus_base * d_scale, 1)
+    else:
+        mr_bonus = mr_bonus_base
     score += mr_bonus
     details["market_read"] = mr_bonus
     if mr_bonus != 0:
-        flags.append(f"market_read:{mr}({mr_bonus:+d})")
+        flags.append(f"market_read:{mr}({mr_bonus:+.1f})")
 
     # ── 3. REVERSE LINE MOVEMENT (RLM) ──
     rlm_score = 0.0
@@ -218,8 +341,13 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
         elif sport_upper == "MLB":
             inst_mult = 0.90
 
+    # Smooth sample confidence: sigmoid from 0.60 (0 bets) to 1.00 (40+ bets)
     bets_num = _safe_float(row.get("bets_pct"))
-    sample_mult = 0.65 if bets_num < 10 else (0.80 if bets_num < 20 else 1.00)
+    if bets_num <= 0:
+        sample_mult = 0.60
+    else:
+        sample_mult = 0.60 + 0.40 / (1.0 + math.exp(-0.15 * (bets_num - 15)))
+        sample_mult = min(sample_mult, 1.00)
 
     price_mult = 1.00
     if mkt_upper == "MONEYLINE":
@@ -248,13 +376,39 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
         div_raw_base = min(12.0, abs(D) * 0.4)
 
     combined_mult = div_mult * timing_mult * price_mult * inst_mult * sample_mult
-    div_contrib = div_raw_base * combined_mult
+
+    # GAP 1: Scale divergence by bets/money intensity (continuous signal)
+    base_money = _safe_float(row.get("money_pct"))
+    bm_intensity = _bets_money_intensity(base_bets, base_money)
+    # Intensity scales the MAGNITUDE of the signal (both positive and negative)
+    intensity_scale = 0.4 + (bm_intensity * 0.9)
+    div_contrib = div_raw_base * combined_mult * intensity_scale
+
+    # BOOK RESPONSE: The book's line movement relative to money is the key signal.
+    # DK is retail — money there is recreational whales, not sharps.
+    # What the BOOK does with that money tells you whether it's real edge or noise.
+    # - Book confirms money (moves with) → positive divergence (trust the money)
+    # - Book holds (no meaningful move) → mild negative (book absorbs, disagrees)
+    # - Book fades money (moves against) → negative divergence (book says money is wrong)
+    if D > 5 and move_dir == -1 and meaningful:
+        # Book actively moves AGAINST money side: strong fade signal
+        # Intensity AMPLIFIES the negative — more concentrated money being faded = stronger
+        div_contrib = max(-5.0, -abs(div_contrib) * 0.5)
+        flags.append(f"book_fades:{div_contrib:.1f}")
+    elif D > 5 and (move_dir == 0 or not meaningful):
+        # Book absorbs money without moving: mild fade signal
+        div_contrib = max(-2.0, -abs(div_contrib) * 0.2)
+        flags.append(f"book_holds:{div_contrib:.1f}")
+    # else: book confirms (move_dir == +1) → keep positive div_contrib
+
     score += div_contrib
     details["divergence"] = round(div_contrib, 2)
+    details["bm_intensity"] = bm_intensity
     details["div_mult_breakdown"] = {
         "div_mult": div_mult, "timing_mult": timing_mult,
         "price_mult": price_mult, "inst_mult": inst_mult,
-        "sample_mult": sample_mult,
+        "sample_mult": round(sample_mult, 3),
+        "intensity_scale": round(intensity_scale, 3),
     }
 
     # ── 6. LINE MOVEMENT (SPREAD x2.0, others x2.0) ──
@@ -325,25 +479,87 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
         flags.append("nhl_puck_line:-3")
     details["nhl_puck_line"] = nhl_puck
 
-    # ── 12. COLOR CLASSIFICATION (enhanced with L1/L2) ──
+    # ── 12. COLOR CLASSIFICATION — gated by book response ──
+    # Color = concentrated money pattern (DARK_GREEN = high $, low bets).
+    # But concentrated DK money is NOT inherently positive — it's retail whales.
+    # The bonus is GATED by the book's line response:
+    #   Book confirms (moves with) → full bonus
+    #   Book holds → reduced bonus (book not convinced)
+    #   Book fades (moves against) → inverted to penalty (book says money is wrong)
     color = str(row.get("color", "")).strip()
     color_bonus = 0
+    l1_dir = int(_safe_float(row.get("l1_move_dir")))
+    l1_avail = row.get("l1_available")
+
+    # Book response gate for color bonus
+    book_confirms = (move_dir == 1 and meaningful)
+    book_holds = (move_dir == 0 or not meaningful)
+    book_fades = (move_dir == -1 and meaningful)
+
     if color == "DARK_GREEN":
-        color_bonus = 6
-        # Enhancement: L1 sharps confirm DK color direction
-        l1_dir = int(_safe_float(row.get("l1_move_dir")))
-        if l1_dir == 1 and row.get("l1_available"):
-            color_bonus = 8  # L1 confirms: stronger
-            flags.append("color:l1_confirms_dark_green")
-        elif l1_dir == -1 and row.get("l1_available"):
-            color_bonus = 3  # L1 opposes: weaker
-            flags.append("color:l1_opposes_dark_green")
+        if book_confirms:
+            # Book agrees with concentrated money → full bonus, scale by D
+            color_bonus = min(5.0 + (D_abs / 15.0) * 3.0, 8.0)
+            if l1_dir == 1 and l1_avail:
+                color_bonus = min(color_bonus + 1.5, 9.0)
+                flags.append("color:l1_confirms")
+            elif l1_dir == -1 and l1_avail:
+                color_bonus = max(color_bonus * 0.5, 2.0)
+                flags.append("color:l1_opposes")
+        elif book_holds:
+            # Book absorbs money without moving → small bonus at best
+            color_bonus = 1.0
+            flags.append("color:dark_green_book_holds")
+        elif book_fades:
+            # Book moves AGAINST concentrated money → this is a negative signal
+            color_bonus = -2.0
+            flags.append("color:dark_green_book_fades")
     elif color == "LIGHT_GREEN":
-        color_bonus = 3
+        if book_confirms:
+            color_bonus = min(2.0 + (D_abs / 20.0) * 1.0, 3.0)
+        elif book_holds:
+            color_bonus = 0.5
+        else:
+            color_bonus = -1.0
     elif color == "RED":
-        color_bonus = -6
+        # Public pile-on — always negative, worse if book confirms the fade
+        color_bonus = max(-4.0 - (D_abs / 15.0) * 2.0, -7.0)
     score += color_bonus
-    details["color_classification"] = color_bonus
+    details["color_classification"] = round(color_bonus, 1)
+
+    # ── 12b. ML vs SPREAD IMPLIED PROBABILITY CROSS-CHECK ──
+    prob_check = 0.0
+    if sport_upper != "UFC":
+        side_key = str(row.get("side_key", row.get("side", ""))).strip()
+        ml_odds_val = _safe_float(context.get(f"ml_odds_{side_key}"))
+        spread_odds_val = _safe_float(context.get(f"spread_odds_{side_key}"))
+        if ml_odds_val != 0 and spread_odds_val != 0:
+            ml_prob = _implied_prob(ml_odds_val)
+            sp_prob = _implied_prob(spread_odds_val)
+            prob_gap = ml_prob - sp_prob
+            if abs(prob_gap) >= 0.05:  # Only act on meaningful gaps
+                if mkt_upper == "MONEYLINE":
+                    prob_check = max(-3.0, min(4.0, prob_gap * 40.0))
+                elif mkt_upper == "SPREAD":
+                    prob_check = max(-3.0, min(4.0, -prob_gap * 40.0))
+                score += prob_check
+                if prob_check != 0:
+                    flags.append(f"prob_check:{prob_check:+.1f}")
+    details["prob_check"] = round(prob_check, 2)
+
+    # ── 12c. LINE MOVEMENT TRAJECTORY ──
+    # DK runs a sophisticated pricing machine. HOW the line moved matters:
+    # - Moved early then held = book found its number, high confidence
+    # - Flat all day = book confident at opening price
+    # - Reversed = book uncertain, lower confidence
+    # - Multiple reversals = volatile, significantly lower confidence
+    lm_pattern = classify_line_movement(row)
+    lm_pattern_bonus = lm_pattern["bonus"]
+    score += lm_pattern_bonus
+    details["line_pattern"] = lm_pattern["pattern"]
+    details["line_pattern_bonus"] = lm_pattern_bonus
+    if lm_pattern_bonus != 0:
+        flags.append(f"line_pattern:{lm_pattern['pattern']}({lm_pattern_bonus:+.1f})")
 
     score = max(0.0, min(100.0, score))
 
