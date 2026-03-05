@@ -384,6 +384,19 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
         axis=1,
     )
 
+    # ─── Extract home/away team names from "game" column ───
+    if "home_team_norm" not in dk_df.columns and "game" in dk_df.columns:
+        def _parse_teams(game_str):
+            """Parse 'AWAY @ HOME' format, return (home_norm, away_norm)."""
+            g = str(game_str) if pd.notna(game_str) else ""
+            if " @ " in g:
+                parts = g.split(" @ ", 1)
+                return normalize_team_name(parts[1].strip()), normalize_team_name(parts[0].strip())
+            return "", ""
+        _teams = dk_df["game"].apply(_parse_teams)
+        dk_df["home_team_norm"] = _teams.apply(lambda t: t[0])
+        dk_df["away_team_norm"] = _teams.apply(lambda t: t[1])
+
     # Join situational data
     for col, default in SITUATIONAL_DEFAULTS.items():
         dk_df[col] = default if not isinstance(default, list) else [default.copy() for _ in range(len(dk_df))]
