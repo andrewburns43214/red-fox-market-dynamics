@@ -100,14 +100,20 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
     tb = str(row.get("timing_bucket", "")).strip().lower()
 
     # ── 1. DYNAMIC BASE SCORE ──
+    # Based on data quality, not just timing. Early games with real signals
+    # shouldn't start 8 points behind a mid game with weak splits.
     base_bets = _safe_float(row.get("bets_pct"))
     base_lm = abs(_safe_float(row.get("line_move_open")))
-    if base_bets < 15 and base_lm < 0.5 and tb == "early":
-        score = 44.0
+    has_real_data = base_bets >= 30 or base_lm >= 0.5
+    if tb == "early" and not has_real_data:
+        score = 46.0  # Genuinely low-info early (was 44)
         flags.append("base:low_info_early")
     elif tb == "late" or (tb == "mid" and base_lm >= 1.0):
         score = 52.0
         flags.append("base:movement_boost")
+    elif tb == "early" and has_real_data:
+        score = 50.0  # Early but has signal — same as mid baseline
+        flags.append("base:early_with_data")
     else:
         score = 50.0
     details["dynamic_base"] = score
@@ -200,7 +206,7 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
     if contradiction:
         div_mult = min(div_mult, 0.60)
 
-    timing_mult = {"early": 0.75, "mid": 0.90, "late": 1.00}.get(tb, 0.85)
+    timing_mult = {"early": 0.85, "mid": 0.92, "late": 1.00}.get(tb, 0.88)
     ml_mult = DK_ML_INST_MULT
     inst_mult = {"SPREAD": 1.00, "MONEYLINE": ml_mult, "TOTAL": 0.90}.get(mkt_upper, 0.85)
 
@@ -278,13 +284,12 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
     details["key_number"] = kn_bonus
 
     # ── 8. TIMING BUCKET ──
+    # No additive timing penalty — timing already handled via dynamic base
+    # (46 vs 50 vs 52) and divergence multiplier (0.85/0.92/1.00).
+    # Double-dipping suppressed scores unnecessarily.
     timing_adj = 0
-    if tb == "early":
-        timing_adj = 0
-    elif tb == "mid":
+    if tb == "mid":
         timing_adj = 1
-    elif tb == "late":
-        timing_adj = -1  # Fixed: late = caution (was +0 in v1.2)
     score += timing_adj
     details["timing"] = timing_adj
 
