@@ -1004,7 +1004,7 @@ th.th-game { text-align: left; }
           <table>
             <thead>
               <tr>
-                <th class="sorted" onclick="sortBy('game_confidence',this)">#</th>
+                <th onclick="sortBy('game_confidence',this)">#</th>
                 <th onclick="sortBy('game',this)">Game</th>
                 <th onclick="sortBy('market_display',this)">Market</th>
                 <th>Bets / Money</th>
@@ -1012,6 +1012,7 @@ th.th-game { text-align: left; }
                 <th onclick="sortBy('current_line',this)">Current</th>
                 <th onclick="sortBy('net_edge',this)">Edge</th>
                 <th onclick="sortBy('game_confidence',this)">Conf</th>
+                <th class="sorted" onclick="sortBy('total_score',this)">Total</th>
                 <th>Bucket</th>
                 <th onclick="sortBy('v2_pattern',this)">Pattern</th>
                 <th onclick="sortBy('layer_mode',this)">Layer</th>
@@ -1201,7 +1202,7 @@ const MOCK_RESULTS = [
 
 let allDash=[], allLedger=[], allResults=[];
 let sport='ALL', filter='all', tabId='board';
-let sortCol='game_confidence', sortAsc=false;
+let sortCol='total_score', sortAsc=false;
 
 function et(ts){ if(!ts) return '-'; const d=new Date(ts); if(isNaN(d)) return String(ts); return d.toLocaleString('en-US',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
 function etT(ts){ if(!ts) return '-'; const d=new Date(ts); if(isNaN(d)) return '-'; return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
@@ -1321,6 +1322,7 @@ function renderBoard(){
       })()}</td>
       <td class="td-edge"><span class="ev ${eC(edge)}">${edge}</span></td>
       <td class="td-conf"><span class="cv ${cC(conf)}">${conf.toFixed(1)}</span></td>
+      <td class="td-total" style="font-weight:700;font-family:var(--mono)">${(Number(r.total_score)||0).toFixed(1)}</td>
       <td class="td-bkt"><span class="bkt ${bk.c}">${bk.l}</span></td>
       <td class="td-pat">${patBadge(r.v2_pattern,r.v2_edge_type)}</td>
       <td class="td-layer">${lyrBadge(r.layer_mode)}</td>
@@ -1939,6 +1941,8 @@ async function loadAll(){
     const rank=r=>{const d=(r.game_decision||'').toUpperCase();return d==='STRONG_BET'?0:d==='BET'?1:d==='LEAN'?2:3;};
     const ra=rank(a),rb=rank(b);
     if(ra!==rb) return ra-rb;
+    const ta=Number(a.total_score||0), tb=Number(b.total_score||0);
+    if(ta!==tb) return tb-ta;
     return Number(b.game_confidence||0)-Number(a.game_confidence||0);
   });
 
