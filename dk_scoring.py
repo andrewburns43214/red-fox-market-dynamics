@@ -116,7 +116,9 @@ def classify_line_movement(row: dict) -> dict:
     # No direction changes from here down
     if lm < 0.3 and settled >= 3:
         # No meaningful movement, stable for 3+ ticks
-        bonus = 1.5 if tb in ("mid", "late") else 0.5
+        # v2.1: boosted FLAT bonus (was 0.5/1.5, now 1.0/2.5)
+        # DK sitting on an unchanged price = confidence in that number
+        bonus = 2.5 if tb in ("mid", "late") else 1.0
         return {
             "pattern": "FLAT",
             "bonus": bonus,
@@ -125,16 +127,16 @@ def classify_line_movement(row: dict) -> dict:
 
     if lm >= 0.3 and settled >= 3:
         # Moved, then held for 3+ ticks — book found its number
-        # If book moved WITH money and holds: confirms the action
-        # If book moved AGAINST money and holds: strong fade signal (already in book_fades)
+        # v2.1: boosted bonuses (was 1.0-2.5, now 2.0-5.0)
+        # This is the strongest DK trajectory signal: moved deliberately, then held
         if move_dir == 1 and D > 5:
-            bonus = 2.5  # Book moved with concentrated money AND holds — strong confirm
+            bonus = 5.0  # Book moved with concentrated money AND holds — strongest confirm
         elif move_dir == 1:
-            bonus = 1.5  # Book moved with action and holds
+            bonus = 3.0  # Book moved with action and holds
         elif move_dir == -1:
-            bonus = 1.0  # Book moved against and holds (fade already scored, just add hold confidence)
+            bonus = 2.0  # Book moved against and holds (fade already scored)
         else:
-            bonus = 1.0
+            bonus = 2.0
         return {
             "pattern": "MOVE_AND_HOLD",
             "bonus": bonus,
@@ -142,11 +144,12 @@ def classify_line_movement(row: dict) -> dict:
         }
 
     if lm >= 0.3 and settled < 3:
-        # Still actively moving
+        # Still actively moving — give partial credit since DK IS moving
+        # v2.1: was 0.0, now 1.0 — active movement is itself a signal
         return {
             "pattern": "ACTIVE",
-            "bonus": 0.0,
-            "explanation": "Line still moving — wait for settlement",
+            "bonus": 1.0,
+            "explanation": "Line actively moving — DK repricing",
         }
 
     return {"pattern": "UNKNOWN", "bonus": 0.0, "explanation": "Insufficient data"}
@@ -215,8 +218,8 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
     tb = str(row.get("timing_bucket", "")).strip().lower()
 
     # ── 1. DYNAMIC BASE SCORE ──
-    # v2.1: widened range (was 46-52, now 44-55) for better differentiation.
-    # Also uses effective_move_mag so juice-only movement counts.
+    # v2.1: widened range for better differentiation. Base stays at 50 for neutral,
+    # rewards movement with higher base, penalizes genuinely empty early games.
     base_bets = _safe_float(row.get("bets_pct"))
     base_lm = abs(_safe_float(row.get("effective_move_mag", row.get("line_move_open"))))
     has_real_data = base_bets >= 30 or base_lm >= 0.3
@@ -233,7 +236,7 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
         score = 50.0  # Early but has signal
         flags.append("base:early_with_data")
     else:
-        score = 48.0  # Mid with no movement — neutral
+        score = 50.0  # Mid baseline — neutral starting point
     details["dynamic_base"] = score
 
     # ── 2. MARKET READ BONUSES — "read the book, not the bettors" ──
@@ -433,12 +436,19 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
             eff_mag = abs(lm)
         except Exception:
             pass
-    # v2.1: raised multiplier from 2.0→2.5, caps from 7/8→9/10
-    # DK line movement is the most reliable signal we have
+    # v2.1: DK line movement is the most reliable signal we have.
+    # Large moves should score proportionally higher — a $50 ML move is way
+    # more meaningful than a $10 move, so use a 2-tier multiplier.
     if mkt_upper == "SPREAD":
-        lm_bonus = min(9.0, eff_mag * 2.5)
+        if eff_mag >= 1.5:
+            lm_bonus = min(14.0, 4.0 + (eff_mag - 1.5) * 3.0)  # steeper for big moves
+        else:
+            lm_bonus = min(14.0, eff_mag * 2.5)
     else:
-        lm_bonus = min(10.0, eff_mag * 2.5)
+        if eff_mag >= 2.0:
+            lm_bonus = min(16.0, 5.0 + (eff_mag - 2.0) * 2.5)  # ML/total big moves
+        else:
+            lm_bonus = min(16.0, eff_mag * 2.5)
     score += lm_bonus
     details["line_movement"] = round(lm_bonus, 2)
     details["effective_move_mag"] = round(eff_mag, 2)
