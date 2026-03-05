@@ -55,10 +55,17 @@ CACHE_TTL_SECONDS = 1800  # 30 minutes
 
 # ─── SCORING WEIGHTS ───
 
-# Layer contribution ranges
-L1_MAX_CONTRIBUTION = 18.0
-L2_MAX_POSITIVE = 10.0
-L2_MAX_NEGATIVE = -8.0
+# Layer contribution ranges (unified engine)
+L1_MAX_ADJUSTMENT = 10.0       # was L1_MAX_CONTRIBUTION = 18.0
+L1_MIN_ADJUSTMENT = -5.0       # NEW: bidirectional (penalizes when sharp opposes DK)
+L2_MAX_POSITIVE_ADJ = 7.0      # was L2_MAX_POSITIVE = 10.0
+L2_MAX_NEGATIVE_ADJ = -5.0     # was L2_MAX_NEGATIVE = -8.0
+LINE_DIFF_MAX_BONUS = 8.0      # NEW: DK vs consensus/Pinnacle differential
+
+# Legacy aliases (for backward compatibility during transition)
+L1_MAX_CONTRIBUTION = L1_MAX_ADJUSTMENT
+L2_MAX_POSITIVE = L2_MAX_POSITIVE_ADJ
+L2_MAX_NEGATIVE = L2_MAX_NEGATIVE_ADJ
 L3_MAX_POSITIVE = 10.0
 L3_MAX_NEGATIVE = -10.0
 
