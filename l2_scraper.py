@@ -259,11 +259,26 @@ def scrape_l2(sport: str) -> dict:
             "pinn_odds": pinn_odds_str,
         })
 
-    # Write aggregated CSV (overwrite — latest snapshot only)
+    # Write aggregated CSV — merge with existing (keep other sports' data)
     if agg_rows:
+        # Read existing agg rows from OTHER sports
+        existing_other = []
+        if os.path.exists(L2_CONSENSUS_AGG_CSV):
+            try:
+                with open(L2_CONSENSUS_AGG_CSV, "r", newline="", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        if row.get("sport", "") != sport_lower:
+                            existing_other.append(row)
+            except Exception:
+                pass
+
+        # Write all: existing other sports + new current sport
         with open(L2_CONSENSUS_AGG_CSV, "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=L2_AGG_COLUMNS)
             w.writeheader()
+            for row in existing_other:
+                w.writerow(row)
             for row in agg_rows:
                 w.writerow(row)
 

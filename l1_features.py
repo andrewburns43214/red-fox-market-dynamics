@@ -74,17 +74,22 @@ def _load_latest_l1() -> dict:
     latest = {}
     try:
         with open(L1_SHARP_CSV, "r", newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
+            reader = csv.DictReader(f, restval="", restkey="_extra")
             for row in reader:
-                k = (
-                    row.get("canonical_key", ""),
-                    row.get("market", ""),
-                    row.get("side", ""),
-                    row.get("bookmaker", ""),
-                )
-                ts = row.get("timestamp", "")
-                if k not in latest or ts > latest[k]["timestamp"]:
-                    latest[k] = row
+                try:
+                    if "_extra" in row:
+                        continue  # skip malformed rows with extra fields
+                    k = (
+                        row.get("canonical_key", ""),
+                        row.get("market", ""),
+                        row.get("side", ""),
+                        row.get("bookmaker", ""),
+                    )
+                    ts = row.get("timestamp", "")
+                    if k not in latest or ts > latest[k]["timestamp"]:
+                        latest[k] = row
+                except Exception:
+                    continue  # skip individual bad rows
     except Exception:
         return {}
 

@@ -242,7 +242,8 @@ def scrape_l1_oddspapi(sport: str) -> dict:
     write_header = not os.path.exists(L1_SHARP_CSV)
     os.makedirs(os.path.dirname(L1_SHARP_CSV) or ".", exist_ok=True)
     with open(L1_SHARP_CSV, "a", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=L1_SHARP_COLUMNS)
+        w = csv.DictWriter(f, fieldnames=L1_SHARP_COLUMNS,
+                           extrasaction="ignore", quoting=csv.QUOTE_ALL)
         if write_header:
             w.writeheader()
         for row in l1_rows:
@@ -371,7 +372,8 @@ def scrape_l1(sport: str) -> dict:
     write_header = not os.path.exists(L1_SHARP_CSV)
     os.makedirs(os.path.dirname(L1_SHARP_CSV) or ".", exist_ok=True)
     with open(L1_SHARP_CSV, "a", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=L1_SHARP_COLUMNS)
+        w = csv.DictWriter(f, fieldnames=L1_SHARP_COLUMNS,
+                           extrasaction="ignore", quoting=csv.QUOTE_ALL)
         if write_header:
             w.writeheader()
         for row in l1_rows:
