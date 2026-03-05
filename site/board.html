@@ -823,6 +823,36 @@ td { padding: 6px 10px; font-size: 12px; white-space: nowrap; vertical-align: mi
 .stat-tbl tbody tr { cursor: pointer; }
 .stat-tbl tbody tr:hover td { background: rgba(0,0,0,.03); }
 
+/* ─── FRESHNESS BANNER ─── */
+.fresh-bar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 5px 20px; background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono); font-size: 10px;
+}
+.fresh-overall { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+.fresh-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: inline-block; flex-shrink: 0;
+}
+.fresh-dot.live { background: #00c853; box-shadow: 0 0 6px rgba(0,200,83,.5); }
+.fresh-dot.degraded { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,.4); }
+.fresh-dot.stale { background: #e05c2a; box-shadow: 0 0 6px rgba(224,92,42,.4); }
+.fresh-label { color: var(--text2); }
+.fresh-sources { display: flex; gap: 12px; flex-wrap: wrap; }
+.fresh-src {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 4px;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text3); font-size: 9px;
+}
+.fresh-src .fs-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.fresh-src .fs-dot.ok { background: #00c853; }
+.fresh-src .fs-dot.warn { background: #f59e0b; }
+.fresh-src .fs-dot.bad { background: #e05c2a; }
+.fresh-src .fs-name { font-weight: 700; color: var(--text2); }
+.fresh-src .fs-age { color: var(--text4); }
+
 /* ─── GAME DETAIL POPUP ─── */
 .gd-wrap { padding: 12px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .gd-header { grid-column: 1/-1; display: flex; flex-direction: column; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
@@ -1026,6 +1056,15 @@ thead th.th-play { text-align: left; }
     <span>Refresh</span>
     <div class="rbar"><div class="rfill"></div></div>
   </div>
+</div>
+
+<!-- ─── FRESHNESS BANNER ─── -->
+<div class="fresh-bar" id="fresh-bar">
+  <div class="fresh-overall" id="fresh-overall">
+    <span class="fresh-dot" id="fresh-dot"></span>
+    <span class="fresh-label" id="fresh-label">Loading...</span>
+  </div>
+  <div class="fresh-sources" id="fresh-sources"></div>
 </div>
 
 <!-- ─── CONTENT ─── -->
@@ -2029,7 +2068,46 @@ function buildKPIs(){
 
 async function loadCSV(url){ try{ const r=await fetch(url+'?t='+Date.now()); if(!r.ok) return null; const txt=await r.text(); return Papa.parse(txt,{header:true,skipEmptyLines:true}).data.map(row=>{ const o={}; Object.keys(row).forEach(k=>{o[k.replace(/\ufeff|\r|\n/g,'').trim()]=row[k];}); return o; }); }catch(e){ return null; } }
 
+function updateFreshness(f){
+  const bar=document.getElementById('fresh-bar');
+  if(!bar) return;
+  if(!f){ bar.style.display='none'; return; }
+  bar.style.display='';
+  const now=Date.now();
+  function ageMin(ts){ if(!ts) return Infinity; const d=new Date(ts); return isNaN(d)?Infinity:Math.round((now-d.getTime())/60000); }
+  function fmtAge(m){ if(m===Infinity) return 'N/A'; if(m<1) return '<1m'; if(m<60) return m+'m'; return Math.floor(m/60)+'h '+m%60+'m'; }
+  function fmtTime(ts){ if(!ts) return '--'; const d=new Date(ts); if(isNaN(d)) return '--'; return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
+  // Per-source: {name, ts, freshThresh, warnThresh}
+  const sources=[
+    {name:'DK', ts:f.dk_ts, fresh:15, warn:30},
+    {name:'L1 Sharp', ts:f.l1_ts, fresh:240, warn:420},
+    {name:'L2 Consensus', ts:f.l2_ts, fresh:240, warn:420},
+    {name:'Engine', ts:f.engine_ts, fresh:15, warn:30}
+  ];
+  let worst=0; // 0=live, 1=degraded, 2=stale
+  let srcHtml='';
+  sources.forEach(s=>{
+    const age=ageMin(s.ts);
+    let st='ok', lvl=0;
+    if(age>s.warn){ st='bad'; lvl=2; }
+    else if(age>s.fresh){ st='warn'; lvl=1; }
+    if(s.name==='DK'||s.name==='Engine'){ worst=Math.max(worst,lvl); }
+    else { if(lvl>0) worst=Math.max(worst,1); } // L1/L2 stale = degraded, not full stale
+    srcHtml+=`<span class="fresh-src"><span class="fs-dot ${st}"></span><span class="fs-name">${s.name}</span><span class="fs-age">${fmtTime(s.ts)} (${fmtAge(age)})</span></span>`;
+  });
+  const dot=document.getElementById('fresh-dot');
+  const lbl=document.getElementById('fresh-label');
+  const statuses=['Live','Degraded','Out of Date'];
+  const cls=['live','degraded','stale'];
+  dot.className='fresh-dot '+cls[worst];
+  lbl.textContent=statuses[worst];
+  lbl.style.color=worst===0?'#00c853':worst===1?'#f59e0b':'#e05c2a';
+  document.getElementById('fresh-sources').innerHTML=srcHtml;
+}
+
 async function loadAll(){
+  let freshJson=null;
+  try{ const r=await fetch('/data/freshness.json?_='+Date.now()); if(r.ok) freshJson=await r.json(); } catch(e){}
   const[dash,snaps,ledger,results,kpi]=await Promise.all([
     loadCSV(DASH_URL),
     loadCSV('/data/snapshots.csv'),
@@ -2037,6 +2115,7 @@ async function loadAll(){
     loadCSV(RESULTS_URL),
     loadCSV('/data/kpi_master_dataset.csv')
   ]);
+  updateFreshness(freshJson);
   const dashRaw=dash||MOCK_DASH;
   const snapsRaw=snaps||[];
   allLedger=ledger||MOCK_LEDGER;
