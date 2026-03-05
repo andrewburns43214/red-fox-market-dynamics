@@ -175,8 +175,8 @@ def scrape_l1_oddspapi(sport: str) -> dict:
             _log_match_failure(sport_lower, "oddspapi", home_raw, away_raw, "Missing team name")
             continue
 
-        home_norm = normalize_team_name(home_raw)
-        away_norm = normalize_team_name(away_raw)
+        home_norm = normalize_team_name(home_raw, sport=sport_lower)
+        away_norm = normalize_team_name(away_raw, sport=sport_lower)
         canon_key = build_canonical_key(away_raw, home_raw, sport_lower, commence)
 
         if not canon_key:
@@ -191,7 +191,7 @@ def scrape_l1_oddspapi(sport: str) -> dict:
         if od["market"] == "TOTAL":
             side = side.lower()
         else:
-            side = normalize_team_name(side)
+            side = normalize_team_name(side, sport=sport_lower)
 
         line_val = od["line"] if od["line"] is not None else ""
         limit_val = od.get("limit")
@@ -309,8 +309,8 @@ def scrape_l1(sport: str) -> dict:
             if row["bookmaker"].lower() not in sharp_books_set:
                 continue
 
-            home_norm = normalize_team_name(row["home_team"])
-            away_norm = normalize_team_name(row["away_team"])
+            home_norm = normalize_team_name(row["home_team"], sport=sport_lower)
+            away_norm = normalize_team_name(row["away_team"], sport=sport_lower)
             canon_key = build_canonical_key(
                 row["away_team"], row["home_team"],
                 sport_lower, row["commence_time"],
@@ -325,7 +325,7 @@ def scrape_l1(sport: str) -> dict:
             if row["market"] == "TOTAL":
                 side = side.lower()
             else:
-                side = normalize_team_name(side)
+                side = normalize_team_name(side, sport=sport_lower)
 
             l1_rows.append({
                 "timestamp": now_ts,

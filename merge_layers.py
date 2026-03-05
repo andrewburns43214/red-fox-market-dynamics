@@ -3,10 +3,14 @@ Layer Merge for Red Fox engine.
 
 Joins L1 (sharp), L2 (consensus), and situational data onto the L3 (DK) DataFrame.
 Sets layer_mode (L123/L13/L23/L3_ONLY) per row and determines available features.
+
+Includes fuzzy fallback matching when exact canonical keys don't match,
+and match rate monitoring for visibility into data pipeline health.
 """
+import re
 import pandas as pd
 
-from canonical_match import build_canonical_key_from_dk
+from canonical_match import build_canonical_key_from_dk, fuzzy_match_key
 from team_aliases import normalize_team_name
 from l1_features import compute_l1_features
 from l2_features import compute_l2_features
@@ -66,9 +70,9 @@ def _infer_market_type(row) -> str:
     """
     Infer market type from DK side column.
     DK stores all markets as 'splits' with the type embedded in the side:
-      "Over 221.5" / "Under 221.5" → TOTAL
-      "OKC Thunder -4.5"           → SPREAD
-      "NY Knicks"                  → MONEYLINE
+      "Over 221.5" / "Under 221.5" -> TOTAL
+      "OKC Thunder -4.5"           -> SPREAD
+      "NY Knicks"                  -> MONEYLINE
     """
     side = str(row.get("side", "")).strip()
     existing = str(row.get("market", "")).strip().upper()
@@ -81,30 +85,28 @@ def _infer_market_type(row) -> str:
     if side_lower.startswith("over ") or side_lower.startswith("under "):
         return "TOTAL"
     # Check for line number (e.g., "-4.5", "+7.5")
-    import re
     if re.search(r'[+-]\d+\.?\d*$', side):
         return "SPREAD"
     return "MONEYLINE"
 
 
-def _clean_side_for_matching(side: str, market: str) -> str:
+def _clean_side_for_matching(side: str, market: str, sport: str = "") -> str:
     """
     Clean DK side for matching against L1/L2 keys.
-    Strips line numbers and normalizes team names.
-      "OKC Thunder -4.5" → "oklahoma city thunder"
-      "Over 221.5"       → "over"
-      "NY Knicks"        → "new york knicks"
+    Strips line numbers and normalizes team names (with sport for mascot stripping).
+      "OKC Thunder -4.5" -> "oklahoma city thunder"
+      "Over 221.5"       -> "over"
+      "NY Knicks"        -> "new york knicks"
     """
-    import re
     side = side.strip()
     if not side:
         return ""
     if market == "TOTAL":
-        # "Over 221.5" → "over", "Under 142.5" → "under"
+        # "Over 221.5" -> "over", "Under 142.5" -> "under"
         return side.split()[0].lower() if side else ""
-    # Strip trailing line number: "OKC Thunder -4.5" → "OKC Thunder"
+    # Strip trailing line number: "OKC Thunder -4.5" -> "OKC Thunder"
     cleaned = re.sub(r'\s*[+-]\d+\.?\d*$', '', side).strip()
-    return normalize_team_name(cleaned)
+    return normalize_team_name(cleaned, sport=sport)
 
 
 def _determine_layer_mode(l1_available: bool, l2_available: bool) -> str:
@@ -144,6 +146,34 @@ def _detect_stale_price(dk_line, consensus_line: float, market: str) -> tuple:
     return (gap >= threshold, round(gap, 2))
 
 
+def _fuzzy_find_feature(canon_key: str, market: str, side: str,
+                         feature_dict: dict, sport: str) -> dict | None:
+    """
+    Fuzzy fallback: when exact key match fails, try fuzzy matching
+    against all keys in the feature dict.
+
+    Returns the best-matching feature dict, or None.
+    """
+    if not canon_key or not feature_dict:
+        return None
+
+    best_score = 0.0
+    best_feat = None
+
+    for (feat_canon, feat_market, feat_side), feat_data in feature_dict.items():
+        # Market and side must match exactly
+        if feat_market != market or feat_side != side:
+            continue
+
+        # Fuzzy match on canonical key
+        score = fuzzy_match_key(canon_key, feat_canon)
+        if score > best_score and score >= 0.8:
+            best_score = score
+            best_feat = feat_data
+
+    return best_feat
+
+
 def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
     """
     Merge L1, L2, and situational data onto the DK DataFrame.
@@ -167,6 +197,8 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
     """
     if dk_df is None or dk_df.empty:
         return dk_df
+
+    sport_lower = (sport or "").lower()
 
     # Compute L1 features
     l1_features = compute_l1_features(sport=sport)
@@ -207,11 +239,24 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
     # Normalize side for matching: strip line numbers, normalize team name
     if "side" in dk_df.columns:
         dk_df["_side_norm"] = dk_df.apply(
-            lambda r: _clean_side_for_matching(str(r.get("side", "")), str(r.get("market", ""))),
+            lambda r: _clean_side_for_matching(
+                str(r.get("side", "")),
+                str(r.get("market", "")),
+                sport=sport_lower,
+            ),
             axis=1,
         )
     else:
         dk_df["_side_norm"] = ""
+
+    # ─── Match monitoring counters ───
+    l1_exact = 0
+    l1_fuzzy = 0
+    l1_miss = 0
+    l2_exact = 0
+    l2_fuzzy = 0
+    l2_miss = 0
+    total_rows = len(dk_df)
 
     # Join L1 features
     for col, default in L1_DEFAULTS.items():
@@ -227,6 +272,17 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
 
         key = (canon, market, side)
         l1_feat = l1_features.get(key)
+
+        if l1_feat:
+            l1_exact += 1
+        elif l1_features and canon:
+            # Fuzzy fallback
+            l1_feat = _fuzzy_find_feature(canon, market, side, l1_features, sport_lower)
+            if l1_feat:
+                l1_fuzzy += 1
+
+        if not l1_feat:
+            l1_miss += 1
 
         if l1_feat:
             for col, val in l1_feat.items():
@@ -248,6 +304,17 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
         l2_feat = l2_features.get(key)
 
         if l2_feat:
+            l2_exact += 1
+        elif l2_features and canon:
+            # Fuzzy fallback
+            l2_feat = _fuzzy_find_feature(canon, market, side, l2_features, sport_lower)
+            if l2_feat:
+                l2_fuzzy += 1
+
+        if not l2_feat:
+            l2_miss += 1
+
+        if l2_feat:
             for col, val in l2_feat.items():
                 dk_df.at[idx, col] = val
 
@@ -257,6 +324,14 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
             is_stale, stale_gap = _detect_stale_price(dk_line, consensus_line, market)
             dk_df.at[idx, "l2_stale_price_flag"] = is_stale
             dk_df.at[idx, "l2_stale_price_gap"] = stale_gap
+
+    # ─── Log match rates ───
+    l1_total_available = l1_exact + l1_fuzzy
+    l2_total_available = l2_exact + l2_fuzzy
+    if l1_features:
+        print(f"  L1 merge: {l1_exact} exact + {l1_fuzzy} fuzzy = {l1_total_available} matched, {l1_miss} unmatched ({total_rows} DK rows)")
+    if l2_features:
+        print(f"  L2 merge: {l2_exact} exact + {l2_fuzzy} fuzzy = {l2_total_available} matched, {l2_miss} unmatched ({total_rows} DK rows)")
 
     # Set layer mode
     dk_df["layer_mode"] = dk_df.apply(
@@ -315,5 +390,10 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
     # Clean up temp column
     if "_side_norm" in dk_df.columns:
         dk_df.drop(columns=["_side_norm"], inplace=True)
+
+    # ─── Final layer mode summary ───
+    if "layer_mode" in dk_df.columns:
+        mode_counts = dk_df["layer_mode"].value_counts().to_dict()
+        print(f"  Layer modes: {mode_counts}")
 
     return dk_df

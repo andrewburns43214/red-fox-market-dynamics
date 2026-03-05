@@ -6,7 +6,10 @@ and other future sources using normalized team names + game date.
 
 Canonical key format:
     "{away_norm} @ {home_norm}|{sport}|{game_date_utc}"
-    e.g. "hou rockets @ was wizards|nba|2026-03-02"
+    e.g. "atlanta hawks @ washington wizards|nba|2026-03-02"
+
+UFC uses alphabetical sort (no home/away concept):
+    "{fighter_a} vs {fighter_b}|ufc|{date}"
 """
 import csv
 import os
@@ -28,9 +31,9 @@ def build_canonical_key(away_name: str, home_name: str, sport: str, commence_tim
     Returns:
         Canonical key string, or "" if inputs are invalid.
     """
-    away_norm = normalize_team_name(away_name)
-    home_norm = normalize_team_name(home_name)
     sport = (sport or "").strip().lower()
+    away_norm = normalize_team_name(away_name, sport=sport)
+    home_norm = normalize_team_name(home_name, sport=sport)
 
     if not away_norm or not home_norm or not sport:
         return ""
@@ -45,6 +48,11 @@ def build_canonical_key(away_name: str, home_name: str, sport: str, commence_tim
 
     if not date_str:
         return ""
+
+    # UFC: alphabetical sort (no home/away concept in MMA)
+    if sport == "ufc":
+        fighters = sorted([away_norm, home_norm])
+        return f"{fighters[0]} vs {fighters[1]}|{sport}|{date_str}"
 
     return f"{away_norm} @ {home_norm}|{sport}|{date_str}"
 
@@ -70,6 +78,8 @@ def build_canonical_key_from_dk(game: str, sport: str, dk_start_iso: str) -> str
 def fuzzy_match_key(key1: str, key2: str, date_tolerance_days: int = 1) -> float:
     """
     Compute match score between two canonical keys.
+
+    Handles both standard "away @ home" and UFC "a vs b" formats.
 
     Returns:
         Score 0.0-1.0. >= 0.8 is a confident match.
@@ -106,37 +116,63 @@ def fuzzy_match_key(key1: str, key2: str, date_tolerance_days: int = 1) -> float
         except Exception:
             return 0.0
 
-        # Team name comparison
-        away1, home1 = teams1.split(" @ ", 1) if " @ " in teams1 else ("", "")
-        away2, home2 = teams2.split(" @ ", 1) if " @ " in teams2 else ("", "")
+        # Detect separator (" @ " or " vs ")
+        for sep in (" @ ", " vs "):
+            if sep in teams1:
+                t1_parts = teams1.split(sep, 1)
+                break
+        else:
+            t1_parts = [teams1, ""]
+
+        for sep in (" @ ", " vs "):
+            if sep in teams2:
+                t2_parts = teams2.split(sep, 1)
+                break
+        else:
+            t2_parts = [teams2, ""]
+
+        name1_a, name1_b = t1_parts[0], t1_parts[1] if len(t1_parts) > 1 else ""
+        name2_a, name2_b = t2_parts[0], t2_parts[1] if len(t2_parts) > 1 else ""
 
         # Exact match on both teams
-        if away1 == away2 and home1 == home2:
+        if name1_a == name2_a and name1_b == name2_b:
             score += 0.7
+        elif name1_a == name2_b and name1_b == name2_a:
+            # Reversed order (can happen with UFC or data quirks)
+            score += 0.65
         else:
             # Token overlap matching
-            tokens1_away = set(away1.split())
-            tokens2_away = set(away2.split())
-            tokens1_home = set(home1.split())
-            tokens2_home = set(home2.split())
+            tokens1_a = set(name1_a.split())
+            tokens2_a = set(name2_a.split())
+            tokens1_b = set(name1_b.split())
+            tokens2_b = set(name2_b.split())
 
-            away_overlap = len(tokens1_away & tokens2_away) / max(len(tokens1_away | tokens2_away), 1)
-            home_overlap = len(tokens1_home & tokens2_home) / max(len(tokens1_home | tokens2_home), 1)
+            # Try both orderings
+            overlap_normal = (
+                len(tokens1_a & tokens2_a) / max(len(tokens1_a | tokens2_a), 1)
+                + len(tokens1_b & tokens2_b) / max(len(tokens1_b | tokens2_b), 1)
+            )
+            overlap_reversed = (
+                len(tokens1_a & tokens2_b) / max(len(tokens1_a | tokens2_b), 1)
+                + len(tokens1_b & tokens2_a) / max(len(tokens1_b | tokens2_a), 1)
+            )
 
-            score += (away_overlap + home_overlap) * 0.35
+            score += max(overlap_normal, overlap_reversed) * 0.35
 
         return min(1.0, score)
     except Exception:
         return 0.0
 
 
-def normalize_side_for_match(market: str, side: str) -> str:
+def normalize_side_for_match(market: str, side: str, sport: str = "") -> str:
     """
     Normalize a side label for cross-source matching.
 
-    For SPREAD/MONEYLINE: normalize team name
+    For SPREAD/MONEYLINE: normalize team name (with sport for mascot stripping)
     For TOTAL: "over" or "under"
     """
+    import re
+
     market = (market or "").strip().upper()
     side = (side or "").strip()
 
@@ -149,9 +185,8 @@ def normalize_side_for_match(market: str, side: str) -> str:
         return s
 
     # For SPREAD/ML: normalize team name, strip spread numbers
-    import re
     cleaned = re.sub(r"[+-]?\d+\.?\d*\s*$", "", side).strip()
-    return normalize_team_name(cleaned)
+    return normalize_team_name(cleaned, sport=sport)
 
 
 # --- Match failure logging ---

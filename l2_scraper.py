@@ -135,7 +135,7 @@ def scrape_l2(sport: str) -> dict:
             if row["market"] == "TOTAL":
                 side = side.lower()
             else:
-                side = normalize_team_name(side)
+                side = normalize_team_name(side, sport=sport_lower)
 
             l2_rows.append({
                 "timestamp": now_ts,
