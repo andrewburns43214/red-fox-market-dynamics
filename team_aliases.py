@@ -382,6 +382,7 @@ TEAM_ALIASES = {
     "tor maple leafs": "toronto maple leafs",
     "van canucks": "vancouver canucks",
     "vgk golden knights": "vegas golden knights",
+    "vgs golden knights": "vegas golden knights",
     "was capitals": "washington capitals",
     "wpg jets": "winnipeg jets",
     # NHL expansion — Utah Mammoth (2024-25 rebrand)

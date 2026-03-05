@@ -428,15 +428,18 @@ def fetch_all_situational(sport: str) -> dict:
     if not rest.get("error"):
         result["rest_days"] = rest["rest_days"]
 
+    # Use today's date for scoreboard-based fetches (ESPN defaults to yesterday)
+    today_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+
     # Pitchers (MLB only)
     if sport.lower() == "mlb":
-        pitch = fetch_probable_pitchers()
+        pitch = fetch_probable_pitchers(date=today_str)
         if not pitch.get("error"):
             result["pitchers"] = pitch["pitchers"]
 
     # Goalies (NHL only)
     if sport.lower() == "nhl":
-        goalies = fetch_probable_goalies()
+        goalies = fetch_probable_goalies(date=today_str)
         if not goalies.get("error"):
             result["goalies"] = goalies["goalies"]
 
