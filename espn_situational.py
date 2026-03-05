@@ -77,7 +77,7 @@ def _espn_get(sport: str, endpoint: str = "scoreboard", params: dict = None) -> 
 
 def fetch_injuries(sport: str) -> dict:
     """
-    Fetch injury data from ESPN scoreboard.
+    Fetch injury data from ESPN's dedicated injuries endpoint.
 
     Args:
         sport: Our sport key (nba, nhl, mlb, nfl, etc.)
@@ -91,42 +91,39 @@ def fetch_injuries(sport: str) -> dict:
             ]
         }
     """
-    result = _espn_get(sport)
+    result = _espn_get(sport, "injuries")
     if result["error"]:
         return {"injuries": {}, "error": result["error"]}
 
     data = result["data"]
     injuries = {}
 
-    for event in data.get("events", []):
-        for comp in event.get("competitions", []):
-            for team_info in comp.get("competitors", []):
-                team_name = team_info.get("team", {}).get("displayName", "")
-                team_norm = normalize_team_name(team_name)
+    for team_data in data.get("injuries", []):
+        team_name = team_data.get("displayName", "")
+        team_norm = normalize_team_name(team_name)
 
-                if not team_norm:
-                    continue
+        if not team_norm:
+            continue
 
-                team_injuries = []
-                for inj in team_info.get("injuries", []):
-                    # ESPN nests injuries under athlete
-                    athlete = inj.get("athlete", {})
-                    player_name = athlete.get("displayName") or athlete.get("fullName", "")
-                    status = inj.get("status", "")
-                    detail = inj.get("type", {}).get("description", "")
+        team_injuries = []
+        for inj in team_data.get("injuries", []):
+            athlete = inj.get("athlete", {})
+            player_name = athlete.get("displayName") or athlete.get("fullName", "")
+            status = inj.get("status", "")
+            detail = inj.get("type", {}).get("description", "")
 
-                    if not status:
-                        status = inj.get("description", "")
+            if not status:
+                status = inj.get("description", "")
 
-                    if player_name:
-                        team_injuries.append({
-                            "player": player_name,
-                            "status": status,
-                            "detail": detail,
-                        })
+            if player_name:
+                team_injuries.append({
+                    "player": player_name,
+                    "status": status,
+                    "detail": detail,
+                })
 
-                if team_injuries:
-                    injuries[team_norm] = team_injuries
+        if team_injuries:
+            injuries[team_norm] = team_injuries
 
     return {"injuries": injuries, "error": None}
 
