@@ -128,6 +128,7 @@ PATTERN_EFFECTS = {
 RLM_BETS_THRESHOLD = 60     # bets% must be at least this on one side
 RLM_MONEY_GAP_MIN = 15      # minimum bets% - money% gap for RLM
 RLM_L2_AGREEMENT_MIN = 0.5  # L2 must agree at this level
+RLM_MOVE_EXHAUSTION = 3.0   # if DK already moved >= this toward public side, dampen RLM
 
 # ─── DK RULES THRESHOLDS (v2.0) ───
 

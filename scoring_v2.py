@@ -34,6 +34,7 @@ from engine_config import (
     RLM_BETS_THRESHOLD,
     RLM_MONEY_GAP_MIN,
     RLM_L2_AGREEMENT_MIN,
+    RLM_MOVE_EXHAUSTION,
     SCORE_FLOORS,
     PUBLIC_HEAVY_THRESHOLD,
     CROSS_CHECK_CONSISTENT,
@@ -348,7 +349,13 @@ def _detect_rlm(row: dict) -> dict:
     RLM = public bets heavy on one side + money NOT following +
           sharp books moved + consensus confirms.
 
-    Returns {"detected": bool, "strength": float, "bets_money_gap": float}
+    Move exhaustion guard: if the DK line already moved >= RLM_MOVE_EXHAUSTION
+    points toward the public side (book already agreed), dampen the RLM signal.
+    A 4-point move means the book already priced in the public direction —
+    stability at the new number is NOT a contrarian signal.
+
+    Returns {"detected": bool, "strength": float, "bets_money_gap": float,
+             "exhaustion_applied": bool}
     """
     bets_pct = _safe_float(row.get("bets_pct", row.get("dk_bets_pct", 50)))
     money_pct = _safe_float(row.get("money_pct", row.get("dk_money_pct", 50)))
@@ -366,14 +373,27 @@ def _detect_rlm(row: dict) -> dict:
     )
 
     if not detected:
-        return {"detected": False, "strength": 0.0, "bets_money_gap": bets_money_gap}
+        return {"detected": False, "strength": 0.0, "bets_money_gap": bets_money_gap,
+                "exhaustion_applied": False}
 
     gap_factor = min(bets_money_gap / 30.0, 1.0)
     bm_intensity = _bets_money_intensity(bets_pct, money_pct)
     strength = gap_factor * max(l1_strength, 0.3) * max(l2_agreement, 0.5) * (0.7 + bm_intensity * 0.6)
     strength = min(1.0, strength)
 
-    return {"detected": True, "strength": round(strength, 3), "bets_money_gap": round(bets_money_gap, 1)}
+    # Move exhaustion: if DK already moved significantly toward the public side,
+    # the "reverse" signal is weaker — the book already agreed by moving.
+    exhaustion_applied = False
+    dk_move = abs(_safe_float(row.get("line_move_open", row.get("effective_move_mag", 0))))
+    if dk_move >= RLM_MOVE_EXHAUSTION:
+        # Dampen strength proportionally: 3pt move → 0.5x, 4pt → 0.33x, 5pt → 0.25x
+        dampen = RLM_MOVE_EXHAUSTION / (dk_move + RLM_MOVE_EXHAUSTION)
+        strength *= dampen
+        exhaustion_applied = True
+
+    return {"detected": True, "strength": round(strength, 3),
+            "bets_money_gap": round(bets_money_gap, 1),
+            "exhaustion_applied": exhaustion_applied}
 
 
 # ─── INTERACTION PATTERNS ───
@@ -409,10 +429,11 @@ def detect_interaction_pattern(row: dict) -> dict:
     if l1_available and l1_dir != 0:
         rlm = _detect_rlm(row)
         if rlm["detected"]:
+            exh_note = " [EXHAUSTED — line already moved, signal dampened]" if rlm["exhaustion_applied"] else ""
             return {
                 "pattern": "G",
                 "label": "REVERSE_LINE_MOVE",
-                "explanation": f"Public bets heavy but line moved opposite — sharp money confirmed (gap: {rlm['bets_money_gap']}%)",
+                "explanation": f"Public bets heavy but line moved opposite — sharp money confirmed (gap: {rlm['bets_money_gap']}%){exh_note}",
                 "rlm_strength": rlm["strength"],
                 "rlm_gap": rlm["bets_money_gap"],
             }
@@ -558,6 +579,11 @@ def compute_unified_score(row: dict) -> dict:
     pattern_cap = pattern_config.get("cap")
     strong_eligible = pattern_config.get("strong_eligible", False)
     edge_type = pattern_config.get("label", pattern_label)
+
+    # Move exhaustion: dampen Pattern G bonus when line already moved significantly
+    if pattern == "G" and pattern_result.get("rlm_strength", 1) < 0.5:
+        pattern_bonus = round(pattern_bonus * pattern_result.get("rlm_strength", 1), 1)
+        strong_eligible = False  # exhausted RLM should not drive STRONG
 
     # Cross-market check
     cross_adj = spread_total_cross_check(row)
