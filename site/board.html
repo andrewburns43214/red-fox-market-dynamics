@@ -1277,9 +1277,13 @@ function renderBoard(){
         return parts.length?'<span style="font-size:9px;color:#5a6480">'+parts.join(' ')+'</span>':'—';
       })()}</td>
       <td class="td-dvm">${(()=>{
+        const dvm=Number(r.dk_vs_mkt);
+        if(!dvm&&dvm!==0||isNaN(dvm)) return '—';
+        const abs=Math.abs(dvm);
+        const clr=abs>=1.0?'#00965a':'#8892aa';
         const cl=Number(r.l2_consensus_line)||0;
-        if(!cl) return '—';
-        return '<span style="font-size:10px;font-weight:700;color:'+(cl>0?'#00965a':'#d63020')+'" title="Consensus: '+cl.toFixed(1)+'">'+(cl>0?'+':'')+cl.toFixed(1)+'</span>';
+        const tip=cl?'DK line - Consensus ('+cl.toFixed(1)+')':'DK vs Market diff';
+        return '<span style="font-size:10px;font-weight:700;color:'+clr+'" title="'+tip+'">'+(dvm>0?'+':'')+dvm.toFixed(1)+'</span>';
       })()}</td>
       <td class="td-dec"><span class="dec ${dc}">${dt}</span></td>
       <td class="td-pick">${r.favored_side||'-'}</td>
