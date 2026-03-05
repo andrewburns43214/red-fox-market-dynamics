@@ -951,7 +951,7 @@ thead th.th-play { text-align: left; }
       </div>
       <div class="tkpi">
         <span class="tkpi-v green" id="t-active">0</span>
-        <span class="tkpi-l">Signals ≥65</span>
+        <span class="tkpi-l">Today's Games</span>
       </div>
       <div class="tkpi">
         <span class="tkpi-v gold" id="t-sb">0</span>
@@ -971,10 +971,9 @@ thead th.th-play { text-align: left; }
 
 <!-- ─── TABS ─── -->
 <nav class="tabs">
-  <div class="tab active" data-tab="board" data-filter="all" onclick="setTab(this)">Current Games <span class="tbadge" id="b-all">0</span></div>
-  <div class="tab" data-tab="board" data-filter="signals" onclick="setTab(this)">Signals <span class="tbadge" id="b-sig">0</span></div>
+  <div class="tab active" data-tab="board" data-filter="today" onclick="setTab(this)">Today's Games <span class="tbadge" id="b-today">0</span></div>
   <div class="tab" data-tab="board" data-filter="highconf" onclick="setTab(this)">Strong Bets <span class="tbadge" id="b-hc">0</span></div>
-  <div class="tab" data-tab="board" data-filter="today" onclick="setTab(this)">Today <span class="tbadge" id="b-today">0</span></div>
+  <div class="tab" data-tab="board" data-filter="all" onclick="setTab(this)">All Games <span class="tbadge" id="b-all">0</span></div>
   <div class="tsep"></div>
   <div class="tab" data-tab="perf" data-filter="" onclick="setTab(this)">Performance</div>
   <div class="tab" data-tab="results" data-filter="" onclick="setTab(this)">Results <span class="tbadge" id="b-res">0</span></div>
@@ -996,7 +995,7 @@ thead th.th-play { text-align: left; }
   <div class="mmet">
     <div class="mmet-body">
       <span class="mmet-v" id="m-active">0</span>
-      <span class="mmet-l">Signals ≥65</span>
+      <span class="mmet-l">Today's Games</span>
     </div>
   </div>
   <div class="mmet">
@@ -1178,7 +1177,7 @@ thead th.th-play { text-align: left; }
 <footer class="statusbar">
   <div class="sl">
     <div class="si"><span>Engine</span><span class="v">v1.2</span></div>
-    <div class="si"><span>Signals</span><span class="v" id="sb-s">0</span></div>
+    <div class="si"><span>Today's Games</span><span class="v" id="sb-s">0</span></div>
     <div class="si"><span>Sports</span><span class="v" id="sb-sp">—</span></div>
     <div class="si"><span>Snapshot</span><span class="v" id="sb-snap">—</span></div>
   </div>
@@ -1244,7 +1243,7 @@ const MOCK_RESULTS = [
 ];
 
 let allDash=[], allLedger=[], allResults=[];
-let sport='ALL', filter='all', tabId='board';
+let sport='ALL', filter='today', tabId='board';
 let sortCol='total_score', sortAsc=false;
 
 function et(ts){ if(!ts) return '-'; const d=new Date(ts); if(isNaN(d)) return String(ts); return d.toLocaleString('en-US',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
@@ -1320,7 +1319,7 @@ let groupMode=false;
 function toggleGroup(el){ groupMode=!groupMode; el.classList.toggle('grp-on',groupMode); el.textContent=groupMode?'Ungroup':'Group by Game'; renderBoard(); }
 
 function _decRank(d){ const k=(d||'').toUpperCase(); if(k==='STRONG_BET') return 0; if(k==='BET') return 1; return 2; }
-function filtered(){ const now=new Date(); let d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now); if(filter==='signals') d=d.filter(r=>Number(r.game_confidence)>=65); if(filter==='highconf') d=d.filter(r=>(r.game_decision||'').toUpperCase()==='STRONG_BET'); if(filter==='today') d=allDash.filter(r=>isToday(r._game_time)); return d.sort((a,b)=>{ const da=_decRank(a.game_decision),db=_decRank(b.game_decision); if(da!==db) return da-db; let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
+function filtered(){ const now=new Date(); let d; if(filter==='today') d=allDash.filter(r=>isToday(r._game_time)).filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport); else if(filter==='highconf') d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now).filter(r=>(r.game_decision||'').toUpperCase()==='STRONG_BET'); else d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now); return d.sort((a,b)=>{ const da=_decRank(a.game_decision),db=_decRank(b.game_decision); if(da!==db) return da-db; let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
 
 window._boardRows=[];
 function renderBoard(){
@@ -1345,9 +1344,10 @@ function renderBoard(){
     groups.forEach(g=>{ g.rows.forEach((r,j)=>{ r._grpSub=j>0; r._grpFirst=j===0&&g.rows.length>1; data.push(r); }); });
   }
   window._boardRows=data;
-  const titles={all:'Current Games',signals:'Signals ≥65',highconf:'Strong Bets',today:"Today's Games"};
+  const titles={all:'All Games',highconf:'Strong Bets',today:"Today's Games"};
   document.getElementById('board-title').textContent=titles[filter]||'Current Games';
-  document.getElementById('board-meta').textContent=`${data.length} rows · sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' · grouped':''}`;
+  const _nGames=new Set(data.map(r=>r.game_id||r.game||'?')).size;
+  document.getElementById('board-meta').textContent=`${_nGames} games · ${data.length} markets · sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' · grouped':''}`;
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
   data.forEach((r,i)=>{
     const v2s=Number(r.v2_score)||0;
@@ -2139,17 +2139,19 @@ function updateStats(){
   const avgConf=todayConf.length?
     (todayConf.reduce((s,r)=>s+Number(r.game_confidence||0),0)/todayConf.length).toFixed(1):null;
 
+  // Count unique games (not market rows)
+  const _ug=rows=>new Set(rows.map(r=>r.game_id||r.game||'?')).size;
   const el=id=>document.getElementById(id);
-  if(el('t-games'))  el('t-games').textContent=upcoming.length;
-  if(el('t-active')) el('t-active').textContent=sigs.length;
+  if(el('t-games'))  el('t-games').textContent=_ug(upcoming);
+  if(el('t-active')) el('t-active').textContent=_ug(today);
   if(el('t-sb'))     el('t-sb').textContent=hc.length;
   const sbResolved=resolved.filter(isHighConf);
   const sbW=sbResolved.filter(r=>(r.result||'').toUpperCase()==='WIN').length;
   const pSBtop=sbResolved.length?Math.round(100*sbW/sbResolved.length):null;
   if(el('t-wr'))     el('t-wr').textContent=pSBtop!==null?pSBtop+'%':'--';
-  if(el('m-active')) el('m-active').textContent=sigs.length;
+  if(el('m-active')) el('m-active').textContent=_ug(today);
   if(el('m-wr'))     el('m-wr').textContent=pSBtop!==null?pSBtop+'%':'--';
-  if(el('m-today'))  el('m-today').textContent=today.length;
+  if(el('m-today'))  el('m-today').textContent=_ug(today);
 
   // Avg conf metric
   document.querySelectorAll('.mmet-v').forEach(mv=>{
@@ -2158,22 +2160,21 @@ function updateStats(){
     const t=lbl.textContent.toLowerCase();
     if(t.includes('avg conf')) mv.textContent=avgConf!==null?avgConf:'--';
     if(t.includes('high conf')||t.includes('strong')) mv.textContent=hc.length;
-    if(t.includes('active sig')) mv.textContent=sigs.length;
+    if(t.includes("today's games")) mv.textContent=_ug(today);
   });
 
   // Tab badges
   const el2=id=>document.getElementById(id);
-  if(el2('b-all'))   el2('b-all').textContent=upcoming.length;
-  if(el2('b-sig'))   el2('b-sig').textContent=sigs.length;
+  if(el2('b-all'))   el2('b-all').textContent=_ug(upcoming);
   if(el2('b-hc'))    el2('b-hc').textContent=hc.length;
-  if(el2('b-today')) el2('b-today').textContent=today.length;
+  if(el2('b-today')) el2('b-today').textContent=_ug(today);
   if(el2('b-res'))   el2('b-res').textContent=resolved.length;
   if(el2('b-led'))   el2('b-led').textContent=allLedger.length;
 
   // Bottom status bar
   const sports=[...new Set(allDash.map(r=>(r.sport||'').toUpperCase()).filter(Boolean))];
   const bsig=document.querySelector('.sb-signals');
-  if(bsig) bsig.textContent='Signals '+sigs.length;
+  if(bsig) bsig.textContent="Today's Games "+_ug(today);
   const bsport=document.querySelector('.sb-sport');
   if(bsport) bsport.textContent='Sports '+sports.length+' ('+sports.join(' ')+')';
   const bsnap=document.querySelector('.sb-snap');
@@ -2198,7 +2199,7 @@ function updateStats(){
 
 
   const sbS=document.getElementById('sb-s');
-  if(sbS) sbS.textContent=sigs.length;
+  if(sbS) sbS.textContent=_ug(today);
   const sbSp=document.getElementById('sb-sp');
   if(sbSp){ const sp=[...new Set(allDash.map(r=>(r.sport||'').toUpperCase()).filter(Boolean))]; sbSp.textContent=sp.length+' ('+sp.join(' ')+')'; }
   const sbSnap=document.getElementById('sb-snap');
