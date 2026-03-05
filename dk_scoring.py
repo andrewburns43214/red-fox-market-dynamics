@@ -79,7 +79,8 @@ def classify_line_movement(row: dict) -> dict:
     """
     settled = int(_safe_float(row.get("line_settled_ticks"), 0))
     dir_changes = int(_safe_float(row.get("line_dir_changes"), 0))
-    lm = abs(_safe_float(row.get("line_move_open")))
+    # v2.1: Use effective_move_mag (combines line number + juice movement)
+    lm = abs(_safe_float(row.get("effective_move_mag", row.get("line_move_open"))))
     move_dir = int(_safe_float(row.get("move_dir")))
     tb = str(row.get("timing_bucket", "")).lower()
     D = _safe_float(row.get("divergence_D"))
@@ -411,20 +412,29 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
         "intensity_scale": round(intensity_scale, 3),
     }
 
-    # ── 6. LINE MOVEMENT (SPREAD x2.0, others x2.0) ──
+    # ── 6. LINE MOVEMENT (line number + juice-equivalent) ──
+    # v2.1: Use effective_move_mag which combines line number AND juice/odds movement.
+    # When DK shifts juice without moving the number, that's still a real pricing signal.
     try:
-        lm = float(row.get("line_move_open")) if row.get("line_move_open") is not None else 0.0
-        if isinstance(lm, float) and math.isnan(lm):
-            lm = 0.0
+        eff_mag = float(row.get("effective_move_mag") or 0)
+        if math.isnan(eff_mag): eff_mag = 0.0
     except Exception:
-        lm = 0.0
-    # SPREAD: x2.0 (was x3.0 in v1.2 — root cause fix for SPREAD inflation)
+        eff_mag = 0.0
+    # Fallback: if effective_move_mag not computed, use raw line_move_open
+    if eff_mag == 0:
+        try:
+            lm = float(row.get("line_move_open") or 0)
+            if math.isnan(lm): lm = 0.0
+            eff_mag = abs(lm)
+        except Exception:
+            pass
     if mkt_upper == "SPREAD":
-        lm_bonus = min(7.0, abs(lm) * 2.0)
+        lm_bonus = min(7.0, eff_mag * 2.0)
     else:
-        lm_bonus = min(8.0, abs(lm) * 2.0)
+        lm_bonus = min(8.0, eff_mag * 2.0)
     score += lm_bonus
     details["line_movement"] = round(lm_bonus, 2)
+    details["effective_move_mag"] = round(eff_mag, 2)
 
     # ── 7. KEY NUMBER CROSSING ──
     # Key numbers (3, 7, 10, 14) only matter for football (NFL/NCAAF).
