@@ -215,22 +215,25 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
     tb = str(row.get("timing_bucket", "")).strip().lower()
 
     # ── 1. DYNAMIC BASE SCORE ──
-    # Based on data quality, not just timing. Early games with real signals
-    # shouldn't start 8 points behind a mid game with weak splits.
+    # v2.1: widened range (was 46-52, now 44-55) for better differentiation.
+    # Also uses effective_move_mag so juice-only movement counts.
     base_bets = _safe_float(row.get("bets_pct"))
-    base_lm = abs(_safe_float(row.get("line_move_open")))
-    has_real_data = base_bets >= 30 or base_lm >= 0.5
+    base_lm = abs(_safe_float(row.get("effective_move_mag", row.get("line_move_open"))))
+    has_real_data = base_bets >= 30 or base_lm >= 0.3
     if tb == "early" and not has_real_data:
-        score = 46.0  # Genuinely low-info early (was 44)
+        score = 44.0  # Genuinely low-info early
         flags.append("base:low_info_early")
-    elif tb == "late" or (tb == "mid" and base_lm >= 1.0):
+    elif tb == "late" and base_lm >= 0.5:
+        score = 55.0  # Late with confirmed movement — highest base
+        flags.append("base:late_with_movement")
+    elif tb == "late" or (tb == "mid" and base_lm >= 0.5):
         score = 52.0
         flags.append("base:movement_boost")
     elif tb == "early" and has_real_data:
-        score = 50.0  # Early but has signal — same as mid baseline
+        score = 50.0  # Early but has signal
         flags.append("base:early_with_data")
     else:
-        score = 50.0
+        score = 48.0  # Mid with no movement — neutral
     details["dynamic_base"] = score
 
     # ── 2. MARKET READ BONUSES — "read the book, not the bettors" ──
@@ -238,14 +241,15 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
     # When book holds or moves against money → book disagrees → fade signal.
     # DK is a retail book — money there is recreational, not sharp.
     mr = str(row.get("market_read", "")).strip()
+    # v2.1: boosted Stealth Move (4→6) and Aligned Sharp (2→4) — confirmed signals deserve more weight
     _MR_MAP = {
-        "Stealth Move": 4,      # Concentrated money + book confirms → genuine edge
-        "Aligned Sharp": 2,     # D≥8 + book confirms → decent but might be priced in
+        "Stealth Move": 6,      # Concentrated money + book confirms → genuine edge
+        "Aligned Sharp": 4,     # D≥8 + book confirms → decent but might be priced in
         "Freeze Pressure": -2,  # Money in, book HOLDS → book comfortable on other side
-        "Reverse Pressure": -4, # Money in, book moves AGAINST → book actively fading
+        "Reverse Pressure": -5, # Money in, book moves AGAINST → book actively fading
         "Contradiction": -3,    # Conflicting signals
         "Neutral": -1,
-        "Public Drift": -5,     # Public momentum, likely wrong
+        "Public Drift": -6,     # Public momentum, likely wrong
     }
     mr_bonus_base = _MR_MAP.get(mr, 0)
     D_abs = abs(_safe_float(row.get("divergence_D")))
@@ -371,10 +375,11 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
         except Exception:
             pass
 
+    # v2.1: raised caps (was 10/12) — divergence is the primary signal, shouldn't be capped so tight
     if mkt_upper == "TOTAL":
-        div_raw_base = min(10.0, abs(D) * 0.3)
+        div_raw_base = min(13.0, abs(D) * 0.35)
     else:
-        div_raw_base = min(12.0, abs(D) * 0.4)
+        div_raw_base = min(16.0, abs(D) * 0.5)
 
     combined_mult = div_mult * timing_mult * price_mult * inst_mult * sample_mult
 
@@ -428,10 +433,12 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
             eff_mag = abs(lm)
         except Exception:
             pass
+    # v2.1: raised multiplier from 2.0→2.5, caps from 7/8→9/10
+    # DK line movement is the most reliable signal we have
     if mkt_upper == "SPREAD":
-        lm_bonus = min(7.0, eff_mag * 2.0)
+        lm_bonus = min(9.0, eff_mag * 2.5)
     else:
-        lm_bonus = min(8.0, eff_mag * 2.0)
+        lm_bonus = min(10.0, eff_mag * 2.5)
     score += lm_bonus
     details["line_movement"] = round(lm_bonus, 2)
     details["effective_move_mag"] = round(eff_mag, 2)
@@ -508,25 +515,27 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
 
     if color == "DARK_GREEN":
         if book_confirms:
-            # Book agrees with concentrated money → full bonus, scale by D
-            color_bonus = min(5.0 + (D_abs / 15.0) * 3.0, 8.0)
+            # v2.1: Book agrees with concentrated money → strong bonus, scale by D
+            # Raised cap 8→12 — this is the strongest DK signal (money + book alignment)
+            color_bonus = min(6.0 + (D_abs / 12.0) * 4.0, 12.0)
             if l1_dir == 1 and l1_avail:
-                color_bonus = min(color_bonus + 1.5, 9.0)
+                color_bonus = min(color_bonus + 2.0, 14.0)
                 flags.append("color:l1_confirms")
             elif l1_dir == -1 and l1_avail:
                 color_bonus = max(color_bonus * 0.5, 2.0)
                 flags.append("color:l1_opposes")
         elif book_holds:
             # Book absorbs money without moving → small bonus at best
-            color_bonus = 1.0
+            color_bonus = 1.5
             flags.append("color:dark_green_book_holds")
         elif book_fades:
             # Book moves AGAINST concentrated money → this is a negative signal
-            color_bonus = -2.0
+            color_bonus = -3.0
             flags.append("color:dark_green_book_fades")
     elif color == "LIGHT_GREEN":
         if book_confirms:
-            color_bonus = min(2.0 + (D_abs / 20.0) * 1.0, 3.0)
+            # v2.1: raised cap 3→5
+            color_bonus = min(3.0 + (D_abs / 15.0) * 2.0, 5.0)
         elif book_holds:
             color_bonus = 0.5
         else:
