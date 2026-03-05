@@ -1,5 +1,5 @@
-# Red Fox Market Intelligence — Engine Architecture v2.0
-*Updated: 2026-03-04 — 3-Layer Scoring Model, Pattern Detection, RLM, complete redesign from v1.x*
+# Red Fox Market Intelligence — Engine Architecture v2.1
+*Updated: 2026-03-05 — CLV tracking, weather integration, sport-specific context layers, injury scoring*
 
 ---
 
@@ -10,14 +10,18 @@
 | v1.0 | 2026-02-27 | Single-layer DK scoring. Color classification, additive signals, fixed base 50. |
 | v1.1 | 2026-03-01 | STRONG_BET wiring, canonical keys, elig_map, persistence cap, SPREAD dampening. Still single-layer. |
 | v1.2 | 2026-03-02 | Regime classifier, RLM signal, combined divergence multiplier, dynamic base, sport-specific rebalancing. Still single-layer. |
-| **v2.0** | **2026-03-04** | **3-Layer model. L1 (sharp books via OddsPapi), L2 (31-book consensus via The-Odds-API), L3 (DK retail behavior). Pattern detection system. Cross-layer interaction scoring. Layer mode caps. Full redesign.** |
+| v2.0 | 2026-03-04 | 3-Layer model. L1 (sharp books via OddsPapi), L2 (31-book consensus via The-Odds-API), L3 (DK retail behavior). Pattern detection system. Cross-layer interaction scoring. Layer mode caps. Full redesign. |
+| **v2.1** | **2026-03-05** | **Situational intelligence layer. CLV tracking for engine validation. Weather scoring (Open-Meteo). ESPN injury dampening. Sport-specific context: MLB pitching + park factors, NHL goalie confirmation, NCAAB rankings. Score formula now has 11 adjustment components.** |
 
-**What changed from v1.x → v2.0:**
-- v1.x scored everything from DK data alone (bets%, money%, line movement)
-- v2.0 uses DK as one of three independent data layers, each with defined contribution ranges
-- Scoring logic moved from inline main.py to modular files: `scoring_v2.py`, `dk_rules.py`, `l1_features.py`, `l2_features.py`, `merge_layers.py`
-- Pattern detection replaces simple market_read as primary signal classifier
-- Layer mode (FULL/PARTIAL/LIMITED) caps scores based on data availability
+**What changed from v2.0 → v2.1:**
+- v2.0 had 7 adjustment components in the score formula (L1, L2, pattern, cross-market, line diff, decay, B2B)
+- v2.1 adds 4 more: injury_adj, weather_adj, sport_context_adj, and wires them through scoring
+- CLV tracking enables engine performance validation beyond win/loss variance
+- Weather data from Open-Meteo (free, no key) affects outdoor sports (NFL, NCAAF, MLB)
+- MLB gets starting pitcher quality scoring + park factors for all 30 teams
+- NHL gets goalie confirmation/backup detection from ESPN
+- NCAAB gets AP/NET ranking differential scoring
+- Dashboard badges for all new signals (pitcher ERA, goalie status, park factor, weather, rankings)
 
 ---
 
@@ -114,7 +118,7 @@
 
 **File:** `merge_layers.py` → `merge_all_layers(dk_df, sport)`
 
-The merge joins L1, L2, and situational data onto the DK DataFrame using a composite key:
+The merge joins L1, L2, situational, weather, and sport-specific context data onto the DK DataFrame using a composite key:
 
 **Match key:** `(canonical_key, market, side_normalized)`
 
@@ -137,25 +141,40 @@ Where:
 **Situational data (ESPN):**
 - Injuries (home/away lists + counts)
 - Rest days + B2B flags (HOME_B2B / AWAY_B2B / BOTH_B2B)
-- Pitcher matchup (MLB)
+- Pitcher matchup (MLB — ERA, W-L, handedness)
+- Probable goalies (NHL — name, status, W-L-OT record)
+- NCAAB rankings (AP/NET top 25)
+
+**Weather data (Open-Meteo):** *(v2.1 NEW)*
+- Wind speed, temperature, precipitation probability
+- Applied to outdoor sports only (NFL, NCAAF, MLB)
+- Dome stadiums detected and skipped automatically
+
+**Sport-specific context:** *(v2.1 NEW)*
+- MLB: Starting pitcher quality + park factors
+- NHL: Goalie confirmation scoring
+- NCAAB: Ranking differential
 
 ---
 
-## 3. SCORING MODEL (v2.0)
+## 3. SCORING MODEL (v2.1)
 
-**File:** `scoring_v2.py` → `compute_3layer_score(row)`
+**File:** `scoring_v2.py` → `compute_unified_score(row)`
 
 ### Score Formula
 
 ```
 Score = 50 (base)
-  + L1 contribution    (0 to +18)
-  + L2 contribution    (-8 to +10)
-  + L3 contribution    (-10 to +10)
-  + Pattern bonus      (varies by pattern)
-  + Cross-market adj   (-2 to +1)
-  + Momentum decay     (0 to -3)
-  + B2B adjustment     (0 to -1)
+  + L1 adjustment       (-5 to +10)
+  + L2 adjustment       (-5 to +7)
+  + Pattern bonus        (varies by pattern)
+  + Cross-market adj     (-2 to +1)
+  + Line diff bonus      (0 to +8, currently disabled)
+  + Momentum decay       (0 to -3)
+  + B2B adjustment       (0 to -1)
+  + Injury adjustment    (-2 to +1)        ← v2.1 NEW
+  + Weather adjustment   (-3.5 to 0)       ← v2.1 NEW
+  + Sport context adj    (-3 to +3)        ← v2.1 NEW
   → Clamped to [floor, cap]
 ```
 
@@ -163,16 +182,11 @@ Score = 50 (base)
 
 ---
 
-### 3A. Layer 1 Contribution (0 to +18)
+### 3A. Layer 1 Adjustment (-5 to +10)
 
-The primary signal driver. L1 is trusted most because sharp books have the best information.
+The primary signal driver. L1 is trusted most because sharp books have the best information. BIDIRECTIONAL: penalizes when sharp opposes DK favored side.
 
-**Formula:**
-```
-raw = (magnitude × agreement_mult × stability_mult × limit_mult × 18) + speed_bonus + key_bonus
-clamped to [0, 18]
-```
-
+**Components:**
 | Component | Range | Description |
 |-----------|-------|-------------|
 | magnitude | 0-1 | Normalized move size |
@@ -181,35 +195,126 @@ clamped to [0, 18]
 | limit_mult | 1.0-1.2 | Limit size confidence |
 | speed_bonus | -4 to +3 | FAST_SNAP: +3 early / -4 late; SLOW_GRIND: -2 |
 | key_bonus | 0 or +2 | Crossed key number (3, 7, 10, 14, 17) |
+| leader_bonus | 0-1 | Pinnacle leads = +1, Bookmaker.eu = +0.5 |
+| DK cross-check | ×0.75 to ×1.15 | Money confirms/contradicts sharps |
 
 ---
 
-### 3B. Layer 2 Contribution (-8 to +10)
+### 3B. Layer 2 Adjustment (-5 to +7)
 
 Validates or rejects L1 signal using 31-book consensus.
 
 | Agreement | Behavior | Range |
 |-----------|----------|-------|
-| ≥ 0.6 | Market confirms L1 → positive | 0 to +10 |
+| ≥ 0.6 | Market confirms L1 → positive | 0 to +7 |
 | 0.3 - 0.6 | Ambiguous → near-zero | -0.75 to +0.75 |
-| ≤ 0.3 | Market rejects L1 → negative | -8 to 0 |
+| ≤ 0.3 | Market rejects L1 → negative | -5 to 0 |
 
 **Trend bonus:** TIGHTENING +1.5, WIDENING -1.5, STABLE 0
 
-**Validation strength** (composite 0-1):
-- Book count (15%): more books = stronger
-- Dispersion (30%): tighter = stronger
-- Trend (15%): tightening = confirming
-- Agreement (30%): books matching L1 = strongest
-- Pinnacle proximity (10%): small Pinn gap = aligned
+---
+
+### 3C. Injury Adjustment (-2 to +1) — v2.1 NEW
+
+**Applies to:** NBA, NHL, NFL only (college rosters too deep to matter)
+
+| Market | Condition | Adjustment |
+|--------|-----------|------------|
+| ML/SPREAD | Our team 3+ injuries | -2.0 |
+| ML/SPREAD | Our team 2+ injuries | -1.0 |
+| ML/SPREAD | Opponent 3+ injuries | +1.0 |
+| ML/SPREAD | Opponent 2+ injuries | +0.5 |
+| TOTAL | Combined 4+ injuries | -1.5 |
+| TOTAL | Combined 2+ injuries | -0.5 |
+
+**Source:** ESPN injury lists via `espn_situational.py`
 
 ---
 
-### 3C. Layer 3 Contribution (-10 to +10)
+### 3D. Weather Adjustment (-3.5 to 0) — v2.1 NEW
 
-DK retail behavior as modifier (confirms but never discovers).
+**Applies to:** NFL, NCAAF, MLB (outdoor stadiums only)
+**Source:** Open-Meteo API (free, no key required), 30-min cache
 
-See Section 1 Layer 3 rules table. Composite of divergence score, line move, timing credibility, and all penalty/bonus rules, clamped to [-10, +10].
+| Condition | Adjustment | Signal |
+|-----------|-----------|--------|
+| Wind ≥ 20 mph | -1.5 | HIGH_WIND |
+| Wind 15-19 mph | -0.5 | WINDY |
+| Precip ≥ 70% or ≥ 2mm | -1.0 | RAIN_LIKELY |
+| Precip 40-69% | -0.5 | RAIN_POSSIBLE |
+| Temp ≤ 20°F (NFL/NCAAF) | -1.0 | EXTREME_COLD |
+| Temp 21-32°F (NFL/NCAAF) | -0.5 | COLD |
+
+**Maximum cumulative:** -3.5 (high wind + rain + extreme cold)
+**Dome stadiums:** Automatically detected, return 0 adjustment
+
+**Stadium database:** 32 NFL + 30 MLB venues with (lat, lon, is_dome) in `weather.py`
+
+---
+
+### 3E. Sport-Specific Context Adjustment (-3 to +3) — v2.1 NEW
+
+#### MLB: Pitching + Park Factors
+
+**Starting Pitcher Quality Score** (ERA-based, -3 to +3):
+
+| ERA | Score | Flag |
+|-----|-------|------|
+| < 2.50 | +3.0 | SP_ACE |
+| 2.50-3.00 | +2.0 to +3.0 | SP_ACE |
+| 3.00-3.50 | +1.0 to +2.0 | SP_STRONG |
+| 3.50-3.75 | +0.5 to +1.0 | SP_STRONG |
+| 3.75-4.25 | 0.0 | SP_AVG |
+| 4.25-4.75 | -0.5 to -1.0 | SP_WEAK |
+| 4.75-5.50 | -1.5 to -2.5 | SP_WEAK |
+| > 5.50 | -3.0 | SP_BAD |
+| W+L < 3 | -1.0 | SP_UNKNOWN |
+
+**Sample gate:** ERA requires ≥3 decisions (W+L). Below threshold = SP_UNKNOWN with -1.0 penalty.
+
+**MLB adjustment formula:**
+- ML/SPREAD: `(our_pitcher_quality - opp_pitcher_quality) × 0.5` — capped at ±3.0
+- TOTAL: `avg_pitcher_quality × 0.3` + park adjustment
+
+**Park factors** (static lookup, all 30 MLB teams):
+
+| Park | Factor | Effect on TOTAL |
+|------|--------|----------------|
+| Coors Field (COL) | 1.28 | +1.5 (strong over lean) |
+| Fenway Park (BOS) | 1.10 | +1.5 |
+| Yankee Stadium (NYY) | 1.05 | +0.5 |
+| Dodger Stadium (LAD) | 0.93 | -0.5 |
+| Petco Park (SD) | 0.91 | -1.0 (strong under lean) |
+| *All 30 teams mapped* | 0.91-1.28 | varies |
+
+**Source:** `mlb_context.py` — ERA/W/L from ESPN probables, park factors static
+
+#### NHL: Goalie Confirmation
+
+| Status | Starter? | Adjustment | Flag |
+|--------|----------|-----------|------|
+| Confirmed | Yes (W+L+OT ≥ 20) | +1.0 | G_STARTER_CONFIRMED |
+| Confirmed | No (backup) | -2.0 | G_BACKUP_CONFIRMED |
+| Probable | Yes | +0.5 | G_PROBABLE |
+| Probable | No | -1.0 | G_PROBABLE |
+| Unknown | — | 0.0 | G_UNKNOWN |
+
+**Side-relative:** "Our" goalie's quality directly affects adjustment. Opponent's backup gives +50% of absolute value as edge bonus.
+
+**Source:** `nhl_context.py` — goalie status from ESPN NHL scoreboard probables
+
+#### NCAAB: Ranking Differential
+
+| Condition | Adjustment |
+|-----------|-----------|
+| Rank gap ≥ 15 (we're higher) | +1.0 |
+| Rank gap 8-14 (we're higher) | +0.5 |
+| Ranked vs unranked (we're ranked) | +0.5 |
+| Rank gap ≥ 15 (we're lower) | -1.0 |
+| Rank gap 8-14 (we're lower) | -0.5 |
+| Unranked vs ranked (we're unranked) | -0.5 |
+
+**Source:** ESPN AP/NET rankings via `espn_situational.py` → `fetch_ncaab_rankings()`
 
 ---
 
@@ -228,7 +333,7 @@ See Section 1 Layer 3 rules table. Composite of divergence score, line move, tim
 | **C** | RETAIL_ALIGNMENT | PUB | No L1 move + public heavy | -5 | 40 | No | Gold |
 | **N** | NEUTRAL | NEU | No strong pattern | 0 | 40 | No | Gray |
 
-### Pattern G — Reverse Line Movement (v2.0 NEW)
+### Pattern G — Reverse Line Movement
 
 The strongest cross-layer signal. Fires when public bets are heavy on one side but money and sharp lines move the opposite direction.
 
@@ -310,39 +415,76 @@ HOME_B2B or AWAY_B2B → -1.0 slight penalty.
 | Stability | last_score within delta of peak (NCAAB: 2pts, others: 3pts) |
 | Early Block | NCAAB/NCAAF: timing ≠ EARLY |
 
-**v2.0 change:** STRONG_BET requires L123 mode — cannot be awarded without both sharp and consensus data confirming.
+**STRONG_BET requires L123 mode** — cannot be awarded without both sharp and consensus data confirming.
 
 ---
 
-## 8. THE PIPELINE (Execution Order)
+## 8. CLV TRACKING — v2.1 NEW
+
+### What is CLV?
+**Closing Line Value** measures whether the engine consistently gets better numbers than the market closing line. It's the gold standard for betting engine validation — win rate has high variance, but sustained positive CLV proves genuine edge.
+
+### How It Works
+
+**Decision Line:** Captured at freeze time — the DK line when STRONG_BET/BET is first awarded. The freeze ledger's dedup logic (STRONG > BET > LEAN > NO BET) ensures the decision line reflects the peak conviction moment.
+
+**Closing Line:** Last DK snapshot before `dk_start_iso` per game/side. Uses the existing 10-min scrape cadence. Captured by `capture_closing_lines()` in main.py.
+
+**CLV Calculation:**
+
+| Market | Formula | Positive Means |
+|--------|---------|----------------|
+| SPREAD | `decision_val - closing_val` | Got better number (e.g., -3 when market closed at -3.5) |
+| TOTAL OVER | `closing - decision` | Took over at lower number than close |
+| TOTAL UNDER | `decision - closing` | Took under at higher number than close |
+| MONEYLINE | `closing_implied_prob - decision_implied_prob` | Got better odds |
+
+**CLV Columns in results_resolved.csv:**
+- `decision_line` — DK line at decision time
+- `decision_line_val` — numeric value extracted
+- `decision_odds` — DK odds at decision time
+- `closing_line` — last DK line before game start
+- `closing_line_val` — numeric value extracted
+- `clv` — closing line value (positive = engine beat the close)
+- `clv_direction` — BEAT_CLOSE / LOST_CLOSE / PUSH
+
+**CLV in KPIs (kpi_builder.py):**
+- Average CLV by decision type, sport, market
+- CLV buckets with win rates: ≥2.0 / 1.0-1.9 / 0.1-0.9 / 0 / negative
+- Forward-only: only applies to decisions made after CLV deployment
+
+---
+
+## 9. THE PIPELINE (Execution Order)
 
 ```
-1. DK snapshot ingest (snapshots.csv)
-2. Odds API pull: L1 sharp (OddsPapi) + L2 consensus (The-Odds-API)
-3. Feature extraction: l1_features, l2_features
-4. Layer merge: merge_all_layers() — joins L1/L2/situational onto DK rows
-5. Market read computation (v1.2 logic, retained for L3-only rows)
-6. 3-Layer scoring: scoring_v2.compute_3layer_score() for L123/L13/L23 rows
-7. DK-only scoring: v1.2 side-level scoring for L3_ONLY rows
-8. Post-scoring passes (persistence cap, SPREAD dampening, ML→Spread reinforcement)
-9. Metrics tap (row_state.csv, signal_ledger.csv)
+1.  DK snapshot ingest (snapshots.csv)
+2.  Odds API pull: L1 sharp (OddsPapi) + L2 consensus (The-Odds-API)
+3.  Feature extraction: l1_features, l2_features
+4.  Layer merge: merge_all_layers() — joins L1/L2/situational/weather/sport-context
+5.  Market read computation (v1.2 logic, retained for L3-only rows)
+6.  3-Layer scoring: scoring_v2.compute_unified_score() for L123/L13/L23 rows
+7.  DK-only scoring: v1.2 side-level scoring for L3_ONLY rows
+8.  Post-scoring passes (persistence cap, SPREAD dampening, ML→Spread reinforcement)
+9.  Metrics tap (row_state.csv, signal_ledger.csv)
 10. Aggregation (game-level: net_edge, favored_side, decision)
 11. Strong eligibility join
-12. Dashboard write (dashboard.csv)
-13. Freeze ledger write (decision_freeze_ledger.csv)
-14. Outcomes enrichment + grading (results_resolved.csv)
-15. KPI layer (read-only)
+12. Dashboard write (dashboard.csv, dashboard.html)
+13. Freeze ledger write (decision_freeze_ledger.csv — includes decision_line for CLV)
+14. Closing line capture (last DK snapshot before game start)
+15. Outcomes enrichment + grading (results_resolved.csv — includes CLV)
+16. KPI layer (read-only, includes CLV analysis)
 ```
 
 **Dual scoring paths:**
 - Rows with L1 and/or L2 data → `scoring_v2.py` (3-layer model)
 - Rows with DK only → existing v1.2 scoring in `main.py` (preserved)
-- v2.0 score becomes PRIMARY (`confidence_score`) when available
+- v2.0+ score becomes PRIMARY (`confidence_score`) when available
 - v1.2 score used as fallback for L3_ONLY rows
 
 ---
 
-## 9. FILES AND THEIR ROLES
+## 10. FILES AND THEIR ROLES
 
 ### Data Files
 
@@ -354,10 +496,10 @@ HOME_B2B or AWAY_B2B → -1.0 slight penalty.
 | `l2_consensus.csv` | Raw 31-book consensus lines | l2_scraper.py |
 | `l2_consensus_agg.csv` | Aggregated consensus (median, std, n_books per side) | l2_scraper.py |
 | `dashboard.csv` | Game-level aggregated summary for UI | aggregation |
-| `dashboard.html` | Engine-generated HTML report (legacy) | build_dashboard |
+| `dashboard.html` | Engine-generated HTML report | build_dashboard |
 | `decision_snapshots.csv` | Ephemeral per-run side-level view (pre-freeze) | build_dashboard |
 | `decision_freeze_ledger.csv` | Canonical historical decisions (append-only, never downgrade) | freeze step |
-| `results_resolved.csv` | Post-game graded results + frozen decisions | outcomes |
+| `results_resolved.csv` | Post-game graded results + frozen decisions + CLV | outcomes |
 | `final_scores_history.csv` | ESPN final scores | outcomes |
 | `row_state.csv` | Side-level lifecycle memory (score, peak, streak) | metrics tap |
 | `signal_ledger.csv` | Event log of threshold crossings | metrics tap |
@@ -366,25 +508,30 @@ HOME_B2B or AWAY_B2B → -1.0 slight penalty.
 
 | File | Role |
 |------|------|
-| `main.py` | Core pipeline, v1.2 scoring (L3-only fallback), dashboard build, outcomes |
-| `scoring_v2.py` | 3-layer scoring model, pattern detection, score floors/caps |
-| `dk_rules.py` | DK retail interpretation rules, L3 contribution |
+| `main.py` | Core pipeline (~5900 lines, LFS tracked). Dashboard build, outcomes, CLV, freeze ledger. |
+| `scoring_v2.py` | Unified scoring: dk_base + 10 adjustment components, pattern detection, floors/caps |
+| `dk_scoring.py` | DK base score (16 components + book response + line trajectory) |
 | `l1_features.py` | L1 sharp book feature extraction |
 | `l2_features.py` | L2 consensus feature extraction |
-| `merge_layers.py` | Layer merge: joins L1/L2/situational onto DK DataFrame |
+| `dk_rules.py` | DK retail interpretation rules, L3 contribution |
+| `merge_layers.py` | Layer merge: joins L1/L2/ESPN/weather/sport-context onto DK DataFrame |
 | `engine_config.py` | All thresholds, weights, API config, season calendar |
 | `team_aliases.py` | Team name normalization + DK/API alias resolution |
 | `canonical_match.py` | Cross-source game matching (canonical key builder) |
 | `odds_api.py` | The-Odds-API wrapper (L2 consensus data) |
 | `l1_scraper.py` | OddsPapi wrapper (L1 sharp data) |
 | `l2_scraper.py` | Consensus aggregation from The-Odds-API |
-| `espn_situational.py` | ESPN injuries, rest days, pitcher matchups |
+| `espn_situational.py` | ESPN: injuries, rest days, pitcher matchups, goalie status, NCAAB rankings |
+| `weather.py` | Open-Meteo weather API + 62 stadium database (NFL + MLB) |
+| `mlb_context.py` | SP quality scoring (ERA-based), park factors (30 teams) |
+| `nhl_context.py` | Goalie confirmation scoring, starter/backup detection |
+| `kpi_builder.py` | KPI analytics + CLV analysis |
 | `serve.py` | HTTP server, routes /board.html to live dashboard |
 | `site/board.html` | Live dashboard UI (fetches CSVs, renders board) |
 
 ---
 
-## 10. API INFRASTRUCTURE
+## 11. API INFRASTRUCTURE
 
 ### OddsPapi (L1 Sharp)
 - **Budget:** 250 req/month
@@ -401,7 +548,16 @@ HOME_B2B or AWAY_B2B → -1.0 slight penalty.
 ### ESPN (Situational)
 - Injuries, rest days, B2B detection
 - Final scores for outcome grading
+- Probable pitchers (MLB): ERA, W-L, handedness
+- Probable goalies (NHL): name, status, W-L-OT record
+- Rankings (NCAAB): AP/NET top 25
 - Cache TTL: 30 minutes
+
+### Open-Meteo (Weather) — v2.1 NEW
+- **Completely free**, no API key required
+- Hourly forecast: wind, temperature, precipitation probability
+- 30-minute disk cache
+- 62 stadium locations (32 NFL + 30 MLB)
 
 ### DraftKings (L3 Retail)
 - Scraped every 10 minutes via `run_all_sports.sh`
@@ -410,15 +566,29 @@ HOME_B2B or AWAY_B2B → -1.0 slight penalty.
 
 ---
 
-## 11. DASHBOARD (board.html)
+## 12. DASHBOARD (dashboard.html)
 
-### Board Columns
-Rank | Game | Market | Bets/Money | Open | Current | Edge | Conf | Bucket | **Pattern** | **Layer** | Timing | Mkt Read | Regime | Decision | Play
+### Game Cell Badges
 
-### v2.0 Dashboard Additions
-- **Pattern column** — colored badges: RLM (purple), SHRP (green), STALE (red), ALGN (blue), SNAP (amber), PUB (gold), REJ (orange), NEU (gray)
-- **Layer column** — FULL (green), PARTIAL (amber/blue), LIMITED (gray) with tooltips showing which layers are present
-- **Confidence** — uses v2_score when available, falls back to v1.2 game_confidence for L3-only
+Each game row shows contextual badges after the game name:
+
+| Badge | Sport | Color | Example |
+|-------|-------|-------|---------|
+| B2B | NBA/NHL | Red | `B2B` |
+| Injuries | NBA/NHL/NFL | Red | `H:3inj A:1inj` |
+| Weather | NFL/NCAAF/MLB | Blue/Sun | `🌬 HIGH_WIND` or `☀` |
+| Dome | NFL/MLB | Gray | `🏟` |
+| Pitcher | MLB | Green/Gray/Red | `RHP Cole 3.21` |
+| Park Factor | MLB | Gold/Blue | `⚾ 1.28x` |
+| Goalie | NHL | Green/Yellow/Gray | `✅ Shesterkin` |
+| Ranking | NCAAB | Purple | `#5 vs #22` |
+
+### v2.1 Dashboard Additions
+- **Pitcher badges** — last name + ERA, colored by quality (green=ace/strong, gray=avg, red=weak/bad)
+- **Park factor badges** — shown for extreme parks (≥1.05 or ≤0.95), gold=hitter, blue=pitcher
+- **Goalie badges** — confirmed (green ✅), probable (yellow ❓), unknown (gray ❓)
+- **Ranking badges** — purple badges showing our rank and opponent rank
+- **Weather badges** — wind/rain/cold indicators with hover tooltips showing exact conditions
 
 ### KPIs
 - By Decision: STRONG_BET / BET / LEAN / NO BET win rates
@@ -428,12 +598,13 @@ Rank | Game | Market | Bets/Money | Open | Current | Edge | Conf | Bucket | **Pa
 - By Sport
 - By Market Type (SPREAD / TOTAL / MONEYLINE)
 - Fav vs Dog (SPREAD only)
+- **By CLV bucket** *(v2.1 NEW)*: ≥2.0 / 1.0-1.9 / 0.1-0.9 / 0 / negative — with win rates
 
-**KPI epoch:** v2.0 resets to 2026-03-05 (fresh start). Only counts the picked side (favored_side), not both sides.
+**KPI epoch:** Reset to 2026-03-05 (v2.0 clean baseline). Only counts the picked side (favored_side), not both sides.
 
 ---
 
-## 12. DEPLOYMENT
+## 13. DEPLOYMENT
 
 - **Server:** 159.65.167.146 (port 2222)
 - **Path:** /opt/red-fox-market-dynamics
@@ -444,7 +615,7 @@ Rank | Game | Market | Bets/Money | Open | Current | Edge | Conf | Bucket | **Pa
 
 ---
 
-## 13. SPORT SEASON CALENDAR
+## 14. SPORT SEASON CALENDAR
 
 | Sport | Season | L1 Tournament ID |
 |-------|--------|------------------|
@@ -458,7 +629,7 @@ Rank | Game | Market | Bets/Money | Open | Current | Edge | Conf | Bucket | **Pa
 
 ---
 
-## 14. SINGLE WRITER RULE (Enforced)
+## 15. SINGLE WRITER RULE (Enforced)
 
 | File | Writer |
 |------|--------|
@@ -476,7 +647,7 @@ No duplicate writers allowed.
 
 ---
 
-## 15. KEY ENGINE LAWS (Non-Negotiable)
+## 16. KEY ENGINE LAWS (Non-Negotiable)
 
 1. **L1 leads.** Sharp books provide the primary signal. DK confirms, never discovers.
 2. **L2 validates.** Consensus either confirms or rejects L1. This determines confidence.
@@ -488,10 +659,11 @@ No duplicate writers allowed.
 8. **Freeze is permanent.** Decisions freeze at dashboard build time; never downgraded.
 9. **Outcomes grade only.** Post-game results do not influence scoring or decisions.
 10. **KPIs analyze only.** Read-only layer. Counts only the picked side.
+11. **Context adjusts, never overrides.** Weather, injuries, and sport context modify the score within bounds but cannot override L1/L2 signals. *(v2.1 NEW)*
 
 ---
 
-## 16. SCORING CALIBRATION HISTORY
+## 17. SCORING CALIBRATION HISTORY
 
 | Version | Date | Changes |
 |---------|------|---------|
@@ -501,8 +673,22 @@ No duplicate writers allowed.
 | v1.2 Phase A | 2026-03-02 | Regime classifier (A/B/C/D/N), v1.2 RLM signal (bets-based), combined divergence multiplier (5 components), dynamic base (44/50/52), Contradiction -4, EARLY timing 0, market_read persistence, dashboard UI badges. |
 | v1.2 Phase B | 2026-03-02 | Sport-relative longshot penalty (ML only, per-sport baselines). |
 | v1.2 Rebalance | 2026-03-02 | NCAAB -4 removed (redundant), NCAAF -2 added, NHL puck line governor -3, decision thresholds lowered (LEAN 60, BET 67, STRONG 70). |
-| **v2.0** | **2026-03-04** | **3-Layer architecture. L1 sharp (OddsPapi), L2 consensus (The-Odds-API), L3 DK (retail). New modules: scoring_v2.py, dk_rules.py, l1_features.py, l2_features.py, merge_layers.py. Pattern detection (A-G). Cross-layer RLM (Pattern G). Layer mode caps (100/85/80/75). STRONG requires L123 + Pattern A/D/G. DK demoted to modifier (-10 to +10). 61 NBA/NHL team aliases. Dashboard pattern + layer badges.** |
+| v2.0 | 2026-03-04 | 3-Layer architecture. L1 sharp (OddsPapi), L2 consensus (The-Odds-API), L3 DK (retail). New modules: scoring_v2.py, dk_rules.py, l1_features.py, l2_features.py, merge_layers.py. Pattern detection (A-G). Cross-layer RLM (Pattern G). Layer mode caps (100/85/80/75). STRONG requires L123 + Pattern A/D/G. DK demoted to modifier (-10 to +10). 61 NBA/NHL team aliases. Dashboard pattern + layer badges. |
+| v2.0.1 | 2026-03-05 | Scoring signal overhaul: book response philosophy (read the BOOK not bettors), continuous divergence signals, ML vs Spread cross-check, line trajectory tracking. |
+| **v2.1** | **2026-03-05** | **CLV tracking (decision line + closing line + CLV calculation). ESPN injury counts wired into scoring (-2 to +1). Weather integration via Open-Meteo (wind/rain/cold dampening, 62 stadiums). MLB context: SP quality from ERA with sample gates + park factors (30 teams). NHL context: goalie confirmation scoring (starter/backup from W-L-OT). NCAAB context: AP/NET ranking differential. Score formula now has 11 adjustment components. Dashboard badges for all new signals.** |
 
 ---
 
-*Engine v2.0 is the first version where all three data layers are active in production. Previous versions scored exclusively from DK retail data.*
+## 18. FUTURE (Phase 7 — Needs 100+ Graded Decisions)
+
+| Feature | Description | Prerequisite |
+|---------|-------------|-------------|
+| Score Calibration | Map raw scores to actual win probabilities | 100+ graded BET/STRONG decisions |
+| Kelly Criterion Sizing | Optimal bet sizing from calibrated probabilities | Calibration complete |
+| Bayesian Score Updates | Prior from historical patterns, posterior from live signals | Sufficient historical data |
+
+These are deferred until the engine has enough resolved decisions to build reliable calibration curves.
+
+---
+
+*Engine v2.1 is the first version with full situational intelligence — weather, injuries, pitching, goalies, and rankings all flow through scoring alongside the 3-layer signal model. CLV tracking enables rigorous engine validation beyond win/loss noise.*
