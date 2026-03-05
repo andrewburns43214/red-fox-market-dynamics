@@ -995,7 +995,6 @@ th.th-game { text-align: left; }
                 <th onclick="sortBy('timing_bucket',this)">Timing</th>
                 <th onclick="sortBy('market_read',this)">DK Signal</th>
                 <th>Breakdown</th>
-                <th>Mkt Line</th>
                 <th>Decision</th>
                 <th>Play</th>
               </tr>
@@ -1275,11 +1274,6 @@ function renderBoard(){
         if(l2) parts.push('L2:'+(l2>0?'+':'')+Math.round(l2));
         if(ld>0) parts.push('LD:+'+Math.round(ld));
         return parts.length?'<span style="font-size:9px;color:#5a6480">'+parts.join(' ')+'</span>':'—';
-      })()}</td>
-      <td class="td-dvm">${(()=>{
-        const cl=Number(r.l2_consensus_line)||0;
-        if(!cl) return '—';
-        return '<span style="font-size:10px;color:#5a6480" title="Market consensus (31 books)">'+cl.toFixed(1)+'</span>';
       })()}</td>
       <td class="td-dec"><span class="dec ${dc}">${dt}</span></td>
       <td class="td-pick">${r.favored_side||'-'}</td>

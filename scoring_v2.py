@@ -499,8 +499,10 @@ def compute_unified_score(row: dict) -> dict:
     # Cross-market check
     cross_adj = spread_total_cross_check(row)
 
-    # Line differential bonus (DK vs consensus/Pinnacle)
-    line_diff = compute_line_differential_bonus(row)
+    # Line differential bonus — DISABLED: 3x/day L2 data too stale for
+    # precise line-vs-line comparisons. L2 directional validation (agreement,
+    # dispersion) still active. Re-enable when real-time feeds available.
+    line_diff = 0.0
 
     # Momentum decay (now for ALL rows)
     decay = momentum_decay(row)
