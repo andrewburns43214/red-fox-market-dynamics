@@ -1007,7 +1007,7 @@ thead th.th-play { text-align: left; }
   <div class="mmet">
     <div class="mmet-body">
       <span class="mmet-v gd" id="m-avg">—</span>
-      <span class="mmet-l">Avg Confidence Today</span>
+      <span class="mmet-l">Avg Total Score Today</span>
     </div>
   </div>
   <div class="mmet">
@@ -2135,9 +2135,9 @@ function updateStats(){
   const resolved=gradedRows(src);
   const totalW=resolved.filter(r=>(r.result||'').toUpperCase()==='WIN').length;
   const pAll=resolved.length?Math.round(100*totalW/resolved.length):null;
-  const todayConf=today.filter(r=>Number(r.game_confidence||0)>0);
-  const avgConf=todayConf.length?
-    (todayConf.reduce((s,r)=>s+Number(r.game_confidence||0),0)/todayConf.length).toFixed(1):null;
+  const todayScored=today.filter(r=>Number(r.total_score||0)>0);
+  const avgTotal=todayScored.length?
+    (todayScored.reduce((s,r)=>s+Number(r.total_score||0),0)/todayScored.length).toFixed(1):null;
 
   // Count unique games (not market rows)
   const _ug=rows=>new Set(rows.map(r=>r.game_id||r.game||'?')).size;
@@ -2158,7 +2158,7 @@ function updateStats(){
     const lbl=mv.nextElementSibling;
     if(!lbl) return;
     const t=lbl.textContent.toLowerCase();
-    if(t.includes('avg conf')) mv.textContent=avgConf!==null?avgConf:'--';
+    if(t.includes('avg total')) mv.textContent=avgTotal!==null?avgTotal:'--';
     if(t.includes('high conf')||t.includes('strong')) mv.textContent=hc.length;
     if(t.includes("today's games")) mv.textContent=_ug(today);
   });
