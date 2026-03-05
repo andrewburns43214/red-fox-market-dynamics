@@ -412,13 +412,13 @@ td { padding: 6px 10px; font-size: 12px; white-space: nowrap; vertical-align: mi
 
 .td-mkt {
   font-family: var(--mono);
-  font-size: 10px; font-weight: 500;
+  font-size: 10px; font-weight: 600;
   color: var(--text2); width: 80px;
-  letter-spacing: .3px;
+  letter-spacing: .3px; text-align: center;
 }
 
 /* SPLITS — compact single-line */
-.td-split { width: 100px; }
+.td-split { width: 110px; text-align: left; padding: 6px 8px; }
 .srow { display: flex; align-items: center; gap: 4px; }
 .srow + .srow { margin-top: 3px; }
 .slbl { font-family: var(--mono); font-size: 8px; color: var(--text3); width: 22px; }
@@ -429,7 +429,7 @@ td { padding: 6px 10px; font-size: 12px; white-space: nowrap; vertical-align: mi
 .spct { font-family: var(--mono); font-size: 8px; color: var(--text2); width: 24px; text-align: right; }
 
 /* LINES */
-.td-line { font-family: var(--mono); font-size: 11px; text-align: right; width: 58px; color: var(--text2); padding: 6px 8px; }
+.td-line { font-family: var(--mono); font-size: 11px; text-align: center; width: 70px; color: var(--text2); padding: 6px 6px; }
 .td-line.up { color: var(--green2); }
 .td-line.dn { color: var(--red2); }
 
@@ -446,6 +446,9 @@ td { padding: 6px 10px; font-size: 12px; white-space: nowrap; vertical-align: mi
 .cv.hi { color: #0f1428; }
 .cv.md { color: #2c3550; }
 .cv.lo { color: #aab2c4; }
+
+/* TOTAL SCORE */
+.td-total { text-align: center; width: 54px; padding: 6px 4px; font-family: var(--mono); font-size: 13px; font-weight: 700; }
 
 /* BUCKET */
 .td-bkt { text-align: center; width: 60px; padding: 6px 4px; }
@@ -566,9 +569,10 @@ td { padding: 6px 10px; font-size: 12px; white-space: nowrap; vertical-align: mi
 .info-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 /* Group button in pane header */
 .grp-btn {
-  padding: 3px 10px; border-radius: 4px; font-family: var(--sans);
+  padding: 4px 14px; border-radius: 20px; font-family: var(--sans);
   font-size: 10px; font-weight: 600; cursor: pointer; transition: all .12s;
   background: var(--surface2); border: 1px solid var(--border2); color: var(--text3);
+  margin-left: 20px;
 }
 .grp-btn:hover { border-color: var(--accent); color: var(--accent); }
 .grp-btn.grp-on { background: var(--accent); color: #fff; border-color: var(--accent); }
@@ -910,12 +914,15 @@ td { padding: 6px 10px; font-size: 12px; white-space: nowrap; vertical-align: mi
 .srow { display: flex; align-items: center; gap: 2px; margin: 1px 0; }
 .slbl { font-size: 9px; font-weight: 700; color: #aab0c0; width: 22px; font-family: var(--mono); text-transform: uppercase; }
 
-/* Column alignment */
-.thead-row th { text-align: center; vertical-align: middle; }
-.td-rank, .td-mkt, .td-split, .td-line, .td-edge, .td-conf, .td-bkt, .td-tim, .td-dec, .td-play { text-align: center; vertical-align: middle; }
-.td-game { width: 260px; max-width: 260px; overflow: hidden; padding: 6px 10px; vertical-align: middle; white-space: normal; }
-.td-split { text-align: left; }
-th.th-game { text-align: left; }
+/* Column alignment — th and td consistent */
+thead th { text-align: center; vertical-align: middle; }
+thead th.th-game { text-align: left; }
+thead th.th-split { text-align: left; }
+thead th.th-play { text-align: left; }
+.td-rank, .td-mkt, .td-edge, .td-conf, .td-total, .td-bkt, .td-pat, .td-layer, .td-sharp, .td-tim, .td-mr, .td-bkdn, .td-dec { text-align: center; vertical-align: middle; }
+.td-line { text-align: center; vertical-align: middle; }
+.td-split { text-align: left; vertical-align: middle; }
+.td-pick { text-align: left; vertical-align: middle; }
 
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -1040,24 +1047,24 @@ th.th-game { text-align: left; }
           <table>
             <thead>
               <tr>
-                <th onclick="sortBy('game_confidence',this)">#</th>
-                <th onclick="sortBy('game',this)">Game</th>
-                <th onclick="sortBy('market_display',this)">Market</th>
-                <th>Bets / Money</th>
-                <th onclick="sortBy('open_line',this)">Open</th>
-                <th onclick="sortBy('current_line',this)">Current</th>
-                <th onclick="sortBy('net_edge',this)">Edge</th>
-                <th onclick="sortBy('game_confidence',this)">Conf</th>
-                <th class="sorted" onclick="sortBy('total_score',this)">Total</th>
-                <th>Bucket</th>
-                <th onclick="sortBy('v2_pattern',this)">Pattern</th>
-                <th onclick="sortBy('layer_mode',this)">Layer</th>
-                <th onclick="sortBy('sharp_cert_tier',this)">Sharp</th>
-                <th onclick="sortBy('timing_bucket',this)">Timing</th>
-                <th onclick="sortBy('market_read',this)">DK Signal</th>
-                <th>Breakdown</th>
-                <th>Decision</th>
-                <th>Play</th>
+                <th class="th-rank" onclick="sortBy('game_confidence',this)">#</th>
+                <th class="th-game" onclick="sortBy('game',this)">Game</th>
+                <th class="th-mkt" onclick="sortBy('market_display',this)">Market</th>
+                <th class="th-split">Bets / Money</th>
+                <th class="th-line" onclick="sortBy('open_line',this)">Open</th>
+                <th class="th-line" onclick="sortBy('current_line',this)">Current</th>
+                <th class="th-edge" onclick="sortBy('net_edge',this)">Edge</th>
+                <th class="th-conf" onclick="sortBy('game_confidence',this)">Conf</th>
+                <th class="th-total sorted" onclick="sortBy('total_score',this)">Total</th>
+                <th class="th-bkt">Bucket</th>
+                <th class="th-pat" onclick="sortBy('v2_pattern',this)">Pattern</th>
+                <th class="th-layer" onclick="sortBy('layer_mode',this)">Layer</th>
+                <th class="th-sharp" onclick="sortBy('sharp_cert_tier',this)">Sharp</th>
+                <th class="th-tim" onclick="sortBy('timing_bucket',this)">Timing</th>
+                <th class="th-mr" onclick="sortBy('market_read',this)">DK Signal</th>
+                <th class="th-bkdn">Breakdown</th>
+                <th class="th-dec">Decision</th>
+                <th class="th-play">Play</th>
               </tr>
             </thead>
             <tbody id="tbody"></tbody>
@@ -1393,7 +1400,7 @@ function renderBoard(){
       })()}</td>
       <td class="td-edge"><span class="ev ${eC(edge)}">${edge}</span></td>
       <td class="td-conf"><span class="cv ${cC(conf)}">${conf.toFixed(1)}</span></td>
-      <td class="td-total" style="font-weight:700;font-family:var(--mono)">${(Number(r.total_score)||0).toFixed(1)}</td>
+      <td class="td-total">${(Number(r.total_score)||0).toFixed(1)}</td>
       <td class="td-bkt"><span class="bkt ${bk.c}">${bk.l}</span></td>
       <td class="td-pat">${patBadge(r.v2_pattern,r.v2_edge_type)}</td>
       <td class="td-layer">${lyrBadge(r.layer_mode)}</td>
