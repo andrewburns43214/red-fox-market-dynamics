@@ -1517,6 +1517,7 @@ function renderBoard(){
       <td class="td-game">
         <div class="game-row1">${spChip(r.sport)}<span class="game-name">${r.game||'-'}</span></div>
         <div class="game-row2"><span class="game-row2-time">${etT(r._game_time)}</span>${gameChips(r)}</div>
+        ${r.intel_summary&&String(r.intel_summary).trim()&&String(r.intel_summary)!=='nan'?'<div style="font-size:9px;color:#8892aa;margin-top:1px;line-height:1.3;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+r.intel_summary+'</div>':''}
       </td>
       <td class="td-mkt">${r.market_display||'-'}</td>
       <td class="td-split">
@@ -1714,6 +1715,10 @@ function openGameDetail(r){
   html+='<div class="gd-header">';
   html+=spChip(r.sport)+' <span class="gd-game">'+( r.game||'--')+'</span>';
   html+='<div class="gd-sub">'+etT(r._game_time)+' · '+(r.market_display||'--')+' · <span class="dec '+(decInfo(r.game_decision)[1])+'">'+decInfo(r.game_decision)[0]+'</span></div>';
+  // Intel Summary
+  if(r.intel_summary && String(r.intel_summary).trim() && String(r.intel_summary)!=='nan'){
+    html+='<div style="font-size:11px;color:#556;margin:6px 0 2px;padding:8px 12px;background:#f0f4f8;border-radius:6px;line-height:1.5;">'+r.intel_summary+'</div>';
+  }
   html+='</div>';
   // Scoring
   const dk=n(r.v2_dk_base),l1c=n(r.v2_l1_contrib),l2c=n(r.v2_l2_contrib),pb=n(r.v2_pattern_bonus),dec=n(r.v2_decay),vs=n(r.v2_score),edge=n(r.net_edge),ts=n(r.total_score);
@@ -1775,6 +1780,7 @@ function openGameDetail(r){
     ['Money %',v(r.money_pct)?Number(r.money_pct).toFixed(0)+'%':null],
     ['Open Line',v(r.open_line)],
     ['Current Line',v(r.current_line)],
+    ['Line Direction',v(r.move_dir)!==null?(Number(r.move_dir)===1?'<span style="color:#00965a;font-weight:700">+1 Confirms</span>':Number(r.move_dir)===-1?'<span style="color:#d63020;font-weight:700">-1 Opposes</span>':'<span style="color:#8892aa">0 Neutral</span>'):null],
     ['Pattern',v(r.v2_pattern)],
     ['Edge Type',v(r.v2_edge_type)],
     ['Layer Mode',v(r.layer_mode)],
