@@ -176,8 +176,8 @@ LEAN_SCORE = 60
 STRONG_BET_EXIT = 66   # STRONG_BET stays until score < 66
 BET_EXIT = 62           # BET stays until score < 62
 LEAN_EXIT = 56          # LEAN stays until score < 56
-NET_EDGE_MIN_SIDES = 10
-NET_EDGE_MIN_TOTAL = 12
+NET_EDGE_MIN_SIDES = 3
+NET_EDGE_MIN_TOTAL = 4
 
 # ─── KEY NUMBERS ───
 KEY_NUMBERS = {3, 7, 10, 14, 17}
