@@ -273,12 +273,20 @@ def compute_l2_adjustment(row: dict) -> dict:
             raw *= 0.85  # Weak DK signal + L2 consensus = modest dampening
         adjustment = max(0.0, min(L2_MAX_POSITIVE_ADJ, raw))
     elif agreement <= 0.3:
-        # Market rejects — negative adjustment
+        # Market genuinely rejects — negative adjustment
+        # Only triggers when L1 direction WAS known and books disagreed
         raw = -(1.0 - validation) * abs(L2_MAX_NEGATIVE_ADJ) + trend_bonus
         adjustment = max(L2_MAX_NEGATIVE_ADJ, min(0.0, raw))
     else:
-        # Ambiguous
-        adjustment = trend_bonus * 0.5
+        # v2.2: Neutral/unknown (0.3-0.6) — L1 direction unknown or ambiguous.
+        # Use dispersion quality as an INDEPENDENT signal.
+        # Tight consensus = books agree on a number = valuable intelligence.
+        if disp_mult >= 0.9:  # TIGHT dispersion
+            adjustment = min(2.0, book_scale * 2.5 + trend_bonus * 0.5)
+        elif disp_mult >= 0.6:  # NORMAL
+            adjustment = trend_bonus * 0.3
+        else:  # WIDE = genuine disagreement among books
+            adjustment = max(-1.5, -1.0 + trend_bonus * 0.5)
 
     return {
         "l2_adjustment": round(adjustment, 2),

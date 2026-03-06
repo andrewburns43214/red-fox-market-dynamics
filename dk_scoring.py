@@ -750,6 +750,20 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
             pass
     details["retail_alignment"] = retail_align
 
+    # ── 17. STACKING CAP ──
+    # v2.2: market_read, divergence, color, lm_bonus, RLM, and line_pattern all
+    # derive from the same underlying signal (D + move_dir). Their combined
+    # positive contribution is capped to prevent one signal from inflating dk_base
+    # by 30+ points. Negative signals (penalties) are NOT capped.
+    _dk_positives = (max(0, mr_bonus) + max(0, div_contrib) + max(0, color_bonus)
+                     + max(0, lm_bonus) + max(0, rlm_score) + max(0, lm_pattern_bonus))
+    _STACK_CAP = 20.0
+    if _dk_positives > _STACK_CAP:
+        _excess = _dk_positives - _STACK_CAP
+        score -= _excess
+        flags.append(f"stack_cap:-{_excess:.1f}")
+    details["stack_cap"] = round(max(0, _dk_positives - _STACK_CAP), 1)
+
     # Final clamp
     score = max(0.0, min(100.0, score))
 

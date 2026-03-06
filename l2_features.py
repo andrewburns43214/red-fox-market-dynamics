@@ -255,8 +255,13 @@ def _compute_consensus_agreement(canon: str, market: str, side: str,
     key = (canon, market, side)
     book_entries = raw_data.get(key, [])
 
-    if not book_entries or l1_direction == 0:
+    if not book_entries:
         return 0.0
+    if l1_direction == 0:
+        # v2.2: No L1 direction signal — return neutral (0.5), not 0.0.
+        # Absence of L1 data is NOT the same as "market rejects."
+        # 0.5 lands in the neutral zone (0.3-0.6) so L2 uses dispersion independently.
+        return 0.5
 
     # Get median line as reference
     lines = []
