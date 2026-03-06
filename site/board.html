@@ -1217,7 +1217,7 @@ thead th.th-play { text-align: left; }
                 <th class="th-conf" onclick="sortBy('game_confidence',this)">Conf</th>
                 <th class="th-total sorted" onclick="sortBy('total_score',this)">Total</th>
                 <th class="th-bkt">Bucket</th>
-                <th class="th-pat" onclick="sortBy('v2_pattern',this)">Pattern</th>
+                <th class="th-pat" onclick="sortBy('pattern_primary',this)">Pattern</th>
                 <th class="th-layer" onclick="sortBy('layer_mode',this)">Layer</th>
                 <th class="th-sharp" onclick="sortBy('sharp_cert_tier',this)">Sharp</th>
                 <th class="th-tim" onclick="sortBy('timing_bucket',this)">Timing</th>
@@ -1436,7 +1436,7 @@ let sortCol='total_score', sortAsc=false;
 function et(ts){ if(!ts) return '-'; const d=new Date(ts); if(isNaN(d)) return String(ts); return d.toLocaleString('en-US',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
 function etT(ts){ if(!ts) return '-'; const d=new Date(ts); if(isNaN(d)) return '-'; return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
 function isToday(ts){ if(!ts) return false; const d=new Date(ts),n=new Date(); return d.toLocaleDateString('en-US',{timeZone:'America/New_York'})===n.toLocaleDateString('en-US',{timeZone:'America/New_York'}); }
-function confBkt(c){ const n=Number(c); if(n>=75) return{l:'75+',c:'bkt75'}; if(n>=70) return{l:'70–74',c:'bkt70'}; if(n>=65) return{l:'65–69',c:'bkt65'}; if(n>=60) return{l:'60–64',c:'bkt60'}; return{l:'<60',c:'bktlo'}; }
+function confBkt(c){ const n=Number(c); if(n>=70) return{l:'STRONG',c:'bkt75'}; if(n>=67) return{l:'BET',c:'bkt65'}; if(n>=60) return{l:'LEAN',c:'bkt60'}; return{l:'<60',c:'bktlo'}; }
 function eC(e){ return e>=13?'h':e>=5?'m':'l'; }
 function cC(c){ return c>=72?'hi':c>=60?'md':'lo'; }
 function decInfo(d){ const s=(d||'').toUpperCase(); if(s==='STRONG_BET') return['Strong Bet','dec-bet dec-strong']; if(s==='BET') return['Bet','dec-bet']; if(s==='LEAN') return['Lean','dec-lean']; return['No Bet','dec-no']; }
@@ -1444,7 +1444,7 @@ function spChip(s){ const k=(s||'').toLowerCase(); return `<span class="sport-ch
 function timBadge(b){ const k=(b||'EARLY').toUpperCase(); return `<span class="tim t${k}">${k}</span>`; }
 function mrBadge(m){ const s=(m||'').trim(); if(!s||s==='-') return '-'; const lu=s.toUpperCase(); const map={'STEALTH MOVE':'mr-stealth','FREEZE PRESSURE':'mr-freeze','ALIGNED SHARP':'mr-aligned','REVERSE PRESSURE':'mr-reverse','CONTRADICTION':'mr-contra','PUBLIC DRIFT':'mr-public','NEUTRAL':'mr-neutral'}; const cls=map[lu]||'mr-neutral'; const labels={'STEALTH MOVE':'Hidden $','FREEZE PRESSURE':'$ No Move','ALIGNED SHARP':'$ + Move','REVERSE PRESSURE':'$ vs Line','CONTRADICTION':'Mixed','PUBLIC DRIFT':'Crowd Push','NEUTRAL':'Flat'}; const tips={'STEALTH MOVE':'Money flowing in quietly — low bets, significant money','FREEZE PRESSURE':'Big money divergence but line not moving yet','ALIGNED SHARP':'Money and line movement both pointing same direction','REVERSE PRESSURE':'Money pushing one way, line moved opposite','CONTRADICTION':'Signals conflict — money says one thing, line says another','PUBLIC DRIFT':'High public bet volume pushing the line — no edge','NEUTRAL':'No meaningful money or line signal detected'}; return `<span class="mr ${cls}" title="${tips[lu]||''}">${labels[lu]||s}</span>`; }
 function regBadge(r){ const k=(r||'N').toUpperCase().trim(); if(!k||k==='-') return '-'; const cls='reg-'+(k.charAt(0)||'N'); const labels={A:"Stealth",B:"Fade",C:"Weak Push",D:"Surge",N:"Flat"}; const tips={A:"Low bets, high money, line moved against",B:"High bets + money, line fading",C:"Weak public push amplified",D:"Strong money divergence into the side",N:"No clear regime detected"}; return `<span class="reg ${cls}" title="${tips[k]||''}">${labels[k]||k}</span>`; }
-function patBadge(p,et){ const k=(p||'').toUpperCase().trim(); if(!k) return '-'; const tips={G:'Reverse Line Movement',A:'Sharp vs Public',D:'Stale Price',B:'Aligned',F:'Late Snap',C:'Public Only',E:'Consensus Rejects',N:'Neutral'}; const labels={G:'RLM',A:'SHRP',D:'STALE',B:'ALGN',F:'SNAP',C:'PUB',E:'REJ',N:'NEU'}; const etStr=et&&et!=='nan'?' | '+et:''; return `<span class="pat pat-${k}" title="${(tips[k]||k)+etStr}">${labels[k]||k}</span>`; }
+function patBadge(p){ const k=(p||'').toUpperCase().trim(); if(!k||k==='NEUTRAL') return '-'; const tips={SHARP_REVERSAL:'Sharp books reversed the line',STALE_PRICE:'Price stale despite signals',FREEZE_PRESSURE:'Line frozen under pressure',PUBLIC_DRIFT:'Following public money',CONSENSUS_HOLD:'Consensus holding steady',RETAIL_CROWD:'Retail crowding detected'}; return `<span class="pat" title="${tips[k]||k}">${k.replace('_',' ')}</span>`; }
 function lyrBadge(l){ const k=(l||'').trim(); if(!k) return '-'; const labels={L123:'FULL',L13:'PARTIAL',L23:'PARTIAL',L3_ONLY:'LIMITED'}; const tips={L123:'All 3 data layers active',L13:'2 of 3 layers (missing consensus)',L23:'2 of 3 layers (missing primary)',L3_ONLY:'Single layer — limited confidence'}; return `<span class="lyr lyr-${k}" title="${tips[k]||k}">${labels[k]||k}</span>`; }
 function sharpBadge(r){ const tier=(r.sharp_cert_tier||'').toUpperCase().trim(); const nBooks=Number(r.l1_n_books)||0; let html=''; if(tier==='FULL') html='<span class="sharp-cert sc-full" title="Sharp Certified: multiple sharp books confirm">SHARP &#x2713;</span>'; else if(tier==='HALF') html='<span class="sharp-cert sc-half" title="Sharp Lean: Pinnacle moved meaningfully">SHARP ~</span>'; else if(nBooks>0){ const pct=Math.round(nBooks/6*100); html=`<span class="sharp-meter" title="${nBooks} of 6 sharp books">${pct}%</span>`; } else html='<span style="color:#aab2c4">—</span>'; return html; }
 function gameChips(r){
@@ -1538,8 +1538,7 @@ function renderBoard(){
   document.getElementById('board-meta').textContent=`${_nGames} games · ${data.length} markets · sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' · grouped':''}`;
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
   data.forEach((r,i)=>{
-    const v2s=Number(r.v2_score)||0;
-    const conf=v2s>0?v2s:(Number(r.game_confidence)||0), edge=Math.round(Number(r.net_edge)||0);
+    const conf=Number(r.game_confidence)||0, edge=Math.round(Number(r.net_edge)||0);
     const[dt,dc]=decInfo(r.game_decision); const bk=confBkt(conf);
     const lc=r.current_line&&r.open_line&&String(r.current_line).trim()!==String(r.open_line).trim();
     const tr=document.createElement('tr');
@@ -1591,24 +1590,24 @@ function renderBoard(){
       <td class="td-conf"><span class="cv ${cC(conf)}">${conf.toFixed(1)}</span></td>
       <td class="td-total">${(Number(r.total_score)||0).toFixed(1)}</td>
       <td class="td-bkt"><span class="bkt ${bk.c}">${bk.l}</span></td>
-      <td class="td-pat">${patBadge(r.v2_pattern,r.v2_edge_type)}</td>
+      <td class="td-pat">${patBadge(r.pattern_primary)}</td>
       <td class="td-layer">${lyrBadge(r.layer_mode)}</td>
       <td class="td-sharp">${sharpBadge(r)}</td>
       <td class="td-tim">${timBadge(r.timing_bucket)}</td>
       <td class="td-mr">${mrBadge(r.market_read)}</td>
       <td class="td-bkdn">${(()=>{
         const parts=[];
-        const dk=Number(r.v2_score)||0;
-        const l1=Number(r.v2_l1_contrib)||0;
-        const l2=Number(r.v2_l2_contrib)||0;
-        const ld=Number(r.v2_line_diff)||0;
-        const disp=(r.l2_dispersion_label||'').trim();
-        const nb=Number(r.l2_n_books)||0;
-        if(dk) parts.push('DK:'+Math.round(dk));
-        if(l1) parts.push('<span style="color:'+(l1>0?'#00965a':'#d63020')+'">L1:'+(l1>0?'+':'')+Math.round(l1)+'</span>');
-        if(l2) parts.push('<span style="color:'+(l2>0?'#00965a':'#d63020')+'">L2:'+(l2>0?'+':'')+Math.round(l2)+'</span>');
-        if(ld>0) parts.push('<span style="color:#00965a">LD:+'+Math.round(ld)+'</span>');
-        if(nb>0&&disp) parts.push('<span style="color:#8892aa">'+nb+'bk/'+disp.charAt(0)+'</span>');
+        const sh=Number(r.sharp_score)||0;
+        const co=Number(r.consensus_score)||0;
+        const rt=Number(r.retail_score)||0;
+        const tm=Number(r.timing_modifier)||0;
+        const xm=Number(r.cross_market_adj)||0;
+        const clr=v=>'color:'+(v>0?'#00965a':'#d63020');
+        if(sh) parts.push('<span style="'+clr(sh)+'">Sh:'+(sh>0?'+':'')+Math.round(sh)+'</span>');
+        if(co) parts.push('<span style="'+clr(co)+'">Co:'+(co>0?'+':'')+Math.round(co)+'</span>');
+        if(rt) parts.push('<span style="'+clr(rt)+'">Rt:'+(rt>0?'+':'')+Math.round(rt)+'</span>');
+        if(tm) parts.push('<span style="'+clr(tm)+'">Tm:'+(tm>0?'+':'')+Math.round(tm)+'</span>');
+        if(xm) parts.push('<span style="'+clr(xm)+'">Xm:'+(xm>0?'+':'')+Math.round(xm)+'</span>');
         return parts.length?'<span style="font-size:9px">'+parts.join(' ')+'</span>':'—';
       })()}</td>
       <td class="td-dec"><span class="dec ${dc}">${dt}</span></td>
@@ -1761,7 +1760,7 @@ function openGameDetail(r){
   mkts.forEach(m=>{
     const mkt=(m.market_display||'').toUpperCase();
     const [dt,dc]=decInfo(m.game_decision);
-    const conf=n(m.v2_score)||n(m.game_confidence)||0;
+    const conf=n(m.game_confidence)||0;
     const edge=n(m.net_edge)||0;
     const total=n(m.total_score)||0;
     const pick=m.favored_side||'--';
@@ -1812,14 +1811,22 @@ function openGameDetail(r){
   html+='<summary style="font-size:11px;font-weight:700;color:var(--text);cursor:pointer;padding:10px 16px;background:var(--bg3);text-transform:uppercase;letter-spacing:.5px">Game Details</summary>';
   html+='<div style="padding:12px 16px">';
 
-  // Scoring breakdown
-  const dk=n(d.v2_dk_base),l1c=n(d.v2_l1_contrib),l2c=n(d.v2_l2_contrib),pb=n(d.v2_pattern_bonus),decay=n(d.v2_decay),vs=n(d.v2_score);
-  html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px">Scoring</div>';
-  html+=_row('DK Base',dk!==null?dk.toFixed(1):null);
-  html+=_row('Sharp (L1)',l1c!==null?(l1c>0?'+':'')+l1c.toFixed(1):null);
-  html+=_row('Consensus (L2)',l2c!==null?(l2c>0?'+':'')+l2c.toFixed(1):null);
-  html+=_row('Pattern Bonus',pb!==null?(pb>0?'+':'')+pb.toFixed(1):null);
-  html+=_row('Total Score',vs!==null?'<b>'+vs.toFixed(1)+'</b>':null);
+  // v3.2 Scoring breakdown (5 components + base 50)
+  const sh=n(d.sharp_score),co=n(d.consensus_score),rt=n(d.retail_score),tm=n(d.timing_modifier),xm=n(d.cross_market_adj);
+  const fs=n(d.game_confidence);
+  html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px">Scoring (v3.2)</div>';
+  html+=_row('Base','50.0');
+  html+=_row('Sharp',sh!==null?(sh>0?'+':'')+sh.toFixed(1):null);
+  html+=_row('Consensus',co!==null?(co>0?'+':'')+co.toFixed(1):null);
+  html+=_row('Retail',rt!==null?(rt>0?'+':'')+rt.toFixed(1):null);
+  html+=_row('Timing',tm!==null?(tm>0?'+':'')+tm.toFixed(1):null);
+  html+=_row('Cross-Market',xm!==null?(xm>0?'+':'')+xm.toFixed(1):null);
+  html+=_row('Final Score',fs!==null?'<b>'+fs.toFixed(1)+'</b>':null);
+  if(v(d.l1_path_behavior)) html+=_row('Path Behavior',d.l1_path_behavior);
+  if(v(d.pattern_primary)&&d.pattern_primary!=='NEUTRAL') html+=_row('Pattern',d.pattern_primary);
+  if(v(d.expression)) html+=_row('Expression',d.expression);
+  if(v(d.expression_reason)) html+=_row('Expr Reason',d.expression_reason);
+  if(v(d.score_explanation)) html+=_row('Explanation',d.score_explanation);
 
   // Sharp data
   if(v(d.l1_n_books)){
@@ -2089,7 +2096,7 @@ function setHistMkt(m){
 
 function exportDrillCSV() {
   if (!_drillRows.length) return;
-  const cols = ['resolved_at_utc','sport','game','market_display','favored_side','current_line','game_confidence','net_edge','timing_bucket','market_read','layer_mode','v2_pattern','game_decision','team1','team1_score','team2','team2_score','result'];
+  const cols = ['resolved_at_utc','sport','game','market_display','favored_side','current_line','game_confidence','net_edge','timing_bucket','market_read','layer_mode','pattern_primary','game_decision','expression','team1','team1_score','team2','team2_score','result'];
   let csv = cols.join(',') + '\n';
   _drillRows.forEach(r => {
     csv += cols.map(c => {
