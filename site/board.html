@@ -1646,9 +1646,9 @@ function isBetPlus(r) {
   return d==='STRONG BET'||d==='STRONG_BET'||d==='BET';
 }
 
-// ── v2.0 epoch: only count results resolved on or after this date ──
-// Reset to v2.0 launch — 3-layer scoring went live Mar 4
-const V2_EPOCH = '2026-03-05T05:00:00';  // midnight Mar 5 EST in UTC (fresh start)
+// ── v2.4 epoch: only count results resolved on or after this date ──
+// Reset for v2.4 scoring recalibration (net_edge fix, juice guard)
+const V2_EPOCH = '2026-03-06T05:00:00';  // midnight Mar 6 EST in UTC
 const V12_EPOCH = V2_EPOCH;
 
 // ── Shared denominator helpers (single source of truth) ──
