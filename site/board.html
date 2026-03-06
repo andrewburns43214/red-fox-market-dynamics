@@ -1007,7 +1007,6 @@ thead th.th-play { text-align: left; }
   <div class="tsep"></div>
   <div class="tab" data-tab="perf" data-filter="" onclick="setTab(this)">Performance</div>
   <div class="tab" data-tab="results" data-filter="" onclick="setTab(this)">Results <span class="tbadge" id="b-res">0</span></div>
-  <div class="tab" data-tab="ledger" data-filter="" onclick="setTab(this)">Signal Log <span class="tbadge" id="b-led">0</span></div>
   <div class="sfilters">
     <div class="schip on" onclick="setSport('ALL',this)">All</div>
     <div class="schip" onclick="setSport('NBA',this)">NBA</div>
@@ -1126,6 +1125,7 @@ thead th.th-play { text-align: left; }
         <div class="panel" id="pnl-decision"></div>
         <div class="panel" id="pnl-confidence"></div>
         <div class="panel" id="pnl-edge"></div>
+        <div class="panel" id="pnl-totalscore"></div>
         <div class="panel" id="pnl-sport"></div>
         <div class="panel" id="pnl-market"></div>
         <div class="panel" id="pnl-favdog"></div>
@@ -1190,25 +1190,6 @@ thead th.th-play { text-align: left; }
   </div>
 
   <!-- SIGNAL LOG -->
-  <div class="tab-content" id="tab-ledger">
-    <div class="full-tab">
-      <div class="panel">
-        <div class="panel-h">
-          <span class="panel-t">Signal Ledger</span>
-          <span class="panel-m">All threshold crossings</span>
-        </div>
-        <div class="tscroll">
-          <table>
-            <thead><tr>
-              <th>Time</th><th>Sport</th><th>Game</th><th>Market</th>
-              <th>Side</th><th>Event</th><th>Conf</th><th>Timing</th><th>Edge</th>
-            </tr></thead>
-            <tbody id="led-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
 
 </div>
 
@@ -1520,6 +1501,11 @@ const EDGE_BUCKETS = [
   {label:'13+', min:13, max:999}, {label:'9–12', min:9, max:12.99},
   {label:'5–8', min:5, max:8.99}, {label:'0–4', min:0, max:4.99}
 ];
+const TOTAL_SCORE_BUCKETS = [
+  {label:'90+', min:90, max:999}, {label:'80–89', min:80, max:89.99},
+  {label:'70–79', min:70, max:79.99}, {label:'60–69', min:60, max:69.99},
+  {label:'<60', min:0, max:59.99}
+];
 const DECISION_ORDER = ['STRONG_BET','BET','LEAN','NO BET'];
 
 // ── Drilldown Modal ──
@@ -1775,6 +1761,14 @@ function buildKPIs(){
   // ── 3. Net Edge ──
   statPanel(document.getElementById('pnl-edge'), 'By Net Edge', dataRows(bucketize(graded, EDGE_BUCKETS, 'net_edge')));
 
+  // ── 3b. Total Score ──
+  function totalScoreField(r){ return Number(r.total_score||(Number(r.game_confidence||0)+Number(r.net_edge||0)))||0; }
+  const tsRows = TOTAL_SCORE_BUCKETS.map(b=>{
+    const rows=graded.filter(r=>{ const v=totalScoreField(r); return v>=b.min&&v<=b.max; });
+    return {label:b.label, rows};
+  });
+  statPanel(document.getElementById('pnl-totalscore'), 'By Total Score', dataRows(tsRows));
+
   // ── Dual-view stat panel: BET+ primary, All graded secondary ──
   function statPanelDual(el, title, sbData, allData) {
     const sbN = sbData.reduce((s,r)=>s+r.n, 0);
@@ -1860,7 +1854,7 @@ function buildKPIs(){
   const fdAllMap = {}; const fdSBMap = {};
   spreadGraded.forEach(r => { const k=classifySpread(r); if(k){if(!fdAllMap[k]) fdAllMap[k]=[]; fdAllMap[k].push(r);} });
   spreadSB.forEach(r => { const k=classifySpread(r); if(k){if(!fdSBMap[k]) fdSBMap[k]=[]; fdSBMap[k].push(r);} });
-  const fdKeys = ['Favorite','Dog'].filter(k=>(fdAllMap[k]||[]).length>0);
+  const fdKeys = ['Favorite','Dog'];
   const [fdSBD, fdAlD] = dualData(fdKeys, fdSBMap, fdAllMap);
   statPanelDual(document.getElementById('pnl-favdog'), 'Spread: Fav vs Dog', fdSBD, fdAlD);
 
@@ -2193,7 +2187,7 @@ async function loadAll(){
     return Number(b.game_confidence||0)-Number(a.game_confidence||0);
   });
 
-  updateStats();renderBoard();renderResults();renderLedger();buildKPIs();
+  updateStats();renderBoard();renderResults();buildKPIs();
 }
 
 setInterval(()=>{ document.getElementById('clk').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'America/New_York'}); },1000);
@@ -2248,7 +2242,6 @@ function updateStats(){
   if(el2('b-hc'))    el2('b-hc').textContent=hc.length;
   if(el2('b-today')) el2('b-today').textContent=_ug(today);
   if(el2('b-res'))   el2('b-res').textContent=resolved.length;
-  if(el2('b-led'))   el2('b-led').textContent=allLedger.length;
 
   // Bottom status bar
   const sports=[...new Set(allDash.map(r=>(r.sport||'').toUpperCase()).filter(Boolean))];
@@ -2327,6 +2320,7 @@ function renderResults(){
       <td style="padding:7px 10px">${decBadge}</td>
       <td style="padding:7px 10px;font-family:var(--mono);font-weight:700">${r.game_confidence?Number(r.game_confidence).toFixed(1):'--'}</td>
       <td style="padding:7px 10px;font-family:var(--mono)">${r.net_edge?Number(r.net_edge).toFixed(1):'--'}</td>
+      <td style="padding:7px 10px;font-family:var(--mono);font-weight:700">${(()=>{const ts=Number(r.total_score)||(Number(r.game_confidence||0)+Number(r.net_edge||0));return ts?ts.toFixed(1):'--';})()}</td>
       <td style="padding:7px 10px">${mrVal?mrBadge(mrVal):'--'}</td>
       <td style="padding:7px 10px">${res}</td>
       <td style="padding:7px 10px;font-family:var(--mono);font-size:11px;white-space:nowrap">${(()=>{const cv=parseFloat(r.clv);if(isNaN(cv)||!r.clv) return '<span style="color:#aab">--</span>';const clr=cv>0?'#00965a':cv<0?'#d63020':'#8892aa';return '<span style="color:'+clr+';font-weight:700">'+(cv>0?'+':'')+cv.toFixed(1)+'</span>';})()}</td>
@@ -2336,7 +2330,7 @@ function renderResults(){
   inner.innerHTML=`<div style="overflow-x:auto">
     <div style="padding:10px 14px;font-size:11px;color:#8892aa;border-bottom:1px solid #eee">${resolved.length} resolved plays</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px">
-    <thead><tr style="background:#f4f5f7;text-align:left">${['Date','Sport','Game','Market','Side','Decision','Conf','Edge','DK Signal','Result','CLV'].map(c=>'<th style="padding:8px 10px;border-bottom:2px solid #dde0e8;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#5a6480;white-space:nowrap">'+c+'</th>').join('')}</tr></thead>
+    <thead><tr style="background:#f4f5f7;text-align:left">${['Date','Sport','Game','Market','Side','Decision','Conf','Edge','Total','DK Signal','Result','CLV'].map(c=>'<th style="padding:8px 10px;border-bottom:2px solid #dde0e8;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#5a6480;white-space:nowrap">'+c+'</th>').join('')}</tr></thead>
     <tbody>${trs}</tbody></table></div>`;
 }
 
