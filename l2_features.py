@@ -203,7 +203,10 @@ def compute_l2_features(sport: str = None, l1_features: dict = None) -> dict:
         disp_trend = _compute_dispersion_trend(line_std, line_std_prev)
 
         # Consensus agreement with L1
-        consensus_agreement = 0.0
+        # v2.2: Default to 0.5 (neutral), not 0.0 (rejection).
+        # When L1 data is missing or has no direction, we don't KNOW if
+        # the market agrees or disagrees — absence of data ≠ rejection.
+        consensus_agreement = 0.5
         if l1_features:
             l1_key = (canon, market, side)
             l1_feat = l1_features.get(l1_key)
