@@ -1132,9 +1132,9 @@ thead th.th-play { text-align: left; }
   <div class="tab" data-tab="board" data-filter="highconf" onclick="setTab(this)">Strong Bets <span class="tbadge" id="b-hc">0</span></div>
   <div class="tab" data-tab="board" data-filter="all" onclick="setTab(this)">All Games <span class="tbadge" id="b-all">0</span></div>
   <div class="tsep"></div>
-  <div class="tab" data-tab="perf" data-filter="" onclick="setTab(this)">Performance</div>
-  <div class="tab" data-tab="results" data-filter="" onclick="setTab(this)">Results <span class="tbadge" id="b-res">0</span></div>
   <div class="tab" data-tab="history" data-filter="" onclick="setTab(this)">Movement</div>
+  <div class="tab" data-tab="perf" data-filter="" onclick="setTab(this)">Performance</div>
+  <div class="tab" data-tab="results" data-filter="" onclick="setTab(this)">Results</div>
   <div class="sfilters">
     <div class="schip on" onclick="setSport('ALL',this)">All</div>
     <div class="schip" onclick="setSport('NBA',this)">NBA</div>
@@ -1171,12 +1171,6 @@ thead th.th-play { text-align: left; }
     <div class="mmet-body">
       <span class="mmet-v g" id="m-wr">—</span>
       <span class="mmet-l">SB Win Rate</span>
-    </div>
-  </div>
-  <div class="mmet">
-    <div class="mmet-body">
-      <span class="mmet-v" id="m-today">0</span>
-      <span class="mmet-l">Today's Matchups</span>
     </div>
   </div>
   <div class="mmet-right" style="display:flex;align-items:center;gap:10px">
@@ -1333,7 +1327,6 @@ thead th.th-play { text-align: left; }
           </select>
           <label id="hist-mkt-label" style="font-size:11px;color:var(--text2);font-weight:600;display:none">Market</label>
           <select id="hist-mkt-select" onchange="setHistMkt(this.value)" style="font-size:12px;padding:5px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--sans);display:none">
-            <option value="">Select a market...</option>
             <option value="ALL">All Markets</option>
             <option value="MONEYLINE">Moneyline</option>
             <option value="SPREAD">Spread</option>
@@ -1756,7 +1749,7 @@ function openGameDetail(r){
   const seen=new Set(); const mkts=[];
   allMkts.forEach(x=>{ const k=(x.market_display||'').toUpperCase(); if(!seen.has(k)){seen.add(k);mkts.push(x);} });
 
-  let html='<div style="padding:16px 20px;max-height:80vh;overflow-y:auto">';
+  let html='<div style="padding:16px 20px">';
 
   // ── GAME HEADER ──
   html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--border)">';
@@ -1901,7 +1894,7 @@ function openGameDetail(r){
       const uid='gdmvt'+Date.now();
       html+='<div style="display:flex;gap:6px;margin-bottom:10px">';
       availMkts.forEach((mk,i)=>{
-        html+='<button onclick="document.querySelectorAll(\'.\'+\''+uid+'\').forEach(x=>x.style.display=\'none\');document.getElementById(\''+uid+mk+'\').style.display=\'\';this.parentElement.querySelectorAll(\'button\').forEach(b=>b.style.background=\'var(--bg2)\');this.style.background=\'var(--accent)\';this.style.color=\'#fff\'" style="font-size:10px;font-weight:700;padding:4px 12px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:'+(i===0?'var(--accent)':'var(--bg2)')+';color:'+(i===0?'#fff':'var(--text)')+';font-family:var(--sans)">'+mk+'</button>';
+        html+='<button onclick="document.querySelectorAll(\'.\'+\''+uid+'\').forEach(x=>x.style.display=\'none\');document.getElementById(\''+uid+mk+'\').style.display=\'\';this.parentElement.querySelectorAll(\'button\').forEach(b=>{b.style.background=\'var(--bg4)\';b.style.color=\'var(--text)\'}); this.style.background=\'var(--accent)\';this.style.color=\'#fff\'" style="font-size:10px;font-weight:700;padding:4px 12px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:'+(i===0?'var(--accent)':'var(--bg4)')+';color:'+(i===0?'#fff':'var(--text)')+';font-family:var(--sans)">'+mk+'</button>';
       });
       html+='</div>';
 
@@ -2009,12 +2002,6 @@ async function renderHistory(){
   let rows=_histData;
   rows=rows.filter(r=>(r.game||r.game_id)===_histGame);
   if(_histMkt&&_histMkt!=='ALL') rows=rows.filter(r=>(r.market_display||'').toUpperCase()===_histMkt);
-  if(!_histMkt){
-    document.getElementById('hist-prompt').style.display='';
-    document.getElementById('hist-prompt').textContent='Now select a market to see data';
-    document.getElementById('hist-table-wrap').style.display='none';
-    return;
-  }
   document.getElementById('hist-prompt').style.display='none';
   document.getElementById('hist-table-wrap').style.display='';
   // Sort by time desc
@@ -2546,7 +2533,7 @@ function updateFreshness(f){
       const age=ageMin(s.ts);
       let st='ok';
       if(age>s.warn) st='bad'; else if(age>s.fresh) st='warn';
-      sh+=`<div class="si"><span class="fs-dot ${st}" style="width:5px;height:5px;display:inline-block;border-radius:50;margin-right:3px"></span><span>${s.name}</span><span class="v">${fmtTime(s.ts)} (${fmtAge(age)})</span></div>`;
+      sh+=`<div class="si"><span class="fs-dot ${st}" style="width:6px;height:6px;display:inline-block;border-radius:50%;margin-right:4px"></span><span>${s.name}</span><span class="v">${fmtTime(s.ts)} (${fmtAge(age)})</span></div>`;
     });
     sbf.innerHTML=sh;
   }
@@ -2679,7 +2666,6 @@ function updateStats(){
   if(el('t-wr'))     el('t-wr').textContent=pSBtop!==null?pSBtop+'%':'--';
   if(el('m-active')) el('m-active').textContent=_ug(today);
   if(el('m-wr'))     el('m-wr').textContent=pSBtop!==null?pSBtop+'%':'--';
-  if(el('m-today'))  el('m-today').textContent=_ug(today);
 
   // Avg conf metric
   document.querySelectorAll('.mmet-v').forEach(mv=>{
@@ -2696,7 +2682,6 @@ function updateStats(){
   if(el2('b-all'))   el2('b-all').textContent=_ug(upcoming);
   if(el2('b-hc'))    el2('b-hc').textContent=hc.length;
   if(el2('b-today')) el2('b-today').textContent=_ug(today);
-  if(el2('b-res'))   el2('b-res').textContent=resolved.length;
 
   // Bottom status bar
   const sports=[...new Set(allDash.map(r=>(r.sport||'').toUpperCase()).filter(Boolean))];
