@@ -1327,7 +1327,7 @@ thead th.th-play { text-align: left; }
           </select>
           <label id="hist-mkt-label" style="font-size:11px;color:var(--text2);font-weight:600;display:none">Market</label>
           <select id="hist-mkt-select" onchange="setHistMkt(this.value)" style="font-size:12px;padding:5px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--sans);display:none">
-            <option value="ALL">All Markets</option>
+            <option value="">Select a market...</option>
             <option value="MONEYLINE">Moneyline</option>
             <option value="SPREAD">Spread</option>
             <option value="TOTAL">Total</option>
@@ -1960,7 +1960,7 @@ function openGameDetail(r){
 // ── SCORE HISTORY TAB ──
 let _histData=null;
 let _histGame='ALL';
-let _histMkt='ALL';
+let _histMkt='';
 function _utcToET(ts){
   if(!ts) return '--';
   // snapshot_ts is "YYYY-MM-DD HH:MM:SS" in UTC — append Z to parse as UTC
@@ -1998,10 +1998,16 @@ async function renderHistory(){
     return;
   }
   mktLabel.style.display=''; mktSel.style.display='';
+  if(!_histMkt){
+    document.getElementById('hist-prompt').style.display='';
+    document.getElementById('hist-prompt').textContent='Select a market';
+    document.getElementById('hist-table-wrap').style.display='none';
+    return;
+  }
   // Filter
   let rows=_histData;
   rows=rows.filter(r=>(r.game||r.game_id)===_histGame);
-  if(_histMkt&&_histMkt!=='ALL') rows=rows.filter(r=>(r.market_display||'').toUpperCase()===_histMkt);
+  rows=rows.filter(r=>(r.market_display||'').toUpperCase()===_histMkt);
   document.getElementById('hist-prompt').style.display='none';
   document.getElementById('hist-table-wrap').style.display='';
   // Sort by time desc
@@ -2071,9 +2077,9 @@ async function renderHistory(){
 }
 function setHistGame(g){
   _histGame=g||'';
-  _histMkt=g?'ALL':'';
+  _histMkt='';
   const mktSel=document.getElementById('hist-mkt-select');
-  if(mktSel) mktSel.value=_histMkt||'';
+  if(mktSel) mktSel.value='';
   renderHistory();
 }
 function setHistMkt(m){
