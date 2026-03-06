@@ -1007,6 +1007,7 @@ thead th.th-play { text-align: left; }
   <div class="tsep"></div>
   <div class="tab" data-tab="perf" data-filter="" onclick="setTab(this)">Performance</div>
   <div class="tab" data-tab="results" data-filter="" onclick="setTab(this)">Results <span class="tbadge" id="b-res">0</span></div>
+  <div class="tab" data-tab="history" data-filter="" onclick="setTab(this)">Score History</div>
   <div class="sfilters">
     <div class="schip on" onclick="setSport('ALL',this)">All</div>
     <div class="schip" onclick="setSport('NBA',this)">NBA</div>
@@ -1189,7 +1190,28 @@ thead th.th-play { text-align: left; }
     </div>
   </div>
 
-  <!-- SIGNAL LOG -->
+  <!-- SCORE HISTORY -->
+  <div class="tab-content" id="tab-history">
+    <div class="full-tab">
+      <div class="panel">
+        <div class="panel-h">
+          <span class="panel-t">Score History (Last 48h)</span>
+          <span class="panel-m" id="hist-meta">—</span>
+        </div>
+        <div id="hist-filters" style="padding:8px 16px;display:flex;gap:8px;flex-wrap:wrap;"></div>
+        <div class="tscroll">
+          <table>
+            <thead><tr>
+              <th>Time</th><th>Game</th><th>Market</th><th>Side</th>
+              <th>Score</th><th>Edge</th><th>Total</th><th>Decision</th>
+              <th>DK Base</th><th>L1</th><th>L2</th><th>Pattern</th><th>Decay</th><th>Mkt Read</th>
+            </tr></thead>
+            <tbody id="hist-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
 
 </div>
 
@@ -1332,6 +1354,7 @@ function setTab(el){
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
   document.getElementById('tab-'+tabId).classList.add('active');
   if(tabId==='board') renderBoard();
+  if(tabId==='history') renderHistory();
 }
 function setSport(s,el){ sport=s; document.querySelectorAll('.sfilters .schip:not(#grp-toggle)').forEach(x=>x.classList.remove('on')); el.classList.add('on'); renderBoard(); }
 function sortBy(col,th){ if(sortCol===col) sortAsc=!sortAsc; else{sortCol=col;sortAsc=false;} document.querySelectorAll('thead th').forEach(t=>t.classList.remove('sorted','asc')); th.classList.add('sorted'); if(sortAsc) th.classList.add('asc'); renderBoard(); }
@@ -1646,11 +1669,138 @@ function openGameDetail(r){
     ['Layer Mode',v(r.layer_mode)],
     ['Timing',v(r.timing_bucket)]
   ]);
+  // Score History mini-timeline (if data loaded)
+  if(_histData){
+    const gid=r.game_id||r.game||'';
+    const mkt=r.market_display||'';
+    const sd=r.side||'';
+    const hist=_histData.filter(h=>(h.game_id===gid||h.game===gid)&&(h.market_display||'')=== mkt&&(h.side||'')===sd)
+      .sort((a,b)=>(a.snapshot_ts||'').localeCompare(b.snapshot_ts||''));
+    if(hist.length>1){
+      html+='<div class="gd-section"><div class="gd-sec-title">Score Timeline</div>';
+      html+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">';
+      hist.forEach((h,i)=>{
+        const ts=(h.snapshot_ts||'').substring(11,16)||'--';
+        const total=Number(h.total_score||h.game_confidence||0);
+        const prev=i>0?Number(hist[i-1].total_score||hist[i-1].game_confidence||0):null;
+        const d=prev!==null?total-prev:0;
+        const col=d>0.05?'#22c55e':d<-0.05?'#ef4444':'#888';
+        const arrow=d>0.05?'▲':d<-0.05?'▼':'';
+        const dec=h.game_decision||'';
+        const prevDec=i>0?(hist[i-1].game_decision||''):'';
+        const decChanged=dec!==prevDec&&prevDec;
+        html+='<div style="background:#1e293b;border-radius:6px;padding:4px 8px;text-align:center;min-width:60px;border:1px solid '+(decChanged?'#f59e0b':'#334155')+'">';
+        html+='<div style="font-size:10px;color:#94a3b8">'+ts+'</div>';
+        html+='<div style="font-size:13px;font-weight:700;color:'+col+'">'+total.toFixed(1)+' '+arrow+'</div>';
+        if(decChanged) html+='<div style="font-size:9px;color:#f59e0b">'+prevDec+'→'+dec+'</div>';
+        html+='</div>';
+      });
+      html+='</div></div>';
+    }
+  }
   html+='</div>';
   document.getElementById('drill-title').textContent=(r.game||'Game Detail')+' — '+(r.market_display||'');
   document.getElementById('drill-tbl').innerHTML='<tr><td style="padding:0">'+html+'</td></tr>';
   document.getElementById('drill-export').style.display='none';
   document.getElementById('drill-overlay').classList.add('open');
+}
+
+// ── SCORE HISTORY TAB ──
+let _histData=null;
+let _histGame='ALL';
+async function renderHistory(){
+  if(!_histData){
+    try{
+      const resp=await fetch('data/score_history.csv?_='+Date.now());
+      const txt=await resp.text();
+      const lines=txt.trim().split('\n');
+      if(lines.length<2){ document.getElementById('hist-tbody').innerHTML='<tr><td colspan="14" style="text-align:center;padding:24px;color:#888">No history yet — data appears after next engine run</td></tr>'; return; }
+      const hdr=lines[0].split(',');
+      _histData=lines.slice(1).map(line=>{
+        const vals=line.split(',');
+        const o={};
+        hdr.forEach((h,i)=>o[h.trim()]=vals[i]||'');
+        return o;
+      });
+    }catch(e){ document.getElementById('hist-tbody').innerHTML='<tr><td colspan="14" style="text-align:center;padding:24px;color:#888">Score history not available yet</td></tr>'; return; }
+  }
+  // Build game filter chips
+  const games=[...new Set(_histData.map(r=>r.game||r.game_id||'?'))].sort();
+  const fDiv=document.getElementById('hist-filters');
+  fDiv.innerHTML='<span class="schip '+(_histGame==='ALL'?'on':'')+'" onclick="setHistGame(\'ALL\',this)">All Games</span>'+
+    games.map(g=>'<span class="schip '+(_histGame===g?'on':'')+'" onclick="setHistGame(\''+g.replace(/'/g,"\\'")+'\',this)">'+g+'</span>').join('');
+  // Filter
+  let rows=_histData;
+  if(_histGame!=='ALL') rows=rows.filter(r=>(r.game||r.game_id)===_histGame);
+  // Sort by time desc
+  rows.sort((a,b)=>(b.snapshot_ts||'').localeCompare(a.snapshot_ts||''));
+  // Build prev-score map for delta arrows
+  const byKey={};
+  const sorted=[...rows].sort((a,b)=>(a.snapshot_ts||'').localeCompare(b.snapshot_ts||''));
+  sorted.forEach(r=>{
+    const k=(r.game_id||r.game)+'|'+(r.market_display||'')+'|'+(r.side||'');
+    if(!byKey[k]) byKey[k]=[];
+    byKey[k].push(r);
+  });
+  // Add delta info
+  rows.forEach(r=>{
+    const k=(r.game_id||r.game)+'|'+(r.market_display||'')+'|'+(r.side||'');
+    const arr=byKey[k]||[];
+    const idx=arr.indexOf(r);
+    r._prevScore=idx>0?Number(arr[idx-1].total_score||arr[idx-1].game_confidence||0):null;
+    r._prevDec=idx>0?(arr[idx-1].game_decision||''):'';
+  });
+  document.getElementById('hist-meta').textContent=rows.length+' snapshots';
+  const tb=document.getElementById('hist-tbody');
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="14" style="text-align:center;padding:24px;color:#888">No data for selected game</td></tr>'; return; }
+  const _v=s=>(s&&s!=='nan'&&s!=='')?s:'--';
+  const _n=s=>{const x=Number(s);return isNaN(x)?null:x;};
+  const _delta=(cur,prev)=>{
+    if(prev===null) return '';
+    const d=cur-prev;
+    if(Math.abs(d)<0.05) return '<span style="color:#888">—</span>';
+    if(d>0) return '<span style="color:#22c55e;font-weight:600">▲+'+d.toFixed(1)+'</span>';
+    return '<span style="color:#ef4444;font-weight:600">▼'+d.toFixed(1)+'</span>';
+  };
+  const _decChg=(cur,prev)=>{
+    if(!prev||prev===cur) return '';
+    const rank={"NO BET":0,"NO_BET":0,"LEAN":1,"BET":2,"STRONG_BET":3};
+    const rc=rank[cur]??0, rp=rank[prev]??0;
+    if(rc>rp) return ' <span style="color:#22c55e;font-size:11px">⬆ from '+prev+'</span>';
+    if(rc<rp) return ' <span style="color:#ef4444;font-size:11px">⬇ from '+prev+'</span>';
+    return '';
+  };
+  tb.innerHTML=rows.slice(0,500).map(r=>{
+    const ts=r.snapshot_ts||'';
+    const tShort=ts.length>=16?ts.substring(5,16).replace('T',' '):ts;
+    const score=_n(r.game_confidence);
+    const edge=_n(r.net_edge);
+    const total=_n(r.total_score);
+    const curDec=r.game_decision||'';
+    const scoreColor=total!==null?(total>=70?'color:#22c55e':total>=60?'color:#eab308':'color:#ef4444'):'';
+    return '<tr>'+
+      '<td style="font-size:12px;white-space:nowrap">'+tShort+'</td>'+
+      '<td>'+_v(r.game)+'</td>'+
+      '<td>'+_v(r.market_display)+'</td>'+
+      '<td>'+_v(r.side)+'</td>'+
+      '<td>'+(score!==null?score.toFixed(1):'--')+'</td>'+
+      '<td>'+(edge!==null?edge.toFixed(1):'--')+'</td>'+
+      '<td style="font-weight:700;'+scoreColor+'">'+(total!==null?total.toFixed(1):'--')+' '+_delta(total,r._prevScore)+'</td>'+
+      '<td><span class="dec '+decInfo(curDec)[1]+'">'+decInfo(curDec)[0]+'</span>'+_decChg(curDec,r._prevDec)+'</td>'+
+      '<td>'+_v(r.dk_base_score)+'</td>'+
+      '<td>'+_v(r.l1_adjustment)+'</td>'+
+      '<td>'+_v(r.l2_adjustment)+'</td>'+
+      '<td>'+_v(r.pattern_bonus)+'</td>'+
+      '<td>'+_v(r.decay)+'</td>'+
+      '<td>'+_v(r.market_read)+'</td>'+
+    '</tr>';
+  }).join('');
+}
+function setHistGame(g,el){
+  _histGame=g;
+  document.querySelectorAll('#hist-filters .schip').forEach(x=>x.classList.remove('on'));
+  el.classList.add('on');
+  renderHistory();
 }
 
 function exportDrillCSV() {

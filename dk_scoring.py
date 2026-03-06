@@ -227,10 +227,10 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
         score = 44.0  # Genuinely low-info early
         flags.append("base:low_info_early")
     elif tb == "late" and base_lm >= 0.5:
-        score = 55.0  # Late with confirmed movement — highest base
+        score = 54.0  # Late with confirmed movement — modest boost
         flags.append("base:late_with_movement")
     elif tb == "late" or (tb == "mid" and base_lm >= 0.5):
-        score = 52.0
+        score = 53.0  # Late or mid with data — line holding is fine, not a penalty
         flags.append("base:movement_boost")
     elif tb == "early" and has_real_data:
         score = 50.0  # Early but has signal
@@ -245,23 +245,41 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
     # DK is a retail book — money there is recreational, not sharp.
     mr = str(row.get("market_read", "")).strip()
     # v2.1: boosted Stealth Move (4→6) and Aligned Sharp (2→4) — confirmed signals deserve more weight
+    # v2.2: Cross-reference L1/L2 data to validate DK-only signals.
+    # DK money (D) is retail; the real validation comes from whether
+    # sharp books (L1) and consensus (L2) also moved or held.
     _MR_MAP = {
         "Stealth Move": 6,      # Concentrated money + book confirms → genuine edge
         "Aligned Sharp": 4,     # D≥8 + book confirms → decent but might be priced in
-        "Freeze Pressure": -2,  # Money in, book HOLDS → book comfortable on other side
         "Reverse Pressure": -5, # Money in, book moves AGAINST → book actively fading
         "Contradiction": -3,    # Conflicting signals
-        "Neutral": -1,
         "Public Drift": -6,     # Public momentum, likely wrong
     }
-    mr_bonus_base = _MR_MAP.get(mr, 0)
     D_abs = abs(_safe_float(row.get("divergence_D")))
+    # Cross-reference: did sharp books move? Is consensus strong?
+    _mr_l1_moved = int(_safe_float(row.get("l1_move_dir"))) != 0
+    _mr_l2_agree = _safe_float(row.get("l2_consensus_agreement"))
+    _mr_sharps_moved = _mr_l1_moved or _mr_l2_agree >= 0.6
+
+    if mr == "Freeze Pressure":
+        if _mr_sharps_moved:
+            # Sharps moved but DK held with money flowing — DK is lagging, penalize more
+            mr_bonus_base = round(min(-0.5, -(D_abs - 5) * 0.08), 1)
+            mr_bonus_base = max(-1.5, mr_bonus_base)
+        else:
+            # Whole market holding — this is fine, not a DK-specific problem
+            mr_bonus_base = round(min(-0.2, -(D_abs - 5) * 0.03), 1)
+            mr_bonus_base = max(-0.5, mr_bonus_base)
+    elif mr == "Neutral":
+        mr_bonus_base = -0.2  # truly neutral — barely a signal
+    else:
+        mr_bonus_base = _MR_MAP.get(mr, 0)
     if mr_bonus_base > 0 and D_abs > 0:
         # Scale positive bonuses by D intensity: D=8->x0.8, D=15->x1.0, D=25->x1.25
         d_scale = min(0.5 + (D_abs / 20.0), 1.25)
         mr_bonus = round(mr_bonus_base * d_scale, 1)
-    elif mr_bonus_base < 0:
-        # Negative signals get STRONGER with higher D
+    elif mr_bonus_base < 0 and mr not in ("Freeze Pressure", "Neutral"):
+        # Other negative signals scale stronger with higher D
         d_scale = min(0.7 + (D_abs / 25.0), 1.3)
         mr_bonus = round(mr_bonus_base * d_scale, 1)
     else:
@@ -393,21 +411,34 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
     intensity_scale = 0.4 + (bm_intensity * 0.9)
     div_contrib = div_raw_base * combined_mult * intensity_scale
 
-    # BOOK RESPONSE: The book's line movement relative to money is the key signal.
-    # DK is retail — money there is recreational whales, not sharps.
-    # What the BOOK does with that money tells you whether it's real edge or noise.
-    # - Book confirms money (moves with) → positive divergence (trust the money)
-    # - Book holds (no meaningful move) → mild negative (book absorbs, disagrees)
-    # - Book fades money (moves against) → negative divergence (book says money is wrong)
+    # BOOK RESPONSE: Cross-reference DK money with L1/L2 market data.
+    # DK money alone is retail noise. The real question is:
+    # Did sharp books (L1) or consensus (L2) move while DK held?
+    # If sharps moved and DK didn't follow → DK is stale, stronger penalty.
+    # If sharps also held → market-wide hold, DK is fine, weak/no penalty.
+    l1_moved = int(_safe_float(row.get("l1_move_dir"))) != 0
+    l2_agreement = _safe_float(row.get("l2_consensus_agreement"))
+    sharps_confirm = l1_moved or l2_agreement >= 0.6  # sharp books moved or consensus strong
+
     if D > 5 and move_dir == -1 and meaningful:
         # Book actively moves AGAINST money side: strong fade signal
-        # Intensity AMPLIFIES the negative — more concentrated money being faded = stronger
-        div_contrib = max(-5.0, -abs(div_contrib) * 0.5)
+        # Stronger when sharps confirm the opposite direction
+        fade_mult = 0.6 if sharps_confirm else 0.4
+        div_contrib = max(-5.0, -abs(div_contrib) * fade_mult)
         flags.append(f"book_fades:{div_contrib:.1f}")
     elif D > 5 and (move_dir == 0 or not meaningful):
-        # Book absorbs money without moving: mild fade signal
-        div_contrib = max(-2.0, -abs(div_contrib) * 0.2)
-        flags.append(f"book_holds:{div_contrib:.1f}")
+        # DK holds while money flows — how much this matters depends on L1/L2:
+        # If sharp books ALSO held → whole market is holding, DK hold is fine
+        # If sharp books moved and DK didn't → DK is lagging, mild fade signal
+        if sharps_confirm:
+            # Sharps moved, DK didn't follow — this is a real lag signal
+            d_hold_scale = min(0.05 + (D - 5) * 0.015, 0.25)
+            div_contrib = max(-1.0, -abs(div_contrib) * d_hold_scale)
+            flags.append(f"book_holds_lag:{div_contrib:.1f}")
+        else:
+            # Sharps also held — market-wide hold, this is neutral/fine
+            div_contrib = max(-0.3, -abs(div_contrib) * 0.03)
+            flags.append(f"book_holds_mkt:{div_contrib:.1f}")
     # else: book confirms (move_dir == +1) → keep positive div_contrib
 
     score += div_contrib

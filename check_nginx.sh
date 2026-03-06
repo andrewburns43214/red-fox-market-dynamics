@@ -26,6 +26,7 @@ check 200 "$BASE/data/results_resolved.csv"   "results_resolved.csv"
 check 200 "$BASE/data/signal_ledger.csv"      "signal_ledger.csv"
 check 200 "$BASE/data/snapshots.csv"          "snapshots.csv"
 check 200 "$BASE/data/freshness.json"        "freshness.json"
+check 200 "$BASE/data/score_history.csv"     "score_history.csv"
 
 # Blocked internal files — should return 403
 check 403 "$BASE/data/l1_sharp.csv"           "l1_sharp.csv (internal)"

@@ -510,14 +510,20 @@ def spread_total_cross_check(row: dict) -> float:
 
 def momentum_decay(row: dict) -> float:
     """
-    If score hasn't increased in 4+ ticks, apply decay.
-    Now applies to ALL rows (including L3_ONLY).
-    Returns penalty (0 to -3).
+    If score hasn't increased in 5+ ticks, apply gentle decay.
+    Scales with context: high-D flat scores decay faster (book absorbing money = stale signal),
+    low-D flat scores decay slowly (nothing happening = fine).
+    Returns penalty (0 to -2.0).
     """
     flat_ticks = _safe_int(row.get("flat_ticks", row.get("score_flat_count", 0)))
 
     if flat_ticks >= DECAY_FLAT_TICK_START:
-        return max(DECAY_MAX, -(flat_ticks - (DECAY_FLAT_TICK_START - 1)) * 1.0)
+        # Base decay: 0.25 per tick after threshold
+        base = -(flat_ticks - (DECAY_FLAT_TICK_START - 1)) * 0.25
+        # D-intensity multiplier — modest since D is DK-retail only, not market-wide
+        D = abs(_safe_float(row.get("divergence_D", 0)))
+        d_mult = 1.0 + min(D / 40.0, 0.5)  # 1.0 at D=0, 1.38 at D=15, 1.5 at D=20+
+        return max(DECAY_MAX, base * d_mult)
 
     return 0.0
 

@@ -171,6 +171,11 @@ DISPERSION_VERY_WIDE_MULT = 0.40
 STRONG_BET_SCORE = 70
 BET_SCORE = 67
 LEAN_SCORE = 60
+
+# Hysteresis: exit thresholds (must fall further to drop a tier)
+STRONG_BET_EXIT = 66   # STRONG_BET stays until score < 66
+BET_EXIT = 62           # BET stays until score < 62
+LEAN_EXIT = 56          # LEAN stays until score < 56
 NET_EDGE_MIN_SIDES = 10
 NET_EDGE_MIN_TOTAL = 12
 
@@ -192,8 +197,8 @@ CROSS_CHECK_CONSISTENT = 1.0
 CROSS_CHECK_CONTRADICTION = -2.0
 
 # Momentum decay
-DECAY_FLAT_TICK_START = 4
-DECAY_MAX = -3.0
+DECAY_FLAT_TICK_START = 5
+DECAY_MAX = -2.0
 
 # B2B adjustment
 B2B_SINGLE_ADJ = -1.0
