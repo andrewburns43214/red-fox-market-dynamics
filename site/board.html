@@ -954,6 +954,117 @@ thead th.th-play { text-align: left; }
 .td-split { text-align: left; vertical-align: middle; }
 .td-pick { text-align: left; vertical-align: middle; }
 
+/* ─── MOBILE RESPONSIVE ─── */
+
+/* Tablets and small desktops */
+@media (max-width: 1024px) {
+  .rpane { display: none !important; }
+  .board { grid-template-columns: 1fr !important; }
+  .td-game { width: 220px; max-width: 220px; }
+}
+
+/* Phones */
+@media (max-width: 768px) {
+  body { font-size: 12px; }
+
+  /* Topbar: shrink padding, hide KPI cards */
+  .topbar { height: 46px; padding: 0 12px; }
+  .topbar-kpis { display: none; }
+  .logo-wrap { padding-right: 10px; margin-right: 10px; }
+  .logo-img { height: 28px; }
+  .tl .logo-wrap + * { font-size: 14px; }
+
+  /* Tabs: horizontal scroll, smaller text */
+  .tabs { height: 38px; padding: 0 8px; gap: 0; }
+  .tab { padding: 0 10px; height: 38px; font-size: 11px; }
+  .tsep { margin: 8px 2px; }
+  .sfilters { gap: 3px; padding: 4px 0; }
+  .schip { padding: 3px 7px; font-size: 10px; }
+
+  /* Metric bar: wrap, reduce height */
+  .metricbar { height: auto; min-height: 36px; flex-wrap: wrap; padding: 4px 8px; gap: 2px; }
+  .metric { padding: 2px 8px; }
+  .metric .mv { font-size: 13px; }
+  .metric .ml { font-size: 8px; }
+
+  /* Freshness bar */
+  .fresh-bar { flex-wrap: wrap; padding: 4px 8px; min-height: auto; }
+
+  /* Table: hide less critical columns on mobile */
+  .td-split, .th-split,
+  .td-pat, .th-pat,
+  .td-layer, .th-layer,
+  .td-sharp, .th-sharp,
+  .td-tim, .th-tim,
+  .td-mr, .th-mr,
+  .td-bkdn, .th-bkdn { display: none; }
+
+  /* Shrink remaining columns */
+  .td-rank { width: 28px; padding: 4px 2px; font-size: 9px; }
+  .td-game { width: 160px; max-width: 160px; padding: 6px 6px 4px; }
+  .game-name { font-size: 11px; }
+  .game-row2 { font-size: 9px; }
+  .td-mkt { width: 52px; font-size: 9px; }
+  .td-line { font-size: 10px; padding: 4px 4px; }
+  td { padding: 4px 6px; font-size: 11px; }
+  thead th { padding: 5px 6px; font-size: 9px; }
+
+  /* Info button */
+  .info-btn { width: 18px; height: 18px; font-size: 9px; }
+
+  /* Game chips */
+  .gchip { font-size: 8px; padding: 1px 4px; }
+
+  /* Pane header */
+  .pane-hdr { padding: 6px 10px; }
+  .pane-title { font-size: 12px; }
+  .grp-btn { font-size: 10px; padding: 4px 10px; }
+
+  /* Drill-down / Game detail modal */
+  .drill-overlay .drill-box,
+  .drill-box { width: 96vw !important; max-width: 96vw !important; max-height: 88vh; margin: 2vh auto; }
+  .drill-title { font-size: 13px; padding: 10px 12px; }
+  .gd-wrap { padding: 8px; }
+  .gd-header { padding: 8px; }
+  .gd-game { font-size: 13px; }
+  .gd-row { padding: 3px 0; }
+  .gd-lbl { font-size: 10px; }
+  .gd-val { font-size: 11px; }
+
+  /* Status bar */
+  .statusbar { height: 22px; padding: 0 10px; font-size: 8px; }
+  .sl { gap: 10px; }
+
+  /* Score History tab */
+  #hist-filters { padding: 6px 8px; gap: 4px; }
+  #hist-filters .schip { font-size: 9px; padding: 2px 6px; }
+
+  /* Performance / Results */
+  .full-tab { padding: 8px; }
+  .panel { border-radius: 6px; }
+  .panel-h { padding: 8px 10px; }
+}
+
+/* Very small phones */
+@media (max-width: 480px) {
+  .topbar { height: 40px; padding: 0 8px; }
+  .logo-img { height: 24px; }
+  .tabs { height: 34px; padding: 0 4px; }
+  .tab { padding: 0 7px; height: 34px; font-size: 10px; }
+  .tbadge { font-size: 8px; padding: 0 4px; }
+
+  /* Game column: minimal */
+  .td-game { width: 130px; max-width: 130px; }
+  .game-name { font-size: 10px; }
+  .sport-chip { font-size: 7px; padding: 1px 4px; }
+
+  /* Also hide edge column on very small screens */
+  .td-edge, .th-edge { display: none; }
+
+  /* Decision badge: compact */
+  .dec { font-size: 9px; padding: 2px 5px; }
+}
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
