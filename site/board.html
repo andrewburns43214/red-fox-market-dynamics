@@ -1118,7 +1118,7 @@ thead th.th-play { text-align: left; }
   <div class="tsep"></div>
   <div class="tab" data-tab="perf" data-filter="" onclick="setTab(this)">Performance</div>
   <div class="tab" data-tab="results" data-filter="" onclick="setTab(this)">Results <span class="tbadge" id="b-res">0</span></div>
-  <div class="tab" data-tab="history" data-filter="" onclick="setTab(this)">Score History</div>
+  <div class="tab" data-tab="history" data-filter="" onclick="setTab(this)">Movement</div>
   <div class="sfilters">
     <div class="schip on" onclick="setSport('ALL',this)">All</div>
     <div class="schip" onclick="setSport('NBA',this)">NBA</div>
@@ -1306,16 +1306,16 @@ thead th.th-play { text-align: left; }
     <div class="full-tab">
       <div class="panel">
         <div class="panel-h">
-          <span class="panel-t">Score History (Last 48h)</span>
+          <span class="panel-t">Movement (Last 48h)</span>
           <span class="panel-m" id="hist-meta">—</span>
         </div>
         <div id="hist-filters" style="padding:8px 16px;display:flex;gap:8px;flex-wrap:wrap;"></div>
         <div class="tscroll">
           <table>
             <thead><tr>
-              <th>Time</th><th>Game</th><th>Market</th><th>Side</th>
-              <th>Score</th><th>Edge</th><th>Total</th><th>Decision</th>
-              <th>DK Base</th><th>L1</th><th>L2</th><th>Pattern</th><th>Decay</th><th>Mkt Read</th>
+              <th>Time</th><th>Game</th><th>Market</th><th>Pick</th>
+              <th>Line</th><th>Conf</th><th>Edge</th><th>Total</th><th>Decision</th>
+              <th>Bets</th><th>Money</th><th>Signal</th><th>Layer</th>
             </tr></thead>
             <tbody id="hist-tbody"></tbody>
           </table>
@@ -1912,18 +1912,9 @@ let _histGame='ALL';
 async function renderHistory(){
   if(!_histData){
     try{
-      const resp=await fetch('data/score_history.csv?_='+Date.now());
-      const txt=await resp.text();
-      const lines=txt.trim().split('\n');
-      if(lines.length<2){ document.getElementById('hist-tbody').innerHTML='<tr><td colspan="14" style="text-align:center;padding:24px;color:#888">No history yet — data appears after next engine run</td></tr>'; return; }
-      const hdr=lines[0].split(',');
-      _histData=lines.slice(1).map(line=>{
-        const vals=line.split(',');
-        const o={};
-        hdr.forEach((h,i)=>o[h.trim()]=vals[i]||'');
-        return o;
-      });
-    }catch(e){ document.getElementById('hist-tbody').innerHTML='<tr><td colspan="14" style="text-align:center;padding:24px;color:#888">Score history not available yet</td></tr>'; return; }
+      _histData=await loadCSV('data/score_history.csv');
+    }catch(e){}
+    if(!_histData||!_histData.length){ document.getElementById('hist-tbody').innerHTML='<tr><td colspan="13" style="text-align:center;padding:24px;color:#888">No history yet — data appears after next engine run</td></tr>'; return; }
   }
   // Build game filter chips
   const games=[...new Set(_histData.map(r=>r.game||r.game_id||'?'))].sort();
@@ -1939,13 +1930,13 @@ async function renderHistory(){
   const byKey={};
   const sorted=[...rows].sort((a,b)=>(a.snapshot_ts||'').localeCompare(b.snapshot_ts||''));
   sorted.forEach(r=>{
-    const k=(r.game_id||r.game)+'|'+(r.market_display||'')+'|'+(r.side||'');
+    const k=(r.game_id||r.game)+'|'+(r.market_display||'')+'|'+(r.favored_side||r.side||'');
     if(!byKey[k]) byKey[k]=[];
     byKey[k].push(r);
   });
   // Add delta info
   rows.forEach(r=>{
-    const k=(r.game_id||r.game)+'|'+(r.market_display||'')+'|'+(r.side||'');
+    const k=(r.game_id||r.game)+'|'+(r.market_display||'')+'|'+(r.favored_side||r.side||'');
     const arr=byKey[k]||[];
     const idx=arr.indexOf(r);
     r._prevScore=idx>0?Number(arr[idx-1].total_score||arr[idx-1].game_confidence||0):null;
@@ -1953,7 +1944,7 @@ async function renderHistory(){
   });
   document.getElementById('hist-meta').textContent=rows.length+' snapshots';
   const tb=document.getElementById('hist-tbody');
-  if(!rows.length){ tb.innerHTML='<tr><td colspan="14" style="text-align:center;padding:24px;color:#888">No data for selected game</td></tr>'; return; }
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="13" style="text-align:center;padding:24px;color:#888">No data for selected game</td></tr>'; return; }
   const _v=s=>(s&&s!=='nan'&&s!=='')?s:'--';
   const _n=s=>{const x=Number(s);return isNaN(x)?null:x;};
   const _delta=(cur,prev)=>{
@@ -1974,26 +1965,32 @@ async function renderHistory(){
   tb.innerHTML=rows.slice(0,500).map(r=>{
     const ts=r.snapshot_ts||'';
     const tShort=ts.length>=16?ts.substring(5,16).replace('T',' '):ts;
-    const score=_n(r.game_confidence);
+    const conf=_n(r.game_confidence);
     const edge=_n(r.net_edge);
     const total=_n(r.total_score);
     const curDec=r.game_decision||'';
-    const scoreColor=total!==null?(total>=70?'color:#22c55e':total>=60?'color:#eab308':'color:#ef4444'):'';
+    const totalColor=total!==null?(total>=70?'color:#22c55e':total>=60?'color:#eab308':'color:#ef4444'):'';
+    const bets=_n(r.bets_pct);
+    const money=_n(r.money_pct);
+    const pick=r.favored_side||r.side||'';
+    const pickShort=pick.split(' ').pop()||pick;
+    const line=r.current_line||'--';
+    // Extract just the numeric part from lines like "DAL Mavericks @ +260"
+    const lineShort=(line.match(/([+-]?\d+(?:\.\d+)?)\s*$/)||[])[1]||line;
     return '<tr>'+
       '<td style="font-size:12px;white-space:nowrap">'+tShort+'</td>'+
       '<td>'+_v(r.game)+'</td>'+
       '<td>'+_v(r.market_display)+'</td>'+
-      '<td>'+_v(r.side)+'</td>'+
-      '<td>'+(score!==null?score.toFixed(1):'--')+'</td>'+
+      '<td>'+pickShort+'</td>'+
+      '<td style="font-weight:600">'+lineShort+'</td>'+
+      '<td>'+(conf!==null?conf.toFixed(1):'--')+'</td>'+
       '<td>'+(edge!==null?edge.toFixed(1):'--')+'</td>'+
-      '<td style="font-weight:700;'+scoreColor+'">'+(total!==null?total.toFixed(1):'--')+' '+_delta(total,r._prevScore)+'</td>'+
+      '<td style="font-weight:700;'+totalColor+'">'+(total!==null?total.toFixed(1):'--')+' '+_delta(total,r._prevScore)+'</td>'+
       '<td><span class="dec '+decInfo(curDec)[1]+'">'+decInfo(curDec)[0]+'</span>'+_decChg(curDec,r._prevDec)+'</td>'+
-      '<td>'+_v(r.dk_base_score)+'</td>'+
-      '<td>'+_v(r.l1_adjustment)+'</td>'+
-      '<td>'+_v(r.l2_adjustment)+'</td>'+
-      '<td>'+_v(r.pattern_bonus)+'</td>'+
-      '<td>'+_v(r.decay)+'</td>'+
+      '<td>'+(bets!==null?bets.toFixed(0)+'%':'--')+'</td>'+
+      '<td>'+(money!==null?money.toFixed(0)+'%':'--')+'</td>'+
       '<td>'+_v(r.market_read)+'</td>'+
+      '<td>'+_v(r.layer_mode)+'</td>'+
     '</tr>';
   }).join('');
 }
@@ -2453,13 +2450,15 @@ function updateFreshness(f){
 async function loadAll(){
   let freshJson=null;
   try{ const r=await fetch('/data/freshness.json?_='+Date.now()); if(r.ok) freshJson=await r.json(); } catch(e){}
-  const[dash,snaps,ledger,results,kpi]=await Promise.all([
+  const[dash,snaps,ledger,results,kpi,hist]=await Promise.all([
     loadCSV(DASH_URL),
     loadCSV('/data/snapshots.csv'),
     loadCSV(LEDGER_URL),
     loadCSV(RESULTS_URL),
-    loadCSV('/data/kpi_master_dataset.csv')
+    loadCSV('/data/kpi_master_dataset.csv'),
+    loadCSV('/data/score_history.csv')
   ]);
+  _histData=hist||null;  // preload for game detail modal
   updateFreshness(freshJson);
   const dashRaw=dash||MOCK_DASH;
   const snapsRaw=snaps||[];
