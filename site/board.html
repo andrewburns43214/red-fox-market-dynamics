@@ -968,98 +968,112 @@ thead th.th-play { text-align: left; }
   body { font-size: 12px; }
 
   /* Topbar: shrink padding, hide KPI cards */
-  .topbar { height: 46px; padding: 0 12px; }
+  .topbar { height: 44px; padding: 0 10px; }
   .topbar-kpis { display: none; }
-  .logo-wrap { padding-right: 10px; margin-right: 10px; }
-  .logo-img { height: 28px; }
-  .tl .logo-wrap + * { font-size: 14px; }
+  .logo-wrap { padding-right: 8px; margin-right: 8px; }
+  .logo-img { height: 26px; }
+  .tl .logo-wrap + * { font-size: 13px; }
 
   /* Tabs: horizontal scroll, smaller text */
-  .tabs { height: 38px; padding: 0 8px; gap: 0; }
-  .tab { padding: 0 10px; height: 38px; font-size: 11px; }
+  .tabs { height: 36px; padding: 0 6px; gap: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tab { padding: 0 8px; height: 36px; font-size: 10px; white-space: nowrap; flex-shrink: 0; }
   .tsep { margin: 8px 2px; }
-  .sfilters { gap: 3px; padding: 4px 0; }
-  .schip { padding: 3px 7px; font-size: 10px; }
+  .sfilters { gap: 2px; padding: 2px 0; }
+  .schip { padding: 2px 6px; font-size: 9px; }
 
-  /* Metric bar: wrap, reduce height */
-  .metricbar { height: auto; min-height: 36px; flex-wrap: wrap; padding: 4px 8px; gap: 2px; }
-  .metric { padding: 2px 8px; }
-  .metric .mv { font-size: 13px; }
-  .metric .ml { font-size: 8px; }
+  /* Metric bar: compact single row */
+  .metricbar { height: auto; min-height: 32px; flex-wrap: wrap; padding: 4px 8px; gap: 2px; }
+  .mmet { min-width: 0; flex: 1 1 auto; }
+  .mmet-body { padding: 2px 6px; }
+  .mmet-v { font-size: 14px; }
+  .mmet-l { font-size: 7px; }
 
-  /* Freshness bar */
-  .fresh-bar { flex-wrap: wrap; padding: 4px 8px; min-height: auto; }
+  /* Freshness bar: compact */
+  .fresh-bar { flex-wrap: wrap; padding: 3px 8px; min-height: auto; gap: 4px; }
+  .fresh-overall { font-size: 10px; }
+  .fresh-sources { font-size: 9px; gap: 6px !important; }
 
-  /* Table: hide less critical columns on mobile */
+  /* Hide everything except Game, Decision, Total, Pick on mobile */
   .td-split, .th-split,
   .td-pat, .th-pat,
   .td-layer, .th-layer,
   .td-sharp, .th-sharp,
   .td-tim, .th-tim,
   .td-mr, .th-mr,
-  .td-bkdn, .th-bkdn { display: none; }
+  .td-bkdn, .th-bkdn,
+  .td-bkt, .th-bkt,
+  .td-line, .th-line,
+  .td-edge, .th-edge,
+  .td-conf, .th-conf { display: none; }
 
   /* Shrink remaining columns */
-  .td-rank { width: 28px; padding: 4px 2px; font-size: 9px; }
-  .td-game { width: 160px; max-width: 160px; padding: 6px 6px 4px; }
-  .game-name { font-size: 11px; }
+  .td-rank { width: 26px; padding: 4px 2px; font-size: 9px; }
+  .td-game { width: auto; max-width: none; padding: 6px 6px 4px; }
+  .game-name { font-size: 12px; white-space: normal; word-break: break-word; }
   .game-row2 { font-size: 9px; }
-  .td-mkt { width: 52px; font-size: 9px; }
-  .td-line { font-size: 10px; padding: 4px 4px; }
+  .td-mkt { width: 55px; font-size: 9px; }
   td { padding: 4px 6px; font-size: 11px; }
   thead th { padding: 5px 6px; font-size: 9px; }
+
+  /* Total column: make it prominent */
+  .td-total, .th-total { font-size: 13px; font-weight: 700; }
 
   /* Info button */
   .info-btn { width: 18px; height: 18px; font-size: 9px; }
 
-  /* Game chips */
-  .gchip { font-size: 8px; padding: 1px 4px; }
+  /* Game chips: hide on mobile */
+  .gchip { display: none; }
 
   /* Pane header */
   .pane-hdr { padding: 6px 10px; }
   .pane-title { font-size: 12px; }
-  .grp-btn { font-size: 10px; padding: 4px 10px; }
+  .grp-btn { font-size: 9px; padding: 3px 8px; }
+  #board-search { width: 120px !important; font-size: 11px !important; padding: 3px 8px !important; }
 
   /* Drill-down / Game detail modal */
   .drill-overlay .drill-box,
-  .drill-box { width: 96vw !important; max-width: 96vw !important; max-height: 88vh; margin: 2vh auto; }
-  .drill-title { font-size: 13px; padding: 10px 12px; }
-  .gd-wrap { padding: 8px; }
-  .gd-header { padding: 8px; }
-  .gd-game { font-size: 13px; }
-  .gd-row { padding: 3px 0; }
-  .gd-lbl { font-size: 10px; }
-  .gd-val { font-size: 11px; }
+  .drill-box { width: 97vw !important; max-width: 97vw !important; max-height: 90vh; margin: 1vh auto; }
+  .drill-title { font-size: 13px; padding: 8px 10px; }
+  .gd-wrap { padding: 6px; gap: 8px; }
+  .gd-header { padding: 6px; }
+  .gd-game { font-size: 12px; }
+  .gd-row { padding: 2px 0; }
+  .gd-lbl { font-size: 9px; min-width: 50px; }
+  .gd-val { font-size: 10px; }
+  .gd-mkt-card { padding: 8px !important; }
+  .gd-intel { font-size: 11px !important; }
 
   /* Status bar */
-  .statusbar { height: 22px; padding: 0 10px; font-size: 8px; }
-  .sl { gap: 10px; }
+  .statusbar { height: 22px; padding: 0 8px; font-size: 8px; }
+  .sl { gap: 8px; }
 
-  /* Score History tab */
-  #hist-filters { padding: 6px 8px; gap: 4px; }
-  #hist-filters .schip { font-size: 9px; padding: 2px 6px; }
+  /* Score History / Movement tab */
+  #hist-filters { padding: 6px 8px; gap: 6px; flex-direction: column; align-items: stretch !important; }
+  #hist-filters select { width: 100%; max-width: 100% !important; font-size: 11px; }
+  #hist-filters label { font-size: 10px; }
+  .hist-table td, .hist-table th { font-size: 10px; padding: 3px 4px; }
 
   /* Performance / Results */
-  .full-tab { padding: 8px; }
+  .full-tab { padding: 6px; }
   .panel { border-radius: 6px; }
-  .panel-h { padding: 8px 10px; }
+  .panel-h { padding: 6px 10px; }
 }
 
 /* Very small phones */
 @media (max-width: 480px) {
-  .topbar { height: 40px; padding: 0 8px; }
-  .logo-img { height: 24px; }
-  .tabs { height: 34px; padding: 0 4px; }
-  .tab { padding: 0 7px; height: 34px; font-size: 10px; }
-  .tbadge { font-size: 8px; padding: 0 4px; }
+  .topbar { height: 38px; padding: 0 6px; }
+  .logo-img { height: 22px; }
+  .tabs { height: 32px; padding: 0 4px; }
+  .tab { padding: 0 6px; height: 32px; font-size: 9px; }
+  .tbadge { font-size: 7px; padding: 0 3px; }
 
-  /* Game column: minimal */
-  .td-game { width: 130px; max-width: 130px; }
-  .game-name { font-size: 10px; }
+  /* Game column */
+  .td-game { padding: 4px; }
+  .game-name { font-size: 11px; }
   .sport-chip { font-size: 7px; padding: 1px 4px; }
 
-  /* Also hide edge column on very small screens */
-  .td-edge, .th-edge { display: none; }
+  /* Also hide market column on very small screens */
+  .td-mkt, .th-mkt { display: none; }
 
   /* Decision badge: compact */
   .dec { font-size: 9px; padding: 2px 5px; }
@@ -1186,9 +1200,10 @@ thead th.th-play { text-align: left; }
     <div class="board">
       <div class="lpane">
         <div class="pane-hdr">
-          <div style="display:flex;align-items:center;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <span class="pane-title" id="board-title">Current Games</span>
             <button class="grp-btn" id="grp-toggle" onclick="toggleGroup(this)">Group by Game</button>
+            <input type="text" id="board-search" placeholder="Search games..." oninput="renderBoard()" style="font-size:12px;padding:4px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--sans);width:180px;margin-left:auto">
           </div>
           <span class="pane-meta" id="board-meta">—</span>
         </div>
@@ -1309,13 +1324,33 @@ thead th.th-play { text-align: left; }
           <span class="panel-t">Movement (Last 48h)</span>
           <span class="panel-m" id="hist-meta">—</span>
         </div>
-        <div id="hist-filters" style="padding:8px 16px;display:flex;gap:8px;flex-wrap:wrap;"></div>
+        <div id="hist-filters" style="padding:8px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          <label style="font-size:11px;color:var(--text2);font-weight:600">Game</label>
+          <select id="hist-game-select" onchange="setHistGame(this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--sans);max-width:260px"></select>
+          <label style="font-size:11px;color:var(--text2);font-weight:600">Market</label>
+          <select id="hist-mkt-select" onchange="setHistMkt(this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--sans)">
+            <option value="ALL">All Markets</option>
+            <option value="MONEYLINE">Moneyline</option>
+            <option value="SPREAD">Spread</option>
+            <option value="TOTAL">Total</option>
+          </select>
+        </div>
         <div class="tscroll">
-          <table>
+          <table class="hist-table">
             <thead><tr>
-              <th>Time</th><th>Game</th><th>Market</th><th>Pick</th>
-              <th>Line</th><th>Conf</th><th>Edge</th><th>Total</th><th>Decision</th>
-              <th>Bets</th><th>Money</th><th>Signal</th><th>Layer</th>
+              <th style="min-width:80px;text-align:left">Time</th>
+              <th style="min-width:180px;text-align:left">Game</th>
+              <th style="min-width:80px;text-align:left">Market</th>
+              <th style="min-width:100px;text-align:left">Pick</th>
+              <th style="min-width:60px;text-align:right">Line</th>
+              <th style="min-width:50px;text-align:right">Conf</th>
+              <th style="min-width:50px;text-align:right">Edge</th>
+              <th style="min-width:70px;text-align:right">Total</th>
+              <th style="min-width:80px;text-align:center">Decision</th>
+              <th style="min-width:50px;text-align:right">Bets</th>
+              <th style="min-width:50px;text-align:right">Money</th>
+              <th style="min-width:90px;text-align:left">Signal</th>
+              <th style="min-width:60px;text-align:left">Layer</th>
             </tr></thead>
             <tbody id="hist-tbody"></tbody>
           </table>
@@ -1473,7 +1508,7 @@ let groupMode=false;
 function toggleGroup(el){ groupMode=!groupMode; el.classList.toggle('grp-on',groupMode); el.textContent=groupMode?'Ungroup':'Group by Game'; renderBoard(); }
 
 function _decRank(d){ const k=(d||'').toUpperCase(); if(k==='STRONG_BET') return 0; if(k==='BET') return 1; return 2; }
-function filtered(){ const now=new Date(); let d; if(filter==='today') d=allDash.filter(r=>isToday(r._game_time)).filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport); else if(filter==='highconf') d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now).filter(r=>(r.game_decision||'').toUpperCase()==='STRONG_BET'); else d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now); return d.sort((a,b)=>{ const da=_decRank(a.game_decision),db=_decRank(b.game_decision); if(da!==db) return da-db; let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
+function filtered(){ const now=new Date(); const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d; if(filter==='today') d=allDash.filter(r=>isToday(r._game_time)).filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport); else if(filter==='highconf') d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now).filter(r=>(r.game_decision||'').toUpperCase()==='STRONG_BET'); else d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.favored_side||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)); return d.sort((a,b)=>{ const da=_decRank(a.game_decision),db=_decRank(b.game_decision); if(da!==db) return da-db; let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
 
 window._boardRows=[];
 function renderBoard(){
@@ -1909,6 +1944,14 @@ function openGameDetail(r){
 // ── SCORE HISTORY TAB ──
 let _histData=null;
 let _histGame='ALL';
+let _histMkt='ALL';
+function _utcToET(ts){
+  if(!ts) return '--';
+  // snapshot_ts is "YYYY-MM-DD HH:MM:SS" in UTC — append Z to parse as UTC
+  const d=new Date(ts.replace(' ','T')+'Z');
+  if(isNaN(d)) return ts;
+  return d.toLocaleString('en-US',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true,timeZone:'America/New_York'});
+}
 async function renderHistory(){
   if(!_histData){
     try{
@@ -1916,14 +1959,16 @@ async function renderHistory(){
     }catch(e){}
     if(!_histData||!_histData.length){ document.getElementById('hist-tbody').innerHTML='<tr><td colspan="13" style="text-align:center;padding:24px;color:#888">No history yet — data appears after next engine run</td></tr>'; return; }
   }
-  // Build game filter chips
+  // Build game dropdown options
   const games=[...new Set(_histData.map(r=>r.game||r.game_id||'?'))].sort();
-  const fDiv=document.getElementById('hist-filters');
-  fDiv.innerHTML='<span class="schip '+(_histGame==='ALL'?'on':'')+'" onclick="setHistGame(\'ALL\',this)">All Games</span>'+
-    games.map(g=>'<span class="schip '+(_histGame===g?'on':'')+'" onclick="setHistGame(\''+g.replace(/'/g,"\\'")+'\',this)">'+g+'</span>').join('');
+  const gSel=document.getElementById('hist-game-select');
+  const prevG=gSel.value||'ALL';
+  gSel.innerHTML='<option value="ALL">All Games ('+games.length+')</option>'+games.map(g=>'<option value="'+g.replace(/"/g,'&quot;')+'"'+(g===prevG?' selected':'')+'>'+g+'</option>').join('');
+  if(prevG!=='ALL'&&games.includes(prevG)) gSel.value=prevG; else if(_histGame!=='ALL'&&games.includes(_histGame)) gSel.value=_histGame;
   // Filter
   let rows=_histData;
   if(_histGame!=='ALL') rows=rows.filter(r=>(r.game||r.game_id)===_histGame);
+  if(_histMkt!=='ALL') rows=rows.filter(r=>(r.market_display||'').toUpperCase()===_histMkt);
   // Sort by time desc
   rows.sort((a,b)=>(b.snapshot_ts||'').localeCompare(a.snapshot_ts||''));
   // Build prev-score map for delta arrows
@@ -1963,8 +2008,7 @@ async function renderHistory(){
     return '';
   };
   tb.innerHTML=rows.slice(0,500).map(r=>{
-    const ts=r.snapshot_ts||'';
-    const tShort=ts.length>=16?ts.substring(5,16).replace('T',' '):ts;
+    const tStr=_utcToET(r.snapshot_ts);
     const conf=_n(r.game_confidence);
     const edge=_n(r.net_edge);
     const total=_n(r.total_score);
@@ -1973,31 +2017,31 @@ async function renderHistory(){
     const bets=_n(r.bets_pct);
     const money=_n(r.money_pct);
     const pick=r.favored_side||r.side||'';
-    const pickShort=pick.split(' ').pop()||pick;
     const line=r.current_line||'--';
-    // Extract just the numeric part from lines like "DAL Mavericks @ +260"
     const lineShort=(line.match(/([+-]?\d+(?:\.\d+)?)\s*$/)||[])[1]||line;
     return '<tr>'+
-      '<td style="font-size:12px;white-space:nowrap">'+tShort+'</td>'+
-      '<td>'+_v(r.game)+'</td>'+
-      '<td>'+_v(r.market_display)+'</td>'+
-      '<td>'+pickShort+'</td>'+
-      '<td style="font-weight:600">'+lineShort+'</td>'+
-      '<td>'+(conf!==null?conf.toFixed(1):'--')+'</td>'+
-      '<td>'+(edge!==null?edge.toFixed(1):'--')+'</td>'+
-      '<td style="font-weight:700;'+totalColor+'">'+(total!==null?total.toFixed(1):'--')+' '+_delta(total,r._prevScore)+'</td>'+
-      '<td><span class="dec '+decInfo(curDec)[1]+'">'+decInfo(curDec)[0]+'</span>'+_decChg(curDec,r._prevDec)+'</td>'+
-      '<td>'+(bets!==null?bets.toFixed(0)+'%':'--')+'</td>'+
-      '<td>'+(money!==null?money.toFixed(0)+'%':'--')+'</td>'+
-      '<td>'+_v(r.market_read)+'</td>'+
-      '<td>'+_v(r.layer_mode)+'</td>'+
+      '<td style="font-size:11px;white-space:nowrap;text-align:left">'+tStr+'</td>'+
+      '<td style="text-align:left;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_v(r.game)+'</td>'+
+      '<td style="text-align:left">'+_v(r.market_display)+'</td>'+
+      '<td style="text-align:left">'+pick+'</td>'+
+      '<td style="font-weight:600;text-align:right">'+lineShort+'</td>'+
+      '<td style="text-align:right">'+(conf!==null?conf.toFixed(1):'--')+'</td>'+
+      '<td style="text-align:right">'+(edge!==null?edge.toFixed(1):'--')+'</td>'+
+      '<td style="font-weight:700;text-align:right;'+totalColor+'">'+(total!==null?total.toFixed(1):'--')+' '+_delta(total,r._prevScore)+'</td>'+
+      '<td style="text-align:center"><span class="dec '+decInfo(curDec)[1]+'">'+decInfo(curDec)[0]+'</span>'+_decChg(curDec,r._prevDec)+'</td>'+
+      '<td style="text-align:right">'+(bets!==null?bets.toFixed(0)+'%':'--')+'</td>'+
+      '<td style="text-align:right">'+(money!==null?money.toFixed(0)+'%':'--')+'</td>'+
+      '<td style="text-align:left">'+_v(r.market_read)+'</td>'+
+      '<td style="text-align:left">'+_v(r.layer_mode)+'</td>'+
     '</tr>';
   }).join('');
 }
-function setHistGame(g,el){
+function setHistGame(g){
   _histGame=g;
-  document.querySelectorAll('#hist-filters .schip').forEach(x=>x.classList.remove('on'));
-  el.classList.add('on');
+  renderHistory();
+}
+function setHistMkt(m){
+  _histMkt=m;
   renderHistory();
 }
 
