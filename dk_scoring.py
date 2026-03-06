@@ -43,11 +43,16 @@ from engine_config import DK_ML_INST_MULT
 def _bets_money_intensity(bets_pct: float, money_pct: float) -> float:
     """Continuous 0.0-1.0 intensity from bets/money split.
     Higher = stronger smart-money signal (money concentrated relative to bets).
-    Ratio 1.0->0.5, 1.5->0.73, 2.0->0.88, 2.5->0.95"""
+    Ratio 1.0->0.5, 1.5->0.73, 2.0->0.88, 2.5->0.95
+    v2.2: When bets_pct < 15%, the ratio is unreliable (could be 1-2 whale bets).
+    Scale intensity down by bets_pct to prevent single-bet noise from inflating scores."""
     if bets_pct <= 0:
-        return 0.5  # No data — neutral
+        return 0.2  # No data — low confidence, not neutral
     ratio = money_pct / bets_pct
     intensity = 1.0 / (1.0 + math.exp(-2.0 * (ratio - 1.3)))
+    # Low-sample guard: at 2% bets, a 20:1 ratio is noise (1-2 bets)
+    if bets_pct < 15:
+        intensity *= (bets_pct / 15.0)  # 2%→0.13x, 5%→0.33x, 10%→0.67x, 15%→1.0x
     return round(max(0.0, min(1.0, intensity)), 3)
 
 
@@ -134,7 +139,7 @@ def classify_line_movement(row: dict) -> dict:
         elif move_dir == 1:
             bonus = 3.0  # Book moved with action and holds
         elif move_dir == -1:
-            bonus = 2.0  # Book moved against and holds (fade already scored)
+            bonus = -2.0  # v2.2: Book moved AGAINST this side and holds = persistent fade
         else:
             bonus = 2.0
         return {
@@ -275,6 +280,9 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
     else:
         mr_bonus_base = _MR_MAP.get(mr, 0)
     if mr_bonus_base > 0 and D_abs > 0:
+        # v2.2: Positive market reads require minimum sample — 2% bets is noise
+        if base_bets < 10:
+            mr_bonus_base = round(mr_bonus_base * (base_bets / 10.0), 1)  # 2%→0.2x, 5%→0.5x
         # Scale positive bonuses by D intensity: D=8->x0.8, D=15->x1.0, D=25->x1.25
         d_scale = min(0.5 + (D_abs / 20.0), 1.25)
         mr_bonus = round(mr_bonus_base * d_scale, 1)
@@ -305,14 +313,16 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
         line_moved_against = rlm_move_dir == -1 and rlm_meaningful
 
         if is_public_majority and line_moved_against:
+            # v2.2: NEGATIVE signal — public majority on this side but book fading it.
+            # Sharps are on the OTHER side. Stronger penalty with higher public %.
             if rlm_bets >= 75:
-                rlm_score = 8.0
+                rlm_score = -6.0
             elif rlm_bets >= 65:
-                rlm_score = 6.0
+                rlm_score = -4.0
             else:
-                rlm_score = 4.0
+                rlm_score = -2.0
             if rlm_money >= 60 and rlm_bets >= 65:
-                rlm_score += 2.0
+                rlm_score -= 1.5  # Money also concentrated = stronger fade signal
 
             # Reduce by 50% when Pattern G fires (Pattern G is the cross-layer RLM)
             if pattern == "G":
@@ -321,6 +331,17 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
 
             score += rlm_score
             flags.append(f"rlm:{rlm_score:+.1f}")
+
+        elif not is_public_majority and rlm_bets >= 10 and rlm_bets <= 40 and rlm_move_dir == 1 and rlm_meaningful:
+            # Contrarian RLM: few public bets on this side but line moving TOWARD it.
+            # Sharps are on THIS side — positive signal.
+            # v2.2: Requires bets >= 10% — below that, "contrarian" is just no data
+            rlm_score = 4.0 if rlm_bets <= 30 else 2.0
+            if pattern == "G":
+                rlm_score *= 0.5
+                flags.append("rlm:dedup_pattern_g")
+            score += rlm_score
+            flags.append(f"rlm_contrarian:{rlm_score:+.1f}")
     except Exception:
         pass
     details["rlm"] = rlm_score
@@ -367,13 +388,17 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
         elif sport_upper == "MLB":
             inst_mult = 0.90
 
-    # Smooth sample confidence: sigmoid from 0.60 (0 bets) to 1.00 (40+ bets)
+    # Smooth sample confidence: sigmoid from 0.20 (0 bets) to 1.00 (40+ bets)
+    # v2.2: Much more aggressive at low end — 2% bets is 1-2 tickets, can't trust D
     bets_num = _safe_float(row.get("bets_pct"))
     if bets_num <= 0:
-        sample_mult = 0.60
+        sample_mult = 0.20
     else:
-        sample_mult = 0.60 + 0.40 / (1.0 + math.exp(-0.15 * (bets_num - 15)))
+        sample_mult = 0.20 + 0.80 / (1.0 + math.exp(-0.18 * (bets_num - 20)))
         sample_mult = min(sample_mult, 1.00)
+    # Hard floor: at < 10% bets, cap at 0.35 regardless
+    if bets_num < 10:
+        sample_mult = min(sample_mult, 0.35)
 
     price_mult = 1.00
     if mkt_upper == "MONEYLINE":
@@ -488,6 +513,9 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
         lm_bonus = 0.0  # No movement = no bonus
     else:
         lm_bonus = lm_raw  # Line confirms this side = full bonus
+        # v2.2: Positive lm_bonus dampened at very low bets — can't attribute move to this side
+        if base_bets < 15:
+            lm_bonus *= max(0.3, base_bets / 15.0)  # 2%→0.3x, 10%→0.67x
     score += lm_bonus
     details["line_movement"] = round(lm_bonus, 2)
     details["effective_move_mag"] = round(eff_mag, 2)
@@ -562,11 +590,16 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
     book_holds = (move_dir == 0 or not meaningful)
     book_fades = (move_dir == -1 and meaningful)
 
+    # v2.2: Low sample guard for color — DARK_GREEN at 2% bets is a whale, not a signal
+    _color_sample_scale = 1.0
+    if base_bets < 15:
+        _color_sample_scale = max(0.1, base_bets / 15.0)  # 2%→0.13x, 10%→0.67x
+
     if color == "DARK_GREEN":
         if book_confirms:
             # v2.1: Book agrees with concentrated money → strong bonus, scale by D
             # Raised cap 8→12 — this is the strongest DK signal (money + book alignment)
-            color_bonus = min(6.0 + (D_abs / 12.0) * 4.0, 12.0)
+            color_bonus = min(6.0 + (D_abs / 12.0) * 4.0, 12.0) * _color_sample_scale
             if l1_dir == 1 and l1_avail:
                 color_bonus = min(color_bonus + 2.0, 14.0)
                 flags.append("color:l1_confirms")
@@ -575,16 +608,16 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
                 flags.append("color:l1_opposes")
         elif book_holds:
             # Book absorbs money without moving → small bonus at best
-            color_bonus = 1.5
+            color_bonus = 1.5 * _color_sample_scale
             flags.append("color:dark_green_book_holds")
         elif book_fades:
             # Book moves AGAINST concentrated money → this is a negative signal
-            color_bonus = -3.0
+            color_bonus = -3.0  # Keep negative signals full strength
             flags.append("color:dark_green_book_fades")
     elif color == "LIGHT_GREEN":
         if book_confirms:
             # v2.1: raised cap 3→5
-            color_bonus = min(3.0 + (D_abs / 15.0) * 2.0, 5.0)
+            color_bonus = min(3.0 + (D_abs / 15.0) * 2.0, 5.0) * _color_sample_scale
         elif book_holds:
             color_bonus = 0.5
         else:
@@ -674,6 +707,8 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
                 longshot = -7
             elif prob_gap > 0.05:
                 longshot = -4
+            elif prob_gap > 0.02:
+                longshot = -2  # v2.2: near-longshot (e.g. +280 NCAAB) — mild penalty
             score += longshot
             if longshot:
                 flags.append(f"longshot:{longshot}")
