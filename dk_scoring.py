@@ -507,8 +507,11 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
         else:
             lm_raw = min(16.0, eff_mag * 2.5)
     # Apply direction: +1=toward side (reward), -1=against side (penalize), 0=neutral
+    # v2.3: Reduced from -0.6x to -0.25x — the positive side already captures
+    # line movement info; harsh penalty on the other side double-counts and
+    # inflates net_edge (the gap between sides).
     if _lm_dir == -1:
-        lm_bonus = -lm_raw * 0.6  # Line moving AGAINST this side = negative signal
+        lm_bonus = -lm_raw * 0.25  # Line moving AGAINST this side = mild negative
     elif _lm_dir == 0:
         lm_bonus = 0.0  # No movement = no bonus
     else:
@@ -763,6 +766,21 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
         score -= _excess
         flags.append(f"stack_cap:-{_excess:.1f}")
     details["stack_cap"] = round(max(0, _dk_positives - _STACK_CAP), 1)
+
+    # ── 18. PENALTY FLOOR ──
+    # v2.3: Mirror of stacking cap — total negative component contributions
+    # are floored at -15 to prevent the unfavored side from being pushed
+    # below ~35. Without this, asymmetric penalties (lm, color, RLM, mr,
+    # retail) can stack to -25+, inflating net_edge excessively.
+    _dk_negatives = (min(0, mr_bonus) + min(0, div_contrib) + min(0, color_bonus)
+                     + min(0, lm_bonus) + min(0, rlm_score) + min(0, lm_pattern_bonus)
+                     + min(0, ml_risk) + min(0, longshot) + retail_align)
+    _PENALTY_FLOOR = -15.0
+    if _dk_negatives < _PENALTY_FLOOR:
+        _recover = _PENALTY_FLOOR - _dk_negatives  # positive number
+        score += _recover
+        flags.append(f"penalty_floor:+{_recover:.1f}")
+    details["penalty_floor"] = round(min(0, _dk_negatives - _PENALTY_FLOOR), 1)
 
     # Final clamp
     score = max(0.0, min(100.0, score))

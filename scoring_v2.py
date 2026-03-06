@@ -174,9 +174,12 @@ def compute_l1_adjustment(row: dict) -> dict:
            * L1_MAX_ADJUSTMENT) + speed_bonus + key_bonus + leader_bonus
 
     # BIDIRECTIONAL: check if sharp direction matches DK favored side
+    # v2.3: Reduced from 0.5x to 0.3x — the favored side's L1 boost already
+    # captures the sharp signal. Heavy penalty on the opposing side inflates
+    # net_edge by widening the gap between sides.
     if direction < 0:
         # Sharp opposes this side — invert to penalty range
-        raw = -abs(raw) * 0.5  # Penalty is 50% of absolute value
+        raw = -abs(raw) * 0.3  # Penalty is 30% of absolute value
 
     # GAP 5: DK money confirmation — cross-check L1 with bets/money context
     money_pct = _safe_float(row.get("money_pct"))
