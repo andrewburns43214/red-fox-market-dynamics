@@ -2425,8 +2425,8 @@ function updateFreshness(f){
   // Per-source: {name, ts, freshThresh, warnThresh}
   const sources=[
     {name:'DK', ts:f.dk_ts, fresh:15, warn:30},
-    {name:'L1 Sharp', ts:f.l1_ts, fresh:240, warn:420},
-    {name:'L2 Consensus', ts:f.l2_ts, fresh:240, warn:420},
+    {name:'L1 Sharp', ts:f.l1_ts, fresh:1080, warn:1500},   // 18h fresh, 25h warn (pulls 3x/day, overnight gap is 17h)
+    {name:'L2 Consensus', ts:f.l2_ts, fresh:1080, warn:1500},
     {name:'Engine', ts:f.engine_ts, fresh:15, warn:30}
   ];
   let worst=0; // 0=live, 1=degraded, 2=stale
