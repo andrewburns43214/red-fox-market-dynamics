@@ -467,19 +467,27 @@ def compute_dk_base(row: dict, context: dict = None) -> dict:
             eff_mag = abs(lm)
         except Exception:
             pass
-    # v2.1: DK line movement is the most reliable signal we have.
-    # Large moves should score proportionally higher — a $50 ML move is way
-    # more meaningful than a $10 move, so use a 2-tier multiplier.
+    # v2.2: Line movement DIRECTION matters — movement toward this side is positive,
+    # movement away (book fading this side) is NEGATIVE. Cannot reward a line
+    # moving against the money/favored side.
+    _lm_dir = int(_safe_float(row.get("move_dir")))
     if mkt_upper == "SPREAD":
         if eff_mag >= 1.5:
-            lm_bonus = min(14.0, 4.0 + (eff_mag - 1.5) * 3.0)  # steeper for big moves
+            lm_raw = min(14.0, 4.0 + (eff_mag - 1.5) * 3.0)
         else:
-            lm_bonus = min(14.0, eff_mag * 2.5)
+            lm_raw = min(14.0, eff_mag * 2.5)
     else:
         if eff_mag >= 2.0:
-            lm_bonus = min(16.0, 5.0 + (eff_mag - 2.0) * 2.5)  # ML/total big moves
+            lm_raw = min(16.0, 5.0 + (eff_mag - 2.0) * 2.5)
         else:
-            lm_bonus = min(16.0, eff_mag * 2.5)
+            lm_raw = min(16.0, eff_mag * 2.5)
+    # Apply direction: +1=toward side (reward), -1=against side (penalize), 0=neutral
+    if _lm_dir == -1:
+        lm_bonus = -lm_raw * 0.6  # Line moving AGAINST this side = negative signal
+    elif _lm_dir == 0:
+        lm_bonus = 0.0  # No movement = no bonus
+    else:
+        lm_bonus = lm_raw  # Line confirms this side = full bonus
     score += lm_bonus
     details["line_movement"] = round(lm_bonus, 2)
     details["effective_move_mag"] = round(eff_mag, 2)
