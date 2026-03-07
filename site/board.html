@@ -588,10 +588,9 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .info-btn.active { background: #e8f1ff; border-color: #3b82f6; color: #2563eb; }
 /* Group button in pane header */
 .grp-btn {
-  padding: 4px 14px; border-radius: 20px; font-family: var(--sans);
+  padding: 4px 10px; border-radius: 20px; font-family: var(--sans);
   font-size: 10px; font-weight: 600; cursor: pointer; transition: all .12s;
-  background: var(--surface2); border: 1px solid var(--border2); color: var(--text3);
-  margin-left: 20px;
+  background: #fff; border: 1px solid var(--border); color: var(--text3);
 }
 .grp-btn:hover { border-color: var(--accent); color: var(--accent); }
 .grp-btn.grp-on { background: var(--accent); color: #fff; border-color: var(--accent); }
@@ -1105,9 +1104,10 @@ thead th.th-play { text-align: left; }
     <div class="board">
       <div class="lpane">
         <div class="pane-hdr">
-          <div style="display:flex;align-items:center;gap:10px">
+          <div style="display:flex;align-items:center;gap:6px">
             <span class="pane-title" id="board-title">Upcoming Games</span>
             <button class="grp-btn" id="grp-toggle" onclick="toggleGroup(this)">Group by Game</button>
+            <button class="grp-btn" onclick="window.scrollTo({top:0,behavior:'smooth'})">Top ↑</button>
             <button class="grp-btn" id="locked-jump" onclick="jumpToLocked()" style="display:none">Live / Locked Games</button>
           </div>
           <span class="pane-meta" id="board-meta">—</span>
