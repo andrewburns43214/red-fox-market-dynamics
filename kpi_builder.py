@@ -94,8 +94,8 @@ pd.DataFrame(summary_rows).to_csv("data/kpi_summary.csv", index=False)
 
 def score_bucket(x):
     if x < 60: return "<60"
-    if x <= 64: return "60-64"
-    if x <= 69: return "65-69"
+    if x <= 66: return "60-66"
+    if x <= 69: return "67-69"
     if x <= 74: return "70-74"
     return "75+"
 

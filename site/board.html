@@ -4,27 +4,29 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Red Fox · Market Intelligence</title>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <style>
 :root {
-  --bg:        #ffffff;
-  --bg2:       #f4f5f7;
-  --bg3:       #f0f1f4;
-  --bg4:       #e8eaef;
-  --surface:   #eceef2;
-  --surface2:  #e2e5ec;
-  --surface3:  #d8dce6;
-  --border:    #dde0e8;
-  --border2:   #c8ccd8;
-  --border3:   #b0b6c8;
-  --text:      #2c3550;
-  --text2:     #5a6480;
-  --text3:     #8892aa;
-  --text4:     #aab2c4;
-  --white:     #1a2040;
-  --white2:    #0f1428;
+  /* Colors — light cards, clean backgrounds */
+  --bg:        #F7F8FA;
+  --bg2:       #F0F1F4;
+  --bg3:       #F7F8FA;
+  --bg4:       #ECEEF2;
+  --surface:   #F0F1F4;
+  --surface2:  #E5E7EB;
+  --surface3:  #D8DCE6;
+  --border:    #E5E7EB;
+  --border2:   #D1D5DB;
+  --border3:   #B0B6C8;
+  --text:      #111827;
+  --text2:     #4B5563;
+  --text3:     #6B7280;
+  --text4:     #9CA3AF;
+  --white:     #111827;
+  --white2:    #030712;
+  /* Accent colors — unchanged */
   --red:       #d63020;
   --red2:      #e53935;
   --red3:      #ff6b6b;
@@ -44,15 +46,28 @@
   --accent2:   #2080f0;
   --acc-bg:    #eef5ff;
   --acc-brd:   #b8d4f8;
+  /* Fonts — Inter replaces Plus Jakarta Sans */
   --mono:      'JetBrains Mono', 'Courier New', monospace;
-  --sans:      'Plus Jakarta Sans', system-ui, sans-serif;
-  --radius:    6px;
+  --sans:      'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  /* Typography scale */
+  --font-kpi:    28px;
+  --font-title:  20px;
+  --font-body:   14px;
+  --font-small:  12px;
+  --font-micro:  11px;
+  /* Layout */
+  --radius:    8px;
   --radius2:   10px;
-  --shadow:    0 1px 4px rgba(0,0,0,.08);
-  --shadow2:   0 2px 12px rgba(0,0,0,.12);
+  --shadow:    0 1px 4px rgba(0,0,0,.06);
+  --shadow2:   0 2px 12px rgba(0,0,0,.08);
 }
 
-*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; font-family: inherit; }
+html, body, button, input, select, textarea {
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
 html,body { height: 100%; overflow: hidden; }
 body {
   background: var(--bg);
@@ -207,6 +222,8 @@ body::before {
   align-items: stretch;
   padding: 0 20px;
   overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
   gap: 0;
 }
 .tabs::-webkit-scrollbar { display: none; }
@@ -353,17 +370,17 @@ body::before {
 table { width: 100%; border-collapse: collapse; }
 thead { position: sticky; top: 0; z-index: 2; }
 thead th {
-  padding: 7px 10px;
+  padding: 8px 10px;
   background: var(--bg4);
   font-family: var(--sans);
-  font-size: 10px; font-weight: 700;
-  letter-spacing: .5px; text-transform: uppercase;
+  font-size: var(--font-small); font-weight: 600;
+  letter-spacing: .05em; text-transform: uppercase;
   color: var(--text3); text-align: left; white-space: nowrap;
   border-bottom: 1px solid var(--border2);
   cursor: pointer; user-select: none;
   transition: color .1s;
 }
-table { width: max-content; min-width: 100%; border-collapse: collapse; }
+table { width: max-content; min-width: 900px; border-collapse: collapse; }
 thead th:hover { color: var(--text2); }
 thead th.sorted { color: var(--white); }
 thead th.sorted::after { content: ' ↓'; color: var(--accent2); font-size: 9px; }
@@ -384,7 +401,7 @@ tbody tr.row-mid {
   border-left: 3px solid transparent;
 }
 
-td { padding: 7px 10px; font-size: 13px; white-space: nowrap; vertical-align: middle; }
+td { padding: 8px 10px; font-size: var(--font-body); font-weight: 500; white-space: nowrap; vertical-align: middle; }
 
 /* TD TYPES */
 .td-rank { font-family: var(--mono); font-size: 10px; color: var(--text3); text-align: center; width: 36px; padding: 6px 4px; vertical-align: top; padding-top: 10px; }
@@ -701,38 +718,42 @@ td { padding: 7px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
   text-align: center; align-items: center;
 }
 .perf-summary-cell:last-child { border-right: none; }
-.psc-val { font-family: var(--mono); font-size: 18px; font-weight: 800; color: var(--accent); line-height: 1.1; }
+.number, .kpi-val, .psc-val, .tkpi-v, .mmet-v, .cv, .ev, .td-total {
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.psc-val { font-family: var(--mono); font-size: var(--font-kpi); font-weight: 800; color: var(--accent); line-height: 1.1; letter-spacing: -0.02em; }
 .psc-val.g { color: var(--green); }
 .psc-val.b { color: var(--accent); }
 .psc-val.gd { color: var(--gold2); }
 .psc-val.o { color: #e06520; }
 .psc-val.r { color: var(--red2); }
-.psc-lbl { font-family: var(--sans); font-size: 8px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; }
+.psc-lbl { font-family: var(--sans); font-size: var(--font-micro); font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; }
 .psc-sub { font-family: var(--mono); font-size: 7.5px; color: var(--text4); margin-top: 0; }
 
 /* Stat-table panels */
 .perf-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
 }
 .perf-grid .panel { min-height: 0; }
 .stat-tbl { width: 100%; border-collapse: collapse; }
 .stat-tbl th {
-  font-family: var(--sans); font-size: 8px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .5px; color: var(--text4);
-  padding: 5px 8px; text-align: left; border-bottom: 1px solid var(--border);
+  font-family: var(--sans); font-size: var(--font-micro); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .05em; color: var(--text3);
+  padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border);
 }
 .stat-tbl th:nth-child(2),
 .stat-tbl th:nth-child(4),
 .stat-tbl th:nth-child(5) { text-align: right; }
 .stat-tbl td {
-  padding: 5px 8px; font-size: 11px; border-bottom: 1px solid rgba(0,0,0,.04);
+  padding: 7px 10px; font-size: var(--font-small); border-bottom: 1px solid rgba(0,0,0,.04);
   font-family: var(--mono); vertical-align: middle;
 }
 .stat-tbl tr:last-child td { border-bottom: none; }
 .stat-tbl .st-label {
-  font-family: var(--sans); font-weight: 700; font-size: 10px;
+  font-family: var(--sans); font-weight: 600; font-size: var(--font-small);
   color: var(--text); white-space: nowrap;
 }
 .stat-tbl .st-bar-cell { width: 35%; padding: 5px 6px; }
@@ -790,7 +811,7 @@ td { padding: 7px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 }
 .drill-overlay.open { display: flex; animation: fadeUp .15s ease both; }
 .drill-modal {
-  background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius2);
+  background: #FFFFFF; border: 1px solid var(--border2); border-radius: var(--radius2);
   width: 94vw; max-width: 1200px; max-height: 82vh; display: flex; flex-direction: column;
   box-shadow: 0 8px 30px rgba(0,0,0,.25);
 }
@@ -869,12 +890,12 @@ td { padding: 7px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 
 /* ─── PANEL ─── */
 .panel {
-  background: var(--bg3);
+  background: #FFFFFF;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius2);
   overflow: hidden;
   display: flex; flex-direction: column;
-  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  box-shadow: var(--shadow);
 }
 .panel-h {
   flex-shrink: 0; padding: 10px 14px;
@@ -1059,6 +1080,31 @@ thead th.th-play { text-align: left; }
   .full-tab { padding: 6px; }
   .panel { border-radius: 6px; }
   .panel-h { padding: 6px 10px; }
+
+  /* Performance summary: 2-col grid on mobile */
+  .perf-summary-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  .perf-summary-cell { border-bottom: 1px solid var(--border); }
+  .psc-val { font-size: 22px; }
+
+  /* Trend/CLV rows stack on mobile */
+  .perf-trend-row { grid-template-columns: 1fr; }
+
+  /* Charts resize */
+  .chart-canvas-wrap { width: 100%; height: 180px; }
+
+  /* Modal: full width on mobile */
+  .drill-modal { max-width: 95vw; width: 95vw; max-height: 90vh; }
+
+  /* Topbar: stack on mobile */
+  .topbar { height: auto; flex-wrap: wrap; padding: 8px 12px; gap: 8px; }
+  .clock { font-size: 16px; }
+
+  /* Also hide DK vs Market column on mobile */
+  .td-dvm, .th-dvm { display: none; }
 }
 
 /* Very small phones */
@@ -1272,6 +1318,30 @@ thead th.th-play { text-align: left; }
       <div class="perf-trend-row">
         <div class="panel" id="pnl-clv"></div>
         <div class="panel" id="pnl-clv-detail"></div>
+      </div>
+
+      <!-- Layer Analysis -->
+      <div class="perf-grid">
+        <div class="panel" id="pnl-pattern"></div>
+        <div class="panel" id="pnl-sharp-agree"></div>
+        <div class="panel" id="pnl-pinn-move"></div>
+      </div>
+
+      <!-- Extended CLV -->
+      <div class="perf-trend-row">
+        <div class="panel" id="pnl-clv-score"></div>
+        <div class="panel" id="pnl-clv-edge"></div>
+      </div>
+
+      <!-- Score Distribution -->
+      <div class="perf-trend-row">
+        <div class="panel" id="pnl-score-dist">
+          <div class="panel-h"><span class="panel-t">Score Distribution</span><span class="panel-m">all graded</span></div>
+          <div class="perf-chart-wrap">
+            <div class="chart-canvas-wrap" style="height:130px"><canvas id="chart-score-dist"></canvas></div>
+          </div>
+        </div>
+        <div class="panel" id="pnl-clv-pattern"></div>
       </div>
 
     </div>
@@ -1669,8 +1739,8 @@ const EDGE_BUCKETS = [
   {label:'5–8', min:5, max:8.99}, {label:'0–4', min:0, max:4.99}
 ];
 const TOTAL_SCORE_BUCKETS = [
-  {label:'90+', min:90, max:999}, {label:'80–89', min:80, max:89.99},
-  {label:'70–79', min:70, max:79.99}, {label:'60–69', min:60, max:69.99},
+  {label:'75+', min:75, max:999}, {label:'70–74', min:70, max:74.99},
+  {label:'67–69', min:67, max:69.99}, {label:'60–66', min:60, max:66.99},
   {label:'<60', min:0, max:59.99}
 ];
 const DECISION_ORDER = ['STRONG_BET','BET','LEAN','NO BET'];
@@ -2121,7 +2191,7 @@ function buildKPIs(){
   const betPlusRows = graded.filter(isBetPlus);
   const mrRows = mrEligible(allResults);
 
-  const FONT = "'Plus Jakarta Sans', system-ui, sans-serif";
+  const FONT = "'Inter', system-ui, sans-serif";
   const MONO = "'JetBrains Mono', monospace";
 
   // ── Color helper: 5-tier based on win% ──
@@ -2465,6 +2535,207 @@ function buildKPIs(){
       clvDetailPanel.innerHTML = html;
     }
   }
+
+  // ── 10. By Pattern ──
+  (function(){
+    const el = document.getElementById('pnl-pattern');
+    if (!el) return;
+    const patRows = graded.filter(r => (r.pattern_primary||'').trim() !== '');
+    if (patRows.length === 0) {
+      el.innerHTML = `<div class="panel-h"><span class="panel-t">By Pattern</span><span class="panel-m">awaiting data</span></div><div class="mr-empty-msg">Awaiting v3.2 freeze data</div>`;
+      return;
+    }
+    const patMap = groupBy(patRows, 'pattern_primary', s=>s.trim());
+    const patKeys = Object.keys(patMap).sort((a,b)=>(patMap[b]||[]).length-(patMap[a]||[]).length);
+    const patData = patKeys.map(k => { const rows=patMap[k]||[]; const w=rows.filter(isWin).length; return {label:k, pct:winRate(rows), w, l:rows.length-w, n:rows.length, _rows:rows}; });
+    let html = `<div class="panel-h"><span class="panel-t">By Pattern</span><span class="panel-m">${patRows.length} graded</span></div>`;
+    html += '<table class="stat-tbl"><thead><tr><th>Pattern</th><th></th><th>Win %</th><th>Record</th><th>N</th></tr></thead><tbody>';
+    patData.forEach(r => {
+      const idx = window._drillStash.length;
+      window._drillStash.push({ title: 'Pattern — ' + r.label + ' (' + r.w + 'W-' + r.l + 'L)', rows: r._rows || [] });
+      const pctStr = r.pct !== null ? r.pct.toFixed(1)+'%' : '—';
+      const cls = pctClass(r.pct); const clr = barClr(r.pct);
+      const barW = r.pct !== null ? Math.max(2, r.pct) : 0;
+      html += `<tr onclick="openDrill(window._drillStash[${idx}].title, window._drillStash[${idx}].rows)"><td class="st-label">${r.label}</td><td class="st-bar-cell"><div class="st-bar-wrap"><div class="st-bar-mark"></div><div class="st-bar-fill" style="width:${barW}%;background:${clr}"></div></div></td><td class="st-pct ${cls}">${pctStr}</td><td class="st-rec">${r.w}W-${r.l}L</td><td class="st-n">${r.n}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  })();
+
+  // ── 11. By Sharp Agreement ──
+  (function(){
+    const el = document.getElementById('pnl-sharp-agree');
+    if (!el) return;
+    const saRows = graded.filter(r => r.l1_sharp_agreement !== undefined && r.l1_sharp_agreement !== '');
+    if (saRows.length === 0) {
+      el.innerHTML = `<div class="panel-h"><span class="panel-t">By Sharp Agreement</span><span class="panel-m">awaiting data</span></div><div class="mr-empty-msg">Awaiting L1 data</div>`;
+      return;
+    }
+    function saBucket(v) { const n = parseInt(v); if (isNaN(n)) return null; if (n === 0) return '0'; if (n === 1) return '1'; return '2+'; }
+    const saMap = {};
+    saRows.forEach(r => { const k = saBucket(r.l1_sharp_agreement); if (k !== null) { if (!saMap[k]) saMap[k] = []; saMap[k].push(r); } });
+    const saKeys = ['0','1','2+'];
+    const saData = saKeys.map(k => { const rows=saMap[k]||[]; const w=rows.filter(isWin).length; return {label:k+' books', pct:winRate(rows), w, l:rows.length-w, n:rows.length, _rows:rows}; }).filter(r=>r.n>0);
+    let html = `<div class="panel-h"><span class="panel-t">By Sharp Agreement</span><span class="panel-m">${saRows.length} graded</span></div>`;
+    html += '<table class="stat-tbl"><thead><tr><th>Agreement</th><th></th><th>Win %</th><th>Record</th><th>N</th></tr></thead><tbody>';
+    saData.forEach(r => {
+      const idx = window._drillStash.length;
+      window._drillStash.push({ title: 'Sharp Agreement — ' + r.label + ' (' + r.w + 'W-' + r.l + 'L)', rows: r._rows || [] });
+      const pctStr = r.pct !== null ? r.pct.toFixed(1)+'%' : '—';
+      const cls = pctClass(r.pct); const clr = barClr(r.pct);
+      const barW = r.pct !== null ? Math.max(2, r.pct) : 0;
+      html += `<tr onclick="openDrill(window._drillStash[${idx}].title, window._drillStash[${idx}].rows)"><td class="st-label">${r.label}</td><td class="st-bar-cell"><div class="st-bar-wrap"><div class="st-bar-mark"></div><div class="st-bar-fill" style="width:${barW}%;background:${clr}"></div></div></td><td class="st-pct ${cls}">${pctStr}</td><td class="st-rec">${r.w}W-${r.l}L</td><td class="st-n">${r.n}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  })();
+
+  // ── 12. By Pinnacle Move ──
+  (function(){
+    const el = document.getElementById('pnl-pinn-move');
+    if (!el) return;
+    const pmRows = graded.filter(r => r.l1_pinnacle_moved !== undefined && r.l1_pinnacle_moved !== '');
+    if (pmRows.length === 0) {
+      el.innerHTML = `<div class="panel-h"><span class="panel-t">By Pinnacle Move</span><span class="panel-m">awaiting data</span></div><div class="mr-empty-msg">Awaiting L1 data</div>`;
+      return;
+    }
+    const pmMap = {'Pinnacle Moved':[], 'No Move':[]};
+    pmRows.forEach(r => {
+      const moved = String(r.l1_pinnacle_moved).toLowerCase() === 'true';
+      (moved ? pmMap['Pinnacle Moved'] : pmMap['No Move']).push(r);
+    });
+    const pmData = ['Pinnacle Moved','No Move'].map(k => { const rows=pmMap[k]||[]; const w=rows.filter(isWin).length; return {label:k, pct:winRate(rows), w, l:rows.length-w, n:rows.length, _rows:rows}; }).filter(r=>r.n>0);
+    let html = `<div class="panel-h"><span class="panel-t">By Pinnacle Move</span><span class="panel-m">${pmRows.length} graded</span></div>`;
+    html += '<table class="stat-tbl"><thead><tr><th>Status</th><th></th><th>Win %</th><th>Record</th><th>N</th></tr></thead><tbody>';
+    pmData.forEach(r => {
+      const idx = window._drillStash.length;
+      window._drillStash.push({ title: 'Pinnacle Move — ' + r.label + ' (' + r.w + 'W-' + r.l + 'L)', rows: r._rows || [] });
+      const pctStr = r.pct !== null ? r.pct.toFixed(1)+'%' : '—';
+      const cls = pctClass(r.pct); const clr = barClr(r.pct);
+      const barW = r.pct !== null ? Math.max(2, r.pct) : 0;
+      html += `<tr onclick="openDrill(window._drillStash[${idx}].title, window._drillStash[${idx}].rows)"><td class="st-label">${r.label}</td><td class="st-bar-cell"><div class="st-bar-wrap"><div class="st-bar-mark"></div><div class="st-bar-fill" style="width:${barW}%;background:${clr}"></div></div></td><td class="st-pct ${cls}">${pctStr}</td><td class="st-rec">${r.w}W-${r.l}L</td><td class="st-n">${r.n}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  })();
+
+  // ── 13. CLV by Score ──
+  (function(){
+    const el = document.getElementById('pnl-clv-score');
+    if (!el) return;
+    if (clvRows.length === 0) {
+      el.innerHTML = `<div class="panel-h"><span class="panel-t">CLV by Score</span></div><div class="mr-empty-msg">Awaiting CLV data</div>`;
+      return;
+    }
+    let html = `<div class="panel-h"><span class="panel-t">CLV by Score</span><span class="panel-m">${clvRows.length} tracked</span></div>`;
+    html += '<table class="stat-tbl"><thead><tr><th>Score</th><th>Avg CLV</th><th>Beat %</th><th>N</th></tr></thead><tbody>';
+    TOTAL_SCORE_BUCKETS.forEach(b => {
+      const rows = clvRows.filter(r => { const s = parseFloat(r.total_score||r.game_confidence||0); return s >= b.min && s <= b.max; });
+      if (rows.length === 0) return;
+      const vals = rows.map(r => parseFloat(r.clv));
+      const avg = vals.reduce((s,v)=>s+v,0)/vals.length;
+      const beat = vals.filter(v=>v>0).length;
+      const beatP = (100*beat/vals.length).toFixed(1);
+      const clr = avg > 0 ? '#00965a' : avg < 0 ? '#d63020' : '#8892aa';
+      html += `<tr><td class="st-label">${b.label}</td><td style="font-family:var(--mono);font-weight:700;color:${clr}">${avg>0?'+':''}${avg.toFixed(2)}</td><td style="font-family:var(--mono)">${beatP}%</td><td class="st-n">${rows.length}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  })();
+
+  // ── 14. CLV by Edge ──
+  (function(){
+    const el = document.getElementById('pnl-clv-edge');
+    if (!el) return;
+    if (clvRows.length === 0) {
+      el.innerHTML = `<div class="panel-h"><span class="panel-t">CLV by Edge</span></div><div class="mr-empty-msg">Awaiting CLV data</div>`;
+      return;
+    }
+    let html = `<div class="panel-h"><span class="panel-t">CLV by Edge</span><span class="panel-m">${clvRows.length} tracked</span></div>`;
+    html += '<table class="stat-tbl"><thead><tr><th>Edge</th><th>Avg CLV</th><th>Beat %</th><th>N</th></tr></thead><tbody>';
+    EDGE_BUCKETS.forEach(b => {
+      const rows = clvRows.filter(r => { const e = parseFloat(r.net_edge||0); return e >= b.min && e <= b.max; });
+      if (rows.length === 0) return;
+      const vals = rows.map(r => parseFloat(r.clv));
+      const avg = vals.reduce((s,v)=>s+v,0)/vals.length;
+      const beat = vals.filter(v=>v>0).length;
+      const beatP = (100*beat/vals.length).toFixed(1);
+      const clr = avg > 0 ? '#00965a' : avg < 0 ? '#d63020' : '#8892aa';
+      html += `<tr><td class="st-label">${b.label}</td><td style="font-family:var(--mono);font-weight:700;color:${clr}">${avg>0?'+':''}${avg.toFixed(2)}</td><td style="font-family:var(--mono)">${beatP}%</td><td class="st-n">${rows.length}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  })();
+
+  // ── 15. CLV by Pattern ──
+  (function(){
+    const el = document.getElementById('pnl-clv-pattern');
+    if (!el) return;
+    const clvPat = clvRows.filter(r => (r.pattern_primary||'').trim() !== '');
+    if (clvPat.length === 0) {
+      el.innerHTML = `<div class="panel-h"><span class="panel-t">CLV by Pattern</span></div><div class="mr-empty-msg">Awaiting data</div>`;
+      return;
+    }
+    const patMap = {};
+    clvPat.forEach(r => { const k = (r.pattern_primary||'').trim(); if (!patMap[k]) patMap[k] = []; patMap[k].push(r); });
+    const patKeys = Object.keys(patMap).sort((a,b)=>(patMap[b]||[]).length-(patMap[a]||[]).length);
+    let html = `<div class="panel-h"><span class="panel-t">CLV by Pattern</span><span class="panel-m">${clvPat.length} tracked</span></div>`;
+    html += '<table class="stat-tbl"><thead><tr><th>Pattern</th><th>Avg CLV</th><th>Beat %</th><th>N</th></tr></thead><tbody>';
+    patKeys.forEach(k => {
+      const rows = patMap[k];
+      const vals = rows.map(r => parseFloat(r.clv));
+      const avg = vals.reduce((s,v)=>s+v,0)/vals.length;
+      const beat = vals.filter(v=>v>0).length;
+      const beatP = (100*beat/vals.length).toFixed(1);
+      const clr = avg > 0 ? '#00965a' : avg < 0 ? '#d63020' : '#8892aa';
+      html += `<tr><td class="st-label">${k}</td><td style="font-family:var(--mono);font-weight:700;color:${clr}">${avg>0?'+':''}${avg.toFixed(2)}</td><td style="font-family:var(--mono)">${beatP}%</td><td class="st-n">${rows.length}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  })();
+
+  // ── 16. Score Distribution Histogram ──
+  (function(){
+    const canvas = document.getElementById('chart-score-dist');
+    if (!canvas) return;
+    const bins = [
+      {label:'<55', min:0, max:54.99}, {label:'55–59', min:55, max:59.99},
+      {label:'60–64', min:60, max:64.99}, {label:'65–69', min:65, max:69.99},
+      {label:'70–74', min:70, max:74.99}, {label:'75+', min:75, max:999}
+    ];
+    const counts = bins.map(b => {
+      return graded.filter(r => { const s = parseFloat(r.total_score||r.game_confidence||0); return s >= b.min && s <= b.max; }).length;
+    });
+    makeChart('chart-score-dist', {
+      type: 'bar',
+      data: {
+        labels: bins.map(b=>b.label),
+        datasets: [{
+          data: counts,
+          backgroundColor: 'rgba(26,111,212,.65)',
+          borderColor: 'rgba(26,111,212,.9)',
+          borderWidth: 1,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            bodyFont: { family: MONO, size: 10 },
+            titleFont: { family: FONT, size: 11, weight: '700' },
+            backgroundColor: '#1a2040', padding: 10, cornerRadius: 6,
+          },
+          datalabels: false,
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { family: FONT, size: 10 }, color: '#4B5563' } },
+          y: { grid: { color: 'rgba(0,0,0,.05)' }, ticks: { font: { family: MONO, size: 9 }, color: 'rgba(90,100,128,.4)', stepSize: 1, precision: 0 }, border: { display: false } }
+        }
+      }
+    });
+  })();
 
   // ── Summary row ──
   const totalW = graded.filter(isWin).length;

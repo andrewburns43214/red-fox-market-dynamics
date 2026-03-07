@@ -41,6 +41,9 @@ L1_DEFAULTS = {
     "sharp_cert_tier": "NONE",
     "sharp_cert_strength": 0.0,
     "sharp_cert_detail": "",
+    "l1_pinnacle_moved": False,
+    "l1_support_agreement": 0,
+    "l1_pinnacle_direction": 0,
 }
 
 L2_DEFAULTS = {
