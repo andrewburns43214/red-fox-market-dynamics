@@ -1490,8 +1490,8 @@ function renderBoard(){
   let _lockedDividerShown=false;
   if(window._lockedOpen===undefined) window._lockedOpen=true;
   data.forEach((r,i)=>{
-    const conf=Number(r.game_confidence)||0, edge=Math.round(Number(r.net_edge)||0);
-    const[dt,dc]=decInfo(r.game_decision); const bk=confBkt(conf);
+    const score=Number(r.total_score)||0, edge=Math.round(Number(r.net_edge)||0);
+    const[dt,dc]=decInfo(r.game_decision); const bk=confBkt(score);
     const lc=r.current_line&&r.open_line&&String(r.current_line).trim()!==String(r.open_line).trim();
     // Insert collapsible divider before first LOCKED row
     if(!_lockedDividerShown && (r.game_decision||'').toUpperCase()==='LOCKED'){
@@ -1503,7 +1503,7 @@ function renderBoard(){
       tbody.appendChild(divtr);
     }
     const tr=document.createElement('tr');
-    if((r.game_decision||'').toUpperCase()==='LOCKED') tr.classList.add('row-locked'); else if((r.game_decision||'').toUpperCase()==='STRONG_BET') tr.classList.add('row-strong'); else if(conf>=70) tr.classList.add('row-hi'); else if(conf>=60) tr.classList.add('row-mid');
+    if((r.game_decision||'').toUpperCase()==='LOCKED') tr.classList.add('row-locked'); else if((r.game_decision||'').toUpperCase()==='STRONG_BET') tr.classList.add('row-strong'); else if(score>=70) tr.classList.add('row-hi'); else if(score>=60) tr.classList.add('row-mid');
     if(r._grpSub) tr.classList.add('row-grp-sub');
     if(r._grpFirst) tr.classList.add('row-grp-first');
     tr.innerHTML=`
@@ -1721,7 +1721,6 @@ function openGameDetail(r){
   mkts.forEach(m=>{
     const mkt=(m.market_display||'').toUpperCase();
     const [dt,dc]=decInfo(m.game_decision);
-    const conf=n(m.game_confidence)||0;
     const edge=n(m.net_edge)||0;
     const total=n(m.total_score)||0;
     const pick=m.favored_side||'--';
@@ -1878,7 +1877,6 @@ function openGameDetail(r){
         rows.forEach((h,i)=>{
           const ts=_utcToET(h.snapshot_ts);
           const total=Number(h.total_score||h.game_confidence||0);
-          const conf=Number(h.game_confidence||0);
           const edge=Number(h.net_edge||0);
           const dec=h.game_decision||'';
           const prevDec=i>0?(rows[i-1].game_decision||''):'';
@@ -2028,9 +2026,8 @@ async function renderHistory(){
   };
   tb.innerHTML=rows.slice(0,500).map(r=>{
     const tStr=_utcToET(r.snapshot_ts);
-    const conf=_n(r.game_confidence);
     const edge=_n(r.net_edge);
-    const total=_n(r.total_score);
+    const total=_n(r.total_score||r.game_confidence);
     const curDec=r.game_decision||'';
     const totalColor=total!==null?(total>=70?'color:#22c55e':total>=60?'color:#eab308':'color:#ef4444'):'';
     const bets=_n(r.bets_pct);
@@ -2852,13 +2849,13 @@ function updateStats(){
   if(el('m-active')) el('m-active').textContent=_ug(today);
   if(el('m-wr'))     el('m-wr').textContent=pSBtop!==null?pSBtop+'%':'--';
 
-  // Avg conf metric
+  // Avg confidence metric
   document.querySelectorAll('.mmet-v').forEach(mv=>{
     const lbl=mv.nextElementSibling;
     if(!lbl) return;
     const t=lbl.textContent.toLowerCase();
     if(t.includes('avg confidence')||t.includes('avg total')) mv.textContent=avgTotal!==null?avgTotal:'--';
-    if(t.includes('high conf')||t.includes('strong')) mv.textContent=hc.length;
+    if(t.includes('strong')) mv.textContent=hc.length;
     if(t.includes("today's games")) mv.textContent=_ug(today);
   });
 
