@@ -1440,7 +1440,7 @@ let groupMode=false;
 function toggleGroup(el){ groupMode=!groupMode; el.classList.toggle('grp-on',groupMode); el.textContent=groupMode?'Ungroup':'Group by Game'; renderBoard(); }
 
 function _decRank(d){ const k=(d||'').toUpperCase(); if(k==='STRONG_BET') return 0; if(k==='BET') return 1; if(k==='LEAN') return 2; if(k==='LOCKED') return 3; return 4; }
-function filtered(){ const now=new Date(); const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d; if(filter==='today') d=allDash.filter(r=>isToday(r._game_time)).filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport); else if(filter==='highconf') d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now).filter(r=>(r.game_decision||'').toUpperCase()==='STRONG_BET'); else d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now||(r.game_decision||'').toUpperCase()==='LOCKED'); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.favored_side||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)); return d.sort((a,b)=>{ const da=_decRank(a.game_decision),db=_decRank(b.game_decision); if(da!==db) return da-db; let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
+function filtered(){ const now=new Date(); const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d; if(filter==='today') d=allDash.filter(r=>isToday(r._game_time)).filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport); else if(filter==='highconf') d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now).filter(r=>(r.game_decision||'').toUpperCase()==='STRONG_BET'); else d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now||(r.game_decision||'').toUpperCase()==='LOCKED'); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.favored_side||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)); const useDecRank = filter!=='today'; return d.sort((a,b)=>{ if(useDecRank){ const da=_decRank(a.game_decision),db=_decRank(b.game_decision); if(da!==db) return da-db; } let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
 
 window._boardRows=[];
 function renderBoard(){
@@ -1476,7 +1476,7 @@ function renderBoard(){
     const[dt,dc]=decInfo(r.game_decision); const bk=confBkt(conf);
     const lc=r.current_line&&r.open_line&&String(r.current_line).trim()!==String(r.open_line).trim();
     // Insert divider before first LOCKED row
-    if(!_lockedDividerShown && (r.game_decision||'').toUpperCase()==='LOCKED'){
+    if(!_lockedDividerShown && filter!=='today' && (r.game_decision||'').toUpperCase()==='LOCKED'){
       _lockedDividerShown=true;
       const _nLocked=data.filter(x=>(x.game_decision||'').toUpperCase()==='LOCKED').length;
       const divtr=document.createElement('tr');
