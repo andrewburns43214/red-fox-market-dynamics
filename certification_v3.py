@@ -5,7 +5,7 @@ Separate from scoring. Answers: "Is this actionable?"
 Score answers: "How strong is the signal?"
 Certification answers: "Can we act on it?"
 
-Decision hierarchy: STRONG_BET > BET > LEAN > NO_BET
+Decision hierarchy: STRONG_BET > BET > LEAN > NO_BET > LOCKED
 Freeze ledger: append-only, never downgrade.
 """
 
@@ -48,6 +48,14 @@ def certify_decision(row: dict, score: float, net_edge: float,
         edge_min = C.BET_EDGE_MIN_SIDES
         strong_edge_min = C.STRONG_EDGE_MIN_SIDES
 
+    # ── LIVE gate: freeze signal, not actionable ──
+    if timing_bucket == "LIVE":
+        return _result("LOCKED", "GAME_STARTED", False, False)
+
+    # ── Final 10-minute gate: cap at LEAN (late whipsaw protection) ──
+    minutes_to_kick = _num(row.get("minutes_to_kickoff", 999))
+    final_10min = 0 <= minutes_to_kick <= 10
+
     # ── NO_BET ──
     if score < C.LEAN_SCORE_MIN:
         return _result("NO_BET", None, False, False)
@@ -55,6 +63,10 @@ def certify_decision(row: dict, score: float, net_edge: float,
     # ── LEAN ──
     if score < C.BET_SCORE_MIN or net_edge < edge_min:
         return _result("LEAN", None, False, False)
+
+    # ── Final 10-min cap: BET-eligible → LEAN ──
+    if final_10min:
+        return _result("LEAN", "FINAL_10MIN", False, False)
 
     # ── BET eligible — check STRONG gates ──
     blocked_by = _check_strong_gates(
