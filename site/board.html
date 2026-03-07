@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Red Fox · Market Intelligence</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <style>
@@ -46,7 +46,7 @@
   --accent2:   #2080f0;
   --acc-bg:    #eef5ff;
   --acc-brd:   #b8d4f8;
-  /* Fonts — Inter replaces Plus Jakarta Sans */
+  /* Fonts — system stack + JetBrains Mono */
   --mono:      'JetBrains Mono', 'Courier New', monospace;
   --sans:      system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   /* Typography scale */
@@ -119,22 +119,23 @@ body::before {
   object-fit: contain;
 }
 
-.wordmark { line-height: 1.1; }
-.wm-sup {
-  font-family: var(--sans);
-  font-size: 8px; letter-spacing: 2.5px;
-  font-weight: 500;
-  color: var(--text3); text-transform: uppercase;
-  display: block;
-  margin-top: 2px;
+.wordmark {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
 .wm-main {
   font-family: var(--sans);
-  font-size: 16px; font-weight: 800;
-  letter-spacing: .5px; color: var(--white2);
-  display: block;
+  font-size: 20px; font-weight: 800;
+  color: #dc2626;
 }
-.wm-main span { color: var(--red2); }
+.wm-main span { color: #dc2626; }
+.wm-sup {
+  font-family: var(--sans);
+  font-size: 11px; letter-spacing: .08em;
+  font-weight: 400;
+  color: #6b7280; text-transform: uppercase;
+}
 
 .live-badge {
   display: flex; align-items: center; gap: 5px;
@@ -371,18 +372,17 @@ table { width: 100%; border-collapse: collapse; }
 thead { position: sticky; top: 0; z-index: 2; }
 thead th {
   padding: 8px 10px;
-  background: var(--bg4);
+  background: #f1f3f5;
   font-family: var(--sans);
   font-size: 12px; font-weight: 600;
-  color: var(--text2); text-align: left; white-space: nowrap;
-  border-bottom: 1px solid var(--border2);
+  color: #6b7280; text-align: left; white-space: nowrap;
+  border-bottom: 1px solid #e5e7eb;
   cursor: pointer; user-select: none;
   transition: color .1s;
 }
-table { width: max-content; min-width: 100%; border-collapse: collapse; }
 thead th:hover { color: var(--text2); }
-thead th.sorted { color: var(--white); }
-thead th.sorted::after { content: ' ↓'; color: var(--accent2); font-size: 9px; }
+thead th.sorted { color: #111827; }
+thead th.sorted::after { content: ' ↓'; color: #2080f0; font-size: 11px; font-weight: 700; }
 thead th.sorted.asc::after { content: ' ↑'; }
 
 tbody tr {
@@ -390,7 +390,7 @@ tbody tr {
   cursor: pointer;
   transition: background .08s;
 }
-tbody tr:hover { background: rgba(26,111,212,.04); }
+tbody tr:hover { background: #f9fafb; }
 tbody tr.row-hi {
   background: rgba(0,168,107,.06);
   border-left: 3px solid var(--green2);
@@ -400,7 +400,7 @@ tbody tr.row-mid {
   border-left: 3px solid transparent;
 }
 
-td { padding: 8px 10px; font-size: var(--font-body); font-weight: 500; white-space: nowrap; vertical-align: middle; }
+td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: middle; }
 
 /* TD TYPES */
 .td-rank { font-family: var(--mono); font-size: 10px; color: var(--text3); text-align: center; width: 36px; padding: 6px 4px; vertical-align: top; padding-top: 10px; }
@@ -889,12 +889,12 @@ td { padding: 8px 10px; font-size: var(--font-body); font-weight: 500; white-spa
 
 /* ─── PANEL ─── */
 .panel {
-  background: #FFFFFF;
-  border: 1px solid var(--border);
-  border-radius: var(--radius2);
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
   overflow: hidden;
   display: flex; flex-direction: column;
-  box-shadow: var(--shadow);
+  box-shadow: 0 1px 3px rgba(0,0,0,.05);
 }
 .panel-h {
   flex-shrink: 0; padding: 10px 14px;
@@ -1107,8 +1107,7 @@ thead th.th-play { text-align: left; }
   .td-dvm, .th-dvm { display: none; }
 
   /* Tables: enforce min-width for horizontal scroll on mobile */
-  table { min-width: 900px; }
-  .results-table table { min-width: 1100px; }
+  table { min-width: 1100px; }
 
   /* KPI panels stack on mobile */
   .perf-grid { grid-template-columns: 1fr; }
@@ -1146,7 +1145,7 @@ thead th.th-play { text-align: left; }
   <div class="tl">
     <div class="logo-wrap">
       <div class="wordmark">
-        <span class="wm-main">Red <span>Fox</span></span>
+        <span class="wm-main">Red Fox</span>
         <span class="wm-sup">Market Intelligence</span>
       </div>
     </div>
@@ -3061,7 +3060,7 @@ function renderResults(){
   inner.innerHTML=`<div style="overflow-x:auto">
     <div style="padding:10px 14px;font-size:11px;color:#8892aa;border-bottom:1px solid #eee">${resolved.length} resolved plays</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px">
-    <thead><tr style="background:#f4f5f7;text-align:left">${['Date','Sport','Game','Market','Side','Decision','Conf','Edge','Total','DK Signal','Result','CLV'].map(c=>'<th style="padding:8px 10px;border-bottom:2px solid #dde0e8;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#5a6480;white-space:nowrap">'+c+'</th>').join('')}</tr></thead>
+    <thead><tr style="background:#f1f3f5;text-align:left">${['Date','Sport','Game','Market','Side','Decision','Conf','Edge','Total','DK Signal','Result','CLV'].map(c=>'<th style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap">'+c+'</th>').join('')}</tr></thead>
     <tbody>${trs}</tbody></table></div>`;
 }
 
