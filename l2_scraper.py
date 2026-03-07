@@ -297,16 +297,14 @@ def scrape_l1_and_l2(sport: str) -> dict:
     """
     Scrape both L1 (sharp) and L2 (consensus) data for a sport.
 
-    L1: OddsPapi (6 sharp books, timestamps, limits) → fallback to The-Odds-API Pinnacle
+    L1: The-Odds-API (tiered sharp cluster — Pinnacle/Matchbook + Betfair/Bet365)
     L2: The-Odds-API (31 US+EU books for consensus)
-
-    These are now SEPARATE API calls to different services with independent budgets.
 
     Returns combined result dict.
     """
     from l1_scraper import scrape_l1_auto
 
-    # L1: OddsPapi first, The-Odds-API fallback
+    # L1: Sharp books from The-Odds-API
     l1_result = scrape_l1_auto(sport)
 
     # L2: Always The-Odds-API (irreplaceable for 31-book consensus)

@@ -49,12 +49,21 @@ def compute_sharp_signal(row: dict) -> dict:
     if sport == "nhl" and market == "SPREAD":
         base *= C.NHL_PUCK_LINE_SHARP_MULT
 
-    # Step 3 — Agreement multiplier
-    agreement = _num(row.get("l1_sharp_agreement", 0))
-    if agreement >= 2:
-        base *= C.SHARP_AGREEMENT_BOOST
+    # Step 3 — Graduated agreement multiplier (Pinnacle-weighted, direction-aware)
+    pinnacle_moved = _bool(row.get("l1_pinnacle_moved", False))
+    sharp_agree = _num(row.get("l1_sharp_agreement", 0))
+    support_agree = _num(row.get("l1_support_agreement", 0))
+
+    if pinnacle_moved and sharp_agree >= 2:
+        base *= C.SHARP_AGREEMENT_BOOST       # Pinnacle + cluster = strongest
+    elif pinnacle_moved:
+        base *= C.SHARP_AGREEMENT_MODERATE    # Pinnacle alone = still meaningful (early steam)
+    elif sharp_agree >= 2:
+        base *= C.SHARP_AGREEMENT_MODERATE    # Cluster without Pinnacle = moderate
+    elif sharp_agree >= 1 and support_agree >= 1:
+        base *= C.SHARP_AGREEMENT_SLIGHT      # Cross-tier = slight boost
     else:
-        base *= C.SHARP_AGREEMENT_DAMPEN
+        base *= C.SHARP_AGREEMENT_DAMPEN      # Weak/noise
 
     # Step 4 — Path behavior adjustment
     path = (row.get("l1_path_behavior") or "UNKNOWN").upper()

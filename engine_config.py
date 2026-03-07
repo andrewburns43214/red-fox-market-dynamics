@@ -82,8 +82,9 @@ API_SPORT_MAP = {
 # Reverse map
 API_SPORT_MAP_REVERSE = {v: k for k, v in API_SPORT_MAP.items()}
 
-# Sharp books for Layer 1 (order = priority)
-L1_SHARP_BOOKS = ["pinnacle"]
+# Sharp books for Layer 1 — tiered hierarchy
+L1_SHARP_BOOKS = ["pinnacle", "matchbook"]           # Tier 1: true sharp
+L1_SUPPORTING_BOOKS = ["betfair_ex_eu", "bet365"]    # Tier 2: exchange/hybrid
 
 # Regions to fetch — us for domestic books, eu for Pinnacle/offshore sharp books
 L2_CONSENSUS_REGIONS = ["us", "eu"]
@@ -244,69 +245,14 @@ SPORT_SEASONS = {
 }
 
 
-# ─── ODDSPAPI CONFIGURATION (Layer 1 primary) ───
-ODDSPAPI_KEY = os.environ.get("ODDSPAPI_KEY", "")
-ODDSPAPI_BASE_URL = "https://api.oddspapi.io/v4"
-ODDSPAPI_CACHE_JSON = os.path.join(DATA_DIR, "oddspapi_cache.json")
-
-# OddsPapi tournament IDs (discovered via /tournaments endpoint)
-ODDSPAPI_TOURNAMENT_MAP = {
-    "nba": 132,
-    "ncaab": 648,
-    "nhl": None,      # discover on first run
-    "mlb": None,       # discover on first run
-    "nfl": None,       # discover on first run
-    "ufc": None,       # discover on first run
-}
-
-# Sharp books available on OddsPapi (6 books vs 1 on The-Odds-API)
-ODDSPAPI_SHARP_BOOKS = [
-    "pinnacle", "singbet", "sbobet",
-    "betcris", "circasports", "bookmaker.eu",
-]
-
-# OddsPapi budget (separate from The-Odds-API)
-ODDSPAPI_BUDGET_MONTHLY = 250
-ODDSPAPI_BUDGET_RESERVE = 20
-
-# OddsPapi monthly priority + pull schedule
-# Each month: sports in PRIORITY ORDER (spend budget on top sports first).
-# UFC is year-round and always included.
-# Lower-priority sports past MAX_SPORTS get The-Odds-API Pinnacle fallback.
-#
-# Pull times (ET): 11:30, 15:30, 18:30 (NFL Sundays add 12:15)
-# These match The-Odds-API L2 pulls so both layers are synchronized.
-ODDSPAPI_PRIORITY_SCHEDULE = {
-    #  Month  Priority Order (top 3 get OddsPapi, rest get The-Odds-API fallback)
-    1:  ["nfl", "nba", "ncaab", "ufc", "nhl"],          # Jan: NFL playoffs, NBA, CBB, UFC, NHL
-    2:  ["nfl", "nba", "ncaab", "ufc", "nhl"],          # Feb: Super Bowl, NBA, CBB, UFC, NHL
-    3:  ["ncaab", "nba", "ufc", "nhl"],                  # Mar: March Madness, NBA, UFC, NHL
-    4:  ["ncaab", "nba", "mlb", "ufc", "nhl"],           # Apr: CBB tourney, NBA, MLB opens, UFC
-    5:  ["nba", "mlb", "ufc", "nhl"],                    # May: NBA playoffs, MLB, UFC, NHL playoffs
-    6:  ["nba", "mlb", "ufc", "nhl"],                    # Jun: NBA Finals, MLB, UFC, NHL Finals
-    7:  ["mlb", "ufc"],                                   # Jul: MLB, UFC
-    8:  ["mlb", "ufc", "ncaaf"],                          # Aug: MLB, UFC, NCAAF starts
-    9:  ["nfl", "ncaaf", "mlb", "ufc"],                   # Sep: NFL opens, NCAAF, MLB stretch, UFC
-    10: ["nfl", "ncaaf", "mlb", "ufc", "nba", "nhl"],    # Oct: NFL, NCAAF, MLB postseason, UFC, NBA/NHL open
-    11: ["nfl", "ncaaf", "nba", "ufc", "ncaab", "nhl"],  # Nov: NFL, NCAAF, NBA, UFC, CBB opens, NHL
-    12: ["nfl", "ncaaf", "nba", "ufc", "ncaab", "nhl"],  # Dec: NFL, bowl games, NBA, UFC, CBB, NHL
-}
-
-# Max OddsPapi sports per pull (to stay within budget)
-# 250 req/month ÷ 30 days ÷ 3 pulls/day = ~2.8 odds calls per pull
-# Each sport = 1 odds call (fixture cached) → max 3 sports per pull
-# Top 3 priority sports get OddsPapi; rest fall back to The-Odds-API
-ODDSPAPI_MAX_SPORTS_PER_PULL = 3
-
 # Pull schedule times (ET) — when odds_snapshot_all runs
-# Weekdays:     11:30, 15:30, 18:30  (3 pulls)
-# NFL Sundays:  11:00, 12:15, 15:30, 18:30  (4 pulls)
-# Saturday:     11:30, 15:30, 18:30  (3 pulls, covers CFB)
+# Aligned with market formation phases for optimal signal capture.
+# 10:30 = post-open (early sharp), 14:00 = mid-day consensus, 17:30 = pre-game maturity
 PULL_SCHEDULE = {
-    "weekday":    ["11:30", "15:30", "18:30"],
-    "saturday":   ["11:30", "15:30", "18:30"],
-    "nfl_sunday": ["11:00", "12:15", "15:30", "18:30"],
-    "sunday":     ["11:30", "15:30", "18:30"],
+    "weekday":    ["10:30", "14:00", "17:30"],
+    "saturday":   ["10:30", "14:00", "17:30"],
+    "nfl_sunday": ["10:30", "14:00", "17:30"],
+    "sunday":     ["10:30", "14:00", "17:30"],
 }
 
 # ─── ESPN CONFIGURATION ───

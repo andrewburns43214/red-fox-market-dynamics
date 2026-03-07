@@ -1,8 +1,7 @@
 """
 Layer 1 Scraper: Sharp book data collection.
 
-Primary source: OddsPapi (6 sharp books with timestamps + limits)
-Fallback: The-Odds-API (Pinnacle only, no timestamps/limits)
+Source: The-Odds-API (tiered sharp cluster — Pinnacle/Matchbook + Betfair/Bet365)
 
 Writes to:
   - data/l1_sharp.csv       (append-only, all snapshots)
@@ -20,12 +19,13 @@ from engine_config import (
     MATCH_FAILURES_CSV,
     API_SPORT_MAP,
     L1_SHARP_BOOKS,
+    L1_SUPPORTING_BOOKS,
 )
 from canonical_match import build_canonical_key
 from team_aliases import normalize_team_name
 
 
-# Updated columns with OddsPapi fields
+# L1 sharp CSV columns
 L1_SHARP_COLUMNS = [
     "timestamp", "sport", "canonical_key", "bookmaker",
     "home_team_norm", "away_team_norm", "commence_time",
@@ -116,172 +116,14 @@ def _log_match_failure(sport: str, source: str, home: str, away: str, reason: st
         print(f"[WARN] l1 match failure log: {repr(e)}")
 
 
-def scrape_l1_oddspapi(sport: str) -> dict:
-    """
-    Scrape Layer 1 data from OddsPapi (primary source).
-
-    Returns 6 sharp books with changedAt timestamps and betting limits.
-
-    Args:
-        sport: Our sport key (nba, nfl, etc.)
-
-    Returns:
-        dict with:
-            "rows_written": int
-            "games_found": int
-            "books_found": list
-            "error": str or None
-            "from_cache": bool
-            "source": "oddspapi"
-    """
-    try:
-        from oddspapi import fetch_fixtures, fetch_odds_with_cache as oddspapi_fetch
-    except ImportError as e:
-        return {"rows_written": 0, "games_found": 0, "books_found": [],
-                "error": f"OddsPapi module not available: {e}",
-                "from_cache": False, "source": "oddspapi"}
-
-    sport_lower = sport.lower()
-
-    # Step 1: Fetch fixtures to get team names
-    fix_result = fetch_fixtures(sport_lower)
-    if fix_result["error"]:
-        return {"rows_written": 0, "games_found": 0, "books_found": [],
-                "error": f"Fixtures: {fix_result['error']}",
-                "from_cache": False, "source": "oddspapi"}
-
-    fixture_map = fix_result["fixture_map"]
-    if not fixture_map:
-        return {"rows_written": 0, "games_found": 0, "books_found": [],
-                "error": "No fixtures found for today",
-                "from_cache": False, "source": "oddspapi"}
-
-    # Step 2: Fetch odds from sharp books
-    odds_result = oddspapi_fetch(sport_lower)
-    if odds_result["error"]:
-        return {"rows_written": 0, "games_found": 0, "books_found": [],
-                "error": f"Odds: {odds_result['error']}",
-                "from_cache": odds_result.get("from_cache", False),
-                "source": "oddspapi"}
-
-    odds_data = odds_result["odds"]
-    if not odds_data:
-        return {"rows_written": 0, "games_found": 0, "books_found": [],
-                "error": "No sharp book odds returned",
-                "from_cache": odds_result.get("from_cache", False),
-                "source": "oddspapi"}
-
-    now_ts = datetime.now(timezone.utc).isoformat()
-    l1_rows = []
-    games_seen = set()
-    books_seen = set()
-
-    for od in odds_data:
-        fid = str(od.get("fixture_id", ""))
-
-        # Look up team names from fixture map
-        fix_info = fixture_map.get(fid)
-        if not fix_info:
-            continue
-
-        home_raw = fix_info["home"]
-        away_raw = fix_info["away"]
-        commence = fix_info["commence_time"]
-
-        if not home_raw or not away_raw:
-            _log_match_failure(sport_lower, "oddspapi", home_raw, away_raw, "Missing team name")
-            continue
-
-        home_norm = normalize_team_name(home_raw, sport=sport_lower)
-        away_norm = normalize_team_name(away_raw, sport=sport_lower)
-        canon_key = build_canonical_key(away_raw, home_raw, sport_lower, commence)
-
-        if not canon_key:
-            _log_match_failure(sport_lower, "oddspapi", home_raw, away_raw, "No canonical key")
-            continue
-
-        games_seen.add(canon_key)
-        books_seen.add(od["bookmaker"])
-
-        # Normalize side
-        side = od["side"]
-        if od["market"] == "TOTAL":
-            side = side.lower()
-        else:
-            side = normalize_team_name(side, sport=sport_lower)
-
-        line_val = od["line"] if od["line"] is not None else ""
-        limit_val = od.get("limit")
-        limit_str = str(limit_val) if limit_val is not None else ""
-
-        l1_rows.append({
-            "timestamp": now_ts,
-            "sport": sport_lower,
-            "canonical_key": canon_key,
-            "bookmaker": od["bookmaker"],
-            "home_team_norm": home_norm,
-            "away_team_norm": away_norm,
-            "commence_time": commence,
-            "market": od["market"],
-            "side": side,
-            "line": line_val,
-            "odds_american": od["odds_american"],
-            "changed_at": od.get("changed_at", ""),
-            "limit": limit_str,
-            "source": "oddspapi",
-        })
-
-    if not l1_rows:
-        return {"rows_written": 0, "games_found": len(games_seen),
-                "books_found": sorted(books_seen),
-                "error": "No sharp book data matched to fixtures",
-                "from_cache": odds_result.get("from_cache", False),
-                "source": "oddspapi"}
-
-    # Update open registry
-    open_reg = _load_l1_open_registry()
-    for row in l1_rows:
-        reg_key = (
-            row["sport"], row["canonical_key"], row["bookmaker"],
-            row["market"], row["side"],
-        )
-        if reg_key not in open_reg:
-            open_reg[reg_key] = {
-                "open_line": str(row["line"]),
-                "open_odds": str(row["odds_american"]),
-                "first_seen": now_ts,
-                "changed_at": row.get("changed_at", ""),
-                "limit": row.get("limit", ""),
-            }
-    _save_l1_open_registry(open_reg)
-
-    # Append to L1 sharp CSV
-    write_header = not os.path.exists(L1_SHARP_CSV)
-    os.makedirs(os.path.dirname(L1_SHARP_CSV) or ".", exist_ok=True)
-    with open(L1_SHARP_CSV, "a", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=L1_SHARP_COLUMNS,
-                           extrasaction="ignore", quoting=csv.QUOTE_ALL)
-        if write_header:
-            w.writeheader()
-        for row in l1_rows:
-            w.writerow(row)
-
-    return {
-        "rows_written": len(l1_rows),
-        "games_found": len(games_seen),
-        "books_found": sorted(books_seen),
-        "error": None,
-        "from_cache": odds_result.get("from_cache", False),
-        "source": "oddspapi",
-    }
-
 
 def scrape_l1(sport: str) -> dict:
     """
-    Scrape Layer 1 data via The-Odds-API (fallback source).
+    Scrape Layer 1 data via The-Odds-API.
 
-    Only returns Pinnacle data. No timestamps or limits.
-    Used when OddsPapi is unavailable or lacks coverage.
+    Captures tiered sharp cluster:
+      - L1_SHARP_BOOKS (pinnacle, matchbook) — tier "sharp"
+      - L1_SUPPORTING_BOOKS (betfair_ex_eu, bet365) — tier "supporting"
 
     Args:
         sport: Our sport key (nba, nfl, etc.)
@@ -316,14 +158,17 @@ def scrape_l1(sport: str) -> dict:
 
     now_ts = datetime.now(timezone.utc).isoformat()
     sport_lower = sport.lower()
-    sharp_books_set = set(b.lower() for b in L1_SHARP_BOOKS)
+    sharp_set = set(b.lower() for b in L1_SHARP_BOOKS)
+    support_set = set(b.lower() for b in L1_SUPPORTING_BOOKS)
+    all_l1_books = sharp_set | support_set
     l1_rows = []
     games_seen = set()
 
     for event in result["events"]:
         parsed = parse_event_odds(event)
         for row in parsed:
-            if row["bookmaker"].lower() not in sharp_books_set:
+            bm_lower = row["bookmaker"].lower()
+            if bm_lower not in all_l1_books:
                 continue
 
             home_norm = normalize_team_name(row["home_team"], sport=sport_lower)
@@ -348,7 +193,7 @@ def scrape_l1(sport: str) -> dict:
                 "timestamp": now_ts,
                 "sport": sport_lower,
                 "canonical_key": canon_key,
-                "bookmaker": row["bookmaker"].lower(),
+                "bookmaker": bm_lower,
                 "home_team_norm": home_norm,
                 "away_team_norm": away_norm,
                 "commence_time": row["commence_time"],
@@ -356,14 +201,14 @@ def scrape_l1(sport: str) -> dict:
                 "side": side,
                 "line": row["line"] if row["line"] is not None else "",
                 "odds_american": row["odds_american"],
-                "changed_at": "",    # Not available from The-Odds-API
-                "limit": "",         # Not available from The-Odds-API
+                "changed_at": "",
+                "limit": "",
                 "source": "oddsapi",
             })
 
     if not l1_rows:
         return {"rows_written": 0, "games_found": len(games_seen),
-                "error": "No sharp book data found (Pinnacle may not cover this sport)",
+                "error": "No sharp book data found",
                 "from_cache": result["from_cache"],
                 "remaining_requests": result.get("remaining_requests"),
                 "source": "oddsapi"}
@@ -407,22 +252,6 @@ def scrape_l1(sport: str) -> dict:
 
 
 def scrape_l1_auto(sport: str) -> dict:
-    """
-    Auto-select best L1 source: OddsPapi first, The-Odds-API fallback.
-
-    Returns:
-        Combined result dict with source indicator.
-    """
+    """Scrape L1 sharp data. Single source: The-Odds-API."""
     _ensure_l1_header()
-
-    # Try OddsPapi first (6 sharp books, timestamps, limits)
-    result = scrape_l1_oddspapi(sport)
-
-    if not result["error"]:
-        return result
-
-    # OddsPapi failed — fall back to The-Odds-API (Pinnacle only)
-    print(f"  [L1] OddsPapi failed ({result['error']}), falling back to The-Odds-API...")
-    fallback = scrape_l1(sport)
-    fallback["oddspapi_error"] = result["error"]
-    return fallback
+    return scrape_l1(sport)

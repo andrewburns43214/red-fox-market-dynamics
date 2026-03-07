@@ -25,6 +25,8 @@ from engine_config import (
     SHARP_CERT_MIN_MAGNITUDE,
     SHARP_CERT_LEADER_BOOKS,
     SHARP_CERT_FULL_MIN_AGREEMENT,
+    L1_SHARP_BOOKS,
+    L1_SUPPORTING_BOOKS,
 )
 
 
@@ -271,15 +273,36 @@ def compute_l1_features(sport: str = None) -> dict:
 
         # Aggregate features across books
 
+        # Book tier sets (lowercase for matching)
+        _sharp_set = set(b.lower() for b in L1_SHARP_BOOKS)
+        _support_set = set(b.lower() for b in L1_SUPPORTING_BOOKS)
+
         # 1. Majority direction
         dir_counts = defaultdict(int)
         for bm in book_moves:
             dir_counts[bm["direction"]] += 1
         majority_dir = max(dir_counts, key=dir_counts.get) if dir_counts else 0
 
-        # 2. Agreement: how many books agree with majority direction
+        # 2. Agreement: total books agreeing with majority direction
         agreement = dir_counts.get(majority_dir, 0)
         agreement_mult = AGREEMENT_MULTIPLIERS.get(agreement, 1.0)
+
+        # 2b. Tiered agreement (direction-aware)
+        pinnacle_moved = False
+        pinnacle_direction = 0
+        sharp_agreement = 0
+        support_agreement = 0
+        for bm in book_moves:
+            bm_name = bm["bookmaker"].lower()
+            if bm_name == "pinnacle":
+                if bm["direction"] != 0:
+                    pinnacle_moved = True
+                    pinnacle_direction = bm["direction"]
+            if bm["direction"] == majority_dir and majority_dir != 0:
+                if bm_name in _sharp_set:
+                    sharp_agreement += 1
+                elif bm_name in _support_set:
+                    support_agreement += 1
 
         # 3. Average magnitude
         magnitudes = [bm["magnitude"] for bm in book_moves if bm["magnitude"] > 0]
@@ -360,7 +383,10 @@ def compute_l1_features(sport: str = None) -> dict:
             "l1_move_dir": majority_dir,
             "l1_move_magnitude": round(normalized_mag, 3),
             "l1_move_magnitude_raw": round(avg_magnitude, 3),
-            "l1_sharp_agreement": agreement,
+            "l1_sharp_agreement": sharp_agreement,
+            "l1_support_agreement": support_agreement,
+            "l1_pinnacle_moved": pinnacle_moved,
+            "l1_pinnacle_direction": pinnacle_direction,
             "l1_agreement_mult": agreement_mult,
             "l1_limit_weighted_dir": round(limit_weighted, 3),
             "l1_leader_book": leader_book,

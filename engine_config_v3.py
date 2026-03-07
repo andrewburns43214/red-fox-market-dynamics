@@ -24,9 +24,11 @@ SHARP_MAG_ML_CAP = 14.0
 # Timing bucket dampening on magnitude
 SHARP_TIMING_MULT = {"EARLY": 1.00, "MID": 0.90, "LATE": 0.60}
 
-# Agreement multiplier (v3.2 tightened)
-SHARP_AGREEMENT_BOOST = 1.15   # Pinnacle + 1 other agree
-SHARP_AGREEMENT_DAMPEN = 0.90  # Pinnacle alone
+# Agreement multiplier — graduated (Pinnacle-weighted, not gated)
+SHARP_AGREEMENT_BOOST = 1.15     # Pinnacle + cluster agree = strongest
+SHARP_AGREEMENT_MODERATE = 1.10  # Pinnacle alone OR cluster without Pinnacle
+SHARP_AGREEMENT_SLIGHT = 1.05   # Cross-tier (1 sharp + 1 supporting)
+SHARP_AGREEMENT_DAMPEN = 0.90   # Weak/noise
 
 # Path behavior adjustments (v3.2 swapped REVERSED/OSCILLATED)
 SHARP_PATH_ADJ = {

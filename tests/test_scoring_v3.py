@@ -43,6 +43,9 @@ def _base_row(**overrides):
         "l1_move_dir": 0,
         "l1_move_magnitude_raw": 0.0,
         "l1_sharp_agreement": 0,
+        "l1_support_agreement": 0,
+        "l1_pinnacle_moved": False,
+        "l1_pinnacle_direction": 0,
         "l1_key_number_cross": 0,
         "l1_path_behavior": "UNKNOWN",
         "timing_bucket": "MID",
@@ -147,7 +150,8 @@ class Test1B_SharpSignal(unittest.TestCase):
         row = _base_row(
             l1_available=True, l1_move_dir=1,
             l1_move_magnitude_raw=2.5,  # spread: min(16, 2.5*4)=10
-            l1_sharp_agreement=2, timing_bucket="EARLY",
+            l1_sharp_agreement=2, l1_pinnacle_moved=True,
+            timing_bucket="EARLY",
             l1_path_behavior="UNKNOWN",
         )
         result = compute_sharp_signal(row)
@@ -155,23 +159,25 @@ class Test1B_SharpSignal(unittest.TestCase):
         self.assertAlmostEqual(result["sharp_score"], 11.5, places=1)
 
     def test_1B_03_solo_pinnacle_multiplier_v32(self):
-        """Pinnacle alone: base × 0.90."""
+        """Pinnacle alone: base × 1.10 (MODERATE — meaningful early steam)."""
         row = _base_row(
             l1_available=True, l1_move_dir=1,
             l1_move_magnitude_raw=2.5,
-            l1_sharp_agreement=1, timing_bucket="EARLY",
+            l1_sharp_agreement=1, l1_pinnacle_moved=True,
+            timing_bucket="EARLY",
             l1_path_behavior="UNKNOWN",
         )
         result = compute_sharp_signal(row)
-        # base=10*1.0*0.90=9.0
-        self.assertAlmostEqual(result["sharp_score"], 9.0, places=1)
+        # base=10*1.0*1.10=11.0
+        self.assertAlmostEqual(result["sharp_score"], 11.0, places=1)
 
     def test_1B_04_path_held_adds_2(self):
         """Path HELD adds +2.0."""
         row = _base_row(
             l1_available=True, l1_move_dir=1,
             l1_move_magnitude_raw=2.5,
-            l1_sharp_agreement=2, timing_bucket="EARLY",
+            l1_sharp_agreement=2, l1_pinnacle_moved=True,
+            timing_bucket="EARLY",
             l1_path_behavior="HELD",
         )
         result = compute_sharp_signal(row)
@@ -183,7 +189,8 @@ class Test1B_SharpSignal(unittest.TestCase):
         row = _base_row(
             l1_available=True, l1_move_dir=1,
             l1_move_magnitude_raw=2.5,
-            l1_sharp_agreement=2, timing_bucket="EARLY",
+            l1_sharp_agreement=2, l1_pinnacle_moved=True,
+            timing_bucket="EARLY",
             l1_path_behavior="REVERSED",
         )
         result = compute_sharp_signal(row)
@@ -195,7 +202,8 @@ class Test1B_SharpSignal(unittest.TestCase):
         row = _base_row(
             l1_available=True, l1_move_dir=1,
             l1_move_magnitude_raw=2.5,
-            l1_sharp_agreement=2, timing_bucket="EARLY",
+            l1_sharp_agreement=2, l1_pinnacle_moved=True,
+            timing_bucket="EARLY",
             l1_path_behavior="OSCILLATED",
         )
         result = compute_sharp_signal(row)
@@ -207,7 +215,8 @@ class Test1B_SharpSignal(unittest.TestCase):
         row = _base_row(
             l1_available=True, l1_move_dir=-1,
             l1_move_magnitude_raw=2.5,
-            l1_sharp_agreement=2, timing_bucket="EARLY",
+            l1_sharp_agreement=2, l1_pinnacle_moved=True,
+            timing_bucket="EARLY",
             l1_path_behavior="UNKNOWN",
         )
         result = compute_sharp_signal(row)
@@ -219,7 +228,8 @@ class Test1B_SharpSignal(unittest.TestCase):
         row = _base_row(
             l1_available=True, l1_move_dir=-1,
             l1_move_magnitude_raw=5.0,  # spread: min(16, 20)=16
-            l1_sharp_agreement=2, timing_bucket="EARLY",
+            l1_sharp_agreement=2, l1_pinnacle_moved=True,
+            timing_bucket="EARLY",
             l1_path_behavior="EXTENDED",
         )
         result = compute_sharp_signal(row)
@@ -231,7 +241,8 @@ class Test1B_SharpSignal(unittest.TestCase):
         row = _base_row(
             l1_available=True, l1_move_dir=1,
             l1_move_magnitude_raw=2.0,
-            l1_sharp_agreement=2, timing_bucket="LATE",
+            l1_sharp_agreement=2, l1_pinnacle_moved=True,
+            timing_bucket="LATE",
             l1_path_behavior="UNKNOWN",
         )
         result = compute_sharp_signal(row)
@@ -244,7 +255,8 @@ class Test1B_SharpSignal(unittest.TestCase):
             sport="nfl",
             l1_available=True, l1_move_dir=1,
             l1_move_magnitude_raw=1.0,
-            l1_sharp_agreement=2, timing_bucket="EARLY",
+            l1_sharp_agreement=2, l1_pinnacle_moved=True,
+            timing_bucket="EARLY",
             l1_path_behavior="UNKNOWN",
             l1_key_number_cross=1,
         )
@@ -258,7 +270,8 @@ class Test1B_SharpSignal(unittest.TestCase):
             sport="nba",
             l1_available=True, l1_move_dir=1,
             l1_move_magnitude_raw=1.0,
-            l1_sharp_agreement=2, timing_bucket="EARLY",
+            l1_sharp_agreement=2, l1_pinnacle_moved=True,
+            timing_bucket="EARLY",
             l1_path_behavior="UNKNOWN",
             l1_key_number_cross=1,
         )
@@ -271,7 +284,8 @@ class Test1B_SharpSignal(unittest.TestCase):
         row = _base_row(
             l1_available=True, l1_move_dir=1,
             l1_move_magnitude_raw=10.0,  # spread: min(16, 40)=16
-            l1_sharp_agreement=2, timing_bucket="EARLY",
+            l1_sharp_agreement=2, l1_pinnacle_moved=True,
+            timing_bucket="EARLY",
             l1_path_behavior="EXTENDED",
             sport="nfl", l1_key_number_cross=1,
         )
