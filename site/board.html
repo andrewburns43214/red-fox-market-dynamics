@@ -1106,8 +1106,9 @@ thead th.th-play { text-align: left; }
       <div class="lpane">
         <div class="pane-hdr">
           <div style="display:flex;align-items:center;gap:10px">
-            <span class="pane-title" id="board-title">Current Games</span>
+            <span class="pane-title" id="board-title">Upcoming Games</span>
             <button class="grp-btn" id="grp-toggle" onclick="toggleGroup(this)">Group by Game</button>
+            <button class="grp-btn" id="locked-jump" onclick="jumpToLocked()" style="display:none">Live / Locked Games</button>
           </div>
           <span class="pane-meta" id="board-meta">—</span>
         </div>
@@ -1438,6 +1439,17 @@ function setSport(s,el){ sport=s; document.querySelectorAll('.sfilters .schip:no
 function sortBy(col,th){ if(sortCol===col) sortAsc=!sortAsc; else{sortCol=col;sortAsc=false;} document.querySelectorAll('thead th').forEach(t=>t.classList.remove('sorted','asc')); th.classList.add('sorted'); if(sortAsc) th.classList.add('asc'); renderBoard(); }
 let groupMode=false;
 function toggleGroup(el){ groupMode=!groupMode; el.classList.toggle('grp-on',groupMode); el.textContent=groupMode?'Ungroup':'Group by Game'; renderBoard(); }
+function jumpToLocked(){
+  const div=document.querySelector('.locked-divider');
+  if(!div) return;
+  // Open the locked section if collapsed
+  if(!window._lockedOpen){
+    window._lockedOpen=true;
+    const arrow=div.querySelector('.lk-arrow'); if(arrow) arrow.textContent='▾';
+    document.querySelectorAll('.row-locked').forEach(r=>r.style.display='');
+  }
+  div.scrollIntoView({behavior:'smooth',block:'start'});
+}
 
 function _decRank(d){ const k=(d||'').toUpperCase(); if(k==='STRONG_BET') return 0; if(k==='BET') return 1; if(k==='LEAN') return 2; if(k==='LOCKED') return 3; return 4; }
 function filtered(){ const now=new Date(); const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d; if(filter==='today') d=allDash.filter(r=>isToday(r._game_time)).filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport); else if(filter==='highconf') d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now).filter(r=>(r.game_decision||'').toUpperCase()==='STRONG_BET'); else d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now||(r.game_decision||'').toUpperCase()==='LOCKED'); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.favored_side||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)); return d.sort((a,b)=>{ const aLocked=(a.game_decision||'').toUpperCase()==='LOCKED'?1:0; const bLocked=(b.game_decision||'').toUpperCase()==='LOCKED'?1:0; if(aLocked!==bLocked) return aLocked-bLocked; let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
@@ -1465,8 +1477,10 @@ function renderBoard(){
     groups.forEach(g=>{ g.rows.forEach((r,j)=>{ r._grpSub=j>0; r._grpFirst=j===0&&g.rows.length>1; data.push(r); }); });
   }
   window._boardRows=data;
-  const titles={all:'All Games',highconf:'Strong Bets',today:"Today's Games"};
-  document.getElementById('board-title').textContent=titles[filter]||'Current Games';
+  const titles={all:'Upcoming Games',highconf:'Strong Bets',today:'Upcoming Games'};
+  document.getElementById('board-title').textContent=titles[filter]||'Upcoming Games';
+  const _hasLocked=data.some(r=>(r.game_decision||'').toUpperCase()==='LOCKED');
+  document.getElementById('locked-jump').style.display=_hasLocked?'':'none';
   const _nGames=new Set(data.map(r=>r.game_id||r.game||'?')).size;
   document.getElementById('board-meta').textContent=`${_nGames} games · ${data.length} markets · sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' · grouped':''}`;
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
