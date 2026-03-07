@@ -48,7 +48,7 @@
   --acc-brd:   #b8d4f8;
   /* Fonts — Inter replaces Plus Jakarta Sans */
   --mono:      'JetBrains Mono', 'Courier New', monospace;
-  --sans:      'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  --sans:      system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   /* Typography scale */
   --font-kpi:    28px;
   --font-title:  20px;
@@ -373,14 +373,13 @@ thead th {
   padding: 8px 10px;
   background: var(--bg4);
   font-family: var(--sans);
-  font-size: var(--font-small); font-weight: 600;
-  letter-spacing: .05em; text-transform: uppercase;
-  color: var(--text3); text-align: left; white-space: nowrap;
+  font-size: 12px; font-weight: 600;
+  color: var(--text2); text-align: left; white-space: nowrap;
   border-bottom: 1px solid var(--border2);
   cursor: pointer; user-select: none;
   transition: color .1s;
 }
-table { width: max-content; min-width: 900px; border-collapse: collapse; }
+table { width: max-content; min-width: 100%; border-collapse: collapse; }
 thead th:hover { color: var(--text2); }
 thead th.sorted { color: var(--white); }
 thead th.sorted::after { content: ' ↓'; color: var(--accent2); font-size: 9px; }
@@ -734,7 +733,7 @@ td { padding: 8px 10px; font-size: var(--font-body); font-weight: 500; white-spa
 /* Stat-table panels */
 .perf-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
 }
 .perf-grid .panel { min-height: 0; }
@@ -984,6 +983,7 @@ thead th.th-play { text-align: left; }
   .rpane { display: none !important; }
   .board { grid-template-columns: 1fr !important; }
   .td-game { width: 220px; max-width: 220px; }
+  .perf-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* Phones */
@@ -1105,6 +1105,13 @@ thead th.th-play { text-align: left; }
 
   /* Also hide DK vs Market column on mobile */
   .td-dvm, .th-dvm { display: none; }
+
+  /* Tables: enforce min-width for horizontal scroll on mobile */
+  table { min-width: 900px; }
+  .results-table table { min-width: 1100px; }
+
+  /* KPI panels stack on mobile */
+  .perf-grid { grid-template-columns: 1fr; }
 }
 
 /* Very small phones */
@@ -2191,7 +2198,7 @@ function buildKPIs(){
   const betPlusRows = graded.filter(isBetPlus);
   const mrRows = mrEligible(allResults);
 
-  const FONT = "'Inter', system-ui, sans-serif";
+  const FONT = "system-ui, -apple-system, sans-serif";
   const MONO = "'JetBrains Mono', monospace";
 
   // ── Color helper: 5-tier based on win% ──
