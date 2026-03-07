@@ -36,12 +36,30 @@ def compute_sharp_signal(row: dict) -> dict:
     timing_bucket = (row.get("timing_bucket") or row.get("l1_timing_bucket") or "MID").upper()
     timing_mult = C.SHARP_TIMING_MULT.get(timing_bucket, 0.90)
 
+    # Debug vars (populated for ML only)
+    ml_implied_prob = 0.0
+    ml_cred_mult = 1.0
+    sharp_base_pre_cred = 0.0
+    sharp_base_post_cred = 0.0
+
     if market == "SPREAD":
         base = min(C.SHARP_MAG_SPREAD_CAP, magnitude_raw * C.SHARP_MAG_SPREAD_MULT)
     elif market == "TOTAL":
         base = min(C.SHARP_MAG_TOTAL_CAP, magnitude_raw * C.SHARP_MAG_TOTAL_MULT)
     else:  # ML
         base = min(C.SHARP_MAG_ML_CAP, magnitude_raw * C.SHARP_MAG_ML_MULT)
+        # ML price credibility — extreme dogs get dampened
+        odds = _num(row.get("current_odds", 0))
+        sharp_base_pre_cred = base
+        if odds > 0:
+            ml_implied_prob = 100.0 / (odds + 100.0) * 100  # +800 → 11.1%
+            ml_cred_mult = C.ML_PRICE_CREDIBILITY[-1][1]    # default: lowest tier
+            for threshold, mult in C.ML_PRICE_CREDIBILITY:
+                if ml_implied_prob >= threshold:
+                    ml_cred_mult = mult
+                    break
+            base *= ml_cred_mult
+        sharp_base_post_cred = base
 
     base *= timing_mult
 
@@ -86,7 +104,14 @@ def compute_sharp_signal(row: dict) -> dict:
     # Step 7 — Hard cap
     result = max(C.SHARP_MIN, min(C.SHARP_MAX, result))
 
-    return {"sharp_score": round(result, 2), "sharp_detail": detail}
+    return {
+        "sharp_score": round(result, 2),
+        "sharp_detail": detail,
+        "ml_implied_prob": round(ml_implied_prob, 1),
+        "ml_cred_mult": ml_cred_mult,
+        "sharp_base_pre_cred": round(sharp_base_pre_cred, 2),
+        "sharp_base_post_cred": round(sharp_base_post_cred, 2),
+    }
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -377,6 +402,11 @@ def compute_v3_score(row: dict) -> dict:
         "score_explanation": explanation,
         "l1_present": l1_present,
         "l1_cap_applied": l1_cap_applied,
+        # Temporary debug — ML price credibility (remove after 1-2 runs)
+        "ml_implied_prob": sharp.get("ml_implied_prob", 0.0),
+        "ml_cred_mult": sharp.get("ml_cred_mult", 1.0),
+        "sharp_base_pre_cred": sharp.get("sharp_base_pre_cred", 0.0),
+        "sharp_base_post_cred": sharp.get("sharp_base_post_cred", 0.0),
     }
 
 
