@@ -1119,7 +1119,7 @@ thead th.th-play { text-align: left; }
                 <th class="th-split">Bets / Money</th>
                 <th class="th-line" onclick="sortBy('open_line',this)">Open</th>
                 <th class="th-line" onclick="sortBy('current_line',this)">Current</th>
-                <th class="th-edge" onclick="sortBy('net_edge',this)">Edge</th>
+                <th class="th-edge" onclick="sortBy('net_edge',this)">Score Gap</th>
                 <th class="th-conf" onclick="sortBy('game_confidence',this)">Conf</th>
                 <th class="th-total sorted" onclick="sortBy('total_score',this)">Total</th>
                 <th class="th-bkt">Bucket</th>
@@ -1233,7 +1233,7 @@ thead th.th-play { text-align: left; }
           <table>
             <thead><tr>
               <th>Date</th><th>Game</th><th>Market</th><th>Play</th>
-              <th>Conf</th><th>Bucket</th><th>Edge</th><th>Timing</th><th>Result</th>
+              <th>Conf</th><th>Bucket</th><th>Score Gap</th><th>Timing</th><th>Result</th>
             </tr></thead>
             <tbody id="res-tbody"></tbody>
           </table>
@@ -1272,7 +1272,7 @@ thead th.th-play { text-align: left; }
               <th style="min-width:100px;text-align:left">Pick</th>
               <th style="min-width:100px;text-align:left">Line</th>
               <th style="min-width:50px;text-align:right">Conf</th>
-              <th style="min-width:50px;text-align:right">Edge</th>
+              <th style="min-width:50px;text-align:right">Score Gap</th>
               <th style="min-width:70px;text-align:right">Total</th>
               <th style="min-width:80px;text-align:center">Decision</th>
               <th style="min-width:50px;text-align:right">Bets</th>

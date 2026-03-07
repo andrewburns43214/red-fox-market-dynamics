@@ -139,18 +139,15 @@ def compute_consensus_validation(row: dict) -> dict:
             if pinn_line != 0 and cons_line != 0:
                 pinn_gap = abs(pinn_line - cons_line)
 
-        # Pinnacle vs market gap — core cross-sectional signal
-        if pinn_gap >= C.CROSS_PINN_GAP_STRONG and n_books >= C.CROSS_PINN_BOOKS_STRONG:
-            result = C.CROSS_PINN_SCORE_STRONG
-        elif pinn_gap >= C.CROSS_PINN_GAP_MODERATE and n_books >= C.CROSS_PINN_BOOKS_MODERATE:
-            result = C.CROSS_PINN_SCORE_MODERATE
-        elif pinn_gap >= C.CROSS_PINN_GAP_WEAK and n_books >= C.CROSS_PINN_BOOKS_WEAK:
-            result = C.CROSS_PINN_SCORE_WEAK
-        else:
-            result = 0.0
+        # Pinnacle vs market gap — core cross-sectional signal (4-tier)
+        result = 0.0
+        for min_gap, min_books, tier_score in C.CROSS_PINN_TIERS:
+            if pinn_gap >= min_gap and n_books >= min_books:
+                result = tier_score
+                break
 
         # Dispersion guard — tight books with small gap = less signal
-        if disp_label == "TIGHT" and pinn_gap < C.CROSS_PINN_GAP_MODERATE:
+        if disp_label == "TIGHT" and pinn_gap < 1.5:
             result *= C.CROSS_TIGHT_DAMPENING
         elif disp_label == "VERY_WIDE":
             result *= C.CROSS_VERY_WIDE_DAMPENING

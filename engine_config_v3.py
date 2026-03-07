@@ -231,15 +231,14 @@ PATTERNS = {
 }
 
 # ─── CROSS-SECTIONAL CONSENSUS (single-snapshot fallback) ───
-CROSS_PINN_GAP_STRONG = 2.0       # Pinnacle diverges ≥2 pts from market
-CROSS_PINN_GAP_MODERATE = 1.0     # ≥1 pt
-CROSS_PINN_GAP_WEAK = 0.5         # ≥0.5 pt
-CROSS_PINN_SCORE_STRONG = 10.0
-CROSS_PINN_SCORE_MODERATE = 6.0
-CROSS_PINN_SCORE_WEAK = 2.0
-CROSS_PINN_BOOKS_STRONG = 10      # n_books required for strong
-CROSS_PINN_BOOKS_MODERATE = 8
-CROSS_PINN_BOOKS_WEAK = 5
+# 4-tier scoring: reserve +10 for time-series only, cross-section caps at +8
+CROSS_PINN_TIERS = [
+    # (min_gap, min_books, score)  — evaluated top-down, first match wins
+    (3.0, 10, 8.0),    # very strong: ≥3 pts, 10+ books
+    (2.0, 8,  6.0),    # strong: ≥2 pts, 8+ books
+    (1.5, 8,  4.0),    # moderate: ≥1.5 pts, 8+ books
+    (1.0, 5,  2.0),    # weak: ≥1 pt, 5+ books
+]
 CROSS_TIGHT_DAMPENING = 0.5       # Reduce when TIGHT + small gap
 CROSS_VERY_WIDE_DAMPENING = 0.4   # Noisy market
 
