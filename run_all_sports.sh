@@ -65,6 +65,17 @@ for SPORT in $SPORTS; do
   sleep 3
 done
 
+
+# Update dk_ts in freshness.json so dashboard shows fresh DK timestamp
+"$PY" -c "
+import json, os
+from datetime import datetime, timezone
+fp = 'data/freshness.json'
+f = json.load(open(fp)) if os.path.exists(fp) else {}
+f['dk_ts'] = datetime.now(timezone.utc).isoformat()
+json.dump(f, open(fp, 'w'))
+" >> "$LOG" 2>&1
+
 echo "--- $(date) report ---" >> "$LOG"
 "$PY" main.py report >> "$LOG" 2>&1
 
