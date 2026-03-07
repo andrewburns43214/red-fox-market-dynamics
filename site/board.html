@@ -119,22 +119,21 @@ body::before {
   object-fit: contain;
 }
 
-.wordmark {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
+.wordmark { line-height: 1.1; }
 .wm-main {
   font-family: var(--sans);
-  font-size: 20px; font-weight: 800;
-  color: #dc2626;
+  font-size: 16px; font-weight: 800;
+  letter-spacing: .5px; color: var(--white2);
+  display: block;
 }
-.wm-main span { color: #dc2626; }
+.wm-main span { color: var(--red2); }
 .wm-sup {
   font-family: var(--sans);
-  font-size: 11px; letter-spacing: .08em;
-  font-weight: 400;
-  color: #6b7280; text-transform: uppercase;
+  font-size: 8px; letter-spacing: 2.5px;
+  font-weight: 500;
+  color: var(--text3); text-transform: uppercase;
+  display: block;
+  margin-top: 2px;
 }
 
 .live-badge {
@@ -382,8 +381,8 @@ thead th {
 }
 thead th:hover { color: var(--text2); }
 thead th.sorted { color: #111827; }
-thead th.sorted::after { content: ' ↓'; color: #2080f0; font-size: 11px; font-weight: 700; }
-thead th.sorted.asc::after { content: ' ↑'; }
+thead th.sorted::after { content: ' ▼'; color: #2080f0; font-size: 10px; font-weight: 700; margin-left: 2px; }
+thead th.sorted.asc::after { content: ' ▲'; }
 
 tbody tr {
   border-bottom: 1px solid var(--border);
@@ -1146,7 +1145,7 @@ thead th.th-play { text-align: left; }
   <div class="tl">
     <div class="logo-wrap">
       <div class="wordmark">
-        <span class="wm-main">Red Fox</span>
+        <span class="wm-main">Red <span>Fox</span></span>
         <span class="wm-sup">Market Intelligence</span>
       </div>
     </div>
@@ -3043,25 +3042,25 @@ function renderResults(){
     const dt=r.resolved_at_utc?new Date(r.resolved_at_utc).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',timeZone:'America/New_York'}):'--';
     const mrVal = (r.market_read||'').trim();
     trs+=`<tr style="background:${i%2===0?'#fff':'#f9fafb'};border-bottom:1px solid #eee">
-      <td style="padding:7px 10px;color:#8892aa;font-size:11px">${dt}</td>
-      <td style="padding:7px 10px">${spChip(r.sport||'')}</td>
-      <td style="padding:7px 10px;font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.game||r.side||'--'}</td>
-      <td style="padding:7px 10px"><span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;background:#eef2ff;color:#2255cc">${r.market_display||'--'}</span></td>
-      <td style="padding:7px 10px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.favored_side||r.side||'--'}</td>
-      <td style="padding:7px 10px">${decBadge}</td>
-      <td style="padding:7px 10px;font-family:var(--mono);font-weight:700">${r.game_confidence?Number(r.game_confidence).toFixed(1):'--'}</td>
-      <td style="padding:7px 10px;font-family:var(--mono)">${r.net_edge?Number(r.net_edge).toFixed(1):'--'}</td>
-      <td style="padding:7px 10px;font-family:var(--mono);font-weight:700">${(()=>{const ts=Number(r.total_score)||(Number(r.game_confidence||0)+Number(r.net_edge||0));return ts?ts.toFixed(1):'--';})()}</td>
-      <td style="padding:7px 10px">${mrVal?mrBadge(mrVal):'--'}</td>
-      <td style="padding:7px 10px">${res}</td>
-      <td style="padding:7px 10px;font-family:var(--mono);font-size:11px;white-space:nowrap">${(()=>{const cv=parseFloat(r.clv);if(isNaN(cv)||!r.clv) return '<span style="color:#aab">--</span>';const clr=cv>0?'#00965a':cv<0?'#d63020':'#8892aa';return '<span style="color:'+clr+';font-weight:700">'+(cv>0?'+':'')+cv.toFixed(1)+'</span>';})()}</td>
+      <td style="padding:6px 10px;color:#8892aa;font-size:11px;white-space:nowrap">${dt}</td>
+      <td style="padding:6px 10px;white-space:nowrap">${spChip(r.sport||'')}</td>
+      <td style="padding:6px 10px;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.game||r.side||'--'}</td>
+      <td style="padding:6px 10px;white-space:nowrap"><span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;background:#eef2ff;color:#2255cc">${r.market_display||'--'}</span></td>
+      <td style="padding:6px 10px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.favored_side||r.side||'--'}</td>
+      <td style="padding:6px 10px;white-space:nowrap">${decBadge}</td>
+      <td style="padding:6px 10px;font-family:var(--mono);font-weight:700;text-align:right;white-space:nowrap">${r.game_confidence?Number(r.game_confidence).toFixed(1):'--'}</td>
+      <td style="padding:6px 10px;font-family:var(--mono);text-align:right;white-space:nowrap">${r.net_edge?Number(r.net_edge).toFixed(1):'--'}</td>
+      <td style="padding:6px 10px;font-family:var(--mono);font-weight:700;text-align:right;white-space:nowrap">${(()=>{const ts=Number(r.total_score)||(Number(r.game_confidence||0)+Number(r.net_edge||0));return ts?ts.toFixed(1):'--';})()}</td>
+      <td style="padding:6px 10px;white-space:nowrap">${mrVal?mrBadge(mrVal):'--'}</td>
+      <td style="padding:6px 10px;white-space:nowrap">${res}</td>
+      <td style="padding:6px 10px;font-family:var(--mono);font-size:11px;text-align:right;white-space:nowrap">${(()=>{const cv=parseFloat(r.clv);if(isNaN(cv)||!r.clv) return '<span style="color:#aab">--</span>';const clr=cv>0?'#00965a':cv<0?'#d63020':'#8892aa';return '<span style="color:'+clr+';font-weight:700">'+(cv>0?'+':'')+cv.toFixed(1)+'</span>';})()}</td>
     </tr>`;
   });
   const inner=el.querySelector('.full-tab')||el;
   inner.innerHTML=`<div style="overflow-x:auto">
     <div style="padding:10px 14px;font-size:11px;color:#8892aa;border-bottom:1px solid #eee">${resolved.length} resolved plays</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px">
-    <thead><tr style="background:#f1f3f5;text-align:left">${['Date','Sport','Game','Market','Side','Decision','Conf','Edge','Total','DK Signal','Result','CLV'].map(c=>'<th style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap">'+c+'</th>').join('')}</tr></thead>
+    <thead><tr style="background:#f1f3f5;text-align:left">${['Date','Sport','Game','Market','Side','Decision','Conf','Edge','Total','DK Signal','Result','CLV'].map((c,i)=>{const ra=[6,7,8,11].includes(i)?'text-align:right;':'';return '<th style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap;'+ra+'">'+c+'</th>';}).join('')}</tr></thead>
     <tbody>${trs}</tbody></table></div>`;
 }
 
