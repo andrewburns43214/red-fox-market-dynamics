@@ -1367,7 +1367,7 @@ let sport='ALL', filter='today', tabId='board';
 let sortCol='total_score', sortAsc=false;
 
 function et(ts){ if(!ts) return '-'; const d=new Date(ts); if(isNaN(d)) return String(ts); return d.toLocaleString('en-US',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
-function etT(ts){ if(!ts) return '-'; const d=new Date(ts); if(isNaN(d)) return '-'; return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
+function etT(ts){ if(!ts) return '-'; const d=new Date(ts); if(isNaN(d)) return '-'; const dt=d.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'America/New_York'}); const tm=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); return dt+' · '+tm; }
 function isToday(ts){ if(!ts) return false; const d=new Date(ts),n=new Date(); return d.toLocaleDateString('en-US',{timeZone:'America/New_York'})===n.toLocaleDateString('en-US',{timeZone:'America/New_York'}); }
 function confBkt(c){ const n=Number(c); if(n>=70) return{l:'STRONG',c:'bkt75'}; if(n>=67) return{l:'BET',c:'bkt65'}; if(n>=60) return{l:'LEAN',c:'bkt60'}; return{l:'<60',c:'bktlo'}; }
 function eC(e){ return e>=13?'h':e>=5?'m':'l'; }
