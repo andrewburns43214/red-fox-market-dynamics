@@ -976,162 +976,16 @@ thead th.th-play { text-align: left; }
 .td-split { text-align: left; vertical-align: middle; }
 .td-pick { text-align: left; vertical-align: middle; }
 
-/* ─── MOBILE RESPONSIVE ─── */
+/* ─── RESPONSIVE ─── */
 
-/* Tablets and small desktops */
+/* Tablets and small desktops — only collapse right pane */
 @media (max-width: 1024px) {
   .rpane { display: none !important; }
   .board { grid-template-columns: 1fr !important; }
-  .td-game { width: 220px; max-width: 220px; }
-  .perf-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* Phones */
-@media (max-width: 768px) {
-  body { font-size: 12px; }
-
-  /* Topbar: shrink padding, hide KPI cards */
-  .topbar { height: 44px; padding: 0 10px; }
-  .topbar-kpis { display: none; }
-  .logo-wrap { padding-right: 8px; margin-right: 8px; }
-  .logo-img { height: 26px; }
-  .tl .logo-wrap + * { font-size: 13px; }
-
-  /* Tabs: horizontal scroll, smaller text */
-  .tabs { height: 36px; padding: 0 6px; gap: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .tab { padding: 0 8px; height: 36px; font-size: 10px; white-space: nowrap; flex-shrink: 0; }
-  .tsep { margin: 8px 2px; }
-  .sfilters { gap: 2px; padding: 2px 0; }
-  .schip { padding: 2px 6px; font-size: 9px; }
-
-  /* Metric bar: compact single row */
-  .metricbar { height: auto; min-height: 32px; flex-wrap: wrap; padding: 4px 8px; gap: 2px; }
-  .mmet { min-width: 0; flex: 1 1 auto; }
-  .mmet-body { padding: 2px 6px; }
-  .mmet-v { font-size: 14px; }
-  .mmet-l { font-size: 7px; }
-
-  /* Freshness bar: compact */
-  .fresh-bar { flex-wrap: wrap; padding: 3px 8px; min-height: auto; gap: 4px; }
-  .fresh-overall { font-size: 10px; }
-  .fresh-sources { font-size: 9px; gap: 6px !important; }
-
-  /* Hide everything except Game, Decision, Total, Pick on mobile */
-  .td-split, .th-split,
-  .td-pat, .th-pat,
-  .td-layer, .th-layer,
-  .td-sharp, .th-sharp,
-  .td-tim, .th-tim,
-  .td-mr, .th-mr,
-  .td-bkdn, .th-bkdn,
-  .td-bkt, .th-bkt,
-  .td-line, .th-line,
-  .td-edge, .th-edge,
-  .td-conf, .th-conf { display: none; }
-
-  /* Shrink remaining columns */
-  .td-rank { width: 26px; padding: 4px 2px; font-size: 9px; }
-  .td-game { width: auto; max-width: none; padding: 6px 6px 4px; }
-  .game-name { font-size: 12px; white-space: normal; word-break: break-word; }
-  .game-row2 { font-size: 9px; }
-  .td-mkt { width: 55px; font-size: 9px; }
-  td { padding: 4px 6px; font-size: 11px; }
-  thead th { padding: 5px 6px; font-size: 9px; }
-
-  /* Total column: make it prominent */
-  .td-total, .th-total { font-size: 13px; font-weight: 700; }
-
-  /* Info button */
-  .info-btn { width: 18px; height: 18px; font-size: 9px; }
-
-  /* Game chips: hide on mobile */
-  .gchip { display: none; }
-
-  /* Pane header */
-  .pane-hdr { padding: 6px 10px; }
-  .pane-title { font-size: 12px; }
-  .grp-btn { font-size: 9px; padding: 3px 8px; }
-  #board-search { width: 90px !important; font-size: 10px !important; padding: 2px 6px !important; }
-
-  /* Drill-down / Game detail modal */
-  .drill-overlay .drill-box,
-  .drill-box { width: 97vw !important; max-width: 97vw !important; max-height: 90vh; margin: 1vh auto; }
-  .drill-title { font-size: 13px; padding: 8px 10px; }
-  .gd-wrap { padding: 6px; gap: 8px; }
-  .gd-header { padding: 6px; }
-  .gd-game { font-size: 12px; }
-  .gd-row { padding: 2px 0; }
-  .gd-lbl { font-size: 9px; min-width: 50px; }
-  .gd-val { font-size: 10px; }
-  .gd-mkt-card { padding: 8px !important; }
-  .gd-intel { font-size: 11px !important; }
-
-  /* Status bar */
-  .statusbar { height: 22px; padding: 0 8px; font-size: 8px; }
-  .sl { gap: 8px; }
-
-  /* Score History / Movement tab */
-  #hist-filters { padding: 6px 8px; gap: 6px; flex-direction: column; align-items: stretch !important; }
-  #hist-filters select { width: 100%; max-width: 100% !important; font-size: 11px; }
-  #hist-filters label { font-size: 10px; }
-  .hist-table td, .hist-table th { font-size: 10px; padding: 3px 4px; }
-
-  /* Performance / Results */
-  .full-tab { padding: 6px; }
-  .panel { border-radius: 6px; }
-  .panel-h { padding: 6px 10px; }
-
-  /* Performance summary: 2-col grid on mobile */
-  .perf-summary-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0;
-  }
-  .perf-summary-cell { border-bottom: 1px solid var(--border); }
-  .psc-val { font-size: 22px; }
-
-  /* Trend/CLV rows stack on mobile */
-  .perf-trend-row { grid-template-columns: 1fr; }
-
-  /* Charts resize */
-  .chart-canvas-wrap { width: 100%; height: 180px; }
-
-  /* Modal: full width on mobile */
-  .drill-modal { max-width: 95vw; width: 95vw; max-height: 90vh; }
-
-  /* Topbar: stack on mobile */
-  .topbar { height: auto; flex-wrap: wrap; padding: 8px 12px; gap: 8px; }
-  .clock { font-size: 16px; }
-
-  /* Also hide DK vs Market column on mobile */
-  .td-dvm, .th-dvm { display: none; }
-
-  /* Tables: enforce min-width for horizontal scroll on mobile */
-  table { min-width: 1100px; }
-
-  /* KPI panels stack on mobile */
-  .perf-grid { grid-template-columns: 1fr; }
-}
-
-/* Very small phones */
-@media (max-width: 480px) {
-  .topbar { height: 38px; padding: 0 6px; }
-  .logo-img { height: 22px; }
-  .tabs { height: 32px; padding: 0 4px; }
-  .tab { padding: 0 6px; height: 32px; font-size: 9px; }
-  .tbadge { font-size: 7px; padding: 0 3px; }
-
-  /* Game column */
-  .td-game { padding: 4px; }
-  .game-name { font-size: 11px; }
-  .sport-chip { font-size: 7px; padding: 1px 4px; }
-
-  /* Also hide market column on very small screens */
-  .td-mkt, .th-mkt { display: none; }
-
-  /* Decision badge: compact */
-  .dec { font-size: 9px; padding: 2px 5px; }
-}
+/* Mobile: disabled — desktop layout renders everywhere, scroll horizontally if needed.
+   Will revisit proper mobile design later. */
 
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
