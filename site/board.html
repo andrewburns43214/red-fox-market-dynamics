@@ -580,11 +580,12 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .info-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 16px; height: 16px; border-radius: 50%;
-  background: var(--surface2); border: 1px solid var(--border);
-  cursor: pointer; font-size: 9px; font-weight: 700; font-style: italic; font-family: Georgia, serif;
-  color: var(--text3); transition: all .15s; margin-top: 4px;
+  background: #f3f4f6; border: 1px solid #d1d5db;
+  cursor: pointer; font-size: 11px; font-weight: 600; font-style: italic; font-family: Georgia, serif;
+  color: #6b7280; transition: all .15s ease; margin-top: 4px;
 }
-.info-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.info-btn:hover { background: #e5e7eb; color: #374151; }
+.info-btn.active { background: #e8f1ff; border-color: #3b82f6; color: #2563eb; }
 /* Group button in pane header */
 .grp-btn {
   padding: 4px 14px; border-radius: 20px; font-family: var(--sans);
