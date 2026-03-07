@@ -94,49 +94,87 @@ def compute_sharp_signal(row: dict) -> dict:
 # ═══════════════════════════════════════════════════════════════
 
 def compute_consensus_validation(row: dict) -> dict:
-    """31-book consensus validates directional read."""
+    """31-book consensus validates directional read.
+    Uses time-series agreement tiers when direction history exists,
+    falls back to cross-sectional signals (pinn vs market) when it doesn't.
+    """
     l2_available = _bool(row.get("l2_available", False))
     if not l2_available:
         return {"consensus_score": 0.0, "consensus_detail": "L2 absent"}
 
-    # Step 1 — Agreement tier
-    agreement = _num(row.get("l2_consensus_agreement", 0))
-    base = C.CONSENSUS_TIERS[-1][1]  # default: rejects
-    for threshold, value in C.CONSENSUS_TIERS:
-        if agreement >= threshold:
-            base = value
-            break
-
-    # Step 2 — Dispersion multiplier
+    n_books = _num(row.get("l2_n_books", 0))
     disp_label = (row.get("l2_dispersion_label") or "NORMAL").upper()
-    disp_mult = C.CONSENSUS_DISPERSION_MULT.get(disp_label, 1.0)
-    result = base * disp_mult
+    agreement = _num(row.get("l2_consensus_agreement", 0))
 
-    # Step 3 — Dispersion trend
-    trend = (row.get("l2_dispersion_trend") or "STABLE").upper()
-    trend_adj = C.CONSENSUS_TREND_ADJ.get(trend, 0.0)
-    result += trend_adj
+    # Determine if we have time-series direction data
+    consensus_dir = row.get("l2_consensus_direction") or row.get("consensus_direction")
+    has_direction = (consensus_dir is not None
+                     and str(consensus_dir).lower() not in ("", "nan", "none")
+                     and agreement > 0)
 
-    # Step 4 — Stale price bonus
+    if has_direction:
+        # ── TIME-SERIES PATH (existing logic, unchanged) ──
+        base = C.CONSENSUS_TIERS[-1][1]  # default: rejects
+        for threshold, value in C.CONSENSUS_TIERS:
+            if agreement >= threshold:
+                base = value
+                break
+
+        disp_mult = C.CONSENSUS_DISPERSION_MULT.get(disp_label, 1.0)
+        result = base * disp_mult
+
+        trend = (row.get("l2_dispersion_trend") or "STABLE").upper()
+        trend_adj = C.CONSENSUS_TREND_ADJ.get(trend, 0.0)
+        result += trend_adj
+
+        detail = f"agree={agreement:.2f} disp={disp_label} trend={trend} books={int(n_books)}"
+    else:
+        # ── CROSS-SECTIONAL PATH (single-snapshot fallback) ──
+        # Compute pinn gap from raw fields if pre-computed field unavailable
+        pinn_gap = abs(_num(row.get("pinn_vs_consensus",
+                                     row.get("l2_pinn_vs_consensus", 0))))
+        if pinn_gap == 0:
+            pinn_line = _num(row.get("l2_pinn_line", 0))
+            cons_line = _num(row.get("l2_consensus_line", 0))
+            if pinn_line != 0 and cons_line != 0:
+                pinn_gap = abs(pinn_line - cons_line)
+
+        # Pinnacle vs market gap — core cross-sectional signal
+        if pinn_gap >= C.CROSS_PINN_GAP_STRONG and n_books >= C.CROSS_PINN_BOOKS_STRONG:
+            result = C.CROSS_PINN_SCORE_STRONG
+        elif pinn_gap >= C.CROSS_PINN_GAP_MODERATE and n_books >= C.CROSS_PINN_BOOKS_MODERATE:
+            result = C.CROSS_PINN_SCORE_MODERATE
+        elif pinn_gap >= C.CROSS_PINN_GAP_WEAK and n_books >= C.CROSS_PINN_BOOKS_WEAK:
+            result = C.CROSS_PINN_SCORE_WEAK
+        else:
+            result = 0.0
+
+        # Dispersion guard — tight books with small gap = less signal
+        if disp_label == "TIGHT" and pinn_gap < C.CROSS_PINN_GAP_MODERATE:
+            result *= C.CROSS_TIGHT_DAMPENING
+        elif disp_label == "VERY_WIDE":
+            result *= C.CROSS_VERY_WIDE_DAMPENING
+
+        detail = f"cross-section pinn_gap={pinn_gap:.2f} disp={disp_label} books={int(n_books)}"
+
+    # Stale price bonus (applies to both paths)
     stale_gap = _num(row.get("l2_stale_price_gap", 0))
     if stale_gap >= C.CONSENSUS_STALE_LARGE_THRESHOLD:
         result += C.CONSENSUS_STALE_LARGE
     elif stale_gap >= C.CONSENSUS_STALE_SMALL_THRESHOLD:
         result += C.CONSENSUS_STALE_SMALL
 
-    # Step 5 — Book count guard
-    n_books = _num(row.get("l2_n_books", 0))
-    book_mult = C.CONSENSUS_BOOK_GUARD[-1][1]  # default: lowest
+    # Book count guard (applies to both paths)
+    book_mult = C.CONSENSUS_BOOK_GUARD[-1][1]
     for threshold, mult in C.CONSENSUS_BOOK_GUARD:
         if n_books >= threshold:
             book_mult = mult
             break
     result *= book_mult
 
-    # Step 6 — Hard cap
+    # Hard cap
     result = max(C.CONSENSUS_MIN, min(C.CONSENSUS_MAX, result))
 
-    detail = f"agree={agreement:.2f} disp={disp_label} trend={trend} books={int(n_books)}"
     return {"consensus_score": round(result, 2), "consensus_detail": detail}
 
 
@@ -298,6 +336,13 @@ def compute_v3_score(row: dict) -> dict:
     timing = compute_timing_modifier(row)
     cross = compute_cross_market_sanity(row)
 
+    # Soft retail dampening when L1 absent + L2 weak
+    l1_present = _bool(row.get("l1_available", row.get("l1_present", False)))
+    l2_agreement = _num(row.get("l2_consensus_agreement", 0))
+    if not l1_present and l2_agreement < C.L1_ABSENT_L2_WEAK_THRESHOLD:
+        retail["retail_score"] = round(
+            retail["retail_score"] * C.RETAIL_L1_ABSENT_MULT, 2)
+
     raw = (C.BASE
            + sharp["sharp_score"]
            + consensus["consensus_score"]
@@ -306,8 +351,6 @@ def compute_v3_score(row: dict) -> dict:
            + cross["cross_market_score"])
 
     # L1-absent + L2-weak hard cap
-    l1_present = _bool(row.get("l1_available", row.get("l1_present", False)))
-    l2_agreement = _num(row.get("l2_consensus_agreement", 0))
     l1_cap_applied = False
     if not l1_present and l2_agreement < C.L1_ABSENT_L2_WEAK_THRESHOLD:
         if raw > C.L1_ABSENT_L2_WEAK_CAP:

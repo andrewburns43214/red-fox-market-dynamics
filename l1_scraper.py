@@ -201,7 +201,7 @@ def scrape_l1(sport: str) -> dict:
                 "side": side,
                 "line": row["line"] if row["line"] is not None else "",
                 "odds_american": row["odds_american"],
-                "changed_at": "",
+                "changed_at": row.get("last_update", ""),
                 "limit": "",
                 "source": "oddsapi",
             })

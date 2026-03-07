@@ -240,9 +240,11 @@ def parse_event_odds(event: dict) -> list:
 
     for bm in event.get("bookmakers", []):
         bm_key = bm.get("key", "")
+        bm_last_update = bm.get("last_update", "")
 
         for mkt in bm.get("markets", []):
             mkt_key = mkt.get("key", "")
+            mkt_last_update = mkt.get("last_update", "") or bm_last_update
 
             # Map API market keys to our format
             if mkt_key == "spreads":
@@ -281,6 +283,7 @@ def parse_event_odds(event: dict) -> list:
                     "line": point,
                     "odds_decimal": price,
                     "odds_american": _american_odds(price),
+                    "last_update": mkt_last_update,
                 })
 
     return rows

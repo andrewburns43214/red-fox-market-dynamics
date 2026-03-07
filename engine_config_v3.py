@@ -230,6 +230,22 @@ PATTERNS = {
     "NEUTRAL": "No strong pattern in any bucket",
 }
 
+# ─── CROSS-SECTIONAL CONSENSUS (single-snapshot fallback) ───
+CROSS_PINN_GAP_STRONG = 2.0       # Pinnacle diverges ≥2 pts from market
+CROSS_PINN_GAP_MODERATE = 1.0     # ≥1 pt
+CROSS_PINN_GAP_WEAK = 0.5         # ≥0.5 pt
+CROSS_PINN_SCORE_STRONG = 10.0
+CROSS_PINN_SCORE_MODERATE = 6.0
+CROSS_PINN_SCORE_WEAK = 2.0
+CROSS_PINN_BOOKS_STRONG = 10      # n_books required for strong
+CROSS_PINN_BOOKS_MODERATE = 8
+CROSS_PINN_BOOKS_WEAK = 5
+CROSS_TIGHT_DAMPENING = 0.5       # Reduce when TIGHT + small gap
+CROSS_VERY_WIDE_DAMPENING = 0.4   # Noisy market
+
+# ─── RETAIL DAMPENING WHEN L1/L2 ABSENT ───
+RETAIL_L1_ABSENT_MULT = 0.7       # Soft dampen retail when unsupported
+
 # NHL puck line dampening on Sharp component
 NHL_PUCK_LINE_SHARP_MULT = 0.85
 
