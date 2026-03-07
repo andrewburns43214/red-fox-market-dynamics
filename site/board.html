@@ -1470,10 +1470,20 @@ function renderBoard(){
   const _nGames=new Set(data.map(r=>r.game_id||r.game||'?')).size;
   document.getElementById('board-meta').textContent=`${_nGames} games · ${data.length} markets · sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' · grouped':''}`;
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
+  let _lockedDividerShown=false;
   data.forEach((r,i)=>{
     const conf=Number(r.game_confidence)||0, edge=Math.round(Number(r.net_edge)||0);
     const[dt,dc]=decInfo(r.game_decision); const bk=confBkt(conf);
     const lc=r.current_line&&r.open_line&&String(r.current_line).trim()!==String(r.open_line).trim();
+    // Insert divider before first LOCKED row
+    if(!_lockedDividerShown && (r.game_decision||'').toUpperCase()==='LOCKED'){
+      _lockedDividerShown=true;
+      const _nLocked=data.filter(x=>(x.game_decision||'').toUpperCase()==='LOCKED').length;
+      const divtr=document.createElement('tr');
+      divtr.className='locked-divider';
+      divtr.innerHTML='<td colspan="99" style="padding:12px 16px;background:#f0f1f5;border-top:2px solid #d0d3de;border-bottom:1px solid #d0d3de;font-size:11px;font-weight:700;color:#7a7f96;letter-spacing:.5px;text-transform:uppercase">Live / Locked Games · '+_nLocked+' markets</td>';
+      tbody.appendChild(divtr);
+    }
     const tr=document.createElement('tr');
     if((r.game_decision||'').toUpperCase()==='LOCKED') tr.classList.add('row-locked'); else if((r.game_decision||'').toUpperCase()==='STRONG_BET') tr.classList.add('row-strong'); else if(conf>=70) tr.classList.add('row-hi'); else if(conf>=60) tr.classList.add('row-mid');
     if(r._grpSub) tr.classList.add('row-grp-sub');
