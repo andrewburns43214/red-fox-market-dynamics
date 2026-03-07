@@ -1110,6 +1110,9 @@ thead th.th-play { text-align: left; }
             <button class="grp-btn" id="grp-toggle" onclick="toggleGroup(this)">Group by Game</button>
             <button class="grp-btn" id="locked-jump" onclick="jumpToLocked()" style="display:none">Live / Locked Games</button>
             <button class="grp-btn" onclick="scrollToTop()">Top ▲</button>
+            <button class="grp-btn" onclick="exportCSV()" title="Export to CSV">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:-1px;margin-right:3px"><path d="M2 14h12M8 2v9M4 7l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>CSV
+            </button>
           </div>
           <span class="pane-meta" id="board-meta">—</span>
         </div>
@@ -1452,6 +1455,26 @@ function jumpToLocked(){
 function scrollToTop(){
   window.scrollTo({top:0,behavior:'smooth'});
   const ts=document.querySelector('.tscroll'); if(ts) ts.scrollTo({top:0,behavior:'smooth'});
+}
+function exportCSV(){
+  const data=filtered();
+  if(!data.length) return;
+  const cols=['game','sport','market_display','favored_side','total_score','net_edge','game_decision','timing_bucket','layer_mode','sharp_score','consensus_score','retail_score','bets_pct','money_pct','open_line','current_line','current_odds','pattern_primary','market_read','_game_time'];
+  const headers=['Game','Sport','Market','Side','Confidence','Score Gap','Decision','Timing','Layer','Sharp','Consensus','Retail','Bets%','Money%','Open Line','Current Line','Odds','Pattern','DK Signal','Game Time'];
+  let csv=headers.join(',')+'\n';
+  data.forEach(r=>{
+    csv+=cols.map(c=>{
+      let v=String(r[c]||'').replace(/"/g,'""');
+      if(v.includes(',')) v='"'+v+'"';
+      return v;
+    }).join(',')+'\n';
+  });
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  const d=new Date();
+  a.download='redfox_'+filter+'_'+d.toISOString().slice(0,10)+'.csv';
+  a.click();
 }
 
 function _decRank(d){ const k=(d||'').toUpperCase(); if(k==='STRONG_BET') return 0; if(k==='BET') return 1; if(k==='LEAN') return 2; if(k==='LOCKED') return 3; return 4; }
