@@ -1107,6 +1107,7 @@ thead th.th-play { text-align: left; }
         <div class="pane-hdr">
           <div style="display:flex;align-items:center;gap:10px">
             <span class="pane-title" id="board-title">Upcoming Games</span>
+            <select id="book-select" class="grp-btn" onchange="switchBook(this.value)" style="font-size:10px;padding:2px 6px;min-width:auto;cursor:pointer"><option value="dk">Lines: DK</option></select>
             <button class="grp-btn" id="grp-toggle" onclick="toggleGroup(this)">Group by Game</button>
             <button class="grp-btn" id="locked-jump" onclick="jumpToLocked()" style="display:none">Live / Locked Games</button>
             <button class="grp-btn" onclick="scrollToTop()">Top ▲</button>
@@ -1368,6 +1369,35 @@ const MOCK_RESULTS = [
 let allDash=[], allLedger=[], allResults=[];
 let sport='ALL', filter='today', tabId='board';
 let sortCol='total_score', sortAsc=false;
+let _bookLines=null, _selectedBook='dk';
+
+function switchBook(b){ _selectedBook=b; renderBoard(); }
+
+function getBookLines(r){
+  if(_selectedBook==='dk') return {open:r.open_line, current:r.current_line};
+  if(!_bookLines||!_bookLines.lines) return {open:'-',current:'-'};
+  const ck=(r.canonical_key||'').trim();
+  if(!ck) return {open:'-',current:'-'};
+  const gameData=_bookLines.lines[ck];
+  if(!gameData) return {open:'-',current:'-'};
+  const mkt=(r.market_display||'').toUpperCase();
+  const pos=(r.side_position||'').toLowerCase();
+  const slotKey=mkt+'|'+pos;
+  const slot=gameData[slotKey];
+  if(!slot) return {open:'-',current:'-'};
+  const bd=slot[_selectedBook];
+  if(!bd) return {open:'-',current:'-'};
+  // Format: ML shows odds only, SPREAD/TOTAL shows line (+non-standard odds)
+  function fmt(line,odds){
+    const l=(line||'').trim(), o=(odds||'').trim();
+    if(mkt==='MONEYLINE') return o||'-';
+    if(!l&&!o) return '-';
+    if(!l) return o;
+    if(o&&o!=='-110'&&o!=='+100') return l+' ('+o+')';
+    return l;
+  }
+  return {open:fmt(bd.ol,bd.oo), current:fmt(bd.cl,bd.co)};
+}
 
 function et(ts){ if(!ts) return '-'; const d=new Date(ts); if(isNaN(d)) return String(ts); return d.toLocaleString('en-US',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
 function etT(ts){ if(!ts) return '-'; const d=new Date(ts); if(isNaN(d)) return '-'; const dt=d.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'America/New_York'}); const tm=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); return dt+' · '+tm; }
@@ -1548,27 +1578,27 @@ function renderBoard(){
           <span class="spct" style="${(r.money_pct||0)>=60?'color:#f59e0b;font-weight:800':'color:#5a6480'}">${r.money_pct?Number(r.money_pct).toFixed(0)+'%':'-'}</span>
         </div>
       </td>
-      <td class="td-line">${r.open_line||'-'}</td>
+      <td class="td-line">${(()=>{const bl=getBookLines(r);return bl.open||'-';})()}</td>
       <td class="td-line">${(()=>{
-        if(!r.current_line||!r.open_line||r.current_line===r.open_line) return r.current_line||'-';
+        const bl=getBookLines(r);
+        const openL=bl.open, curL=bl.current;
+        if(!curL||!openL||curL===openL) return curL||'-';
         const mkt=(r.market_display||'').toUpperCase();
-        // For SPREAD and TOTAL: compare the number only (first token before space)
-        // For MONEYLINE: compare the full value (it IS the juice)
         const getKey=s=>{
           const t=(s||'').trim();
-          if(mkt==='MONEYLINE') return t; // whole thing is the odds
-          return t.split(' ')[0]; // just the spread/total number
+          if(mkt==='MONEYLINE') return t;
+          return t.split(' ')[0].replace(/[()]/g,'');
         };
-        const openKey=getKey(r.open_line);
-        const curKey=getKey(r.current_line);
-        if(openKey===curKey) return '<span style="color:#8892aa">'+r.current_line+'</span>';
+        const openKey=getKey(openL);
+        const curKey=getKey(curL);
+        if(openKey===curKey) return '<span style="color:#8892aa">'+curL+'</span>';
         const openNum=parseFloat(openKey), curNum=parseFloat(curKey);
         const moved=!isNaN(openNum)&&!isNaN(curNum)&&openNum!==curNum;
-        if(!moved) return '<span style="color:#8892aa">'+r.current_line+'</span>';
+        if(!moved) return '<span style="color:#8892aa">'+curL+'</span>';
         const up=curNum>openNum;
         const arrow=up?'▲':'▼';
         const color=up?'#1a6fd4':'#e05c2a';
-        return '<span style="color:'+color+';font-weight:700">'+r.current_line+'</span> <span style="font-size:9px;color:'+color+'">'+arrow+'</span>';
+        return '<span style="color:'+color+';font-weight:700">'+curL+'</span> <span style="font-size:9px;color:'+color+'">'+arrow+'</span>';
       })()}</td>
       <td class="td-edge"><span class="ev ${eC(edge)}">${edge}</span></td>
       <td class="td-total">${Math.round(Number(r.total_score)||0)}</td>
@@ -2747,15 +2777,30 @@ function updateFreshness(f){
 async function loadAll(){
   let freshJson=null;
   try{ const r=await fetch('/data/freshness.json?_='+Date.now()); if(r.ok) freshJson=await r.json(); } catch(e){}
-  const[dash,snaps,ledger,results,kpi,hist]=await Promise.all([
+  let bookLinesP=fetch('/data/book_lines.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null);
+  const[dash,snaps,ledger,results,kpi,hist,bookLines]=await Promise.all([
     loadCSV(DASH_URL),
     loadCSV('/data/snapshots.csv'),
     loadCSV(LEDGER_URL),
     loadCSV(RESULTS_URL),
     loadCSV('/data/kpi_master_dataset.csv'),
-    loadCSV('/data/score_history.csv')
+    loadCSV('/data/score_history.csv'),
+    bookLinesP
   ]);
   _histData=hist||null;  // preload for game detail modal
+  _bookLines=bookLines;
+  // Populate book selector dropdown
+  const bSel=document.getElementById('book-select');
+  if(bSel&&_bookLines&&_bookLines.books){
+    const cur=_selectedBook;
+    bSel.innerHTML='<option value="dk">Lines: DK</option>';
+    _bookLines.books.forEach(b=>{
+      if(b==='draftkings') return;
+      const label=(_bookLines.labels&&_bookLines.labels[b])||b;
+      bSel.innerHTML+='<option value="'+b+'">Lines: '+label+'</option>';
+    });
+    bSel.value=cur;
+  }
   updateFreshness(freshJson);
   const dashRaw=dash||MOCK_DASH;
   const snapsRaw=snaps||[];
