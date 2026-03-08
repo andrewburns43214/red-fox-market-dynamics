@@ -157,6 +157,29 @@ else:
     print("[kpi] pattern_primary column not in results (pre-v3.2)")
 
 # -------------------------------------------------
+# PATTERN COMBINATIONS (v3.3f)
+# -------------------------------------------------
+if "pattern_secondary" in k.columns:
+    has_sec = k[k["pattern_secondary"].notna() & (k["pattern_secondary"] != "")]
+    if len(has_sec) > 0:
+        combo_rows = []
+        for (p1, p2), g in has_sec.groupby(["pattern_primary", "pattern_secondary"]):
+            wins = (g["result"] == "WIN").sum()
+            losses = (g["result"] == "LOSS").sum()
+            wr = round(wins / (wins + losses), 4) if (wins + losses) > 0 else 0.0
+            combo_rows.append({
+                "primary": p1, "secondary": p2,
+                "wins": int(wins), "losses": int(losses),
+                "n": len(g), "win_rate": wr,
+                "avg_score": round(g["last_score"].mean(), 2) if "last_score" in g.columns else None,
+                "avg_edge": round(g["net_edge"].mean(), 2) if "net_edge" in g.columns else None,
+            })
+        pd.DataFrame(combo_rows).to_csv("data/kpi_pattern_combos.csv", index=False)
+        print(f"[kpi] pattern combos: {len(combo_rows)} combinations tracked")
+    else:
+        print("[kpi] no pattern_secondary data yet")
+
+# -------------------------------------------------
 # CLV ANALYSIS (v2.1)
 # -------------------------------------------------
 if "clv" in k.columns:

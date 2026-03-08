@@ -425,7 +425,7 @@ def compute_v3_score(row: dict) -> dict:
     final_score = max(0, min(100, round(raw, 1)))
 
     # Pattern detection (output label only — never affects score)
-    pattern_primary = _detect_pattern(row, sharp, consensus, retail)
+    patterns = _detect_pattern(row, sharp, consensus, retail)
     explanation = _build_explanation(row, sharp, consensus, retail, timing, cross, final_score, market_rx)
 
     return {
@@ -442,8 +442,8 @@ def compute_v3_score(row: dict) -> dict:
         "timing_detail": timing["timing_detail"],
         "cross_market_detail": cross["cross_market_detail"],
         "market_reaction_detail": market_rx["market_reaction_detail"],
-        "pattern_primary": pattern_primary,
-        "pattern_secondary": None,
+        "pattern_primary": patterns["pattern_primary"],
+        "pattern_secondary": patterns["pattern_secondary"],
         "score_explanation": explanation,
         "l1_present": l1_present,
         "l1_cap_applied": l1_cap_applied,
@@ -458,8 +458,10 @@ def compute_v3_score(row: dict) -> dict:
 # Pattern Detection (labels only, never score inputs)
 # ═══════════════════════════════════════════════════════════════
 
-def _detect_pattern(row, sharp, consensus, retail) -> str:
-    """Detect primary pattern label. Output only — never changes score."""
+def _detect_pattern(row, sharp, consensus, retail) -> dict:
+    """Detect all matching pattern labels in priority order.
+    Returns dict with pattern_primary (highest) and pattern_secondary (second, or None).
+    Output only — never changes score."""
     l1_present = _bool(row.get("l1_available", row.get("l1_present", False)))
     path = (row.get("l1_path_behavior") or "UNKNOWN").upper()
     bets_pct = _num(row.get("bets_pct", 0))
@@ -468,53 +470,63 @@ def _detect_pattern(row, sharp, consensus, retail) -> str:
     stale = _bool(row.get("l2_stale_price_flag", False))
     move_dir = _num(row.get("l1_move_dir", 0))
     dk_dir = _num(row.get("move_dir", 0))
+    sharp_score = sharp["sharp_score"]
+    pinnacle_moved = _bool(row.get("l1_pinnacle_moved", False))
+
+    matched = []
 
     # SHARP_REVERSAL: L1 moved + public heavy opposite + path HELD/EXTENDED
     if (l1_present and move_dir != 0 and path in ("HELD", "EXTENDED")
-            and bets_pct >= 60 and sharp["sharp_score"] > 0):
-        # Check if public is on opposite side (high bets but divergence)
+            and bets_pct >= 60 and sharp_score > 0):
         D = money_pct - bets_pct
-        if D < -5:  # Money not following bets = contrarian
-            return "SHARP_REVERSAL"
+        if D < -5:
+            matched.append("SHARP_REVERSAL")
 
     # STALE_PRICE: DK lags consensus + L1 confirmed
-    if stale and l1_present and sharp["sharp_score"] > 0:
-        return "STALE_PRICE"
+    if stale and l1_present and sharp_score > 0:
+        matched.append("STALE_PRICE")
 
     # FREEZE_PRESSURE: L1 moved + L2 strongly aligned + no DK response
     if (l1_present and move_dir != 0 and l2_agreement >= 0.75
             and dk_dir == 0):
-        return "FREEZE_PRESSURE"
+        matched.append("FREEZE_PRESSURE")
 
     # BOOK_RESISTANCE: Heavy public but book hasn't moved toward public (or only juice shifted)
     line_move = abs(_num(row.get("line_move_open", 0)))
     if (bets_pct >= 65 or money_pct >= 65) and line_move < 0.5:
-        if dk_dir <= 0:  # Book didn't move toward this side (0 = held, -1 = moved against)
+        if dk_dir <= 0:
             if not (l1_present and move_dir != 0 and l2_agreement >= 0.75):
-                return "BOOK_RESISTANCE"
+                matched.append("BOOK_RESISTANCE")
 
-    # BOOK_INITIATED: Line moved without public pressure
-    # dk_dir=+1 = book moved FOR this side, dk_dir=-1 = book moved AGAINST
+    # BOOK_INITIATED / SHARP_BOOK_CONFLICT: Line moved without public pressure
     if dk_dir != 0 and bets_pct < 40 and money_pct < 40:
-        return "BOOK_INITIATED_FOR" if dk_dir > 0 else "BOOK_INITIATED_AGAINST"
+        if dk_dir < 0 and sharp_score > 3:
+            matched.append("SHARP_BOOK_CONFLICT")
+        elif dk_dir > 0 and (sharp_score > 2 or pinnacle_moved):
+            matched.append("BOOK_INITIATED_FOR")
+        elif dk_dir < 0:
+            matched.append("BOOK_INITIATED_AGAINST")
+        # dk_dir > 0 but no sharp confirmation → juice noise, skip
 
     # SHARP_PUBLIC_SPLIT: Sharp books favor this side, public is on the other side
-    if l1_present and sharp["sharp_score"] > 3 and bets_pct <= 35:
-        return "SHARP_PUBLIC_SPLIT"
+    if l1_present and sharp_score > 3 and bets_pct <= 35:
+        matched.append("SHARP_PUBLIC_SPLIT")
 
-    # PUBLIC_DRIFT: Heavy public + line toward public
-    if bets_pct >= 70 and money_pct >= 70 and dk_dir != 0:
-        return "PUBLIC_DRIFT"
+    # PUBLIC_DRIFT: Heavy public + line toward public + NO sharp support (v3.3f)
+    if bets_pct >= 70 and money_pct >= 70 and dk_dir != 0 and sharp_score <= 0:
+        matched.append("PUBLIC_DRIFT")
 
     # CONSENSUS_HOLD: L2 strongly aligned without clear L1
     if not l1_present and l2_agreement >= 0.75:
-        return "CONSENSUS_HOLD"
+        matched.append("CONSENSUS_HOLD")
 
     # RETAIL_CROWD: Extreme public, no sharp support
-    if bets_pct >= 75 and money_pct >= 75 and sharp["sharp_score"] <= 0:
-        return "RETAIL_CROWD"
+    if bets_pct >= 75 and money_pct >= 75 and sharp_score <= 0:
+        matched.append("RETAIL_CROWD")
 
-    return "NEUTRAL"
+    primary = matched[0] if matched else "NEUTRAL"
+    secondary = matched[1] if len(matched) > 1 else None
+    return {"pattern_primary": primary, "pattern_secondary": secondary}
 
 
 def _build_explanation(row, sharp, consensus, retail, timing, cross, score, market_rx=None) -> str:

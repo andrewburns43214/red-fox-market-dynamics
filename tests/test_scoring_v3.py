@@ -1314,8 +1314,8 @@ class Test6_TotalDirectionPolarity(unittest.TestCase):
 
 
 class Test7_PatternDetection(unittest.TestCase):
-    """v3.3d: Regression tests for BOOK_RESISTANCE, BOOK_INITIATED,
-    and SHARP_PUBLIC_SPLIT pattern labels."""
+    """v3.3f: Regression tests for pattern detection including
+    pattern_secondary, SHARP_BOOK_CONFLICT, and logic guards."""
 
     def _base_row(self, **overrides):
         row = {
@@ -1375,10 +1375,11 @@ class Test7_PatternDetection(unittest.TestCase):
         self.assertEqual(result["pattern_primary"], "FREEZE_PRESSURE")
 
     # --- BOOK_INITIATED_FOR / BOOK_INITIATED_AGAINST ---
-    def test_7B_01_book_initiated_for_dk_moved_positive(self):
-        """DK moved FOR this side (dk_dir=+1), low public → BOOK_INITIATED_FOR."""
+    def test_7B_01_book_initiated_for_with_pinnacle(self):
+        """DK moved FOR (dk_dir=+1), low public, pinnacle_moved → BOOK_INITIATED_FOR."""
         row = self._base_row(bets_pct=25, money_pct=30, move_dir=1,
-                             line_move_open=1.0, effective_move_mag=1.0)
+                             line_move_open=1.0, effective_move_mag=1.0,
+                             l1_available=True, l1_pinnacle_moved=True)
         result = compute_v3_score(row)
         self.assertEqual(result["pattern_primary"], "BOOK_INITIATED_FOR")
 
@@ -1403,6 +1404,38 @@ class Test7_PatternDetection(unittest.TestCase):
         result = compute_v3_score(row)
         self.assertNotIn(result["pattern_primary"],
                          ["BOOK_INITIATED_FOR", "BOOK_INITIATED_AGAINST"])
+
+    def test_7B_05_book_initiated_for_no_sharp_falls_through(self):
+        """DK moved FOR (dk_dir=+1) but sharp=0 and no pinnacle → NOT BOOK_INITIATED_FOR (juice noise)."""
+        row = self._base_row(bets_pct=25, money_pct=30, move_dir=1,
+                             line_move_open=1.0, effective_move_mag=1.0)
+        result = compute_v3_score(row)
+        self.assertNotEqual(result["pattern_primary"], "BOOK_INITIATED_FOR")
+
+    def test_7B_06_sharp_book_conflict(self):
+        """DK moved AGAINST (dk_dir=-1) + sharp > 3 → SHARP_BOOK_CONFLICT."""
+        row = self._base_row(
+            bets_pct=20, money_pct=15, move_dir=-1,
+            line_move_open=1.0, effective_move_mag=1.0,
+            l1_available=True, l1_move_dir=1, l1_move_magnitude_raw=3.0,
+            l1_pinnacle_moved=True, l1_sharp_agreement=2, l1_support_agreement=1,
+            timing_bucket="MID",
+        )
+        result = compute_v3_score(row)
+        self.assertEqual(result["pattern_primary"], "SHARP_BOOK_CONFLICT")
+
+    def test_7B_07_sharp_book_conflict_not_when_weak_sharp(self):
+        """DK moved AGAINST but sharp ≤ 3 → BOOK_INITIATED_AGAINST, not SHARP_BOOK_CONFLICT."""
+        row = self._base_row(
+            bets_pct=20, money_pct=15, move_dir=-1,
+            line_move_open=1.0, effective_move_mag=1.0,
+            l1_available=True, l1_move_dir=1, l1_move_magnitude_raw=0.5,
+            l1_pinnacle_moved=False, l1_sharp_agreement=0,
+            timing_bucket="MID",
+        )
+        result = compute_v3_score(row)
+        self.assertLessEqual(result["sharp_score"], 3)
+        self.assertEqual(result["pattern_primary"], "BOOK_INITIATED_AGAINST")
 
     # --- SHARP_PUBLIC_SPLIT ---
     def test_7C_01_sharp_public_split(self):
@@ -1436,6 +1469,60 @@ class Test7_PatternDetection(unittest.TestCase):
         )
         result = compute_v3_score(row)
         self.assertNotEqual(result["pattern_primary"], "SHARP_PUBLIC_SPLIT")
+
+    # --- PUBLIC_DRIFT ---
+    def test_7D_01_public_drift_fires_when_sharp_zero(self):
+        """Heavy public + dk moved + sharp ≤ 0 → PUBLIC_DRIFT."""
+        row = self._base_row(bets_pct=75, money_pct=80, move_dir=1, line_move_open=1.0)
+        result = compute_v3_score(row)
+        self.assertEqual(result["pattern_primary"], "PUBLIC_DRIFT")
+
+    def test_7D_02_public_drift_blocked_when_sharp_positive(self):
+        """Heavy public + dk moved but sharp > 0 → NOT PUBLIC_DRIFT."""
+        row = self._base_row(
+            bets_pct=75, money_pct=80, move_dir=1, line_move_open=1.0,
+            l1_available=True, l1_move_dir=1, l1_move_magnitude_raw=3.0,
+            l1_pinnacle_moved=True, l1_sharp_agreement=2,
+            timing_bucket="MID",
+        )
+        result = compute_v3_score(row)
+        self.assertNotEqual(result["pattern_primary"], "PUBLIC_DRIFT")
+
+    # --- PATTERN_SECONDARY ---
+    def test_7E_01_secondary_populated_multi_signal(self):
+        """BOOK_RESISTANCE + CONSENSUS_HOLD: both fire, secondary populated.
+        L1 absent + L2 strong + heavy public + no move → both match."""
+        row = self._base_row(
+            l1_available=False,
+            l2_consensus_agreement=0.80, bets_pct=70, money_pct=70,
+            move_dir=0, line_move_open=0,
+        )
+        result = compute_v3_score(row)
+        self.assertEqual(result["pattern_primary"], "BOOK_RESISTANCE")
+        self.assertEqual(result["pattern_secondary"], "CONSENSUS_HOLD")
+
+    def test_7E_02_secondary_none_single_signal(self):
+        """Only BOOK_RESISTANCE fires → secondary is None."""
+        row = self._base_row(bets_pct=70, money_pct=50, move_dir=0, line_move_open=0)
+        result = compute_v3_score(row)
+        self.assertEqual(result["pattern_primary"], "BOOK_RESISTANCE")
+        self.assertIsNone(result["pattern_secondary"])
+
+    def test_7E_03_secondary_only_second_match(self):
+        """Three patterns match → secondary is the second, not third."""
+        row = self._base_row(
+            l1_available=True, l1_move_dir=1, l1_move_magnitude_raw=2.0,
+            l1_pinnacle_moved=True, l1_sharp_agreement=2,
+            l2_consensus_agreement=0.80, bets_pct=70, money_pct=70,
+            move_dir=0, line_move_open=0.3,
+            l2_stale_price_flag=True,
+        )
+        result = compute_v3_score(row)
+        # STALE_PRICE (sharp > 0 + stale + l1) is first
+        # FREEZE_PRESSURE (l1 moved + l2 >= 0.75 + dk_dir == 0) is second
+        # BOOK_RESISTANCE (heavy public + no line move) is third — lost
+        self.assertEqual(result["pattern_primary"], "STALE_PRICE")
+        self.assertEqual(result["pattern_secondary"], "FREEZE_PRESSURE")
 
 
 if __name__ == "__main__":

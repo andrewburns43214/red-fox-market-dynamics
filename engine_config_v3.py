@@ -4,7 +4,7 @@ All magic numbers from the scoring spec in one place.
 Single source of truth. Any change requires a version bump.
 """
 
-V3_VERSION = "v3.3e"
+V3_VERSION = "v3.3f"
 
 # ─── FIXED BASE ───
 BASE = 50  # Fixed. All sports. No exceptions.
@@ -224,7 +224,12 @@ PATTERNS = {
     "SHARP_REVERSAL": "L1 moved + public heavy opposite + path HELD/EXTENDED",
     "STALE_PRICE": "DK lags consensus ≥1pt + L1 confirmed direction",
     "FREEZE_PRESSURE": "L1 moved + L2 strongly aligned + no DK response",
-    "PUBLIC_DRIFT": "Heavy public bets + money + line toward public side",
+    "BOOK_RESISTANCE": "Heavy public but book held firm or moved against",
+    "SHARP_BOOK_CONFLICT": "Sharp favors side but book moves against — contradiction",
+    "BOOK_INITIATED_FOR": "Book moved FOR side with sharp confirmation, no public pressure",
+    "BOOK_INITIATED_AGAINST": "Book fading side quietly, no public pressure",
+    "SHARP_PUBLIC_SPLIT": "Sharp books favor side, public heavy on opposite",
+    "PUBLIC_DRIFT": "Heavy public + line toward public + no sharp support",
     "CONSENSUS_HOLD": "L2 strongly aligned without clear L1 move",
     "RETAIL_CROWD": "Extreme public concentration, no sharp support",
     "NEUTRAL": "No strong pattern in any bucket",
