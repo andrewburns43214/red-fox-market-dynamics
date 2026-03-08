@@ -491,6 +491,11 @@ def _detect_pattern(row, sharp, consensus, retail) -> dict:
             and dk_dir == 0):
         matched.append("FREEZE_PRESSURE")
 
+    # SHARP_CONFIRMED: Strong sharp conviction — multiple books moved in agreement
+    sharp_agree = _num(row.get("l1_sharp_agreement", 0))
+    if sharp_score > 6 and pinnacle_moved and sharp_agree >= 1:
+        matched.append("SHARP_CONFIRMED")
+
     # BOOK_RESISTANCE: Heavy public but book hasn't moved toward public (or only juice shifted)
     line_move = abs(_num(row.get("line_move_open", 0)))
     if (bets_pct >= 65 or money_pct >= 65) and line_move < 0.5:

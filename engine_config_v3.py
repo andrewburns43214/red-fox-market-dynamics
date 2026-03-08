@@ -224,6 +224,7 @@ PATTERNS = {
     "SHARP_REVERSAL": "L1 moved + public heavy opposite + path HELD/EXTENDED",
     "STALE_PRICE": "DK lags consensus ≥1pt + L1 confirmed direction",
     "FREEZE_PRESSURE": "L1 moved + L2 strongly aligned + no DK response",
+    "SHARP_CONFIRMED": "Strong sharp conviction — pinnacle + agreement, score > 6",
     "BOOK_RESISTANCE": "Heavy public but book held firm or moved against",
     "SHARP_BOOK_CONFLICT": "Sharp favors side but book moves against — contradiction",
     "BOOK_INITIATED_FOR": "Book moved FOR side with sharp confirmation, no public pressure",

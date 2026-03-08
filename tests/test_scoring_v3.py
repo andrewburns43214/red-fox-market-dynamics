@@ -1413,15 +1413,17 @@ class Test7_PatternDetection(unittest.TestCase):
         self.assertNotEqual(result["pattern_primary"], "BOOK_INITIATED_FOR")
 
     def test_7B_06_sharp_book_conflict(self):
-        """DK moved AGAINST (dk_dir=-1) + sharp > 3 → SHARP_BOOK_CONFLICT."""
+        """DK moved AGAINST (dk_dir=-1) + sharp > 3 but ≤ 6 → SHARP_BOOK_CONFLICT."""
         row = self._base_row(
             bets_pct=20, money_pct=15, move_dir=-1,
             line_move_open=1.0, effective_move_mag=1.0,
-            l1_available=True, l1_move_dir=1, l1_move_magnitude_raw=3.0,
-            l1_pinnacle_moved=True, l1_sharp_agreement=2, l1_support_agreement=1,
+            l1_available=True, l1_move_dir=1, l1_move_magnitude_raw=1.5,
+            l1_pinnacle_moved=True, l1_sharp_agreement=1,
             timing_bucket="MID",
         )
         result = compute_v3_score(row)
+        self.assertGreater(result["sharp_score"], 3)
+        self.assertLessEqual(result["sharp_score"], 6)
         self.assertEqual(result["pattern_primary"], "SHARP_BOOK_CONFLICT")
 
     def test_7B_07_sharp_book_conflict_not_when_weak_sharp(self):
@@ -1437,12 +1439,25 @@ class Test7_PatternDetection(unittest.TestCase):
         self.assertLessEqual(result["sharp_score"], 3)
         self.assertEqual(result["pattern_primary"], "BOOK_INITIATED_AGAINST")
 
-    # --- SHARP_PUBLIC_SPLIT ---
-    def test_7C_01_sharp_public_split(self):
-        """Sharp favors side (score > 3), public against (bets ≤ 35) → SHARP_PUBLIC_SPLIT."""
+    # --- SHARP_CONFIRMED ---
+    def test_7B_08_sharp_confirmed(self):
+        """Sharp > 6 + pinnacle_moved + agreement ≥ 1 → SHARP_CONFIRMED."""
         row = self._base_row(
             l1_available=True, l1_move_dir=1, l1_move_magnitude_raw=3.0,
             l1_pinnacle_moved=True, l1_sharp_agreement=2, l1_support_agreement=1,
+            bets_pct=50, money_pct=50, move_dir=0, line_move_open=0,
+            timing_bucket="MID",
+        )
+        result = compute_v3_score(row)
+        self.assertGreater(result["sharp_score"], 6)
+        self.assertEqual(result["pattern_primary"], "SHARP_CONFIRMED")
+
+    # --- SHARP_PUBLIC_SPLIT ---
+    def test_7C_01_sharp_public_split(self):
+        """Sharp favors side (3 < score ≤ 6), public against (bets ≤ 35) → SHARP_PUBLIC_SPLIT."""
+        row = self._base_row(
+            l1_available=True, l1_move_dir=1, l1_move_magnitude_raw=1.5,
+            l1_pinnacle_moved=True, l1_sharp_agreement=1,
             bets_pct=20, money_pct=25, move_dir=0, line_move_open=0,
             timing_bucket="MID",
         )
