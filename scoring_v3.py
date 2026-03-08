@@ -189,8 +189,20 @@ def compute_consensus_validation(row: dict) -> dict:
                 result = tier_score
                 break
 
+        # Dispersion-based fallback: when pinn gap is 0 (e.g. moneyline,
+        # or first-cycle with no line data) but books exist, use dispersion
+        # tightness as a consensus signal — tight books = agreement on price.
+        if result == 0.0 and pinn_gap == 0 and n_books >= 10:
+            if disp_label == "TIGHT":
+                result = 5.0
+                consensus_tier = 2  # moderate
+            elif disp_label == "NORMAL":
+                result = 2.0
+                consensus_tier = 3  # weak
+            # WIDE / VERY_WIDE → no signal (result stays 0)
+
         # Dispersion guard — tight books with small gap = less signal
-        if disp_label == "TIGHT" and pinn_gap < 1.5:
+        if disp_label == "TIGHT" and pinn_gap < 1.5 and pinn_gap > 0:
             result *= C.CROSS_TIGHT_DAMPENING
         elif disp_label == "VERY_WIDE":
             result *= C.CROSS_VERY_WIDE_DAMPENING
