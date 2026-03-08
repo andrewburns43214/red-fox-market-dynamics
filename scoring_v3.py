@@ -135,7 +135,7 @@ def compute_consensus_validation(row: dict) -> dict:
     """
     l2_available = _bool(row.get("l2_available", False))
     if not l2_available:
-        return {"consensus_score": 0.0, "consensus_detail": "L2 absent"}
+        return {"consensus_score": 0.0, "consensus_detail": "L2 absent", "consensus_tier": 0}
 
     n_books = _num(row.get("l2_n_books", 0))
     disp_label = (row.get("l2_dispersion_label") or "NORMAL").upper()
@@ -155,9 +155,11 @@ def compute_consensus_validation(row: dict) -> dict:
     if has_direction:
         # ── TIME-SERIES PATH (existing logic, unchanged) ──
         base = C.CONSENSUS_TIERS[-1][1]  # default: rejects
-        for threshold, value in C.CONSENSUS_TIERS:
+        consensus_tier = 0  # default: rejects (below all tiers)
+        for i, (threshold, value) in enumerate(C.CONSENSUS_TIERS):
             if agreement >= threshold:
                 base = value
+                consensus_tier = i + 1  # 1=strong, 2=moderate, 3=weak
                 break
 
         disp_mult = C.CONSENSUS_DISPERSION_MULT.get(disp_label, 1.0)
@@ -169,6 +171,7 @@ def compute_consensus_validation(row: dict) -> dict:
 
         detail = f"agree={agreement:.2f} disp={disp_label} trend={trend} books={int(n_books)}"
     else:
+        consensus_tier = 0  # cross-sectional path
         # ── CROSS-SECTIONAL PATH (single-snapshot fallback) ──
         # Compute pinn gap from raw fields if pre-computed field unavailable
         pinn_gap = abs(_num(row.get("pinn_vs_consensus",
@@ -212,7 +215,8 @@ def compute_consensus_validation(row: dict) -> dict:
     # Hard cap
     result = max(C.CONSENSUS_MIN, min(C.CONSENSUS_MAX, result))
 
-    return {"consensus_score": round(result, 2), "consensus_detail": detail}
+    return {"consensus_score": round(result, 2), "consensus_detail": detail,
+            "consensus_tier": consensus_tier}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -432,6 +436,7 @@ def compute_v3_score(row: dict) -> dict:
         "final_score": final_score,
         "sharp_score": sharp["sharp_score"],
         "consensus_score": consensus["consensus_score"],
+        "consensus_tier": consensus["consensus_tier"],
         "retail_score": retail["retail_score"],
         "timing_modifier": timing["timing_score"],
         "cross_market_adj": cross["cross_market_score"],
