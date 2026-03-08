@@ -129,6 +129,34 @@ for b, g in k.groupby("edge_bucket"):
 pd.DataFrame(bucket_rows).to_csv("data/kpi_bucket_summary.csv", index=False)
 
 # -------------------------------------------------
+# PATTERN WIN RATES (v3.3d)
+# -------------------------------------------------
+if "pattern_primary" in k.columns:
+    pattern_rows = []
+    for pat, g in k.groupby("pattern_primary"):
+        wins = (g["result"] == "WIN").sum()
+        losses = (g["result"] == "LOSS").sum()
+        wr = round(wins / (wins + losses), 4) if (wins + losses) > 0 else 0.0
+        pattern_rows.append({
+            "pattern": pat,
+            "wins": int(wins),
+            "losses": int(losses),
+            "n": len(g),
+            "win_rate": wr,
+            "avg_score": round(g["last_score"].mean(), 2) if "last_score" in g.columns else None,
+            "avg_edge": round(g["net_edge"].mean(), 2) if "net_edge" in g.columns else None,
+        })
+        summary_rows.append({
+            "metric": f"pattern_{pat}_win_rate",
+            "value": wr,
+            "n": len(g),
+        })
+    pd.DataFrame(pattern_rows).to_csv("data/kpi_pattern_summary.csv", index=False)
+    print(f"[kpi] pattern summary: {len(pattern_rows)} patterns tracked")
+else:
+    print("[kpi] pattern_primary column not in results (pre-v3.2)")
+
+# -------------------------------------------------
 # CLV ANALYSIS (v2.1)
 # -------------------------------------------------
 if "clv" in k.columns:

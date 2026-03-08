@@ -1313,5 +1313,115 @@ class Test6_TotalDirectionPolarity(unittest.TestCase):
                         "Over must be negative when total line moves DOWN")
 
 
+class Test7_PatternDetection(unittest.TestCase):
+    """v3.3d: Regression tests for BOOK_RESISTANCE, BOOK_INITIATED,
+    and SHARP_PUBLIC_SPLIT pattern labels."""
+
+    def _base_row(self, **overrides):
+        row = {
+            "sport": "nba", "market_display": "SPREAD",
+            "side": "Team A +3.5", "favored_side": "Team A +3.5",
+            "l1_available": False, "l1_move_dir": 0,
+            "l1_move_magnitude_raw": 0, "l1_pinnacle_moved": False,
+            "l1_sharp_agreement": 0, "l1_support_agreement": 0,
+            "l1_path_behavior": "UNKNOWN", "l2_consensus_agreement": 0,
+            "l2_stale_price_flag": False, "timing_bucket": "EARLY",
+            "bets_pct": 50, "money_pct": 50, "move_dir": 0,
+            "line_move_open": 0, "effective_move_mag": 0,
+        }
+        row.update(overrides)
+        return row
+
+    # --- BOOK_RESISTANCE ---
+    def test_7A_01_book_resistance_high_bets_no_move(self):
+        """Heavy bets%, no line move → BOOK_RESISTANCE."""
+        row = self._base_row(bets_pct=70, money_pct=50, move_dir=0, line_move_open=0)
+        result = compute_v3_score(row)
+        self.assertEqual(result["pattern_primary"], "BOOK_RESISTANCE")
+
+    def test_7A_02_book_resistance_high_money_no_move(self):
+        """Heavy money%, no line move → BOOK_RESISTANCE."""
+        row = self._base_row(bets_pct=40, money_pct=80, move_dir=0, line_move_open=0)
+        result = compute_v3_score(row)
+        self.assertEqual(result["pattern_primary"], "BOOK_RESISTANCE")
+
+    def test_7A_03_book_resistance_juice_only(self):
+        """Heavy public, juice shift < 0.5 → still BOOK_RESISTANCE."""
+        row = self._base_row(bets_pct=70, money_pct=70, move_dir=0, line_move_open=0.3)
+        result = compute_v3_score(row)
+        self.assertEqual(result["pattern_primary"], "BOOK_RESISTANCE")
+
+    def test_7A_04_book_resistance_not_when_line_moved(self):
+        """Heavy public but line moved ≥ 0.5 → NOT BOOK_RESISTANCE."""
+        row = self._base_row(bets_pct=70, money_pct=70, move_dir=1, line_move_open=1.0)
+        result = compute_v3_score(row)
+        self.assertNotEqual(result["pattern_primary"], "BOOK_RESISTANCE")
+
+    def test_7A_05_book_resistance_not_freeze_pressure(self):
+        """FREEZE_PRESSURE conditions take priority over BOOK_RESISTANCE."""
+        row = self._base_row(
+            l1_available=True, l1_move_dir=1, l1_move_magnitude_raw=2.0,
+            l1_pinnacle_moved=True, l1_sharp_agreement=2,
+            l2_consensus_agreement=0.80, bets_pct=70, money_pct=70,
+            move_dir=0, line_move_open=0,
+        )
+        result = compute_v3_score(row)
+        self.assertEqual(result["pattern_primary"], "FREEZE_PRESSURE")
+
+    # --- BOOK_INITIATED ---
+    def test_7B_01_book_initiated_low_public_dk_moved(self):
+        """DK moved, public below 40% → BOOK_INITIATED."""
+        row = self._base_row(bets_pct=25, money_pct=30, move_dir=1,
+                             line_move_open=1.0, effective_move_mag=1.0)
+        result = compute_v3_score(row)
+        self.assertEqual(result["pattern_primary"], "BOOK_INITIATED")
+
+    def test_7B_02_book_initiated_not_when_public_heavy(self):
+        """DK moved but public ≥ 40% → NOT BOOK_INITIATED."""
+        row = self._base_row(bets_pct=45, money_pct=30, move_dir=1,
+                             line_move_open=1.0, effective_move_mag=1.0)
+        result = compute_v3_score(row)
+        self.assertNotEqual(result["pattern_primary"], "BOOK_INITIATED")
+
+    def test_7B_03_book_initiated_not_when_no_move(self):
+        """Public low but DK didn't move → NOT BOOK_INITIATED."""
+        row = self._base_row(bets_pct=25, money_pct=30, move_dir=0, line_move_open=0)
+        result = compute_v3_score(row)
+        self.assertNotEqual(result["pattern_primary"], "BOOK_INITIATED")
+
+    # --- SHARP_PUBLIC_SPLIT ---
+    def test_7C_01_sharp_public_split(self):
+        """Sharp favors side (score > 3), public against (bets ≤ 35) → SHARP_PUBLIC_SPLIT."""
+        row = self._base_row(
+            l1_available=True, l1_move_dir=1, l1_move_magnitude_raw=3.0,
+            l1_pinnacle_moved=True, l1_sharp_agreement=2, l1_support_agreement=1,
+            bets_pct=20, money_pct=25, move_dir=0, line_move_open=0,
+            timing_bucket="MID",
+        )
+        result = compute_v3_score(row)
+        self.assertEqual(result["pattern_primary"], "SHARP_PUBLIC_SPLIT")
+
+    def test_7C_02_sharp_public_split_not_when_public_aligned(self):
+        """Sharp favors side but public also on this side → NOT SHARP_PUBLIC_SPLIT."""
+        row = self._base_row(
+            l1_available=True, l1_move_dir=1, l1_move_magnitude_raw=3.0,
+            l1_pinnacle_moved=True, l1_sharp_agreement=2, l1_support_agreement=1,
+            bets_pct=60, money_pct=55, move_dir=0, line_move_open=0,
+            timing_bucket="MID",
+        )
+        result = compute_v3_score(row)
+        self.assertNotEqual(result["pattern_primary"], "SHARP_PUBLIC_SPLIT")
+
+    def test_7C_03_sharp_public_split_not_when_weak_sharp(self):
+        """Weak sharp (score ≤ 3) even with low public → NOT SHARP_PUBLIC_SPLIT."""
+        row = self._base_row(
+            l1_available=True, l1_move_dir=1, l1_move_magnitude_raw=0.5,
+            l1_pinnacle_moved=False, l1_sharp_agreement=0,
+            bets_pct=20, money_pct=25, move_dir=0, line_move_open=0,
+        )
+        result = compute_v3_score(row)
+        self.assertNotEqual(result["pattern_primary"], "SHARP_PUBLIC_SPLIT")
+
+
 if __name__ == "__main__":
     unittest.main()
