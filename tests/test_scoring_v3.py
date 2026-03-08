@@ -1357,6 +1357,12 @@ class Test7_PatternDetection(unittest.TestCase):
         result = compute_v3_score(row)
         self.assertNotEqual(result["pattern_primary"], "BOOK_RESISTANCE")
 
+    def test_7A_04b_book_resistance_not_when_dk_moved_with_public(self):
+        """Heavy public, no line move, but dk_dir=+1 (book moved WITH public) → NOT BOOK_RESISTANCE."""
+        row = self._base_row(bets_pct=70, money_pct=70, move_dir=1, line_move_open=0)
+        result = compute_v3_score(row)
+        self.assertNotEqual(result["pattern_primary"], "BOOK_RESISTANCE")
+
     def test_7A_05_book_resistance_not_freeze_pressure(self):
         """FREEZE_PRESSURE conditions take priority over BOOK_RESISTANCE."""
         row = self._base_row(
@@ -1368,26 +1374,35 @@ class Test7_PatternDetection(unittest.TestCase):
         result = compute_v3_score(row)
         self.assertEqual(result["pattern_primary"], "FREEZE_PRESSURE")
 
-    # --- BOOK_INITIATED ---
-    def test_7B_01_book_initiated_low_public_dk_moved(self):
-        """DK moved, public below 40% → BOOK_INITIATED."""
+    # --- BOOK_INITIATED_FOR / BOOK_INITIATED_AGAINST ---
+    def test_7B_01_book_initiated_for_dk_moved_positive(self):
+        """DK moved FOR this side (dk_dir=+1), low public → BOOK_INITIATED_FOR."""
         row = self._base_row(bets_pct=25, money_pct=30, move_dir=1,
                              line_move_open=1.0, effective_move_mag=1.0)
         result = compute_v3_score(row)
-        self.assertEqual(result["pattern_primary"], "BOOK_INITIATED")
+        self.assertEqual(result["pattern_primary"], "BOOK_INITIATED_FOR")
 
-    def test_7B_02_book_initiated_not_when_public_heavy(self):
-        """DK moved but public ≥ 40% → NOT BOOK_INITIATED."""
+    def test_7B_02_book_initiated_against_dk_moved_negative(self):
+        """DK moved AGAINST this side (dk_dir=-1), low public → BOOK_INITIATED_AGAINST."""
+        row = self._base_row(bets_pct=25, money_pct=30, move_dir=-1,
+                             line_move_open=1.0, effective_move_mag=1.0)
+        result = compute_v3_score(row)
+        self.assertEqual(result["pattern_primary"], "BOOK_INITIATED_AGAINST")
+
+    def test_7B_03_book_initiated_not_when_public_heavy(self):
+        """DK moved but public ≥ 40% → NOT BOOK_INITIATED_FOR/AGAINST."""
         row = self._base_row(bets_pct=45, money_pct=30, move_dir=1,
                              line_move_open=1.0, effective_move_mag=1.0)
         result = compute_v3_score(row)
-        self.assertNotEqual(result["pattern_primary"], "BOOK_INITIATED")
+        self.assertNotIn(result["pattern_primary"],
+                         ["BOOK_INITIATED_FOR", "BOOK_INITIATED_AGAINST"])
 
-    def test_7B_03_book_initiated_not_when_no_move(self):
-        """Public low but DK didn't move → NOT BOOK_INITIATED."""
+    def test_7B_04_book_initiated_not_when_no_move(self):
+        """Public low but DK didn't move → NOT BOOK_INITIATED_FOR/AGAINST."""
         row = self._base_row(bets_pct=25, money_pct=30, move_dir=0, line_move_open=0)
         result = compute_v3_score(row)
-        self.assertNotEqual(result["pattern_primary"], "BOOK_INITIATED")
+        self.assertNotIn(result["pattern_primary"],
+                         ["BOOK_INITIATED_FOR", "BOOK_INITIATED_AGAINST"])
 
     # --- SHARP_PUBLIC_SPLIT ---
     def test_7C_01_sharp_public_split(self):

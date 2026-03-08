@@ -486,15 +486,17 @@ def _detect_pattern(row, sharp, consensus, retail) -> str:
             and dk_dir == 0):
         return "FREEZE_PRESSURE"
 
-    # BOOK_RESISTANCE: Heavy public but book hasn't moved (or only juice shifted)
+    # BOOK_RESISTANCE: Heavy public but book hasn't moved toward public (or only juice shifted)
     line_move = abs(_num(row.get("line_move_open", 0)))
-    if (bets_pct >= 65 or money_pct >= 65) and dk_dir == 0 and line_move < 0.5:
-        if not (l1_present and move_dir != 0 and l2_agreement >= 0.75):
-            return "BOOK_RESISTANCE"
+    if (bets_pct >= 65 or money_pct >= 65) and line_move < 0.5:
+        if dk_dir <= 0:  # Book didn't move toward this side (0 = held, -1 = moved against)
+            if not (l1_present and move_dir != 0 and l2_agreement >= 0.75):
+                return "BOOK_RESISTANCE"
 
     # BOOK_INITIATED: Line moved without public pressure
+    # dk_dir=+1 = book moved FOR this side, dk_dir=-1 = book moved AGAINST
     if dk_dir != 0 and bets_pct < 40 and money_pct < 40:
-        return "BOOK_INITIATED"
+        return "BOOK_INITIATED_FOR" if dk_dir > 0 else "BOOK_INITIATED_AGAINST"
 
     # SHARP_PUBLIC_SPLIT: Sharp books favor this side, public is on the other side
     if l1_present and sharp["sharp_score"] > 3 and bets_pct <= 35:
