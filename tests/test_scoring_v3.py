@@ -25,6 +25,7 @@ from scoring_v3 import (
     compute_retail_context,
     compute_timing_modifier,
     compute_cross_market_sanity,
+    compute_market_reaction,
     compute_v3_score,
 )
 from certification_v3 import certify_decision
@@ -61,6 +62,7 @@ def _base_row(**overrides):
         "current_odds": -110,
         "move_dir": 0,
         "effective_move_mag": 0.0,
+        "line_move_open": 0.0,
         "favored_side": "Home",
         "spread_favored_side": "",
         "ml_favored_side": "",
@@ -1079,6 +1081,59 @@ class TestPathBehavior(unittest.TestCase):
                "line_last_dir": 1, "line_max_move": 1.0,
                "effective_move_mag": 0.5, "ticks_since_open": 15}
         self.assertEqual(classify_path_behavior(row), "OSCILLATED")
+
+
+# ═══════════════════════════════════════════════════════════════
+# Section 4A — Market Reaction Component (7)
+# ═══════════════════════════════════════════════════════════════
+
+class Test4A_MarketReaction(unittest.TestCase):
+    """Market Reaction Score — book-initiated movement without public pressure."""
+
+    def test_4A_01_book_initiated_move(self):
+        """Line moves with low public pressure → +4."""
+        row = _base_row(effective_move_mag=1.0, bets_pct=45, money_pct=50)
+        result = compute_market_reaction(row)
+        self.assertEqual(result["market_reaction_score"], 4.0)
+
+    def test_4A_02_no_move_no_signal(self):
+        """No line movement → 0."""
+        row = _base_row(effective_move_mag=0.0, bets_pct=45, money_pct=50)
+        result = compute_market_reaction(row)
+        self.assertEqual(result["market_reaction_score"], 0.0)
+
+    def test_4A_03_high_bets_blocks(self):
+        """Line moves but bets_pct >= 60 → no bonus."""
+        row = _base_row(effective_move_mag=1.0, bets_pct=65, money_pct=50)
+        result = compute_market_reaction(row)
+        self.assertEqual(result["market_reaction_score"], 0.0)
+
+    def test_4A_04_high_money_blocks(self):
+        """Line moves but money_pct >= 65 → no bonus."""
+        row = _base_row(effective_move_mag=1.0, bets_pct=45, money_pct=70)
+        result = compute_market_reaction(row)
+        self.assertEqual(result["market_reaction_score"], 0.0)
+
+    def test_4A_05_small_move_blocks(self):
+        """Move below threshold → no bonus."""
+        row = _base_row(effective_move_mag=0.3, bets_pct=45, money_pct=50)
+        result = compute_market_reaction(row)
+        self.assertEqual(result["market_reaction_score"], 0.0)
+
+    def test_4A_06_in_v3_output(self):
+        """market_reaction_score appears in compute_v3_score output."""
+        row = _base_row()
+        result = compute_v3_score(row)
+        self.assertIn("market_reaction_score", result)
+        self.assertIn("market_reaction_detail", result)
+
+    def test_4A_07_boosts_final_score(self):
+        """Book-initiated move raises final score by exactly 4."""
+        base = _base_row(effective_move_mag=0.0, bets_pct=45, money_pct=50)
+        with_move = _base_row(effective_move_mag=1.0, bets_pct=45, money_pct=50)
+        s1 = compute_v3_score(base)["final_score"]
+        s2 = compute_v3_score(with_move)["final_score"]
+        self.assertAlmostEqual(s2 - s1, 4.0, places=1)
 
 
 if __name__ == "__main__":

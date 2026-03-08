@@ -4,7 +4,7 @@ All magic numbers from the scoring spec in one place.
 Single source of truth. Any change requires a version bump.
 """
 
-V3_VERSION = "v3.2"
+V3_VERSION = "v3.3"
 
 # ─── FIXED BASE ───
 BASE = 50  # Fixed. All sports. No exceptions.
@@ -255,3 +255,13 @@ NHL_RETAIL_SAMPLE_MULT = 0.80
 NCAAB_PUBLIC_HEAVY_THRESHOLD = 75      # vs 72 default
 NCAAB_RETAIL_DIV_MIN = 20             # minimum D for meaningful signal
 NCAAB_CONSENSUS_EFFECTIVE_BUMP = 0.05  # interpretation note, not formula change
+
+# ─── COMPONENT 6: MARKET REACTION [-4, +12] ───
+MARKET_REACTION_MIN = -4
+MARKET_REACTION_MAX = 12
+
+# Book-initiated movement (no public pressure)
+MR_BOOK_MOVE_THRESHOLD = 0.5        # min effective_move_mag to qualify
+MR_BOOK_BETS_CEILING = 60           # bets_pct must be below
+MR_BOOK_MONEY_CEILING = 65          # money_pct must be below
+MR_BOOK_INITIATED_BONUS = 4.0

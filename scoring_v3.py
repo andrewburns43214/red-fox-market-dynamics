@@ -1,10 +1,10 @@
 """
-Red Fox v3.2 — Scoring Engine
+Red Fox v3.3 — Scoring Engine
 
-Score = 50 + Sharp + Consensus + Retail + Timing + CrossMarket
+Score = 50 + Sharp + Consensus + Retail + Timing + CrossMarket + MarketReaction
 Clamped to [0, 100]
 
-Five pure functions. No shared state. No side effects.
+Six pure functions. No shared state. No side effects.
 Each reads from a row dict and returns its contribution.
 """
 
@@ -347,16 +347,43 @@ def compute_cross_market_sanity(row: dict) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════
-# Orchestrator — Score = 50 + Sharp + Consensus + Retail + Timing + Cross
+# Component 6 — Market Reaction  [-4, +12]
+# ═══════════════════════════════════════════════════════════════
+
+def compute_market_reaction(row: dict) -> dict:
+    """Book-initiated movement without public pressure."""
+    bets_pct = _num(row.get("bets_pct", 0))
+    money_pct = _num(row.get("money_pct", 0))
+    result = 0.0
+    detail_parts = []
+
+    eff_move = abs(_num(row.get("effective_move_mag", 0)))
+    line_move = abs(_num(row.get("line_move_open", 0)))
+    move_mag = max(eff_move, line_move)
+
+    if (move_mag >= C.MR_BOOK_MOVE_THRESHOLD
+            and bets_pct < C.MR_BOOK_BETS_CEILING
+            and money_pct < C.MR_BOOK_MONEY_CEILING):
+        result += C.MR_BOOK_INITIATED_BONUS
+        detail_parts.append(f"book-init(+{C.MR_BOOK_INITIATED_BONUS})")
+
+    result = max(C.MARKET_REACTION_MIN, min(C.MARKET_REACTION_MAX, result))
+    detail = " | ".join(detail_parts) if detail_parts else "no reaction"
+    return {"market_reaction_score": round(result, 2), "market_reaction_detail": detail}
+
+
+# ═══════════════════════════════════════════════════════════════
+# Orchestrator — Score = 50 + Sharp + Consensus + Retail + Timing + Cross + MarketReaction
 # ═══════════════════════════════════════════════════════════════
 
 def compute_v3_score(row: dict) -> dict:
-    """Compute the full v3.2 score. Returns all components + metadata."""
+    """Compute the full v3.3 score. Returns all components + metadata."""
     sharp = compute_sharp_signal(row)
     consensus = compute_consensus_validation(row)
     retail = compute_retail_context(row)
     timing = compute_timing_modifier(row)
     cross = compute_cross_market_sanity(row)
+    market_rx = compute_market_reaction(row)
 
     # Soft retail dampening when L1 absent + L2 weak
     l1_present = _bool(row.get("l1_available", row.get("l1_present", False)))
@@ -370,7 +397,8 @@ def compute_v3_score(row: dict) -> dict:
            + consensus["consensus_score"]
            + retail["retail_score"]
            + timing["timing_score"]
-           + cross["cross_market_score"])
+           + cross["cross_market_score"]
+           + market_rx["market_reaction_score"])
 
     # L1-absent + L2-weak hard cap
     l1_cap_applied = False
@@ -383,7 +411,7 @@ def compute_v3_score(row: dict) -> dict:
 
     # Pattern detection (output label only — never affects score)
     pattern_primary = _detect_pattern(row, sharp, consensus, retail)
-    explanation = _build_explanation(row, sharp, consensus, retail, timing, cross, final_score)
+    explanation = _build_explanation(row, sharp, consensus, retail, timing, cross, final_score, market_rx)
 
     return {
         "final_score": final_score,
@@ -392,17 +420,18 @@ def compute_v3_score(row: dict) -> dict:
         "retail_score": retail["retail_score"],
         "timing_modifier": timing["timing_score"],
         "cross_market_adj": cross["cross_market_score"],
+        "market_reaction_score": market_rx["market_reaction_score"],
         "sharp_detail": sharp["sharp_detail"],
         "consensus_detail": consensus["consensus_detail"],
         "retail_detail": retail["retail_detail"],
         "timing_detail": timing["timing_detail"],
         "cross_market_detail": cross["cross_market_detail"],
+        "market_reaction_detail": market_rx["market_reaction_detail"],
         "pattern_primary": pattern_primary,
         "pattern_secondary": None,
         "score_explanation": explanation,
         "l1_present": l1_present,
         "l1_cap_applied": l1_cap_applied,
-        # Temporary debug — ML price credibility (remove after 1-2 runs)
         "ml_implied_prob": sharp.get("ml_implied_prob", 0.0),
         "ml_cred_mult": sharp.get("ml_cred_mult", 1.0),
         "sharp_base_pre_cred": sharp.get("sharp_base_pre_cred", 0.0),
@@ -457,11 +486,14 @@ def _detect_pattern(row, sharp, consensus, retail) -> str:
     return "NEUTRAL"
 
 
-def _build_explanation(row, sharp, consensus, retail, timing, cross, score) -> str:
+def _build_explanation(row, sharp, consensus, retail, timing, cross, score, market_rx=None) -> str:
     """Build one plain-English sentence explaining the score."""
     parts = []
     sport = (row.get("sport") or "").upper()
     side = row.get("favored_side") or "this side"
+
+    if market_rx and market_rx.get("market_reaction_score", 0) > 0:
+        parts.append("book-initiated movement detected")
 
     if sharp["sharp_score"] > 5:
         parts.append(f"sharp books strongly favor {side}")
