@@ -1263,5 +1263,55 @@ class Test5C_EffectiveMoveMagMLCapped(unittest.TestCase):
         self.assertEqual(result, 4.5)
 
 
+# ── Section 6: TOTAL Direction Polarity (permanent regression — v3.3c) ──
+
+class Test6_TotalDirectionPolarity(unittest.TestCase):
+    """TOTAL markets: line UP = Over favored, Under opposed. Line DOWN = reverse.
+    These tests are PERMANENT — they protect against the v3.3b inversion bug
+    where both Over and Under got identical sharp polarity."""
+
+    def _base_total_row(self, side, move_dir):
+        return {
+            "sport": "ncaab",
+            "market_display": "TOTAL",
+            "side": side,
+            "l1_available": True,
+            "l1_move_dir": move_dir,
+            "l1_move_magnitude_raw": 2.5,
+            "l1_pinnacle_moved": True,
+            "l1_sharp_agreement": 2,
+            "l1_support_agreement": 1,
+            "timing_bucket": "MID",
+        }
+
+    def test_6A_01_total_line_up_over_positive(self):
+        """Total line UP (+1): Over should get POSITIVE sharp."""
+        row = self._base_total_row("Over 134.5", move_dir=1)
+        result = compute_sharp_signal(row)
+        self.assertGreater(result["sharp_score"], 0,
+                           "Over must be positive when total line moves UP")
+
+    def test_6A_02_total_line_up_under_negative(self):
+        """Total line UP (+1): Under should get NEGATIVE sharp."""
+        row = self._base_total_row("Under 134.5", move_dir=1)
+        result = compute_sharp_signal(row)
+        self.assertLess(result["sharp_score"], 0,
+                        "Under must be negative when total line moves UP")
+
+    def test_6A_03_total_line_down_under_positive(self):
+        """Total line DOWN (-1): Under should get POSITIVE sharp."""
+        row = self._base_total_row("Under 134.5", move_dir=-1)
+        result = compute_sharp_signal(row)
+        self.assertGreater(result["sharp_score"], 0,
+                           "Under must be positive when total line moves DOWN")
+
+    def test_6A_04_total_line_down_over_negative(self):
+        """Total line DOWN (-1): Over should get NEGATIVE sharp."""
+        row = self._base_total_row("Over 134.5", move_dir=-1)
+        result = compute_sharp_signal(row)
+        self.assertLess(result["sharp_score"], 0,
+                        "Over must be negative when total line moves DOWN")
+
+
 if __name__ == "__main__":
     unittest.main()

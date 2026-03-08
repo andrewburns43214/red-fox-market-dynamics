@@ -27,6 +27,16 @@ def compute_sharp_signal(row: dict) -> dict:
 
     move_dir = _num(row.get("l1_move_dir", 0))
 
+    # TOTAL: same line move has opposite meaning for Over vs Under.
+    # Line UP (+1) = books favor Over, oppose Under. Negate for Under.
+    if market == "TOTAL" and move_dir != 0:
+        side = (row.get("side") or row.get("favored_side") or "").upper()
+        if not side:
+            import logging
+            logging.warning("[v3.3c] TOTAL row missing side field — cannot determine Over/Under polarity")
+        elif "UNDER" in side:
+            move_dir = -move_dir
+
     # Step 1 — Direction gate
     if move_dir == 0:
         return {"sharp_score": 0.0, "sharp_detail": "No L1 movement"}
@@ -132,9 +142,14 @@ def compute_consensus_validation(row: dict) -> dict:
     agreement = _num(row.get("l2_consensus_agreement", 0))
 
     # Determine if we have time-series direction data
+    # Fallback to l1_move_dir: consensus_agreement is already computed relative
+    # to l1_move_dir in l2_features.py, so this is semantically correct.
     consensus_dir = row.get("l2_consensus_direction") or row.get("consensus_direction")
+    if consensus_dir is None or str(consensus_dir).lower() in ("", "nan", "none"):
+        _l1_dir = _num(row.get("l1_move_dir", 0))
+        consensus_dir = _l1_dir if _l1_dir != 0 else None
     has_direction = (consensus_dir is not None
-                     and str(consensus_dir).lower() not in ("", "nan", "none")
+                     and str(consensus_dir).lower() not in ("", "nan", "none", "0", "0.0")
                      and agreement > 0)
 
     if has_direction:
