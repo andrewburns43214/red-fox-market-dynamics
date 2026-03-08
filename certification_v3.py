@@ -68,6 +68,10 @@ def certify_decision(row: dict, score: float, net_edge: float,
     if final_10min:
         return _result("LEAN", "FINAL_10MIN", False, False)
 
+    # ── LATE timing cap: BET-eligible → LEAN (timing window closed) ──
+    if timing_bucket == "LATE":
+        return _result("LEAN", "LATE timing", False, False)
+
     # ── BET eligible — check STRONG gates ──
     blocked_by = _check_strong_gates(
         score=score,
