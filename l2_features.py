@@ -292,7 +292,15 @@ def _compute_consensus_agreement(canon: str, market: str, side: str,
         total += 1
 
         deviation = line - median_line
-        if l1_direction > 0 and deviation > 0:
+        # For ML: lower odds = more favorable, so agreement is OPPOSITE deviation
+        if market == "MONEYLINE":
+            if l1_direction > 0 and deviation < 0:
+                agreeing += 1
+            elif l1_direction < 0 and deviation > 0:
+                agreeing += 1
+            elif abs(deviation) < 0.01:
+                agreeing += 0.5
+        elif l1_direction > 0 and deviation > 0:
             agreeing += 1
         elif l1_direction < 0 and deviation < 0:
             agreeing += 1

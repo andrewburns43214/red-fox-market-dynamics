@@ -249,8 +249,12 @@ def compute_l1_features(sport: str = None) -> dict:
 
             # Compute move
             if market == "MONEYLINE":
-                # For ML, compute direction from odds change
-                move = current_odds - open_odds if open_odds != 0 else 0
+                # For ML: LOWER odds = book favors this side more.
+                # +180 → +250 means worse (book opposes), direction should be -1
+                # +100 → -162 means better (book favors), direction should be +1
+                # -200 → -250 means better (book favors), direction should be +1
+                # Negate because decreasing odds = favorable movement.
+                move = -(current_odds - open_odds) if open_odds != 0 else 0
             else:
                 move = current_line - open_line
 

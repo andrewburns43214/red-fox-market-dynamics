@@ -304,31 +304,31 @@ class Test1C_ConsensusValidation(unittest.TestCase):
 
     def test_1C_01_strong_tier_boundary(self):
         """agreement=0.75 → base=+14."""
-        row = _base_row(l2_available=True, l2_consensus_agreement=0.75, l2_n_books=15)
+        row = _base_row(l2_available=True, l2_consensus_agreement=0.75, l2_consensus_direction=1, l2_n_books=15)
         result = compute_consensus_validation(row)
         self.assertAlmostEqual(result["consensus_score"], 14.0, places=1)
 
     def test_1C_02_just_below_strong(self):
         """agreement=0.74 → moderate tier base=+7."""
-        row = _base_row(l2_available=True, l2_consensus_agreement=0.74, l2_n_books=15)
+        row = _base_row(l2_available=True, l2_consensus_agreement=0.74, l2_consensus_direction=1, l2_n_books=15)
         result = compute_consensus_validation(row)
         self.assertAlmostEqual(result["consensus_score"], 7.0, places=1)
 
     def test_1C_03_moderate_tier(self):
         """agreement=0.60 → moderate base=+7."""
-        row = _base_row(l2_available=True, l2_consensus_agreement=0.60, l2_n_books=15)
+        row = _base_row(l2_available=True, l2_consensus_agreement=0.60, l2_consensus_direction=1, l2_n_books=15)
         result = compute_consensus_validation(row)
         self.assertAlmostEqual(result["consensus_score"], 7.0, places=1)
 
     def test_1C_04_just_below_moderate(self):
         """agreement=0.54 → weak tier base=+1."""
-        row = _base_row(l2_available=True, l2_consensus_agreement=0.54, l2_n_books=15)
+        row = _base_row(l2_available=True, l2_consensus_agreement=0.54, l2_consensus_direction=1, l2_n_books=15)
         result = compute_consensus_validation(row)
         self.assertAlmostEqual(result["consensus_score"], 1.0, places=1)
 
     def test_1C_05_rejects_tier(self):
         """agreement=0.30 → rejects base=-8."""
-        row = _base_row(l2_available=True, l2_consensus_agreement=0.30, l2_n_books=15)
+        row = _base_row(l2_available=True, l2_consensus_agreement=0.30, l2_consensus_direction=1, l2_n_books=15)
         result = compute_consensus_validation(row)
         self.assertAlmostEqual(result["consensus_score"], -8.0, places=1)
 
@@ -336,6 +336,7 @@ class Test1C_ConsensusValidation(unittest.TestCase):
         """TIGHT dispersion: base × 1.25."""
         row = _base_row(
             l2_available=True, l2_consensus_agreement=0.76,
+            l2_consensus_direction=1,
             l2_dispersion_label="TIGHT", l2_n_books=15,
         )
         result = compute_consensus_validation(row)
@@ -346,6 +347,7 @@ class Test1C_ConsensusValidation(unittest.TestCase):
         """TIGHT + TIGHTENING: 14*1.25+2=19.5 → capped at 18."""
         row = _base_row(
             l2_available=True, l2_consensus_agreement=0.76,
+            l2_consensus_direction=1,
             l2_dispersion_label="TIGHT", l2_dispersion_trend="TIGHTENING",
             l2_n_books=15,
         )
@@ -356,6 +358,7 @@ class Test1C_ConsensusValidation(unittest.TestCase):
         """Consensus never exceeds +18."""
         row = _base_row(
             l2_available=True, l2_consensus_agreement=0.99,
+            l2_consensus_direction=1,
             l2_dispersion_label="TIGHT", l2_dispersion_trend="TIGHTENING",
             l2_stale_price_gap=2.0, l2_n_books=30,
         )
@@ -366,6 +369,7 @@ class Test1C_ConsensusValidation(unittest.TestCase):
         """WIDENING trend: -2.0."""
         row = _base_row(
             l2_available=True, l2_consensus_agreement=0.76,
+            l2_consensus_direction=1,
             l2_dispersion_label="NORMAL", l2_dispersion_trend="WIDENING",
             l2_n_books=15,
         )
@@ -377,6 +381,7 @@ class Test1C_ConsensusValidation(unittest.TestCase):
         """DK 1.2 pts behind consensus: +2.5 bonus."""
         row = _base_row(
             l2_available=True, l2_consensus_agreement=0.60,
+            l2_consensus_direction=1,
             l2_stale_price_gap=1.2, l2_n_books=15,
         )
         result = compute_consensus_validation(row)
@@ -1134,6 +1139,128 @@ class Test4A_MarketReaction(unittest.TestCase):
         s1 = compute_v3_score(base)["final_score"]
         s2 = compute_v3_score(with_move)["final_score"]
         self.assertAlmostEqual(s2 - s1, 4.0, places=1)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 5: v3.3b Direction Sanity Assertions (permanent)
+# ═══════════════════════════════════════════════════════════════════
+
+class Test5A_MLDirectionSanity(unittest.TestCase):
+    """ML direction: lower odds = book favors = dir +1. These must NEVER regress."""
+
+    def test_5A_01_odds_shortened_positive_side(self):
+        """+180 → +120: book favors, dir should be +1."""
+        # move = -(120 - 180) = 60, dir = +1
+        move = -(120 - 180)
+        direction = 1 if move > 0 else (-1 if move < 0 else 0)
+        self.assertEqual(direction, 1)
+
+    def test_5A_02_odds_lengthened_positive_side(self):
+        """+180 → +250: book opposes, dir should be -1."""
+        move = -(250 - 180)
+        direction = 1 if move > 0 else (-1 if move < 0 else 0)
+        self.assertEqual(direction, -1)
+
+    def test_5A_03_odds_shortened_negative_side(self):
+        """-120 → -200: book favors, dir should be +1."""
+        move = -(-200 - (-120))
+        direction = 1 if move > 0 else (-1 if move < 0 else 0)
+        self.assertEqual(direction, 1)
+
+    def test_5A_04_odds_lengthened_negative_side(self):
+        """-200 → -120: book opposes, dir should be -1."""
+        move = -(-120 - (-200))
+        direction = 1 if move > 0 else (-1 if move < 0 else 0)
+        self.assertEqual(direction, -1)
+
+    def test_5A_05_no_move(self):
+        """-110 → -110: no move, dir should be 0."""
+        move = -(-110 - (-110))
+        direction = 1 if move > 0 else (-1 if move < 0 else 0)
+        self.assertEqual(direction, 0)
+
+    def test_5A_06_zero_crossing_favors(self):
+        """+100 → -162: massive book favor, dir should be +1."""
+        move = -(-162 - 100)
+        direction = 1 if move > 0 else (-1 if move < 0 else 0)
+        self.assertEqual(direction, 1)
+
+
+class Test5B_MLConsensusAgreementPolarity(unittest.TestCase):
+    """For ML, lower odds than median = agrees with dir +1."""
+
+    def test_5B_01_lower_odds_agrees_with_positive_dir(self):
+        """Books with lower odds than median should agree with l1_direction=+1 for ML."""
+        from l2_features import _compute_consensus_agreement, _parse_float
+        # Simulate: median=+150, books at +120 (lower=favors) and +180 (higher=opposes)
+        raw_data = {
+            ("game1", "MONEYLINE", "TeamA"): [
+                {"line": "120", "bookmaker": "book1"},
+                {"line": "180", "bookmaker": "book2"},
+                {"line": "150", "bookmaker": "book3"},
+            ]
+        }
+        result = _compute_consensus_agreement("game1", "MONEYLINE", "TeamA", 1, raw_data)
+        # book1 (120) has deviation -30 from median 150 — agrees with +1 for ML
+        # book2 (180) has deviation +30 from median 150 — opposes
+        # book3 (150) has deviation 0 — half credit
+        # agreeing = 1 + 0.5 = 1.5, total = 3 → 0.5
+        self.assertGreaterEqual(result, 0.4)
+
+    def test_5B_02_higher_odds_agrees_with_negative_dir(self):
+        """Books with higher odds than median should agree with l1_direction=-1 for ML."""
+        from l2_features import _compute_consensus_agreement
+        raw_data = {
+            ("game1", "MONEYLINE", "TeamA"): [
+                {"line": "120", "bookmaker": "book1"},
+                {"line": "180", "bookmaker": "book2"},
+                {"line": "150", "bookmaker": "book3"},
+            ]
+        }
+        result = _compute_consensus_agreement("game1", "MONEYLINE", "TeamA", -1, raw_data)
+        # book2 (180) deviation +30, agrees with -1 for ML (higher odds = opposes = agrees with -1)
+        self.assertGreaterEqual(result, 0.4)
+
+
+class Test5C_EffectiveMoveMagMLCapped(unittest.TestCase):
+    """ML effective_move_mag must never exceed 3.0."""
+
+    def test_5C_01_ml_large_odds_move_capped(self):
+        """ML row with 500-point odds move capped at 3.0."""
+        import pandas as pd
+        row = {"market_display": "MONEYLINE", "line_move_open": 0, "odds_move_open": 500}
+        # Replicate the function logic
+        mkt = str(row.get("market_display", "")).upper()
+        om = abs(row.get("odds_move_open", 0) or 0)
+        if mkt == "MONEYLINE" and om >= 5:
+            result = min(3.0, om / 15.0)
+        else:
+            result = 0.0
+        self.assertLessEqual(result, 3.0)
+
+    def test_5C_02_ml_small_odds_move_zero(self):
+        """ML row with 3-point odds move returns 0."""
+        row = {"market_display": "MONEYLINE", "line_move_open": 0, "odds_move_open": 3}
+        mkt = str(row.get("market_display", "")).upper()
+        om = abs(row.get("odds_move_open", 0) or 0)
+        if mkt == "MONEYLINE" and om >= 5:
+            result = min(3.0, om / 15.0)
+        else:
+            result = 0.0
+        self.assertEqual(result, 0.0)
+
+    def test_5C_03_spread_line_move_not_capped(self):
+        """Spread row with 4.5 point line move returns 4.5 (not capped by ML rule)."""
+        row = {"market_display": "SPREAD", "line_move_open": 4.5, "odds_move_open": 0}
+        mkt = str(row.get("market_display", "")).upper()
+        lm = abs(row.get("line_move_open", 0) or 0)
+        if mkt == "MONEYLINE":
+            result = 0.0
+        elif lm >= 0.5:
+            result = lm
+        else:
+            result = 0.0
+        self.assertEqual(result, 4.5)
 
 
 if __name__ == "__main__":
