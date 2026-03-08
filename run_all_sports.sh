@@ -56,7 +56,7 @@ if in_season 1105 410; then SPORTS="ncaab $SPORTS"; fi
 echo "--- active sports: $SPORTS ---" >> "$LOG"
 for SPORT in $SPORTS; do
   echo "--- $(date) snapshot --sport $SPORT ---" >> "$LOG"
-  if "$PY" main.py snapshot --sport "$SPORT" >> "$LOG" 2>&1;
+  if timeout 600 "$PY" main.py snapshot --sport "$SPORT" >> "$LOG" 2>&1;
   then
   echo "--- $(date) snapshot DONE --sport $SPORT ---" >> "$LOG"
   else
