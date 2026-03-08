@@ -179,6 +179,7 @@ def compute_l2_features(sport: str = None, l1_features: dict = None) -> dict:
         }
     """
     agg_data = _load_consensus_agg()
+    raw_consensus = _load_raw_consensus_latest()  # load once, not per-row
 
     features = {}
 
@@ -212,7 +213,8 @@ def compute_l2_features(sport: str = None, l1_features: dict = None) -> dict:
             l1_feat = l1_features.get(l1_key)
             if l1_feat and l1_feat.get("l1_move_dir", 0) != 0:
                 consensus_agreement = _compute_consensus_agreement(
-                    canon, market, side, l1_feat["l1_move_dir"]
+                    canon, market, side, l1_feat["l1_move_dir"],
+                    raw_consensus,
                 )
 
         # Stale price detection (placeholder — computed during merge with DK data)
@@ -245,16 +247,18 @@ def compute_l2_features(sport: str = None, l1_features: dict = None) -> dict:
 
 
 def _compute_consensus_agreement(canon: str, market: str, side: str,
-                                  l1_direction: int) -> float:
+                                  l1_direction: int,
+                                  raw_data: dict = None) -> float:
     """
     Compute what % of consensus books are moving in the same direction as L1.
 
-    Loads raw L2 data and compares each book's line vs consensus to determine
-    if they're leaning with or against L1's direction.
+    Uses pre-loaded raw_data (from _load_raw_consensus_latest) to avoid
+    re-reading the 178K-line CSV on every call.
 
     Returns 0.0 - 1.0
     """
-    raw_data = _load_raw_consensus_latest()
+    if raw_data is None:
+        raw_data = _load_raw_consensus_latest()
     key = (canon, market, side)
     book_entries = raw_data.get(key, [])
 
