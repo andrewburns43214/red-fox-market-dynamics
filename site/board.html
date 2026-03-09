@@ -506,17 +506,8 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .mr-public   { background: #fff2f2; color: #c03800; border: 1px solid #f8c0a8; }
 .mr-neutral  { background: #f4f5f7; color: #8892aa; border: 1px solid #dde0e8; }
 
-/* BREAKDOWN — diverging bar chart */
-.td-bkdn { text-align: left; width: 150px; padding: 4px 6px; white-space: nowrap; }
-.bkdn-row { display: flex; align-items: center; gap: 3px; margin: 1px 0; }
-.bkdn-lbl { font-size: 8px; font-weight: 700; color: #aab0c0; width: 28px; font-family: var(--mono); text-transform: uppercase; flex-shrink: 0; }
-.bkdn-bar { display: flex; width: 90px; height: 4px; flex-shrink: 0; }
-.bkdn-neg { flex: 1; display: flex; justify-content: flex-end; }
-.bkdn-pos { flex: 1; }
-.bkdn-fill { height: 100%; border-radius: 1px; min-width: 0; }
-.bkdn-fill.pos { background: #00965a; border-radius: 0 2px 2px 0; }
-.bkdn-fill.neg { background: #d63020; border-radius: 2px 0 0 2px; }
-.bkdn-mid { width: 1px; background: #c8ccda; flex-shrink: 0; }
+/* BREAKDOWN */
+.td-bkdn { text-align: left; width: auto; padding: 6px 8px; white-space: nowrap; }
 /* DK vs MARKET */
 .td-dvm { text-align: center; width: 56px; padding: 6px 4px; }
 
@@ -1642,19 +1633,15 @@ function renderBoard(){
       <td class="td-sharp">${sharpBadge(r)}</td>
       <td class="td-tim">${timBadge(r.timing_bucket)}</td>
       <td class="td-bkdn">${(()=>{
-        const items=[
-          {lbl:'Sharp',v:Number(r.sharp_score)||0,max:20,min:-1},
-          {lbl:'Cons',v:Number(r.consensus_score)||0,max:10,min:0},
-          {lbl:'Retail',v:Number(r.retail_score)||0,max:10,min:-5},
-          {lbl:'Time',v:Number(r.timing_modifier)||0,max:3,min:-3},
-          {lbl:'XMkt',v:Number(r.cross_market_adj)||0,max:5,min:0},
-        ];
-        return items.map(i=>{
-          const pctPos=i.max>0?Math.min(Math.abs(i.v>0?i.v:0)/i.max*100,100):0;
-          const pctNeg=i.min<0?Math.min(Math.abs(i.v<0?i.v:0)/Math.abs(i.min)*100,100):0;
-          const tip=i.lbl+': '+(i.v>0?'+':'')+Math.round(i.v)+' (range '+i.min+' to +'+i.max+')';
-          return '<div class="bkdn-row" title="'+tip+'"><span class="bkdn-lbl">'+i.lbl+'</span><div class="bkdn-bar"><div class="bkdn-neg"><div class="bkdn-fill neg" style="width:'+pctNeg+'%"></div></div><div class="bkdn-mid"></div><div class="bkdn-pos"><div class="bkdn-fill pos" style="width:'+pctPos+'%"></div></div></div></div>';
-        }).join('');
+        const parts=[];
+        const c=v=>v>0?'#00965a':'#d63020';
+        const f=(lbl,v)=>{const n=Math.round(v);if(!n)return;parts.push('<span style="color:'+c(v)+'">'+lbl+' '+(v>0?'+':'')+n+'</span>');};
+        f('Sharp',Number(r.sharp_score)||0);
+        f('Cons',Number(r.consensus_score)||0);
+        f('Retail',Number(r.retail_score)||0);
+        f('Time',Number(r.timing_modifier)||0);
+        f('XMkt',Number(r.cross_market_adj)||0);
+        return parts.length?'<span style="font-size:9px;line-height:1.5">'+parts.join('<span style="color:#c8ccda"> | </span>')+'</span>':'—';
       })()}</td>
       <td class="td-dec"><span class="dec ${dc}">${dt}</span></td>
       <td class="td-pick">${r.favored_side||'-'}</td>
