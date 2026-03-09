@@ -1114,7 +1114,7 @@ thead th.th-play { text-align: left; }
         <div class="pane-hdr">
           <div style="display:flex;align-items:center;gap:10px">
             <span class="pane-title" id="board-title">Upcoming Games</span>
-            <select id="book-select" class="grp-btn" onchange="switchBook(this.value)" style="font-size:10px;padding:2px 6px;min-width:auto;cursor:pointer"><option value="dk">Odds: DK</option></select>
+            <select id="book-select" class="grp-btn" onchange="switchBook(this.value)" style="font-size:10px;padding:2px 6px;min-width:auto;cursor:pointer"><option value="dk">Odds: DraftKings</option></select>
             <button class="grp-btn" id="grp-toggle" onclick="toggleGroup(this)">Group by Game</button>
             <button class="grp-btn" id="locked-jump" onclick="jumpToLocked()" style="display:none">Live / Locked Games</button>
             <button class="grp-btn" onclick="scrollToTop()">Top ▲</button>
@@ -1137,7 +1137,7 @@ thead th.th-play { text-align: left; }
                 <th class="th-edge" onclick="sortBy('net_edge',this)">Score Gap</th>
                 <th class="th-total sorted" onclick="sortBy('total_score',this)">Confidence</th>
                 <th class="th-bkt">Bucket</th>
-                <th class="th-pat" onclick="sortBy('pattern_primary',this)">Pattern <span style="cursor:pointer;opacity:.5;font-size:11px" onclick="event.stopPropagation();openPatLegend()">&oplus;</span></th>
+                <th class="th-pat" onclick="sortBy('pattern_primary',this)">Pattern <span class="info-btn" style="display:inline-flex;width:14px;height:14px;font-size:10px;margin-top:0;vertical-align:middle" onclick="event.stopPropagation();openPatLegend()" title="Pattern definitions">i</span></th>
                 <th class="th-layer" onclick="sortBy('layer_mode',this)">Layer</th>
                 <th class="th-sharp" onclick="sortBy('sharp_cert_tier',this)">Sharp</th>
                 <th class="th-tim" onclick="sortBy('timing_bucket',this)">Timing</th>
@@ -1236,26 +1236,26 @@ thead th.th-play { text-align: left; }
 
   <!-- PATTERN LEGEND MODAL -->
   <div class="drill-overlay" id="pat-legend-overlay" onclick="if(event.target===this)closePatLegend()">
-    <div class="drill-modal" style="max-width:640px">
+    <div class="drill-modal" style="max-width:680px;max-height:none;overflow:visible">
       <div class="drill-hdr">
         <div class="drill-title">Pattern Definitions (v3.3g)</div>
         <button class="drill-close" onclick="closePatLegend()">&times;</button>
       </div>
-      <div class="drill-body" style="padding:12px 16px;font-family:var(--sans);font-size:12px;line-height:1.6">
-        <table style="width:100%;border-collapse:collapse">
-          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">SHARP CONFIRMED</td><td style="padding:6px 8px;color:var(--text2)">Multiple sharp books moved in strong agreement with Pinnacle confirming. Clean sharp conviction — no public noise.</td></tr>
-          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">SHARP PUBLIC SPLIT</td><td style="padding:6px 8px;color:var(--text2)">Sharp books moved this line but less than 35% of public tickets are on it. Sharps and public on opposite sides. Highest conviction setup.</td></tr>
-          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">SHARP BOOK CONFLICT</td><td style="padding:6px 8px;color:var(--text2)">Sharp books favor this side but DK moved the line against it. Two strong signals contradicting each other — watch for resolution.</td></tr>
-          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">BOOK RESISTANCE</td><td style="padding:6px 8px;color:var(--text2)">Heavy public action (65%+ bets or money) but the book hasn't moved toward them. Book disagrees with its customers and is holding firm.</td></tr>
-          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">BOOK INITIATED FOR</td><td style="padding:6px 8px;color:var(--text2)">Book moved toward this side with no public pressure driving it. Quiet buy signal — someone the book respects is on this side.</td></tr>
-          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">BOOK INITIATED AGAINST</td><td style="padding:6px 8px;color:var(--text2)">Book moved against this side with no public pressure. Quiet fade — the book is signaling it doesn't like this side.</td></tr>
-          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">FREEZE PRESSURE</td><td style="padding:6px 8px;color:var(--text2)">Sharp and consensus books moved but DK is frozen and hasn't followed. Pressure building on DK to catch up.</td></tr>
-          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">STALE PRICE</td><td style="padding:6px 8px;color:var(--text2)">DK price is significantly behind the consensus market. Potential value before DK adjusts.</td></tr>
-          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">SHARP REVERSAL</td><td style="padding:6px 8px;color:var(--text2)">Sharp books moved this line but it reversed direction. Initial sharp move may have been absorbed or wrong.</td></tr>
-          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">CONSENSUS HOLD</td><td style="padding:6px 8px;color:var(--text2)">The broad market of 30 books is holding this position despite pressure. Market-wide conviction signal.</td></tr>
-          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">RETAIL CROWD</td><td style="padding:6px 8px;color:var(--text2)">Extreme public overcrowding (75%+ bets and money) with no sharp support. Classic fade setup.</td></tr>
-          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">PUBLIC DRIFT</td><td style="padding:6px 8px;color:var(--text2)">Heavy public bet volume pushing the line with no sharp support — no edge.</td></tr>
-        </table>
+      <div style="padding:16px 20px;font-family:var(--sans);font-size:12px;line-height:1.7">
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 16px">
+          <span style="font-weight:700;color:var(--accent);padding:6px 0">SHARP CONFIRMED</span><span style="color:var(--text2);padding:6px 0">Multiple sharp books moved in strong agreement with Pinnacle confirming. Clean sharp conviction — no public noise.</span>
+          <span style="font-weight:700;color:var(--accent);padding:6px 0">SHARP PUBLIC SPLIT</span><span style="color:var(--text2);padding:6px 0">Sharp books moved this line but less than 35% of public tickets are on it. Sharps and public on opposite sides. Highest conviction setup.</span>
+          <span style="font-weight:700;color:var(--accent);padding:6px 0">SHARP BOOK CONFLICT</span><span style="color:var(--text2);padding:6px 0">Sharp books favor this side but DK moved the line against it. Two strong signals contradicting each other — watch for resolution.</span>
+          <span style="font-weight:700;color:var(--accent);padding:6px 0">BOOK RESISTANCE</span><span style="color:var(--text2);padding:6px 0">Heavy public action (65%+ bets or money) but the book hasn't moved toward them. Book disagrees with its customers and is holding firm.</span>
+          <span style="font-weight:700;color:var(--accent);padding:6px 0">BOOK INITIATED FOR</span><span style="color:var(--text2);padding:6px 0">Book moved toward this side with no public pressure driving it. Quiet buy signal — someone the book respects is on this side.</span>
+          <span style="font-weight:700;color:var(--accent);padding:6px 0">BOOK INITIATED AGAINST</span><span style="color:var(--text2);padding:6px 0">Book moved against this side with no public pressure. Quiet fade — the book is signaling it doesn't like this side.</span>
+          <span style="font-weight:700;color:var(--accent);padding:6px 0">FREEZE PRESSURE</span><span style="color:var(--text2);padding:6px 0">Sharp and consensus books moved but DK is frozen and hasn't followed. Pressure building on DK to catch up.</span>
+          <span style="font-weight:700;color:var(--accent);padding:6px 0">STALE PRICE</span><span style="color:var(--text2);padding:6px 0">DK price is significantly behind the consensus market. Potential value before DK adjusts.</span>
+          <span style="font-weight:700;color:var(--accent);padding:6px 0">SHARP REVERSAL</span><span style="color:var(--text2);padding:6px 0">Sharp books moved this line but it reversed direction. Initial sharp move may have been absorbed or wrong.</span>
+          <span style="font-weight:700;color:var(--accent);padding:6px 0">CONSENSUS HOLD</span><span style="color:var(--text2);padding:6px 0">The broad market of 30 books is holding this position despite pressure. Market-wide conviction signal.</span>
+          <span style="font-weight:700;color:var(--accent);padding:6px 0">RETAIL CROWD</span><span style="color:var(--text2);padding:6px 0">Extreme public overcrowding (75%+ bets and money) with no sharp support. Classic fade setup.</span>
+          <span style="font-weight:700;color:var(--accent);padding:6px 0">PUBLIC DRIFT</span><span style="color:var(--text2);padding:6px 0">Heavy public bet volume pushing the line with no sharp support — no edge.</span>
+        </div>
       </div>
     </div>
   </div>
@@ -2831,7 +2831,7 @@ async function loadAll(){
   const bSel=document.getElementById('book-select');
   if(bSel&&_bookLines&&_bookLines.books){
     const cur=_selectedBook;
-    bSel.innerHTML='<option value="dk">Odds: DK</option>';
+    bSel.innerHTML='<option value="dk">Odds: DraftKings</option>';
     _bookLines.books.forEach(b=>{
       if(b==='draftkings') return;
       const label=(_bookLines.labels&&_bookLines.labels[b])||b;
