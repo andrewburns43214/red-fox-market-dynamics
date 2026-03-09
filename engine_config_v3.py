@@ -4,7 +4,7 @@ All magic numbers from the scoring spec in one place.
 Single source of truth. Any change requires a version bump.
 """
 
-V3_VERSION = "v3.3f"
+V3_VERSION = "v3.3g"
 
 # ─── FIXED BASE ───
 BASE = 50  # Fixed. All sports. No exceptions.
