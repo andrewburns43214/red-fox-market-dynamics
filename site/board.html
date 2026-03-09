@@ -506,8 +506,15 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .mr-public   { background: #fff2f2; color: #c03800; border: 1px solid #f8c0a8; }
 .mr-neutral  { background: #f4f5f7; color: #8892aa; border: 1px solid #dde0e8; }
 
-/* BREAKDOWN */
-.td-bkdn { text-align: left; width: auto; padding: 6px 8px; white-space: nowrap; }
+/* BREAKDOWN — vertical bars with fractions */
+.td-bkdn { text-align: left; width: 200px; padding: 4px 6px; }
+.bk-row { display: flex; align-items: center; gap: 4px; margin: 2px 0; }
+.bk-lbl { font-size: 9px; font-weight: 600; color: #8892aa; width: 62px; flex-shrink: 0; font-family: var(--sans); }
+.bk-bar { width: 70px; height: 5px; background: #e8eaef; border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+.bk-fill { height: 100%; border-radius: 3px; }
+.bk-fill.pos { background: #00965a; }
+.bk-fill.neg { background: #d63020; }
+.bk-val { font-size: 9px; font-family: var(--mono); width: 32px; text-align: right; flex-shrink: 0; }
 /* DK vs MARKET */
 .td-dvm { text-align: center; width: 56px; padding: 6px 4px; }
 
@@ -1633,15 +1640,20 @@ function renderBoard(){
       <td class="td-sharp">${sharpBadge(r)}</td>
       <td class="td-tim">${timBadge(r.timing_bucket)}</td>
       <td class="td-bkdn">${(()=>{
-        const parts=[];
-        const c=v=>v>0?'#00965a':'#d63020';
-        const f=(lbl,v)=>{const n=Math.round(v);if(!n)return;parts.push('<span style="color:'+c(v)+'">'+lbl+' '+(v>0?'+':'')+n+'</span>');};
-        f('Sharp',Number(r.sharp_score)||0);
-        f('Cons',Number(r.consensus_score)||0);
-        f('Retail',Number(r.retail_score)||0);
-        f('Time',Number(r.timing_modifier)||0);
-        f('XMkt',Number(r.cross_market_adj)||0);
-        return parts.length?'<span style="font-size:9px;line-height:1.5">'+parts.join('<span style="color:#c8ccda"> | </span>')+'</span>':'—';
+        const items=[
+          {lbl:'Sharp',v:Number(r.sharp_score)||0,max:20},
+          {lbl:'Consensus',v:Number(r.consensus_score)||0,max:10},
+          {lbl:'Retail',v:Number(r.retail_score)||0,max:10},
+          {lbl:'Timing',v:Number(r.timing_modifier)||0,max:3},
+          {lbl:'Cross-Mkt',v:Number(r.cross_market_adj)||0,max:5},
+        ];
+        return items.map(i=>{
+          const n=Math.round(i.v);
+          const pct=Math.min(Math.abs(n)/i.max*100,100);
+          const cls=n>=0?'pos':'neg';
+          const clr=n>0?'#00965a':n<0?'#d63020':'#aab2c4';
+          return '<div class="bk-row"><span class="bk-lbl">'+i.lbl+'</span><div class="bk-bar"><div class="bk-fill '+cls+'" style="width:'+pct+'%"></div></div><span class="bk-val" style="color:'+clr+'">'+(n>0?'+':'')+n+'/'+i.max+'</span></div>';
+        }).join('');
       })()}</td>
       <td class="td-dec"><span class="dec ${dc}">${dt}</span></td>
       <td class="td-pick">${r.favored_side||'-'}</td>
