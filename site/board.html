@@ -506,8 +506,17 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .mr-public   { background: #fff2f2; color: #c03800; border: 1px solid #f8c0a8; }
 .mr-neutral  { background: #f4f5f7; color: #8892aa; border: 1px solid #dde0e8; }
 
-/* BREAKDOWN */
-.td-bkdn { text-align: center; width: 90px; padding: 6px 4px; white-space: nowrap; }
+/* BREAKDOWN — diverging bar chart */
+.td-bkdn { text-align: left; width: 150px; padding: 4px 6px; white-space: nowrap; }
+.bkdn-row { display: flex; align-items: center; gap: 3px; margin: 1px 0; }
+.bkdn-lbl { font-size: 8px; font-weight: 700; color: #aab0c0; width: 28px; font-family: var(--mono); text-transform: uppercase; flex-shrink: 0; }
+.bkdn-bar { display: flex; width: 90px; height: 4px; flex-shrink: 0; }
+.bkdn-neg { flex: 1; display: flex; justify-content: flex-end; }
+.bkdn-pos { flex: 1; }
+.bkdn-fill { height: 100%; border-radius: 1px; min-width: 0; }
+.bkdn-fill.pos { background: #00965a; border-radius: 0 2px 2px 0; }
+.bkdn-fill.neg { background: #d63020; border-radius: 2px 0 0 2px; }
+.bkdn-mid { width: 1px; background: #c8ccda; flex-shrink: 0; }
 /* DK vs MARKET */
 .td-dvm { text-align: center; width: 56px; padding: 6px 4px; }
 
@@ -973,7 +982,7 @@ thead th { text-align: center; vertical-align: middle; }
 thead th.th-game { text-align: left; }
 thead th.th-split { text-align: left; }
 thead th.th-play { text-align: left; }
-.td-rank, .td-mkt, .td-edge, .td-conf, .td-total, .td-bkt, .td-pat, .td-layer, .td-sharp, .td-tim, .td-mr, .td-bkdn, .td-dec { text-align: center; vertical-align: middle; }
+.td-rank, .td-mkt, .td-edge, .td-conf, .td-total, .td-bkt, .td-pat, .td-layer, .td-sharp, .td-tim, .td-dec { text-align: center; vertical-align: middle; }
 .td-line { text-align: center; vertical-align: middle; }
 .td-split { text-align: left; vertical-align: middle; }
 .td-pick { text-align: left; vertical-align: middle; }
@@ -1107,7 +1116,7 @@ thead th.th-play { text-align: left; }
         <div class="pane-hdr">
           <div style="display:flex;align-items:center;gap:10px">
             <span class="pane-title" id="board-title">Upcoming Games</span>
-            <select id="book-select" class="grp-btn" onchange="switchBook(this.value)" style="font-size:10px;padding:2px 6px;min-width:auto;cursor:pointer"><option value="dk">Lines: DK</option></select>
+            <select id="book-select" class="grp-btn" onchange="switchBook(this.value)" style="font-size:10px;padding:2px 6px;min-width:auto;cursor:pointer"><option value="dk">Odds: DK</option></select>
             <button class="grp-btn" id="grp-toggle" onclick="toggleGroup(this)">Group by Game</button>
             <button class="grp-btn" id="locked-jump" onclick="jumpToLocked()" style="display:none">Live / Locked Games</button>
             <button class="grp-btn" onclick="scrollToTop()">Top ▲</button>
@@ -1130,11 +1139,10 @@ thead th.th-play { text-align: left; }
                 <th class="th-edge" onclick="sortBy('net_edge',this)">Score Gap</th>
                 <th class="th-total sorted" onclick="sortBy('total_score',this)">Confidence</th>
                 <th class="th-bkt">Bucket</th>
-                <th class="th-pat" onclick="sortBy('pattern_primary',this)">Pattern</th>
+                <th class="th-pat" onclick="sortBy('pattern_primary',this)">Pattern <span style="cursor:pointer;opacity:.5;font-size:11px" onclick="event.stopPropagation();openPatLegend()">&oplus;</span></th>
                 <th class="th-layer" onclick="sortBy('layer_mode',this)">Layer</th>
                 <th class="th-sharp" onclick="sortBy('sharp_cert_tier',this)">Sharp</th>
                 <th class="th-tim" onclick="sortBy('timing_bucket',this)">Timing</th>
-                <th class="th-mr" onclick="sortBy('market_read',this)">DK Signal</th>
                 <th class="th-bkdn">Breakdown</th>
                 <th class="th-dec">Decision</th>
                 <th class="th-play">Play</th>
@@ -1224,6 +1232,32 @@ thead th.th-play { text-align: left; }
       </div>
       <div class="drill-body">
         <table class="drill-tbl" id="drill-tbl"></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- PATTERN LEGEND MODAL -->
+  <div class="drill-overlay" id="pat-legend-overlay" onclick="if(event.target===this)closePatLegend()">
+    <div class="drill-modal" style="max-width:640px">
+      <div class="drill-hdr">
+        <div class="drill-title">Pattern Definitions (v3.3g)</div>
+        <button class="drill-close" onclick="closePatLegend()">&times;</button>
+      </div>
+      <div class="drill-body" style="padding:12px 16px;font-family:var(--sans);font-size:12px;line-height:1.6">
+        <table style="width:100%;border-collapse:collapse">
+          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">SHARP CONFIRMED</td><td style="padding:6px 8px;color:var(--text2)">Multiple sharp books moved in strong agreement with Pinnacle confirming. Clean sharp conviction — no public noise.</td></tr>
+          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">SHARP PUBLIC SPLIT</td><td style="padding:6px 8px;color:var(--text2)">Sharp books moved this line but less than 35% of public tickets are on it. Sharps and public on opposite sides. Highest conviction setup.</td></tr>
+          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">SHARP BOOK CONFLICT</td><td style="padding:6px 8px;color:var(--text2)">Sharp books favor this side but DK moved the line against it. Two strong signals contradicting each other — watch for resolution.</td></tr>
+          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">BOOK RESISTANCE</td><td style="padding:6px 8px;color:var(--text2)">Heavy public action (65%+ bets or money) but the book hasn't moved toward them. Book disagrees with its customers and is holding firm.</td></tr>
+          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">BOOK INITIATED FOR</td><td style="padding:6px 8px;color:var(--text2)">Book moved toward this side with no public pressure driving it. Quiet buy signal — someone the book respects is on this side.</td></tr>
+          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">BOOK INITIATED AGAINST</td><td style="padding:6px 8px;color:var(--text2)">Book moved against this side with no public pressure. Quiet fade — the book is signaling it doesn't like this side.</td></tr>
+          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">FREEZE PRESSURE</td><td style="padding:6px 8px;color:var(--text2)">Sharp and consensus books moved but DK is frozen and hasn't followed. Pressure building on DK to catch up.</td></tr>
+          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">STALE PRICE</td><td style="padding:6px 8px;color:var(--text2)">DK price is significantly behind the consensus market. Potential value before DK adjusts.</td></tr>
+          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">SHARP REVERSAL</td><td style="padding:6px 8px;color:var(--text2)">Sharp books moved this line but it reversed direction. Initial sharp move may have been absorbed or wrong.</td></tr>
+          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">CONSENSUS HOLD</td><td style="padding:6px 8px;color:var(--text2)">The broad market of 30 books is holding this position despite pressure. Market-wide conviction signal.</td></tr>
+          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">RETAIL CROWD</td><td style="padding:6px 8px;color:var(--text2)">Extreme public overcrowding (75%+ bets and money) with no sharp support. Classic fade setup.</td></tr>
+          <tr><td style="padding:6px 8px;font-weight:700;white-space:nowrap;vertical-align:top;color:var(--accent)">PUBLIC DRIFT</td><td style="padding:6px 8px;color:var(--text2)">Heavy public bet volume pushing the line with no sharp support — no edge.</td></tr>
+        </table>
       </div>
     </div>
   </div>
@@ -1410,7 +1444,7 @@ function spChip(s){ const k=(s||'').toLowerCase(); return `<span class="sport-ch
 function timBadge(b){ const k=(b||'EARLY').toUpperCase(); return `<span class="tim t${k}">${k}</span>`; }
 function mrBadge(m){ const s=(m||'').trim(); if(!s||s==='-') return '-'; const lu=s.toUpperCase(); const map={'STEALTH MOVE':'mr-stealth','FREEZE PRESSURE':'mr-freeze','ALIGNED SHARP':'mr-aligned','REVERSE PRESSURE':'mr-reverse','CONTRADICTION':'mr-contra','PUBLIC DRIFT':'mr-public','NEUTRAL':'mr-neutral'}; const cls=map[lu]||'mr-neutral'; const labels={'STEALTH MOVE':'Hidden $','FREEZE PRESSURE':'$ No Move','ALIGNED SHARP':'$ + Move','REVERSE PRESSURE':'$ vs Line','CONTRADICTION':'Mixed','PUBLIC DRIFT':'Crowd Push','NEUTRAL':'Flat'}; const tips={'STEALTH MOVE':'Money flowing in quietly — low bets, significant money','FREEZE PRESSURE':'Big money divergence but line not moving yet','ALIGNED SHARP':'Money and line movement both pointing same direction','REVERSE PRESSURE':'Money pushing one way, line moved opposite','CONTRADICTION':'Signals conflict — money says one thing, line says another','PUBLIC DRIFT':'High public bet volume pushing the line — no edge','NEUTRAL':'No meaningful money or line signal detected'}; return `<span class="mr ${cls}" title="${tips[lu]||''}">${labels[lu]||s}</span>`; }
 function regBadge(r){ const k=(r||'N').toUpperCase().trim(); if(!k||k==='-') return '-'; const cls='reg-'+(k.charAt(0)||'N'); const labels={A:"Stealth",B:"Fade",C:"Weak Push",D:"Surge",N:"Flat"}; const tips={A:"Low bets, high money, line moved against",B:"High bets + money, line fading",C:"Weak public push amplified",D:"Strong money divergence into the side",N:"No clear regime detected"}; return `<span class="reg ${cls}" title="${tips[k]||''}">${labels[k]||k}</span>`; }
-function patBadge(p){ const k=(p||'').toUpperCase().trim(); if(!k||k==='NEUTRAL') return '-'; const tips={SHARP_REVERSAL:'Sharp books reversed the line',STALE_PRICE:'Price stale despite signals',FREEZE_PRESSURE:'Line frozen under pressure',PUBLIC_DRIFT:'Following public money',CONSENSUS_HOLD:'Consensus holding steady',RETAIL_CROWD:'Retail crowding detected'}; return `<span class="pat" title="${tips[k]||k}">${k.replace('_',' ')}</span>`; }
+function patBadge(p){ const k=(p||'').toUpperCase().trim(); if(!k||k==='NEUTRAL') return '-'; const tips={SHARP_CONFIRMED:'Multiple sharp books moved in strong agreement with Pinnacle confirming. Clean sharp conviction \u2014 no public noise.',SHARP_PUBLIC_SPLIT:'Sharp books moved this line but less than 35% of public tickets are on it. Sharps and public on opposite sides. Highest conviction setup.',SHARP_BOOK_CONFLICT:'Sharp books favor this side but DK moved the line against it. Two strong signals contradicting each other \u2014 watch for resolution.',BOOK_RESISTANCE:'Heavy public action (65%+ bets or money) but the book hasn\u2019t moved toward them. Book disagrees with its customers and is holding firm.',BOOK_INITIATED_FOR:'Book moved toward this side with no public pressure driving it. Quiet buy signal \u2014 someone the book respects is on this side.',BOOK_INITIATED_AGAINST:'Book moved against this side with no public pressure. Quiet fade \u2014 the book is signaling it doesn\u2019t like this side.',FREEZE_PRESSURE:'Sharp and consensus books moved but DK is frozen and hasn\u2019t followed. Pressure building on DK to catch up.',STALE_PRICE:'DK price is significantly behind the consensus market. Potential value before DK adjusts.',SHARP_REVERSAL:'Sharp books moved this line but it reversed direction. Initial sharp move may have been absorbed or wrong.',CONSENSUS_HOLD:'The broad market of 30 books is holding this position despite pressure. Market-wide conviction signal.',RETAIL_CROWD:'Extreme public overcrowding (75%+ bets and money) with no sharp support. Classic fade setup.',PUBLIC_DRIFT:'Heavy public bet volume pushing the line with no sharp support \u2014 no edge.'}; return `<span class="pat" title="${tips[k]||k}">${k.replace('_',' ')}</span>`; }
 function lyrBadge(l){ const k=(l||'').trim(); if(!k) return '-'; const labels={L123:'FULL',L13:'PARTIAL',L23:'PARTIAL',L3_ONLY:'LIMITED'}; const tips={L123:'All 3 data layers active',L13:'2 of 3 layers (missing consensus)',L23:'2 of 3 layers (missing primary)',L3_ONLY:'Single layer — limited confidence'}; return `<span class="lyr lyr-${k}" title="${tips[k]||k}">${labels[k]||k}</span>`; }
 function sharpBadge(r){ const tier=(r.sharp_cert_tier||'').toUpperCase().trim(); const nBooks=Number(r.l1_n_books)||0; let html=''; if(tier==='FULL') html='<span class="sharp-cert sc-full" title="Sharp Certified: multiple sharp books confirm">SHARP &#x2713;</span>'; else if(tier==='HALF') html='<span class="sharp-cert sc-half" title="Sharp Lean: Pinnacle moved meaningfully">SHARP ~</span>'; else if(nBooks>0){ const pct=Math.round(nBooks/6*100); html=`<span class="sharp-meter" title="${nBooks} of 6 sharp books">${pct}%</span>`; } else html='<span style="color:#aab2c4">—</span>'; return html; }
 function gameChips(r){
@@ -1489,8 +1523,8 @@ function scrollToTop(){
 function exportCSV(){
   const data=filtered();
   if(!data.length) return;
-  const cols=['game','sport','market_display','favored_side','total_score','net_edge','game_decision','timing_bucket','layer_mode','sharp_score','consensus_score','retail_score','bets_pct','money_pct','open_line','current_line','current_odds','pattern_primary','market_read','_game_time'];
-  const headers=['Game','Sport','Market','Side','Confidence','Score Gap','Decision','Timing','Layer','Sharp','Consensus','Retail','Bets%','Money%','Open Line','Current Line','Odds','Pattern','DK Signal','Game Time'];
+  const cols=['game','sport','market_display','favored_side','total_score','net_edge','game_decision','timing_bucket','layer_mode','sharp_score','consensus_score','retail_score','bets_pct','money_pct','open_line','current_line','current_odds','pattern_primary','pattern_secondary','_game_time'];
+  const headers=['Game','Sport','Market','Side','Confidence','Score Gap','Decision','Timing','Layer','Sharp','Consensus','Retail','Bets%','Money%','Open Line','Current Line','Odds','Pattern','Pattern 2','Game Time'];
   let csv=headers.join(',')+'\n';
   data.forEach(r=>{
     csv+=cols.map(c=>{
@@ -1603,25 +1637,24 @@ function renderBoard(){
       <td class="td-edge"><span class="ev ${eC(edge)}">${edge}</span></td>
       <td class="td-total">${Math.round(Number(r.total_score)||0)}</td>
       <td class="td-bkt"><span class="bkt ${bk.c}">${bk.l}</span></td>
-      <td class="td-pat">${patBadge(r.pattern_primary)}</td>
+      <td class="td-pat">${patBadge(r.pattern_primary)}${(()=>{const s=(r.pattern_secondary||'').trim();return s&&s!=='NEUTRAL'?'<br><span style="font-size:8px;opacity:.55">+ '+s.replace(/_/g,' ')+'</span>':'';})()}</td>
       <td class="td-layer">${lyrBadge(r.layer_mode)}</td>
       <td class="td-sharp">${sharpBadge(r)}</td>
       <td class="td-tim">${timBadge(r.timing_bucket)}</td>
-      <td class="td-mr">${mrBadge(r.market_read)}</td>
       <td class="td-bkdn">${(()=>{
-        const parts=[];
-        const sh=Number(r.sharp_score)||0;
-        const co=Number(r.consensus_score)||0;
-        const rt=Number(r.retail_score)||0;
-        const tm=Number(r.timing_modifier)||0;
-        const xm=Number(r.cross_market_adj)||0;
-        const clr=v=>'color:'+(v>0?'#00965a':'#d63020');
-        if(sh) parts.push('<span style="'+clr(sh)+'">Sh:'+(sh>0?'+':'')+Math.round(sh)+'</span>');
-        if(co) parts.push('<span style="'+clr(co)+'">Co:'+(co>0?'+':'')+Math.round(co)+'</span>');
-        if(rt) parts.push('<span style="'+clr(rt)+'">Rt:'+(rt>0?'+':'')+Math.round(rt)+'</span>');
-        if(tm) parts.push('<span style="'+clr(tm)+'">Tm:'+(tm>0?'+':'')+Math.round(tm)+'</span>');
-        if(xm) parts.push('<span style="'+clr(xm)+'">Xm:'+(xm>0?'+':'')+Math.round(xm)+'</span>');
-        return parts.length?'<span style="font-size:9px">'+parts.join(' ')+'</span>':'—';
+        const items=[
+          {lbl:'Sharp',v:Number(r.sharp_score)||0,max:20,min:-1},
+          {lbl:'Cons',v:Number(r.consensus_score)||0,max:10,min:0},
+          {lbl:'Retail',v:Number(r.retail_score)||0,max:10,min:-5},
+          {lbl:'Time',v:Number(r.timing_modifier)||0,max:3,min:-3},
+          {lbl:'XMkt',v:Number(r.cross_market_adj)||0,max:5,min:0},
+        ];
+        return items.map(i=>{
+          const pctPos=i.max>0?Math.min(Math.abs(i.v>0?i.v:0)/i.max*100,100):0;
+          const pctNeg=i.min<0?Math.min(Math.abs(i.v<0?i.v:0)/Math.abs(i.min)*100,100):0;
+          const tip=i.lbl+': '+(i.v>0?'+':'')+Math.round(i.v)+' (range '+i.min+' to +'+i.max+')';
+          return '<div class="bkdn-row" title="'+tip+'"><span class="bkdn-lbl">'+i.lbl+'</span><div class="bkdn-bar"><div class="bkdn-neg"><div class="bkdn-fill neg" style="width:'+pctNeg+'%"></div></div><div class="bkdn-mid"></div><div class="bkdn-pos"><div class="bkdn-fill pos" style="width:'+pctPos+'%"></div></div></div></div>';
+        }).join('');
       })()}</td>
       <td class="td-dec"><span class="dec ${dc}">${dt}</span></td>
       <td class="td-pick">${r.favored_side||'-'}</td>
@@ -1744,6 +1777,12 @@ function openDrill(title, rows) {
 
 function closeDrill() {
   document.getElementById('drill-overlay').classList.remove('open');
+}
+function openPatLegend() {
+  document.getElementById('pat-legend-overlay').classList.add('open');
+}
+function closePatLegend() {
+  document.getElementById('pat-legend-overlay').classList.remove('open');
 }
 
 function openGameDetail(r){
@@ -2793,11 +2832,11 @@ async function loadAll(){
   const bSel=document.getElementById('book-select');
   if(bSel&&_bookLines&&_bookLines.books){
     const cur=_selectedBook;
-    bSel.innerHTML='<option value="dk">Lines: DK</option>';
+    bSel.innerHTML='<option value="dk">Odds: DK</option>';
     _bookLines.books.forEach(b=>{
       if(b==='draftkings') return;
       const label=(_bookLines.labels&&_bookLines.labels[b])||b;
-      bSel.innerHTML+='<option value="'+b+'">Lines: '+label+'</option>';
+      bSel.innerHTML+='<option value="'+b+'">Odds: '+label+'</option>';
     });
     bSel.value=cur;
   }
