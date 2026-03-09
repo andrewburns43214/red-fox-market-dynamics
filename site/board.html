@@ -404,9 +404,8 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 /* TD TYPES */
 .td-rank { font-family: var(--mono); font-size: 10px; color: var(--text3); text-align: center; width: 36px; padding: 6px 4px; vertical-align: top; padding-top: 10px; }
 
-.td-game { width: 290px; max-width: 290px; overflow: hidden; padding: 8px 10px 6px; vertical-align: middle; white-space: normal; text-align: center; }
-.game-row1 { display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 4px; }
-.game-row2 { justify-content: center; }
+.td-game { width: 290px; max-width: 290px; overflow: hidden; padding: 8px 10px 6px; vertical-align: middle; white-space: normal; }
+.game-row1 { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .game-name {
   font-family: var(--sans);
   font-weight: 700; font-size: 13px;
@@ -978,7 +977,7 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 
 /* Column alignment — th and td consistent */
 thead th { text-align: center; vertical-align: middle; }
-thead th.th-game { text-align: left; }
+thead th.th-game { text-align: center; }
 thead th.th-split { text-align: left; }
 thead th.th-play { text-align: left; }
 .td-rank, .td-mkt, .td-edge, .td-conf, .td-total, .td-bkt, .td-pat, .td-layer, .td-sharp, .td-tim, .td-dec { text-align: center; vertical-align: middle; }
@@ -1574,7 +1573,7 @@ function renderBoard(){
   document.getElementById('board-meta').textContent=`${_nGames} games · ${data.length} markets · sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' · grouped':''}`;
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
   let _lockedDividerShown=false;
-  if(window._lockedOpen===undefined) window._lockedOpen=true;
+  if(window._lockedOpen===undefined) window._lockedOpen=false;
   data.forEach((r,i)=>{
     const score=Number(r.total_score)||0, edge=Math.round(Number(r.net_edge)||0);
     const[dt,dc]=decInfo(r.game_decision); const bk=confBkt(score);
@@ -1585,11 +1584,11 @@ function renderBoard(){
       const _nLocked=data.filter(x=>(x.game_decision||'').toUpperCase()==='LOCKED').length;
       const divtr=document.createElement('tr');
       divtr.className='locked-divider';
-      divtr.innerHTML='<td colspan="99" style="padding:12px 16px;background:#f0f1f5;border-top:2px solid #d0d3de;border-bottom:1px solid #d0d3de;font-size:11px;font-weight:700;color:#7a7f96;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;user-select:none" onclick="window._lockedOpen=!window._lockedOpen;this.querySelector(\'.lk-arrow\').textContent=window._lockedOpen?\'▾\':\'▸\';this.closest(\'tbody\').querySelectorAll(\'.row-locked\').forEach(r=>r.style.display=window._lockedOpen?\'\':\'none\')"><span class="lk-arrow">▾</span> Live / Locked Games · '+_nLocked+' markets</td>';
+      divtr.innerHTML='<td colspan="99" style="padding:12px 16px;background:#f0f1f5;border-top:2px solid #d0d3de;border-bottom:1px solid #d0d3de;font-size:11px;font-weight:700;color:#7a7f96;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;user-select:none" onclick="window._lockedOpen=!window._lockedOpen;this.querySelector(\'.lk-arrow\').textContent=window._lockedOpen?\'▾\':\'▸\';this.closest(\'tbody\').querySelectorAll(\'.row-locked\').forEach(r=>r.style.display=window._lockedOpen?\'\':\'none\')"><span class="lk-arrow">'+(window._lockedOpen?'▾':'▸')+'</span> Live / Locked Games · '+_nLocked+' markets</td>';
       tbody.appendChild(divtr);
     }
     const tr=document.createElement('tr');
-    if((r.game_decision||'').toUpperCase()==='LOCKED') tr.classList.add('row-locked'); else if((r.game_decision||'').toUpperCase()==='STRONG_BET') tr.classList.add('row-strong'); else if(score>=70) tr.classList.add('row-hi'); else if(score>=60) tr.classList.add('row-mid');
+    if((r.game_decision||'').toUpperCase()==='LOCKED'){ tr.classList.add('row-locked'); if(!window._lockedOpen) tr.style.display='none'; } else if((r.game_decision||'').toUpperCase()==='STRONG_BET') tr.classList.add('row-strong'); else if(score>=70) tr.classList.add('row-hi'); else if(score>=60) tr.classList.add('row-mid');
     if(r._grpSub) tr.classList.add('row-grp-sub');
     if(r._grpFirst) tr.classList.add('row-grp-first');
     tr.innerHTML=`
