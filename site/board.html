@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=1440">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Red Fox · Market Intelligence</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -993,13 +993,47 @@ thead th.th-play { text-align: left; }
   .board { grid-template-columns: 1fr !important; }
 }
 
-/* Mobile: disabled — desktop layout renders everywhere, scroll horizontally if needed.
-   Will revisit proper mobile design later. */
+/* ─── MOBILE: prioritize key columns ─── */
+@media (max-width: 768px) {
+  .topbar { padding: 6px 10px; flex-wrap: wrap; gap: 4px; }
+  .topbar-kpis { gap: 6px; }
+  .tkpi { min-width: 50px; padding: 4px 6px; }
+  .tab-bar { gap: 2px; padding: 4px 8px; flex-wrap: wrap; }
+  .tab-btn { font-size: 10px; padding: 5px 8px; }
+
+  /* Dashboard table: hide lower-priority columns */
+  .td-rank { display: none; }
+  th.th-rank { display: none; }
+  .td-edge, th.th-edge { display: none; }
+  .td-bkt, th.th-bkt { display: none; }
+  .td-pat, th.th-pat { display: none; }
+  .td-layer, th.th-layer { display: none; }
+  .td-sharp, th.th-sharp { display: none; }
+  .td-tim, th.th-tim { display: none; }
+  .td-bkdn, th.th-bkdn { display: none; }
+
+  /* Shrink remaining columns */
+  .td-game { width: auto; max-width: 160px; padding: 6px 6px; }
+  .game-name { font-size: 11px; }
+  .td-mkt { width: 55px; font-size: 9px; }
+  .td-split { width: 90px; padding: 4px 6px; }
+  .td-line { width: 55px; font-size: 10px; padding: 4px 4px; }
+  .td-total { width: 45px; font-size: 12px; padding: 4px 4px; }
+  .td-dec { width: auto; padding: 4px 6px; }
+  .td-pick { max-width: 100px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+  .dec { font-size: 9px; padding: 2px 5px; }
+  td { font-size: 11px; padding: 4px 6px; }
+
+  /* Performance tab */
+  .perf-grid { grid-template-columns: 1fr !important; }
+  .perf-summary-row { flex-wrap: wrap; gap: 6px; }
+  .summary-card { min-width: 120px; }
+}
 
 </style>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 </head>
 <body>
 
@@ -2808,99 +2842,43 @@ function updateFreshness(f){
   }
 }
 
+function parseLine(raw,mkt){
+  if(!raw||raw==='-') return '-';
+  const atIdx=raw.indexOf('@');
+  const before=atIdx>-1?raw.slice(0,atIdx).trim():raw.trim();
+  const juice=atIdx>-1?raw.slice(atIdx+1).trim():'';
+  const parts=before.split(' ');
+  const num=parts[parts.length-1];
+  const m=(mkt||'').toUpperCase();
+  if(m==='MONEYLINE') return juice||num;
+  if(juice&&juice!=='-110'&&juice!=='+100') return num+' ('+juice+')';
+  return num;
+}
+
 async function loadAll(){
   let freshJson=null;
   try{ const r=await fetch('/data/freshness.json?_='+Date.now()); if(r.ok) freshJson=await r.json(); } catch(e){}
-  let bookLinesP=fetch('/data/book_lines.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null);
-  const[dash,snaps,ledger,results,kpi,hist,bookLines]=await Promise.all([
+  // Phase 1: load dashboard + lightweight data (fast render)
+  const[dash,ledger,results,kpi]=await Promise.all([
     loadCSV(DASH_URL),
-    loadCSV('/data/snapshots.csv'),
     loadCSV(LEDGER_URL),
     loadCSV(RESULTS_URL),
     loadCSV('/data/kpi_master_dataset.csv'),
-    loadCSV('/data/score_history.csv'),
-    bookLinesP
   ]);
-  _histData=hist||null;  // preload for game detail modal
-  _bookLines=bookLines;
-  // Populate book selector dropdown
-  const bSel=document.getElementById('book-select');
-  if(bSel&&_bookLines&&_bookLines.books){
-    const cur=_selectedBook;
-    bSel.innerHTML='<option value="dk">Odds: DraftKings</option>';
-    _bookLines.books.forEach(b=>{
-      if(b==='draftkings') return;
-      const label=(_bookLines.labels&&_bookLines.labels[b])||b;
-      bSel.innerHTML+='<option value="'+b+'">Odds: '+label+'</option>';
-    });
-    bSel.value=cur;
-  }
   updateFreshness(freshJson);
   const dashRaw=dash||MOCK_DASH;
-  const snapsRaw=snaps||[];
   allLedger=ledger||MOCK_LEDGER;
   allResults=results||MOCK_RESULTS;
   allKPI=kpi||[];
 
-  const snapsByGame={};
-  snapsRaw.forEach(s=>{
-    const gid=String(s.game_id||'').trim();
-    if(!gid) return;
-    if(!snapsByGame[gid]) snapsByGame[gid]=[];
-    snapsByGame[gid].push(s);
-  });
-
-  function snapMkt(side){
-    const s=(side||'').toLowerCase();
-    if(s.startsWith('over ')||s.startsWith('under ')) return 'TOTAL';
-    if(/[+\-]\d/.test(s)&&!s.includes('@')) return 'SPREAD';
-    return 'MONEYLINE';
-  }
-
-  function parseLine(raw,mkt){
-    if(!raw||raw==='-') return '-';
-    const atIdx=raw.indexOf('@');
-    const before=atIdx>-1?raw.slice(0,atIdx).trim():raw.trim();
-    const juice=atIdx>-1?raw.slice(atIdx+1).trim():'';
-    const parts=before.split(' ');
-    const num=parts[parts.length-1];
-    const m=(mkt||'').toUpperCase();
-    if(m==='MONEYLINE') return juice||num;
-    if(juice&&juice!=='-110'&&juice!=='+100') return num+' ('+juice+')';
-    return num;
-  }
-
-  function findSnap(r){
-    const gid=String(r.game_id||'').trim();
-    const snaps=snapsByGame[gid];
-    if(!snaps||!snaps.length) return null;
-    const mkt=(r.market_display||'').toUpperCase();
-    const fav=(r.favored_side||'').toLowerCase();
-    const favWord=fav.split(' ').find(w=>w.length>2)||fav;
-    // Find all snaps matching this market type and favored side
-    let matches=snaps.filter(s=>snapMkt(s.side)===mkt&&(s.side||'').toLowerCase().includes(favWord));
-    if(!matches.length) matches=snaps.filter(s=>snapMkt(s.side)===mkt);
-    if(!matches.length) matches=snaps;
-    // Sort by timestamp
-    matches.sort((a,b)=>new Date(a.timestamp||0)-new Date(b.timestamp||0));
-    const earliest=matches[0];
-    const latest=matches[matches.length-1];
-    return {
-      bets_pct: latest.bets_pct,
-      money_pct: latest.money_pct,
-      open_line: earliest.open_line,
-      current_line: latest.current_line,
-    };
-  }
-
+  // Dashboard CSV already has bets_pct, money_pct, open_line, current_line from engine
   allDash=dashRaw.map(r=>{
-    const snap=findSnap(r);
     const mkt=r.market_display;
     return {...r,
-      bets_pct:snap?Number(snap.bets_pct)||null:null,
-      money_pct:snap?Number(snap.money_pct)||null:null,
-      open_line:snap?parseLine(snap.open_line,mkt):null,
-      current_line:snap?parseLine(snap.current_line,mkt):null,
+      bets_pct:Number(r.bets_pct)||null,
+      money_pct:Number(r.money_pct)||null,
+      open_line:r.open_line?parseLine(r.open_line,mkt):null,
+      current_line:r.current_line?parseLine(r.current_line,mkt):null,
     };
   });
 
@@ -2913,12 +2891,34 @@ async function loadAll(){
     return Number(b.game_confidence||0)-Number(a.game_confidence||0);
   });
 
-  updateStats();renderBoard();renderResults();buildKPIs();
+  updateStats();renderBoard();renderResults();if(typeof Chart!=='undefined') buildKPIs();
+
+  // Phase 2: load book lines + score history in background (non-blocking)
+  Promise.all([
+    fetch('/data/book_lines.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null),
+    loadCSV('/data/score_history.csv'),
+  ]).then(([bookLines,hist])=>{
+    _histData=hist||null;
+    _bookLines=bookLines;
+    const bSel=document.getElementById('book-select');
+    if(bSel&&_bookLines&&_bookLines.books){
+      const cur=_selectedBook;
+      bSel.innerHTML='<option value="dk">Odds: DraftKings</option>';
+      _bookLines.books.forEach(b=>{
+        if(b==='draftkings') return;
+        const label=(_bookLines.labels&&_bookLines.labels[b])||b;
+        bSel.innerHTML+='<option value="'+b+'">Odds: '+label+'</option>';
+      });
+      bSel.value=cur;
+    }
+  });
 }
 
 setInterval(()=>{ document.getElementById('clk').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'America/New_York'}); },1000);
 setInterval(loadAll,30000);
 loadAll();
+// Build KPIs once Chart.js loads (deferred)
+document.addEventListener('DOMContentLoaded',()=>{ const _checkChart=setInterval(()=>{ if(typeof Chart!=='undefined'&&allDash.length){ clearInterval(_checkChart); buildKPIs(); } },200); });
 
 function updateStats(){
   const now=new Date();
