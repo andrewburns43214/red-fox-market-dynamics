@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=1440">
 <title>Red Fox · Market Intelligence</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -993,42 +993,7 @@ thead th.th-play { text-align: left; }
   .board { grid-template-columns: 1fr !important; }
 }
 
-/* ─── MOBILE: prioritize key columns ─── */
-@media (max-width: 768px) {
-  .topbar { padding: 6px 10px; flex-wrap: wrap; gap: 4px; }
-  .topbar-kpis { gap: 6px; }
-  .tkpi { min-width: 50px; padding: 4px 6px; }
-  .tab-bar { gap: 2px; padding: 4px 8px; flex-wrap: wrap; }
-  .tab-btn { font-size: 10px; padding: 5px 8px; }
-
-  /* Dashboard table: hide lower-priority columns */
-  .td-rank { display: none; }
-  th.th-rank { display: none; }
-  .td-edge, th.th-edge { display: none; }
-  .td-bkt, th.th-bkt { display: none; }
-  .td-pat, th.th-pat { display: none; }
-  .td-layer, th.th-layer { display: none; }
-  .td-sharp, th.th-sharp { display: none; }
-  .td-tim, th.th-tim { display: none; }
-  .td-bkdn, th.th-bkdn { display: none; }
-
-  /* Shrink remaining columns */
-  .td-game { width: auto; max-width: 160px; padding: 6px 6px; }
-  .game-name { font-size: 11px; }
-  .td-mkt { width: 55px; font-size: 9px; }
-  .td-split { width: 90px; padding: 4px 6px; }
-  .td-line { width: 55px; font-size: 10px; padding: 4px 4px; }
-  .td-total { width: 45px; font-size: 12px; padding: 4px 4px; }
-  .td-dec { width: auto; padding: 4px 6px; }
-  .td-pick { max-width: 100px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
-  .dec { font-size: 9px; padding: 2px 5px; }
-  td { font-size: 11px; padding: 4px 6px; }
-
-  /* Performance tab */
-  .perf-grid { grid-template-columns: 1fr !important; }
-  .perf-summary-row { flex-wrap: wrap; gap: 6px; }
-  .summary-card { min-width: 120px; }
-}
+/* Mobile: desktop layout renders everywhere, scroll horizontally if needed. */
 
 </style>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
