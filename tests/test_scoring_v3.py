@@ -1586,5 +1586,61 @@ class Test7_PatternDetection(unittest.TestCase):
         self.assertEqual(result["pattern_secondary"], "FREEZE_PRESSURE")
 
 
+# ═══════════════════════════════════════════════════════════════
+# Section 8 — is_locked (v3.3j)
+# ═══════════════════════════════════════════════════════════════
+
+class Test8_IsLocked(unittest.TestCase):
+    """LIVE rows get real decision + is_locked=True, non-LIVE get is_locked=False."""
+
+    def test_8_01_live_high_score_is_locked_lean(self):
+        """LIVE + BET-eligible score → LEAN + is_locked=True (capped same as LATE)."""
+        row = _base_row(timing_bucket="LIVE")
+        result = certify_decision(row, score=70, net_edge=10)
+        self.assertEqual(result["decision"], "LEAN")
+        self.assertTrue(result["is_locked"])
+        self.assertIn("LIVE", result["blocked_by"])
+
+    def test_8_02_non_live_not_locked(self):
+        """MID timing → is_locked=False."""
+        row = _base_row(timing_bucket="MID")
+        result = certify_decision(row, score=67, net_edge=10)
+        self.assertEqual(result["decision"], "BET")
+        self.assertFalse(result["is_locked"])
+
+    def test_8_03_live_low_score_no_bet(self):
+        """LIVE + low score → NO_BET + is_locked=False (never reached LIVE cap)."""
+        row = _base_row(timing_bucket="LIVE")
+        result = certify_decision(row, score=50, net_edge=5)
+        self.assertEqual(result["decision"], "NO_BET")
+        self.assertFalse(result["is_locked"])
+
+    def test_8_04_live_lean_score_not_locked(self):
+        """LIVE + LEAN-only score → LEAN + is_locked=False (hit LEAN gate before LIVE cap)."""
+        row = _base_row(timing_bucket="LIVE")
+        result = certify_decision(row, score=63, net_edge=5)
+        self.assertEqual(result["decision"], "LEAN")
+        self.assertFalse(result["is_locked"])
+
+    def test_8_05_late_not_locked(self):
+        """LATE timing → LEAN but is_locked=False (LATE is not LIVE)."""
+        row = _base_row(timing_bucket="LATE")
+        result = certify_decision(row, score=70, net_edge=10)
+        self.assertEqual(result["decision"], "LEAN")
+        self.assertFalse(result["is_locked"])
+
+    def test_8_06_live_strong_gates_blocked(self):
+        """LIVE + all STRONG gates pass → still LEAN (LIVE caps at LEAN before STRONG eval)."""
+        row = _base_row(
+            timing_bucket="LIVE", l1_available=True,
+            l1_path_behavior="HELD", pattern_primary="SHARP_REVERSAL",
+            cross_market_adj=4,
+        )
+        result = certify_decision(row, score=75, net_edge=15,
+                                  strong_streak=3, peak_score=75, last_score=75)
+        self.assertEqual(result["decision"], "LEAN")
+        self.assertTrue(result["is_locked"])
+
+
 if __name__ == "__main__":
     unittest.main()

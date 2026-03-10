@@ -48,10 +48,6 @@ def certify_decision(row: dict, score: float, net_edge: float,
         edge_min = C.BET_EDGE_MIN_SIDES
         strong_edge_min = C.STRONG_EDGE_MIN_SIDES
 
-    # ── LIVE gate: freeze signal, not actionable ──
-    if timing_bucket == "LIVE":
-        return _result("LOCKED", "GAME_STARTED", False, False)
-
     # ── Final 10-minute gate: cap at LEAN (late whipsaw protection) ──
     minutes_to_kick = _num(row.get("minutes_to_kickoff", 999))
     final_10min = 0 <= minutes_to_kick <= 10
@@ -68,9 +64,9 @@ def certify_decision(row: dict, score: float, net_edge: float,
     if final_10min:
         return _result("LEAN", "FINAL_10MIN", False, False)
 
-    # ── LATE timing cap: BET-eligible → LEAN (timing window closed) ──
-    if timing_bucket == "LATE":
-        return _result("LEAN", "LATE timing", False, False)
+    # ── LATE/LIVE timing cap: BET-eligible → LEAN (timing window closed) ──
+    if timing_bucket in ("LATE", "LIVE"):
+        return _result("LEAN", f"{timing_bucket} timing", False, False, is_locked=(timing_bucket == "LIVE"))
 
     # ── BET eligible — check STRONG gates ──
     blocked_by = _check_strong_gates(
@@ -112,9 +108,9 @@ def _check_strong_gates(*, score, net_edge, strong_edge_min,
     if not l1_present:
         return "L1 absent"
 
-    # Gate 4: Timing ≠ LATE
-    if timing_bucket == "LATE":
-        return "LATE timing"
+    # Gate 4: Timing ≠ LATE or LIVE
+    if timing_bucket in ("LATE", "LIVE"):
+        return f"{timing_bucket} timing"
 
     # Gate 5: NCAAB/NCAAF early block
     if sport in C.STRONG_EARLY_BLOCK_SPORTS and timing_bucket == "EARLY":
@@ -161,12 +157,13 @@ def apply_l1_absent_cap(score: float, row: dict) -> tuple:
     return score, False
 
 
-def _result(decision, blocked_by, l1_cap, strong_eligible):
+def _result(decision, blocked_by, l1_cap, strong_eligible, is_locked=False):
     return {
         "decision": decision,
         "blocked_by": blocked_by,
         "l1_cap_applied": l1_cap,
         "strong_eligible": strong_eligible,
+        "is_locked": is_locked,
     }
 
 
