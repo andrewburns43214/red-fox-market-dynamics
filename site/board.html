@@ -2845,6 +2845,7 @@ function parseLine(raw,mkt){
   return num;
 }
 
+let _lastDashHash='';
 async function loadAll(){
   let freshJson=null;
   try{ const r=await fetch('/data/freshness.json?_='+Date.now()); if(r.ok) freshJson=await r.json(); } catch(e){}
@@ -2881,7 +2882,12 @@ async function loadAll(){
     return Number(b.game_confidence||0)-Number(a.game_confidence||0);
   });
 
-  updateStats();renderBoard();renderResults();if(typeof Chart!=='undefined') buildKPIs();
+  // Skip re-render if data unchanged (prevents mobile flicker)
+  const _hash=dashRaw.map(r=>(r.game_id||'')+(r.market_display||'')+(r.total_score||'')+(r.game_decision||'')+(r.current_line||'')).join('|');
+  const _changed=_hash!==_lastDashHash;
+  _lastDashHash=_hash;
+  updateStats();
+  if(_changed){ renderBoard();renderResults();if(typeof Chart!=='undefined') buildKPIs(); }
 
   // Phase 2: load book lines + score history in background (non-blocking)
   Promise.all([
