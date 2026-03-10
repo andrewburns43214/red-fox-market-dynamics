@@ -1030,7 +1030,7 @@ thead th.th-play { text-align: left; }
       </div>
       <div class="tkpi">
         <span class="tkpi-v" id="t-wr">—</span>
-        <span class="tkpi-l">BET+ Win Rate</span>
+        <span class="tkpi-l">Bet Win Rate</span>
       </div>
     </div>
     </div>
@@ -1072,7 +1072,7 @@ thead th.th-play { text-align: left; }
   <div class="mmet">
     <div class="mmet-body">
       <span class="mmet-v g" id="m-hc">0</span>
-      <span class="mmet-l">Strong Bets</span>
+      <span class="mmet-l">Bets</span>
     </div>
   </div>
   <div class="mmet">
@@ -1084,7 +1084,7 @@ thead th.th-play { text-align: left; }
   <div class="mmet">
     <div class="mmet-body">
       <span class="mmet-v g" id="m-wr">—</span>
-      <span class="mmet-l">BET+ Win Rate</span>
+      <span class="mmet-l">Bet Win Rate</span>
     </div>
   </div>
   <div class="mmet-right" style="display:flex;align-items:center;gap:10px">
@@ -1138,9 +1138,8 @@ thead th.th-play { text-align: left; }
                 <th class="th-bkt">Bucket</th>
                 <th class="th-pat" onclick="sortBy('pattern_primary',this)">Pattern <span class="info-btn" style="display:inline-flex;width:14px;height:14px;font-size:10px;margin-top:0;vertical-align:middle" onclick="event.stopPropagation();openPatLegend()" title="Pattern definitions">i</span></th>
                 <th class="th-layer" onclick="sortBy('layer_mode',this)">Layer</th>
-                <th class="th-sharp" onclick="sortBy('sharp_cert_tier',this)">Sharp</th>
                 <th class="th-tim" onclick="sortBy('timing_bucket',this)">Timing</th>
-                <th class="th-bkdn">Breakdown</th>
+                <th class="th-bkdn">Breakdown <span class="info-btn" style="display:inline-flex;width:14px;height:14px;font-size:10px;margin-top:0;vertical-align:middle" onclick="event.stopPropagation();openBkdnLegend()" title="Breakdown definitions">i</span></th>
                 <th class="th-dec">Decision</th>
                 <th class="th-play">Play</th>
               </tr>
@@ -1261,6 +1260,23 @@ thead th.th-play { text-align: left; }
     </div>
   </div>
 
+  <!-- BREAKDOWN LEGEND MODAL -->
+  <div class="drill-overlay" id="bkdn-legend-overlay" onclick="if(event.target===this)closeBkdnLegend()">
+    <div class="drill-modal" style="max-width:600px;max-height:none;overflow:visible">
+      <div class="drill-hdr">
+        <div class="drill-title">Score Breakdown Components</div>
+        <button class="drill-close" onclick="closeBkdnLegend()">&times;</button>
+      </div>
+      <div style="padding:16px 20px;font-family:var(--sans);font-size:12px;line-height:1.5">
+        <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">Sharp (0–20 pts)</b><br><span style="color:var(--text2)">Points from L1 sharp book data (Pinnacle, Matchbook, etc). Measures direction agreement, move magnitude, and book-tier weighting. Higher = more sharp books confirming the pick.</span></div>
+        <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">Consensus (0–10 pts)</b><br><span style="color:var(--text2)">Points from L2 cross-market consensus (30+ books). Measures how far the broad market has moved vs Pinnacle's line. Higher = stronger market-wide agreement.</span></div>
+        <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">Retail (0–10 pts)</b><br><span style="color:var(--text2)">Points from L3 DraftKings retail data — line movement, bets %, and money %. Dampened when L1 is absent and L2 agreement is weak to avoid retail-only noise.</span></div>
+        <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">Timing (0–3 pts)</b><br><span style="color:var(--text2)">Bonus/penalty based on when movement occurred. Late moves closer to game time carry more weight. EARLY/MID/LATE timing buckets affect score.</span></div>
+        <div style="padding:7px 0"><b style="color:var(--accent)">Cross-Mkt (-5–5 pts)</b><br><span style="color:var(--text2)">Cross-market reinforcement or contradiction. Positive when spread/total/moneyline signals align for the same game. Negative when they contradict.</span></div>
+      </div>
+    </div>
+  </div>
+
   <!-- RESULTS -->
   <div class="tab-content" id="tab-results">
     <div class="full-tab">
@@ -1311,14 +1327,9 @@ thead th.th-play { text-align: left; }
               <th style="min-width:80px;text-align:left">Time</th>
               <th style="min-width:100px;text-align:left">Pick</th>
               <th style="min-width:100px;text-align:left">Line</th>
-              <th style="min-width:50px;text-align:right">Score Gap</th>
-              <th style="min-width:70px;text-align:right">Confidence</th>
-              <th style="min-width:80px;text-align:center">Decision</th>
-              <th style="min-width:50px;text-align:right">Bets</th>
-              <th style="min-width:50px;text-align:right">Money</th>
-              <th style="min-width:80px;text-align:left">Signal</th>
-              <th style="min-width:60px;text-align:left">Pattern</th>
-              <th style="min-width:50px;text-align:left">Layer</th>
+              <th style="min-width:50px;text-align:left">Score Gap</th>
+              <th style="min-width:70px;text-align:left">Confidence</th>
+              <th style="min-width:80px;text-align:left">Decision</th>
             </tr></thead>
             <tbody id="hist-tbody"></tbody>
           </table>
@@ -1639,7 +1650,6 @@ function renderBoard(){
       <td class="td-bkt"><span class="bkt ${bk.c}">${bk.l}</span></td>
       <td class="td-pat">${patBadge(r.pattern_primary)}${(()=>{const s=(r.pattern_secondary||'').trim();return s&&s!=='NEUTRAL'?'<br><span style="font-size:8px;opacity:.55">+ '+s.replace(/_/g,' ')+'</span>':'';})()}</td>
       <td class="td-layer">${lyrBadge(r.layer_mode)}</td>
-      <td class="td-sharp">${sharpBadge(r)}</td>
       <td class="td-tim">${timBadge(r.timing_bucket)}</td>
       <td class="td-bkdn">${(()=>{
         const items=[
@@ -1784,6 +1794,12 @@ function openPatLegend() {
 }
 function closePatLegend() {
   document.getElementById('pat-legend-overlay').classList.remove('open');
+}
+function openBkdnLegend() {
+  document.getElementById('bkdn-legend-overlay').classList.add('open');
+}
+function closeBkdnLegend() {
+  document.getElementById('bkdn-legend-overlay').classList.remove('open');
 }
 
 function openGameDetail(r){
@@ -2085,10 +2101,11 @@ async function renderHistory(){
     const idx=arr.indexOf(r);
     r._prevScore=idx>0?Number(arr[idx-1].total_score||arr[idx-1].game_confidence||0):null;
     r._prevDec=idx>0?(arr[idx-1].game_decision||''):'';
+    r._prevLine=idx>0?(arr[idx-1].current_line||arr[idx-1].open_line||''):'';
   });
   document.getElementById('hist-meta').textContent=rows.length+' snapshots';
   const tb=document.getElementById('hist-tbody');
-  if(!rows.length){ tb.innerHTML='<tr><td colspan="12" style="text-align:center;padding:24px;color:#888">No data for this selection</td></tr>'; return; }
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:#888">No data for this selection</td></tr>'; return; }
   const _v=s=>(s&&s!=='nan'&&s!==''&&s!=='0')?s:'--';
   const _n=s=>{const x=Number(s);return isNaN(x)?null:x;};
   const _delta=(cur,prev)=>{
@@ -2117,29 +2134,37 @@ async function renderHistory(){
     if(m2) return m2[1];
     return raw;
   };
-  tb.innerHTML=rows.slice(0,500).map(r=>{
+  tb.innerHTML=rows.slice(0,500).map((r,i)=>{
     const tStr=_utcToET(r.snapshot_ts);
-    const edge=_n(r.net_edge);
-    const total=_n(r.total_score||r.game_confidence);
+    const edge=Number(r.net_edge||0);
+    const total=Number(r.total_score||r.game_confidence||0);
     const curDec=r.game_decision||'';
-    const totalColor=total!==null?(total>=70?'color:#22c55e':total>=60?'color:#eab308':'color:#ef4444'):'';
-    const bets=_n(r.bets_pct);
-    const money=_n(r.money_pct);
-    const pick=r.favored_side||r.side||'';
-    const line=_fmtLine(r.current_line);
-    const pattern=_v(r.pattern_primary);
-    return '<tr style="border-bottom:1px solid var(--border)">'+
-      '<td style="font-size:11px;white-space:nowrap;text-align:left">'+tStr+'</td>'+
-      '<td style="text-align:left;white-space:nowrap">'+pick+'</td>'+
-      '<td style="font-family:var(--mono);font-weight:600;text-align:left;white-space:nowrap">'+line+'</td>'+
-      '<td style="font-family:var(--mono);text-align:right">'+(edge!==null?edge.toFixed(1):'--')+'</td>'+
-      '<td style="font-family:var(--mono);font-weight:700;text-align:right;'+totalColor+'">'+(total!==null?total.toFixed(1):'--')+' '+_delta(total,r._prevScore)+'</td>'+
-      '<td style="text-align:center"><span class="dec '+decInfo(curDec)[1]+'">'+decInfo(curDec)[0]+'</span>'+_decChg(curDec,r._prevDec)+'</td>'+
-      '<td style="font-family:var(--mono);text-align:right">'+(bets!==null?bets.toFixed(0)+'%':'--')+'</td>'+
-      '<td style="font-family:var(--mono);text-align:right">'+(money!==null?money.toFixed(0)+'%':'--')+'</td>'+
-      '<td style="text-align:left;white-space:nowrap">'+_v(r.market_read)+'</td>'+
-      '<td style="text-align:left;white-space:nowrap">'+pattern+'</td>'+
-      '<td style="text-align:left;white-space:nowrap">'+_v(r.layer_mode)+'</td>'+
+    const prevDec=r._prevDec||'';
+    const decChanged=curDec!==prevDec&&i>0;
+    const pick=r.favored_side||r.side||'--';
+    const rawLine=r.current_line||r.open_line||'--';
+    const line=_fmtLine(rawLine);
+    const prevLine=r._prevLine||'';
+    const lineChanged=prevLine&&line!==_fmtLine(prevLine)&&i>0;
+    const prevTotal=r._prevScore!=null?Number(r._prevScore):total;
+    const totalDelta=total-prevTotal;
+    const totalCol=totalDelta>0.5?'color:#00965a;font-weight:700':totalDelta<-0.5?'color:#d63020;font-weight:700':'color:var(--text)';
+    const rowBg=(decChanged||lineChanged)?'background:#fffbeb':'';
+    const lineSty=lineChanged?'color:#d48000;font-weight:700':'color:var(--text);font-weight:600';
+    let decHtml;
+    if(decChanged){
+      decHtml='<td style="padding:4px 8px;font-weight:700;color:#d48000;white-space:nowrap">'+prevDec+' &rarr; '+curDec+'</td>';
+    } else {
+      const decCol=curDec==='BET'||curDec==='STRONG_BET'?'color:#00965a;font-weight:600':curDec==='LEAN'?'color:#d48000':'color:var(--text3)';
+      decHtml='<td style="padding:4px 8px;'+decCol+'">'+curDec+'</td>';
+    }
+    return '<tr style="border-bottom:1px solid var(--bg4);'+rowBg+'">'+
+      '<td style="padding:4px 8px;color:var(--text3);white-space:nowrap;font-size:10px">'+tStr+'</td>'+
+      '<td style="padding:4px 8px;color:var(--text2);white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis">'+pick+'</td>'+
+      '<td style="padding:4px 8px;'+lineSty+';white-space:nowrap;font-family:var(--mono)">'+line+'</td>'+
+      '<td style="padding:4px 8px;color:var(--text)">'+edge.toFixed(0)+'</td>'+
+      '<td style="padding:4px 8px;'+totalCol+'">'+total.toFixed(1)+'</td>'+
+      decHtml+
     '</tr>';
   }).join('');
 }
@@ -2261,7 +2286,7 @@ function buildKPIs(){
   statPanel(document.getElementById('pnl-confidence'), 'By Confidence', dataRows(bucketize(graded, CONF_BUCKETS, 'game_confidence')));
 
   // ── 3. Net Edge ──
-  statPanel(document.getElementById('pnl-edge'), 'By Net Edge', dataRows(bucketize(graded, EDGE_BUCKETS, 'net_edge')));
+  statPanel(document.getElementById('pnl-edge'), 'By Score Gap', dataRows(bucketize(graded, EDGE_BUCKETS, 'net_edge')));
 
   // ── Dual-view stat panel: BET+ primary, All graded secondary ──
   function statPanelDual(el, title, sbData, allData) {
@@ -2387,7 +2412,7 @@ function buildKPIs(){
     return byD;
   }
   const byDateAll = buildTrend(graded);
-  const byDateSB = buildTrend(sbRows);
+  const byDateSB = buildTrend(betPlusRows);
   const sortedDates = Object.keys(byDateAll).sort((a,b)=>new Date(a)-new Date(b));
   function rollingWR(byD, dates) {
     const vals = [];
@@ -2410,7 +2435,7 @@ function buildKPIs(){
       labels: sortedDates,
       datasets: [
         {
-          label: 'Strong Bet',
+          label: 'BET+',
           data: trendSB,
           borderColor: 'rgba(0,150,90,.9)',
           backgroundColor: 'rgba(0,150,90,.06)',
@@ -2632,10 +2657,10 @@ function buildKPIs(){
     const el = document.getElementById('pnl-clv-edge');
     if (!el) return;
     if (clvRows.length === 0) {
-      el.innerHTML = `<div class="panel-h"><span class="panel-t">CLV by Edge</span></div><div class="mr-empty-msg">Awaiting CLV data</div>`;
+      el.innerHTML = `<div class="panel-h"><span class="panel-t">CLV by Score Gap</span></div><div class="mr-empty-msg">Awaiting CLV data</div>`;
       return;
     }
-    let html = `<div class="panel-h"><span class="panel-t">CLV by Edge</span><span class="panel-m">${clvRows.length} tracked</span></div>`;
+    let html = `<div class="panel-h"><span class="panel-t">CLV by Score Gap</span><span class="panel-m">${clvRows.length} tracked</span></div>`;
     html += '<table class="stat-tbl"><thead><tr><th>Edge</th><th>Avg CLV</th><th>Beat %</th><th>N</th></tr></thead><tbody>';
     EDGE_BUCKETS.forEach(b => {
       const rows = clvRows.filter(r => { const e = parseFloat(r.net_edge||0); return e >= b.min && e <= b.max; });
@@ -2735,8 +2760,8 @@ function buildKPIs(){
   const summEl = document.getElementById('p-summary');
   summEl.innerHTML = '';
   [
-    {label:'BET+ Record', val: betPlusRows.length ? `${bpW}–${bpL}` : '—', sub: `${betPlusRows.length} Bet + SB`, cls:''},
-    {label:'BET+ Win %', val: pBP !== null ? pBP.toFixed(1)+'%' : '—', sub: 'Bet + Strong Bet', cls: pBP!==null?pctClass(pBP):''},
+    {label:'Bet Record', val: betPlusRows.length ? `${bpW}–${bpL}` : '—', sub: `${betPlusRows.length} Bet + Strong Bet`, cls:''},
+    {label:'Bet Win %', val: pBP !== null ? pBP.toFixed(1)+'%' : '—', sub: 'Bet + Strong Bet', cls: pBP!==null?pctClass(pBP):''},
     {label:'SB Record', val: sbRows.length ? `${sbW}–${sbL}` : '—', sub: `${sbRows.length} Strong Bet`, cls:''},
     {label:'SB Win %', val: pSB !== null ? pSB.toFixed(1)+'%' : '—', sub: 'Strong Bet', cls: pSB!==null?pctClass(pSB):''},
     {label:'Overall Record', val: `${totalW}–${totalL}`, sub: `${graded.length} graded`, cls:''},
@@ -2880,8 +2905,6 @@ async function loadAll(){
 }
 
 setInterval(()=>{ document.getElementById('clk').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'America/New_York'}); },1000);
-setInterval(loadAll,30000);
-loadAll();
 // Build KPIs once Chart.js loads (deferred)
 document.addEventListener('DOMContentLoaded',()=>{ const _checkChart=setInterval(()=>{ if(typeof Chart!=='undefined'&&allDash.length){ clearInterval(_checkChart); buildKPIs(); } },200); });
 
@@ -2994,7 +3017,6 @@ function renderResults(){
   const _lyr = l => { const u=(l||'').toUpperCase(); if(u==='L123') return '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#dbeafe;color:#1e40af">L123</span>'; if(u==='L13') return '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#ccfbf1;color:#0f766e">L13</span>'; if(u==='L23') return '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#e0e7ff;color:#4338ca">L23</span>'; return '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#f3f4f6;color:#6b7280">'+(l||'--')+'</span>'; };
   const _clv = r => { const cv=parseFloat(r.clv); if(isNaN(cv)||!r.clv) return '<span style="color:#aab">--</span>'; const clr=cv>0?'#00965a':cv<0?'#d63020':'#8892aa'; return '<span style="color:'+clr+';font-weight:700">'+(cv>0?'+':'')+cv.toFixed(1)+'</span>'; };
   const _pct = v => { const n=Number(v); if(isNaN(n)||!v) return '<span style="color:#aab">--</span>'; return `<span style="font-weight:600">${n.toFixed(0)}%</span>`; };
-  const _openClose = r => { const ol=r.open_line||'', cl=r.current_line||r.decision_line||''; if(!ol&&!cl) return '--'; if(!ol) return cl; if(!cl||ol===cl) return ol; return ol+' → '+cl; };
   let trs='';
   resolved.slice(0,300).forEach((r,i)=>{
     const win=(r.result||'').toUpperCase()==='WIN';
@@ -3010,36 +3032,40 @@ function renderResults(){
     const conf=Number(r.game_confidence||0); const confStr=conf?conf.toFixed(1):'--';
     const gap=Number(r.net_edge||0); const gapStr=gap?gap.toFixed(1):'--';
     const gapClr=gap>0?'#00965a':gap<0?'#d63020':'#8892aa';
+    const openLine=r.open_line||'--';
+    const curLine=r.decision_line||r.current_line||'--';
+    const c='text-align:center;';
     trs+=`<tr style="background:${i%2===0?'#fff':'#f9fafb'};border-bottom:1px solid #eee">
-      <td style="padding:5px 8px;color:#8892aa;font-size:11px;white-space:nowrap">${dt}</td>
-      <td style="padding:5px 8px;white-space:nowrap">${spChip(r.sport||'')}</td>
-      <td style="padding:5px 8px;font-weight:600;white-space:nowrap">${r.game||r.side||'--'}</td>
-      <td style="padding:5px 8px;white-space:nowrap"><span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;background:#eef2ff;color:#2255cc">${r.market_display||'--'}</span></td>
-      <td style="padding:5px 8px;white-space:nowrap">${res}</td>
-      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;text-align:right">${_pct(r.bets_pct)}</td>
-      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;text-align:right">${_pct(r.money_pct)}</td>
-      <td style="padding:5px 6px;font-size:10px;white-space:nowrap">${_openClose(r)}</td>
-      <td style="padding:5px 8px;font-family:var(--mono);font-weight:700;text-align:right;white-space:nowrap">${confStr}</td>
-      <td style="padding:5px 8px;font-family:var(--mono);text-align:right;white-space:nowrap"><span style="color:${gapClr};font-weight:600">${gapStr}</span></td>
-      <td style="padding:5px 6px;white-space:nowrap;font-size:10px">${patBadge(r.pattern_primary)}${patSub}</td>
-      <td style="padding:5px 6px;text-align:center">${_lyr(r.layer_mode)}</td>
-      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;text-align:right">${_sc(r.sharp_score)}</td>
-      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;text-align:right">${_sc(r.consensus_score)}</td>
-      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;text-align:right">${_sc(r.retail_score)}</td>
-      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;text-align:right">${_sc(r.timing_modifier)}</td>
-      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;text-align:right">${_sc(r.cross_market_adj)}</td>
-      <td style="padding:5px 8px;font-family:var(--mono);font-size:11px;text-align:right;white-space:nowrap">${_clv(r)}</td>
-      <td style="padding:5px 8px;white-space:nowrap">${decBadge}${lockIcon}</td>
-      <td style="padding:5px 6px;font-size:10px;white-space:nowrap">${r.decision_line||'--'}</td>
+      <td style="padding:5px 8px;color:#8892aa;font-size:11px;white-space:nowrap;text-align:left">${dt}</td>
+      <td style="padding:5px 8px;white-space:nowrap;${c}">${spChip(r.sport||'')}</td>
+      <td style="padding:5px 8px;font-weight:600;white-space:nowrap;text-align:left">${r.game||r.side||'--'}</td>
+      <td style="padding:5px 8px;white-space:nowrap;${c}"><span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;background:#eef2ff;color:#2255cc">${r.market_display||'--'}</span></td>
+      <td style="padding:5px 8px;white-space:nowrap;${c}">${res}</td>
+      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;${c}">${_pct(r.bets_pct)}</td>
+      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;${c}">${_pct(r.money_pct)}</td>
+      <td style="padding:5px 6px;font-size:10px;white-space:nowrap;${c}">${openLine}</td>
+      <td style="padding:5px 6px;font-size:10px;white-space:nowrap;${c}">${curLine}</td>
+      <td style="padding:5px 8px;font-family:var(--mono);${c};white-space:nowrap"><span style="color:${gapClr};font-weight:600">${gapStr}</span></td>
+      <td style="padding:5px 8px;font-family:var(--mono);font-weight:700;${c};white-space:nowrap">${confStr}</td>
+      <td style="padding:5px 6px;white-space:nowrap;font-size:10px;${c}">${patBadge(r.pattern_primary)}${patSub}</td>
+      <td style="padding:5px 6px;${c}">${_lyr(r.layer_mode)}</td>
+      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;${c}">${_sc(r.sharp_score)}</td>
+      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;${c}">${_sc(r.consensus_score)}</td>
+      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;${c}">${_sc(r.retail_score)}</td>
+      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;${c}">${_sc(r.timing_modifier)}</td>
+      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;${c}">${_sc(r.cross_market_adj)}</td>
+      <td style="padding:5px 8px;font-family:var(--mono);font-size:11px;${c};white-space:nowrap">${_clv(r)}</td>
+      <td style="padding:5px 8px;white-space:nowrap;${c}">${decBadge}${lockIcon}</td>
+      <td style="padding:5px 6px;font-size:10px;white-space:nowrap;${c}">${r.favored_side||'--'}</td>
     </tr>`;
   });
-  const _cols=['Date','Sport','Game','Market','Result','Tix%','$%','Open/Close','Conf','Gap','Pattern','Layer','Sharp','Cons','Retail','Time','Cross','CLV','Decision','Play'];
-  const _ra=[5,6,8,9,12,13,14,15,16,17];
+  const _cols=['Date','Sport','Game','Market','Result','Tix%','$%','Open','Current','Score Gap','Confidence','Pattern','Layer','Sharp','Cons','Retail','Time','Cross','CLV','Decision','Play'];
+  const _ra=[];
   const inner=el.querySelector('.full-tab')||el;
   inner.innerHTML=`<div style="overflow-x:auto">
     <div style="padding:10px 14px;font-size:11px;color:#8892aa;border-bottom:1px solid #eee">${resolved.length} resolved plays</div>
     <table style="border-collapse:collapse;font-size:12px">
-    <thead><tr style="background:#f1f3f5;text-align:left">${_cols.map((c,i)=>{const ra=_ra.includes(i)?'text-align:right;':'';return '<th style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:10px;font-weight:600;color:#6b7280;white-space:nowrap;'+ra+'">'+c+'</th>';}).join('')}</tr></thead>
+    <thead><tr style="background:#f1f3f5">${_cols.map((c,i)=>{const la=(c==='Date'||c==='Game')?'text-align:left;':'text-align:center;';return '<th style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:10px;font-weight:600;color:#6b7280;white-space:nowrap;'+la+'">'+c+'</th>';}).join('')}</tr></thead>
     <tbody>${trs}</tbody></table></div>`;
 }
 
@@ -3099,7 +3125,7 @@ async function loadCSV(url){
   // Access granted — start dashboard
   loadAll();
   setInterval(updateStats, 1000);
-  setInterval(loadAll, 30000);
+  setInterval(loadAll, 60000);
   // Add logout button
   const logoutBtn = document.createElement('button');
   logoutBtn.textContent = 'Logout';
