@@ -4,7 +4,7 @@ All magic numbers from the scoring spec in one place.
 Single source of truth. Any change requires a version bump.
 """
 
-V3_VERSION = "v3.3g"
+V3_VERSION = "v3.3h"
 
 # ─── FIXED BASE ───
 BASE = 50  # Fixed. All sports. No exceptions.
@@ -140,6 +140,7 @@ TIMING_MID_BASE = 0
 TIMING_MID_BOOST = 1  # Only when L1 present AND path HELD or EXTENDED
 TIMING_LATE_BASE = -3
 TIMING_LATE_REVERSED = -5  # LATE + REVERSED or OSCILLATED
+TIMING_LATE_CONFIRMED = 0  # LATE + HELD/EXTENDED + L1 present = no penalty
 
 # NBA exception
 TIMING_NBA_LATE_CAP = -3  # NBA LATE never worse than -3
@@ -158,6 +159,12 @@ TIMING_WINDOWS = {
 # ─── COMPONENT 5: CROSS-MARKET SANITY [-4, +4] ───
 CROSS_MARKET_AGREE = 4
 CROSS_MARKET_CONTRADICT = -4
+CROSS_MARKET_AGREE_STRONG = 4
+CROSS_MARKET_AGREE_MARGINAL = 2
+CROSS_MARKET_CONTRADICT_MARGINAL = -2
+CROSS_MARKET_CONTRADICT_STRONG = -4
+CROSS_MARKET_PICKEM_THRESHOLD = 0.05   # Below this implied prob gap, treat as pick'em (score 0)
+CROSS_MARKET_STRONG_THRESHOLD = 0.10   # Above this, full weight
 CROSS_MARKET_EXEMPT_SPORTS = {"ufc"}
 CROSS_MARKET_MLB_RUNLINE_EXEMPT = True  # MLB run line excluded
 

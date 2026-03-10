@@ -523,22 +523,57 @@ class Test1E_TimingCrossMarket(unittest.TestCase):
         self.assertEqual(result["timing_score"], -3)
 
     def test_1E_07_cross_market_aligned(self):
-        """Spread + ML same side → +4."""
+        """Spread + ML same side + strong ML favorite → +4."""
         row = _base_row(
             spread_favored_side="Home",
             ml_favored_side="Home",
+            ml_fav_odds=-200,  # implied 0.667, gap=0.167 > 0.10 → strong
         )
         result = compute_cross_market_sanity(row)
         self.assertEqual(result["cross_market_score"], 4)
 
+    def test_1E_07b_cross_market_aligned_marginal(self):
+        """Spread + ML same side + marginal ML favorite → +2."""
+        row = _base_row(
+            spread_favored_side="Home",
+            ml_favored_side="Home",
+            ml_fav_odds=-120,  # implied 0.545, gap=0.045+0.5=0.545-0.5=0.045... wait
+        )
+        # -120 → impl = 120/220 = 0.5455, gap = 0.0455 < 0.05 → pick'em (0)
+        # Use -130 instead: 130/230 = 0.5652, gap = 0.0652 → marginal
+        row["ml_fav_odds"] = -130
+        result = compute_cross_market_sanity(row)
+        self.assertEqual(result["cross_market_score"], 2)
+
+    def test_1E_07c_cross_market_pickem(self):
+        """Near pick'em ML → 0 regardless of alignment."""
+        row = _base_row(
+            spread_favored_side="Home",
+            ml_favored_side="Home",
+            ml_fav_odds=-108,  # implied 0.519, gap=0.019 < 0.05 → pick'em
+        )
+        result = compute_cross_market_sanity(row)
+        self.assertEqual(result["cross_market_score"], 0)
+
     def test_1E_08_cross_market_contradiction(self):
-        """Spread + ML opposite → -4."""
+        """Spread + ML opposite + strong ML favorite → -4."""
         row = _base_row(
             spread_favored_side="Home",
             ml_favored_side="Away",
+            ml_fav_odds=-200,  # strong favorite
         )
         result = compute_cross_market_sanity(row)
         self.assertEqual(result["cross_market_score"], -4)
+
+    def test_1E_08b_cross_market_contradiction_marginal(self):
+        """Spread + ML opposite + marginal ML favorite → -2."""
+        row = _base_row(
+            spread_favored_side="Home",
+            ml_favored_side="Away",
+            ml_fav_odds=-130,  # marginal
+        )
+        result = compute_cross_market_sanity(row)
+        self.assertEqual(result["cross_market_score"], -2)
 
     def test_1E_09_ufc_cross_zero(self):
         """UFC → cross_market = 0 always."""

@@ -320,14 +320,16 @@ def compute_timing_modifier(row: dict) -> dict:
     if timing_bucket == "EARLY":
         result = C.TIMING_EARLY
     elif timing_bucket == "MID":
-        # +1 only when L1 present AND path HELD or EXTENDED
-        if l1_present and path in ("HELD", "EXTENDED"):
+        # +1 when path HELD or EXTENDED (path tracked independently of L1)
+        if path in ("HELD", "EXTENDED"):
             result = C.TIMING_MID_BOOST
         else:
             result = C.TIMING_MID_BASE
     elif timing_bucket == "LATE":
         if path in ("REVERSED", "OSCILLATED"):
             result = C.TIMING_LATE_REVERSED  # -5
+        elif path in ("HELD", "EXTENDED") and l1_present:
+            result = C.TIMING_LATE_CONFIRMED  # 0 — confirmed late signal
         else:
             result = C.TIMING_LATE_BASE  # -3
 
@@ -367,12 +369,33 @@ def compute_cross_market_sanity(row: dict) -> dict:
     if not spread_fav or not ml_fav:
         return {"cross_market_score": 0, "cross_market_detail": "Single market only"}
 
-    if spread_fav == ml_fav:
-        result = C.CROSS_MARKET_AGREE
-        detail = f"Aligned: {spread_fav}"
+    # Compute ML favorite implied probability gap from 0.5 (pick'em)
+    ml_fav_odds = _num(row.get("ml_fav_odds", 0))
+    if ml_fav_odds != 0:
+        if ml_fav_odds < 0:
+            impl_prob = abs(ml_fav_odds) / (abs(ml_fav_odds) + 100)
+        else:
+            impl_prob = 100 / (ml_fav_odds + 100)
+        prob_gap = abs(impl_prob - 0.5)
     else:
-        result = C.CROSS_MARKET_CONTRADICT
-        detail = f"Contradiction: spread={spread_fav} ml={ml_fav}"
+        prob_gap = 0.0
+
+    # Near pick'em — ML favorite call is unreliable
+    if prob_gap < C.CROSS_MARKET_PICKEM_THRESHOLD:
+        return {"cross_market_score": 0, "cross_market_detail": f"Pick'em (gap={prob_gap:.3f})"}
+
+    if spread_fav == ml_fav:
+        if prob_gap >= C.CROSS_MARKET_STRONG_THRESHOLD:
+            result = C.CROSS_MARKET_AGREE_STRONG
+        else:
+            result = C.CROSS_MARKET_AGREE_MARGINAL
+        detail = f"Aligned: {spread_fav} (gap={prob_gap:.3f})"
+    else:
+        if prob_gap >= C.CROSS_MARKET_STRONG_THRESHOLD:
+            result = C.CROSS_MARKET_CONTRADICT_STRONG
+        else:
+            result = C.CROSS_MARKET_CONTRADICT_MARGINAL
+        detail = f"Contradiction: spread={spread_fav} ml={ml_fav} (gap={prob_gap:.3f})"
 
     return {"cross_market_score": result, "cross_market_detail": detail}
 
