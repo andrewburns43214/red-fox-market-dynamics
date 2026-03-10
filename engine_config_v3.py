@@ -4,7 +4,7 @@ All magic numbers from the scoring spec in one place.
 Single source of truth. Any change requires a version bump.
 """
 
-V3_VERSION = "v3.3h"
+V3_VERSION = "v3.3i"
 
 # ─── FIXED BASE ───
 BASE = 50  # Fixed. All sports. No exceptions.
@@ -240,7 +240,7 @@ PATTERNS = {
     "PUBLIC_DRIFT": "Heavy public + line toward public + no sharp support",
     "CONSENSUS_HOLD": "L2 strongly aligned without clear L1 move",
     "RETAIL_CROWD": "Extreme public concentration, no sharp support",
-    "NEUTRAL": "No strong pattern in any bucket",
+    "NEUTRAL": "No pattern detected. Score driven purely by component math.",
 }
 
 # ─── CROSS-SECTIONAL CONSENSUS (single-snapshot fallback) ───
