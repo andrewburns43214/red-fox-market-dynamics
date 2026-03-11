@@ -1450,7 +1450,7 @@ function confBkt(c){ const n=Number(c); if(n>=70) return{l:'HIGH',c:'bkt75'}; if
 function eC(e){ return e>=13?'h':e>=5?'m':'l'; }
 function cC(c){ return c>=72?'hi':c>=60?'md':'lo'; }
 function decInfo(d){ const s=(d||'').toUpperCase(); if(s==='STRONG_BET') return['Strong Bet','dec-bet dec-strong']; if(s==='BET') return['Bet','dec-bet']; if(s==='LEAN') return['Lean','dec-lean']; return['No Bet','dec-no']; }
-function isLocked(r){ return String(r.is_locked||'').toLowerCase()==='true' || (r.game_decision||'').toUpperCase()==='LOCKED'; }
+function isLocked(r){ return String(r.is_locked||'').toLowerCase()==='true' || (r.game_decision||'').toUpperCase()==='LOCKED' || (r.timing_bucket||'').toUpperCase()==='LIVE'; }
 function spChip(s){ const k=(s||'').toLowerCase(); return `<span class="sport-chip sc-${k}">${(s||'').toUpperCase()}</span>`; }
 function timBadge(b){ const k=(b||'EARLY').toUpperCase(); return `<span class="tim t${k}">${k}</span>`; }
 function mrBadge(m){ const s=(m||'').trim(); if(!s||s==='-') return '-'; const lu=s.toUpperCase(); const map={'STEALTH MOVE':'mr-stealth','FREEZE PRESSURE':'mr-freeze','ALIGNED SHARP':'mr-aligned','REVERSE PRESSURE':'mr-reverse','CONTRADICTION':'mr-contra','PUBLIC DRIFT':'mr-public','NEUTRAL':'mr-neutral'}; const cls=map[lu]||'mr-neutral'; const labels={'STEALTH MOVE':'Hidden $','FREEZE PRESSURE':'$ No Move','ALIGNED SHARP':'$ + Move','REVERSE PRESSURE':'$ vs Line','CONTRADICTION':'Mixed','PUBLIC DRIFT':'Crowd Push','NEUTRAL':'Flat'}; const tips={'STEALTH MOVE':'Money flowing in quietly — low bets, significant money','FREEZE PRESSURE':'Big money divergence but line not moving yet','ALIGNED SHARP':'Money and line movement both pointing same direction','REVERSE PRESSURE':'Money pushing one way, line moved opposite','CONTRADICTION':'Signals conflict — money says one thing, line says another','PUBLIC DRIFT':'High public bet volume pushing the line — no edge','NEUTRAL':'No meaningful money or line signal detected'}; return `<span class="mr ${cls}" title="${tips[lu]||''}">${labels[lu]||s}</span>`; }
@@ -1991,7 +1991,7 @@ function openGameDetail(r){
           const prevDec=i>0?(rows[i-1].game_decision||''):'';
           const decChanged=dec!==prevDec&&i>0;
           const rawLine=h.current_line||h.open_line||'--';
-          const line=(()=>{if(!rawLine||rawLine==='--'||rawLine==='nan') return '--'; const m=rawLine.match(/([+-]?\d+\.?\d*)\s*(?:@|[\(\)])\s*([+-]?\d+)/); if(m) return m[1]+' ('+m[2]+')'; const m2=rawLine.match(/([+-]?\d+\.?\d*)/); if(m2) return m2[1]; return rawLine;})();
+          const line=(()=>{if(!rawLine||rawLine==='--'||rawLine==='nan') return '--'; const mt=rawLine.match(/^(Over|Under)\s+(\d+\.?\d*)\s*@\s*([+-]?\d+)/); if(mt) return (mt[1]==='Over'?'O':'U')+' '+mt[2]+' ('+mt[3]+')'; const ms=rawLine.match(/([+-]\d+\.?\d*)\s*@\s*([+-]?\d+)/); if(ms) return ms[1]+' ('+ms[2]+')'; const mm=rawLine.match(/@\s*([+-]?\d+)/); if(mm) return mm[1]; const m2=rawLine.match(/([+-]?\d+\.?\d*)/); if(m2) return m2[1]; return rawLine;})();
           const pick=h.favored_side||'--';
           const prevTotal=i>0?Number(rows[i-1].total_score||rows[i-1].game_confidence||0):total;
           const totalDelta=total-prevTotal;
@@ -2123,14 +2123,20 @@ async function renderHistory(){
     if(rc<rp) return ' <span style="color:#ef4444;font-size:11px">⬇ from '+prev+'</span>';
     return '';
   };
-  // Parse line string: "Missouri -1.5 @ -115" → "-1.5 (-115)"
+  // Parse line string with market-aware formatting
   const _fmtLine=(raw)=>{
     if(!raw||raw==='--'||raw==='nan') return '--';
-    // Match: "Team +/-N @ odds" or "Team +/-N (odds)"
-    const m = raw.match(/([+-]?\d+\.?\d*)\s*(?:@|[\(\)])\s*([+-]?\d+)/);
-    if(m) return m[1]+' ('+m[2]+')';
-    // Match just a number
-    const m2 = raw.match(/([+-]?\d+\.?\d*)/);
+    // Total: "Over 225.5 @ -105" → "O 225.5 (-105)"
+    const mt=raw.match(/^(Over|Under)\s+(\d+\.?\d*)\s*@\s*([+-]?\d+)/);
+    if(mt) return (mt[1]==='Over'?'O':'U')+' '+mt[2]+' ('+mt[3]+')';
+    // Spread: "Team -5.5 @ -110" → "-5.5 (-110)"
+    const ms=raw.match(/([+-]\d+\.?\d*)\s*@\s*([+-]?\d+)/);
+    if(ms) return ms[1]+' ('+ms[2]+')';
+    // ML: "Team @ +225" → "+225"
+    const mm=raw.match(/@\s*([+-]?\d+)/);
+    if(mm) return mm[1];
+    // Fallback
+    const m2=raw.match(/([+-]?\d+\.?\d*)/);
     if(m2) return m2[1];
     return raw;
   };
@@ -2749,12 +2755,9 @@ function buildKPIs(){
   // ── Summary row ──
   const totalW = graded.filter(isWin).length;
   const totalL = graded.length - totalW;
-  const sbW = sbRows.filter(isWin).length;
-  const sbL = sbRows.length - sbW;
   const bpW = betPlusRows.filter(isWin).length;
   const bpL = betPlusRows.length - bpW;
   const pAll = winRate(graded);
-  const pSB = winRate(sbRows);
   const pBP = winRate(betPlusRows);
 
   const summEl = document.getElementById('p-summary');
@@ -2762,8 +2765,6 @@ function buildKPIs(){
   [
     {label:'Bet Record', val: betPlusRows.length ? `${bpW}–${bpL}` : '—', sub: `${betPlusRows.length} Bet + Strong Bet`, cls:''},
     {label:'Bet Win %', val: pBP !== null ? pBP.toFixed(1)+'%' : '—', sub: 'Bet + Strong Bet', cls: pBP!==null?pctClass(pBP):''},
-    {label:'SB Record', val: sbRows.length ? `${sbW}–${sbL}` : '—', sub: `${sbRows.length} Strong Bet`, cls:''},
-    {label:'SB Win %', val: pSB !== null ? pSB.toFixed(1)+'%' : '—', sub: 'Strong Bet', cls: pSB!==null?pctClass(pSB):''},
     {label:'Overall Record', val: `${totalW}–${totalL}`, sub: `${graded.length} graded`, cls:''},
     {label:'Overall Win %', val: pAll !== null ? pAll.toFixed(1)+'%' : '—', sub: 'all plays', cls: pAll!==null?pctClass(pAll):''},
     {label:'Avg CLV', val: (()=>{const cv=clvRows.map(r=>parseFloat(r.clv));if(!cv.length) return '—';const a=cv.reduce((s,v)=>s+v,0)/cv.length;return (a>0?'+':'')+a.toFixed(2);})(), sub: clvRows.length+' tracked', cls: (()=>{const cv=clvRows.map(r=>parseFloat(r.clv));if(!cv.length) return '';const a=cv.reduce((s,v)=>s+v,0)/cv.length;return a>0?'g':a<0?'r':'';})()},
