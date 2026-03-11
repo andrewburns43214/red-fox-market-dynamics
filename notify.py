@@ -89,13 +89,10 @@ def _build_email_html(new_bets):
           </td>
           <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;text-align:center">
             <div style="font-weight:600;font-size:14px;color:#111">{edge_f}</div>
-            <div style="color:#6b7280;font-size:11px">Edge</div>
+            <div style="color:#6b7280;font-size:11px">Score Gap</div>
           </td>
           <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;text-align:center;font-size:12px;color:#374151">
             {line}
-          </td>
-          <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;text-align:center;font-size:11px;color:#6b7280">
-            {pattern}
           </td>
         </tr>"""
 
@@ -111,9 +108,10 @@ def _build_email_html(new_bets):
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f3f4f6">
   <div style="max-width:640px;margin:0 auto;padding:20px">
-    <div style="background:#111827;border-radius:12px 12px 0 0;padding:20px 24px;text-align:center">
-      <div style="color:#f97316;font-weight:800;font-size:20px;letter-spacing:1px">RED FOX</div>
-      <div style="color:#9ca3af;font-size:12px;margin-top:4px">Market Intelligence</div>
+    <div style="background:#F0F1F4;border-radius:12px 12px 0 0;padding:20px 24px;display:flex;align-items:center;justify-content:center;gap:8px;border-bottom:1px solid #d0d3de">
+      <div style="line-height:1.1">
+        <div style="font-family:'Plus Jakarta Sans',-apple-system,sans-serif;font-size:20px;font-weight:800;letter-spacing:.5px;color:#030712">Red <span style="color:#e53935">Fox</span></div>
+      </div>
     </div>
     <div style="background:#ffffff;padding:24px;border-radius:0 0 12px 12px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
       <div style="font-size:18px;font-weight:700;color:#111;margin-bottom:4px">New Bet Alert</div>
@@ -124,9 +122,8 @@ def _build_email_html(new_bets):
             <th style="padding:8px 16px;text-align:left;font-size:11px;color:#6b7280;font-weight:600;border-bottom:2px solid #e5e7eb">PICK</th>
             <th style="padding:8px 16px;text-align:center;font-size:11px;color:#6b7280;font-weight:600;border-bottom:2px solid #e5e7eb">DECISION</th>
             <th style="padding:8px 16px;text-align:center;font-size:11px;color:#6b7280;font-weight:600;border-bottom:2px solid #e5e7eb">SCORE</th>
-            <th style="padding:8px 16px;text-align:center;font-size:11px;color:#6b7280;font-weight:600;border-bottom:2px solid #e5e7eb">EDGE</th>
+            <th style="padding:8px 16px;text-align:center;font-size:11px;color:#6b7280;font-weight:600;border-bottom:2px solid #e5e7eb">SCORE GAP</th>
             <th style="padding:8px 16px;text-align:center;font-size:11px;color:#6b7280;font-weight:600;border-bottom:2px solid #e5e7eb">LINE</th>
-            <th style="padding:8px 16px;text-align:center;font-size:11px;color:#6b7280;font-weight:600;border-bottom:2px solid #e5e7eb">PATTERN</th>
           </tr>
         </thead>
         <tbody>
@@ -134,10 +131,10 @@ def _build_email_html(new_bets):
         </tbody>
       </table>
       <div style="margin-top:24px;text-align:center">
-        <a href="https://redfoxintel.com/board.html" style="display:inline-block;background:#f97316;color:#fff;font-weight:700;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px">View Dashboard</a>
+        <a href="https://redfoxintel.com/board.html" style="display:inline-block;background:#e53935;color:#fff;font-weight:700;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px">View Dashboard</a>
       </div>
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f3f4f6;text-align:center;font-size:11px;color:#9ca3af">
-        Red Fox Market Intelligence · Automated Alert
+        Red Fox · Automated Alert
       </div>
     </div>
   </div>
