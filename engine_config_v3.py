@@ -236,6 +236,9 @@ ML_FAV_DAMPENING = [
     (-9999, 0.60),  # worse than -350: 60% of excess
 ]
 
+# ML extreme favorite certification cap — worse than this → LEAN regardless of score
+ML_EXTREME_FAV_THRESHOLD = -200
+
 # ─── PATTERNS (output labels only, never affect score) ───
 PATTERNS = {
     "SHARP_REVERSAL": "L1 moved + public heavy opposite + path HELD/EXTENDED",

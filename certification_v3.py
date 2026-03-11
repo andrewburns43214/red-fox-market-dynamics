@@ -68,6 +68,12 @@ def certify_decision(row: dict, score: float, net_edge: float,
     if timing_bucket == "LIVE":
         return _result("LEAN", "LIVE timing", False, False, is_locked=True)
 
+    # ── ML extreme favorite cap: heavy fav → LEAN regardless of score ──
+    if market == "MONEYLINE":
+        odds_val = _num(row.get("current_odds", row.get("decision_odds", 0)))
+        if odds_val != 0 and odds_val < C.ML_EXTREME_FAV_THRESHOLD:
+            return _result("LEAN", f"ML extreme fav ({int(odds_val)})", False, False)
+
     # ── BET eligible — check STRONG gates ──
     blocked_by = _check_strong_gates(
         score=score,

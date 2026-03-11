@@ -1701,5 +1701,39 @@ class Test9_MLFavDampening(unittest.TestCase):
         self.assertGreater(result["final_score"], 60)
 
 
+class Test10_MLExtremeFavCap(unittest.TestCase):
+    """ML extreme favorite certification cap tests."""
+
+    def test_10_01_ml_minus_250_capped_lean(self):
+        """ML -250: worse than -200 threshold → LEAN regardless of score."""
+        row = _base_row(market_display="MONEYLINE", current_odds=-250,
+                        timing_bucket="MID")
+        result = certify_decision(row, score=75, net_edge=15)
+        self.assertEqual(result["decision"], "LEAN")
+        self.assertIn("ML extreme fav", result["blocked_by"])
+
+    def test_10_02_ml_minus_150_not_capped(self):
+        """ML -150: above threshold → normal BET evaluation."""
+        row = _base_row(market_display="MONEYLINE", current_odds=-150,
+                        timing_bucket="MID")
+        result = certify_decision(row, score=75, net_edge=15)
+        # Should be BET or STRONG_BET, not LEAN
+        self.assertIn(result["decision"], ("BET", "STRONG_BET"))
+
+    def test_10_03_spread_not_capped(self):
+        """Spread: no ML cap applied regardless of odds."""
+        row = _base_row(market_display="SPREAD", current_odds=-250,
+                        timing_bucket="MID")
+        result = certify_decision(row, score=75, net_edge=15)
+        self.assertIn(result["decision"], ("BET", "STRONG_BET"))
+
+    def test_10_04_ml_minus_1200_capped(self):
+        """ML -1200: extreme fav → LEAN."""
+        row = _base_row(market_display="MONEYLINE", current_odds=-1200,
+                        timing_bucket="MID")
+        result = certify_decision(row, score=80, net_edge=20)
+        self.assertEqual(result["decision"], "LEAN")
+
+
 if __name__ == "__main__":
     unittest.main()
