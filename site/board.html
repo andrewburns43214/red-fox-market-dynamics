@@ -2211,6 +2211,7 @@ function buildKPIs(){
   const graded = gradedRows(allResults);
   const sbRows = graded.filter(isHighConf);
   const betPlusRows = graded.filter(isBetPlus);
+  const leanRows = graded.filter(r=>(r.game_decision||'').toUpperCase()==='LEAN');
   const mrRows = mrEligible(allResults);
 
   const FONT = "system-ui, -apple-system, sans-serif";
@@ -2753,20 +2754,20 @@ function buildKPIs(){
   })();
 
   // ── Summary row ──
-  const totalW = graded.filter(isWin).length;
-  const totalL = graded.length - totalW;
   const bpW = betPlusRows.filter(isWin).length;
   const bpL = betPlusRows.length - bpW;
-  const pAll = winRate(graded);
+  const lnW = leanRows.filter(isWin).length;
+  const lnL = leanRows.length - lnW;
   const pBP = winRate(betPlusRows);
+  const pLean = winRate(leanRows);
 
   const summEl = document.getElementById('p-summary');
   summEl.innerHTML = '';
   [
     {label:'Bet Record', val: betPlusRows.length ? `${bpW}–${bpL}` : '—', sub: `${betPlusRows.length} Bet + Strong Bet`, cls:''},
     {label:'Bet Win %', val: pBP !== null ? pBP.toFixed(1)+'%' : '—', sub: 'Bet + Strong Bet', cls: pBP!==null?pctClass(pBP):''},
-    {label:'Overall Record', val: `${totalW}–${totalL}`, sub: `${graded.length} graded`, cls:''},
-    {label:'Overall Win %', val: pAll !== null ? pAll.toFixed(1)+'%' : '—', sub: 'all plays', cls: pAll!==null?pctClass(pAll):''},
+    {label:'Lean Record', val: leanRows.length ? `${lnW}–${lnL}` : '—', sub: `${leanRows.length} Lean`, cls:''},
+    {label:'Lean Win %', val: pLean !== null ? pLean.toFixed(1)+'%' : '—', sub: 'Lean plays', cls: pLean!==null?pctClass(pLean):''},
     {label:'Avg CLV', val: (()=>{const cv=clvRows.map(r=>parseFloat(r.clv));if(!cv.length) return '—';const a=cv.reduce((s,v)=>s+v,0)/cv.length;return (a>0?'+':'')+a.toFixed(2);})(), sub: clvRows.length+' tracked', cls: (()=>{const cv=clvRows.map(r=>parseFloat(r.clv));if(!cv.length) return '';const a=cv.reduce((s,v)=>s+v,0)/cv.length;return a>0?'g':a<0?'r':'';})()},
   ].forEach(item => {
     const d = document.createElement('div');
