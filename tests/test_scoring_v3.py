@@ -615,23 +615,23 @@ class Test2A_Thresholds(unittest.TestCase):
         self.assertEqual(result["decision"], "STRONG_BET")
 
     def test_2A_02_one_below_strong(self):
-        """Score=69, all other gates pass → BET."""
+        """Score=69, all other gates pass → LEAN (below BET threshold 70)."""
         row = _base_row(l1_available=True, timing_bucket="MID",
                         l1_path_behavior="HELD", cross_market_adj=4)
         result = certify_decision(row, score=69, net_edge=10,
                                   strong_streak=2, peak_score=69, last_score=69)
-        self.assertEqual(result["decision"], "BET")
+        self.assertEqual(result["decision"], "LEAN")
 
     def test_2A_03_exact_bet_threshold(self):
-        """Score=67, edge=10 → BET."""
+        """Score=70, edge=10 → BET."""
         row = _base_row()
-        result = certify_decision(row, score=67, net_edge=10)
+        result = certify_decision(row, score=70, net_edge=10)
         self.assertEqual(result["decision"], "BET")
 
     def test_2A_04_one_below_bet(self):
-        """Score=66, edge=10 → LEAN."""
+        """Score=69, edge=10 → LEAN."""
         row = _base_row()
-        result = certify_decision(row, score=66, net_edge=10)
+        result = certify_decision(row, score=69, net_edge=10)
         self.assertEqual(result["decision"], "LEAN")
 
     def test_2A_05_lean_boundary(self):
@@ -717,12 +717,12 @@ class Test2B_StrongGates(unittest.TestCase):
         self.assertEqual(result["decision"], "BET")
         self.assertEqual(result["blocked_by"], "LATE timing")
 
-    def test_2B_09_late_score_68_gets_bet(self):
-        """LATE row with score 68 (BET-eligible) → BET (no LATE cap). STRONG blocked by score < 70."""
+    def test_2B_09_late_score_70_gets_bet(self):
+        """LATE row with score 70 (BET-eligible) → BET. STRONG blocked by LATE timing."""
         row = self._strong_row(timing_bucket="LATE")
-        result = certify_decision(row, 68, 10)
+        result = certify_decision(row, 70, 10)
         self.assertEqual(result["decision"], "BET")
-        self.assertIn("score 68", result["blocked_by"])
+        self.assertIn("LATE timing", result["blocked_by"])
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1604,7 +1604,7 @@ class Test8_IsLocked(unittest.TestCase):
     def test_8_02_non_live_not_locked(self):
         """MID timing → is_locked=False."""
         row = _base_row(timing_bucket="MID")
-        result = certify_decision(row, score=67, net_edge=10)
+        result = certify_decision(row, score=70, net_edge=10)
         self.assertEqual(result["decision"], "BET")
         self.assertFalse(result["is_locked"])
 
