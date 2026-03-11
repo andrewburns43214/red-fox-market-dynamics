@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://nwvosippnquwhtuppmkw.supabase.co")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-FROM_EMAIL = os.environ.get("NOTIFY_FROM", "Red Fox Alerts <onboarding@resend.dev>")
+FROM_EMAIL = os.environ.get("NOTIFY_FROM", "Red Fox <alerts@redfoxmi.com>")
 
 
 def _get_active_user_emails():
@@ -131,7 +131,7 @@ def _build_email_html(new_bets):
         </tbody>
       </table>
       <div style="margin-top:24px;text-align:center">
-        <a href="https://redfoxintel.com/board.html" style="display:inline-block;background:#e53935;color:#fff;font-weight:700;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px">View Dashboard</a>
+        <a href="https://redfoxmi.com/board.html" style="display:inline-block;background:#e53935;color:#fff;font-weight:700;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px">View Dashboard</a>
       </div>
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f3f4f6;text-align:center;font-size:11px;color:#9ca3af">
         Red Fox · Automated Alert
