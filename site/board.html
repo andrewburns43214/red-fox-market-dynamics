@@ -1988,8 +1988,8 @@ function openGameDetail(r){
           const ts=_utcToET(h.snapshot_ts);
           const total=Number(h.total_score||h.game_confidence||0);
           const edge=Number(h.net_edge||0);
-          const dec=h.game_decision||'';
-          const prevDec=i>0?(rows[i-1].game_decision||''):'';
+          const dec=(h.game_decision||'')==='LOCKED'?'LEAN':h.game_decision||'';
+          const prevDec=i>0?((rows[i-1].game_decision||'')==='LOCKED'?'LEAN':rows[i-1].game_decision||''):'';
           const decChanged=dec!==prevDec&&i>0;
           const rawLine=h.current_line||h.open_line||'';
           const rawPick=h.favored_side||'--';
@@ -2150,8 +2150,8 @@ async function renderHistory(){
     const tStr=_utcToET(r.snapshot_ts);
     const edge=Number(r.net_edge||0);
     const total=Number(r.total_score||r.game_confidence||0);
-    const curDec=r.game_decision||'';
-    const prevDec=r._prevDec||'';
+    const curDec=(r.game_decision||'')==='LOCKED'?'LEAN':r.game_decision||'';
+    const prevDec=(r._prevDec||'')==='LOCKED'?'LEAN':r._prevDec||'';
     const decChanged=curDec!==prevDec&&i>0;
     const rawPick=r.favored_side||r.side||'--';
     const rawLine=r.current_line||r.open_line||'';
