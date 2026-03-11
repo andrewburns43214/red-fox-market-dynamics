@@ -4,7 +4,7 @@ All magic numbers from the scoring spec in one place.
 Single source of truth. Any change requires a version bump.
 """
 
-V3_VERSION = "v3.3k"
+V3_VERSION = "v3.3l"
 
 # ─── FIXED BASE ───
 BASE = 50  # Fixed. All sports. No exceptions.
@@ -138,7 +138,7 @@ TIMING_MAX = 1
 TIMING_EARLY = -2
 TIMING_MID_BASE = 0
 TIMING_MID_BOOST = 1  # Only when L1 present AND path HELD or EXTENDED
-TIMING_LATE_BASE = -3
+TIMING_LATE_BASE = 0
 TIMING_LATE_REVERSED = -5  # LATE + REVERSED or OSCILLATED
 TIMING_LATE_CONFIRMED = 0  # LATE + HELD/EXTENDED + L1 present = no penalty
 

@@ -1235,7 +1235,7 @@ thead th.th-play { text-align: left; }
   <div class="drill-overlay" id="pat-legend-overlay" onclick="if(event.target===this)closePatLegend()">
     <div class="drill-modal" style="max-width:1100px;max-height:none;overflow:visible">
       <div class="drill-hdr">
-        <div class="drill-title">Pattern Definitions (v3.3j)</div>
+        <div class="drill-title">Pattern Definitions (v3.3l)</div>
         <button class="drill-close" onclick="closePatLegend()">&times;</button>
       </div>
       <div style="padding:16px 20px;font-family:var(--sans);font-size:12px;line-height:1.5;display:grid;grid-template-columns:1fr 1fr;gap:0 28px">
@@ -1344,7 +1344,7 @@ thead th.th-play { text-align: left; }
 <!-- ─── STATUS BAR ─── -->
 <footer class="statusbar">
   <div class="sl">
-    <div class="si"><span>Engine</span><span class="v">v3.3j</span></div>
+    <div class="si"><span>Engine</span><span class="v">v3.3l</span></div>
     <div class="si"><span>Today's Games</span><span class="v" id="sb-s">0</span></div>
     <div class="si"><span>Sports</span><span class="v" id="sb-sp">—</span></div>
     <div class="si"><span>Snapshot</span><span class="v" id="sb-snap">—</span></div>
@@ -1377,6 +1377,7 @@ function toggleRpane() {
 const DASH_URL    = '/data/dashboard.csv';
 const LEDGER_URL  = '/data/signal_ledger.csv';
 const RESULTS_URL = '/data/results_resolved.csv';
+const FREEZE_URL  = '/data/decision_freeze_ledger.csv';
 
 const MOCK_DASH = [
   {sport:'nba',game_id:'101',market_display:'TOTAL',game:'CLE Cavaliers @ DET Pistons',favored_side:'Under 226.5',game_confidence:66.4,net_edge:10.0,game_decision:'LEAN',_game_time:'2026-02-27T19:10:00-05:00',bets_pct:38,money_pct:62,open_line:'226.5',current_line:'224.5',timing_bucket:'MID'},
@@ -2864,26 +2865,48 @@ async function loadAll(){
   let freshJson=null;
   try{ const r=await fetch('/data/freshness.json?_='+Date.now()); if(r.ok) freshJson=await r.json(); } catch(e){}
   // Phase 1: load dashboard + lightweight data (fast render)
-  const[dash,ledger,results,kpi]=await Promise.all([
+  const[dash,ledger,results,kpi,freeze]=await Promise.all([
     loadCSV(DASH_URL),
     loadCSV(LEDGER_URL),
     loadCSV(RESULTS_URL),
     loadCSV('/data/kpi_master_dataset.csv'),
+    loadCSV(FREEZE_URL),
   ]);
   updateFreshness(freshJson);
   const dashRaw=dash||MOCK_DASH;
   allLedger=ledger||MOCK_LEDGER;
   allResults=results||MOCK_RESULTS;
   allKPI=kpi||[];
+  // Build freeze ledger lookup: (game_id|market_display) → highest frozen decision
+  const _freezeMap={};
+  const _decRankMap={"NO_BET":0,"NO BET":0,"LOCKED":0,"LEAN":1,"BET":2,"STRONG_BET":3};
+  if(freeze&&freeze.length){
+    freeze.forEach(r=>{
+      const k=(r.game_id||'')+'|'+(r.market_display||'');
+      const rank=_decRankMap[(r.game_decision||'').toUpperCase()]||0;
+      if(!_freezeMap[k]||rank>(_decRankMap[(_freezeMap[k]).toUpperCase()]||0)){
+        _freezeMap[k]=r.game_decision;
+      }
+    });
+  }
 
   // Dashboard CSV already has bets_pct, money_pct, open_line, current_line from engine
   allDash=dashRaw.map(r=>{
     const mkt=r.market_display;
+    // Overlay frozen decision if it exists and is higher rank
+    const fk=(r.game_id||'')+'|'+(r.market_display||'');
+    const frozenDec=_freezeMap[fk]||'';
+    const curDec=(r.game_decision||'').toUpperCase();
+    const frozenRank=_decRankMap[frozenDec.toUpperCase()]||0;
+    const curRank=_decRankMap[curDec]||0;
+    const useFrozen=frozenDec&&frozenRank>curRank;
     return {...r,
       bets_pct:Number(r.bets_pct)||null,
       money_pct:Number(r.money_pct)||null,
       open_line:r.open_line?parseLine(r.open_line,mkt):null,
       current_line:r.current_line?parseLine(r.current_line,mkt):null,
+      game_decision:useFrozen?frozenDec:r.game_decision,
+      _frozen_decision:useFrozen,
     };
   });
 

@@ -64,9 +64,9 @@ def certify_decision(row: dict, score: float, net_edge: float,
     if final_10min:
         return _result("LEAN", "FINAL_10MIN", False, False)
 
-    # ── LATE/LIVE timing cap: BET-eligible → LEAN (timing window closed) ──
-    if timing_bucket in ("LATE", "LIVE"):
-        return _result("LEAN", f"{timing_bucket} timing", False, False, is_locked=(timing_bucket == "LIVE"))
+    # ── LIVE timing cap: BET-eligible → LEAN (game in progress) ──
+    if timing_bucket == "LIVE":
+        return _result("LEAN", "LIVE timing", False, False, is_locked=True)
 
     # ── BET eligible — check STRONG gates ──
     blocked_by = _check_strong_gates(

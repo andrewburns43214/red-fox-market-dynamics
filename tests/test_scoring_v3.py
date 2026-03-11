@@ -502,10 +502,10 @@ class Test1E_TimingCrossMarket(unittest.TestCase):
         self.assertEqual(result["timing_score"], -2)
 
     def test_1E_04_late_base(self):
-        """LATE + BUYBACK → timing = -3."""
+        """LATE + BUYBACK → timing = 0 (no LATE penalty in v3.3l)."""
         row = _base_row(timing_bucket="LATE", l1_path_behavior="BUYBACK")
         result = compute_timing_modifier(row)
-        self.assertEqual(result["timing_score"], -3)
+        self.assertEqual(result["timing_score"], 0)
 
     def test_1E_05_late_reversed_minus_5(self):
         """LATE + REVERSED → timing = -5 (non-NBA sport)."""
@@ -671,12 +671,12 @@ class Test2B_StrongGates(unittest.TestCase):
         self.assertEqual(result["decision"], "BET")
         self.assertIn("L1 absent", result["blocked_by"])
 
-    def test_2B_02_late_caps_at_lean(self):
-        """LATE timing caps BET-eligible at LEAN."""
+    def test_2B_02_late_reaches_bet_not_strong(self):
+        """LATE timing: BET-eligible score reaches BET, but STRONG gate blocks LATE."""
         row = self._strong_row(timing_bucket="LATE")
         result = certify_decision(row, 74, 10, strong_streak=2,
                                   peak_score=74, last_score=74)
-        self.assertEqual(result["decision"], "LEAN")
+        self.assertEqual(result["decision"], "BET")
         self.assertEqual(result["blocked_by"], "LATE timing")
 
     def test_2B_03_public_drift_blocks_strong(self):
@@ -709,20 +709,20 @@ class Test2B_StrongGates(unittest.TestCase):
                                   peak_score=74, last_score=74)
         self.assertEqual(result["decision"], "BET")
 
-    def test_2B_08_ncaab_late_caps_at_lean(self):
-        """NCAAB LATE also caps at LEAN — no sport exception."""
+    def test_2B_08_ncaab_late_reaches_bet(self):
+        """NCAAB LATE reaches BET — STRONG gate still blocks LATE."""
         row = self._strong_row(sport="ncaab", timing_bucket="LATE")
         result = certify_decision(row, 74, 10, strong_streak=3,
                                   peak_score=74, last_score=74)
-        self.assertEqual(result["decision"], "LEAN")
+        self.assertEqual(result["decision"], "BET")
         self.assertEqual(result["blocked_by"], "LATE timing")
 
-    def test_2B_09_late_score_68_gets_lean_not_bet(self):
-        """Regression: LATE row with score 68 (BET-eligible) → LEAN."""
+    def test_2B_09_late_score_68_gets_bet(self):
+        """LATE row with score 68 (BET-eligible) → BET (no LATE cap). STRONG blocked by score < 70."""
         row = self._strong_row(timing_bucket="LATE")
         result = certify_decision(row, 68, 10)
-        self.assertEqual(result["decision"], "LEAN")
-        self.assertEqual(result["blocked_by"], "LATE timing")
+        self.assertEqual(result["decision"], "BET")
+        self.assertIn("score 68", result["blocked_by"])
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1623,10 +1623,10 @@ class Test8_IsLocked(unittest.TestCase):
         self.assertFalse(result["is_locked"])
 
     def test_8_05_late_not_locked(self):
-        """LATE timing → LEAN but is_locked=False (LATE is not LIVE)."""
+        """LATE timing → BET (no LATE cap), is_locked=False."""
         row = _base_row(timing_bucket="LATE")
         result = certify_decision(row, score=70, net_edge=10)
-        self.assertEqual(result["decision"], "LEAN")
+        self.assertEqual(result["decision"], "BET")
         self.assertFalse(result["is_locked"])
 
     def test_8_06_live_strong_gates_blocked(self):
