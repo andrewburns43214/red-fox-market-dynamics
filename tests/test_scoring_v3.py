@@ -1642,5 +1642,64 @@ class Test8_IsLocked(unittest.TestCase):
         self.assertTrue(result["is_locked"])
 
 
+class Test9_MLFavDampening(unittest.TestCase):
+    """ML heavy favorite score dampening tests."""
+
+    def _ml_row(self, odds):
+        return _base_row(
+            sport="nba", market_display="MONEYLINE",
+            l1_available=True, l1_present=True,
+            l1_pinnacle_moved=True, l1_pinnacle_direction=1,
+            l1_sharp_agreement=2, l1_support_agreement=1,
+            l1_move_magnitude_raw=70.0, l1_move_dir=1,
+            l1_path_behavior="HELD",
+            current_odds=odds,
+            timing_bucket="MID",
+            l2_available=True, l2_consensus_agreement=0.8,
+            l2_dispersion_label="TIGHT", l2_n_books=15,
+            move_dir=1, effective_move_mag=1.0,
+        )
+
+    def test_9_01_no_dampening_short_fav(self):
+        """ML -150: no dampening (above -180 floor)."""
+        r = self._ml_row(odds=-150)
+        result = compute_v3_score(r)
+        self.assertGreater(result["final_score"], 70)
+
+    def test_9_02_dampening_200(self):
+        """ML -200: 0.90x dampening on excess above 50."""
+        r = self._ml_row(odds=-200)
+        undampened = self._ml_row(odds=-150)
+        r_score = compute_v3_score(r)["final_score"]
+        u_score = compute_v3_score(undampened)["final_score"]
+        self.assertLess(r_score, u_score)
+
+    def test_9_03_dampening_1200(self):
+        """ML -1200: 0.60x dampening — heavy compression."""
+        r = self._ml_row(odds=-1200)
+        result = compute_v3_score(r)
+        # Undampened would be ~91. Dampened = 50 + 41.4*0.60 = 74.8
+        self.assertLess(result["final_score"], 80)
+        self.assertGreater(result["final_score"], 60)
+
+    def test_9_04_spread_not_dampened(self):
+        """Spread market: no favorite dampening regardless of odds."""
+        r = _base_row(
+            sport="nba", market_display="SPREAD",
+            l1_available=True, l1_present=True,
+            l1_pinnacle_moved=True, l1_pinnacle_direction=1,
+            l1_sharp_agreement=2, l1_support_agreement=1,
+            l1_move_magnitude_raw=5.0, l1_move_dir=1,
+            l1_path_behavior="HELD",
+            current_odds=-200,
+            timing_bucket="MID",
+            l2_available=True, l2_consensus_agreement=0.8,
+            l2_dispersion_label="TIGHT", l2_n_books=15,
+            move_dir=1, effective_move_mag=1.0,
+        )
+        result = compute_v3_score(r)
+        self.assertGreater(result["final_score"], 60)
+
+
 if __name__ == "__main__":
     unittest.main()

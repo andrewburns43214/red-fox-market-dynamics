@@ -226,6 +226,16 @@ ML_PRICE_CREDIBILITY = [
     (0, 0.50),    # < 15% implied prob (extreme dogs)
 ]
 
+# ML heavy favorite dampening — compress score excess above BASE
+# Applied to final score, not sharp component. Only for MONEYLINE.
+ML_FAV_DAMPENING_FLOOR = -180   # only dampen odds worse than -180
+ML_FAV_DAMPENING = [
+    (-200, 0.90),   # -180 to -200: 90% of excess
+    (-250, 0.80),   # -201 to -250: 80% of excess
+    (-350, 0.70),   # -251 to -350: 70% of excess
+    (-9999, 0.60),  # worse than -350: 60% of excess
+]
+
 # ─── PATTERNS (output labels only, never affect score) ───
 PATTERNS = {
     "SHARP_REVERSAL": "L1 moved + public heavy opposite + path HELD/EXTENDED",

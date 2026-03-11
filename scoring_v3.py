@@ -463,6 +463,21 @@ def compute_v3_score(row: dict) -> dict:
 
     final_score = max(0, min(100, round(raw, 1)))
 
+    # ML heavy favorite dampening — compress excess above BASE
+    ml_fav_mult = 1.0
+    market = (row.get("market_display") or row.get("market") or "").upper()
+    if market == "MONEYLINE":
+        odds = _num(row.get("current_odds", 0))
+        if odds < C.ML_FAV_DAMPENING_FLOOR:
+            excess = final_score - C.BASE
+            if excess > 0:
+                ml_fav_mult = C.ML_FAV_DAMPENING[-1][1]
+                for threshold, mult in C.ML_FAV_DAMPENING:
+                    if odds >= threshold:
+                        ml_fav_mult = mult
+                        break
+                final_score = round(C.BASE + excess * ml_fav_mult, 1)
+
     # Pattern detection (output label only — never affects score)
     patterns = _detect_pattern(row, sharp, consensus, retail)
     explanation = _build_explanation(row, sharp, consensus, retail, timing, cross, final_score, market_rx)
