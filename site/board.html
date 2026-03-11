@@ -2882,6 +2882,10 @@ async function loadAll(){
   const _decRankMap={"NO_BET":0,"NO BET":0,"LOCKED":0,"LEAN":1,"BET":2,"STRONG_BET":3};
   if(freeze&&freeze.length){
     freeze.forEach(r=>{
+      // Only use favored side's freeze entry — non-favored side keeps its own decision
+      const s=(r.side||'').replace(/\s*[+-]?\d+\.?\d*\s*$/,'').trim();
+      const f=(r.favored_side||'').replace(/\s*[+-]?\d+\.?\d*\s*$/,'').trim();
+      if(s&&f&&s!==f) return;
       const k=(r.game_id||'')+'|'+(r.market_display||'');
       const rank=_decRankMap[(r.game_decision||'').toUpperCase()]||0;
       if(!_freezeMap[k]||rank>(_decRankMap[(_freezeMap[k]).toUpperCase()]||0)){
