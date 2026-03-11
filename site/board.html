@@ -1326,7 +1326,7 @@ thead th.th-play { text-align: left; }
             <thead><tr>
               <th style="min-width:80px;text-align:left">Time</th>
               <th style="min-width:100px;text-align:left">Pick</th>
-              <th style="min-width:100px;text-align:left">Line</th>
+              <th style="min-width:100px;text-align:left">Pattern</th>
               <th style="min-width:50px;text-align:left">Score Gap</th>
               <th style="min-width:70px;text-align:left">Confidence</th>
               <th style="min-width:80px;text-align:left">Decision</th>
@@ -1978,7 +1978,7 @@ function openGameDetail(r){
         html+='<div id="'+uid+mk+'" class="'+uid+'" style="'+(mi>0?'display:none':'')+'">';
         html+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px">';
         html+='<thead><tr style="background:var(--bg4)">';
-        ['Time','Pick','Line','Score Gap','Confidence','Decision'].forEach(col=>{
+        ['Time','Pick','Pattern','Score Gap','Confidence','Decision'].forEach(col=>{
           html+='<th style="padding:5px 8px;text-align:left;font-weight:700;color:var(--text3);border-bottom:1px solid var(--border);white-space:nowrap">'+col+'</th>';
         });
         html+='</tr></thead><tbody>';
@@ -1990,18 +1990,23 @@ function openGameDetail(r){
           const dec=h.game_decision||'';
           const prevDec=i>0?(rows[i-1].game_decision||''):'';
           const decChanged=dec!==prevDec&&i>0;
-          const rawLine=h.current_line||h.open_line||'--';
-          const line=(()=>{if(!rawLine||rawLine==='--'||rawLine==='nan') return '--'; const mt=rawLine.match(/^(Over|Under)\s+(\d+\.?\d*)\s*@\s*([+-]?\d+)/); if(mt) return (mt[1]==='Over'?'O':'U')+' '+mt[2]+' ('+mt[3]+')'; const ms=rawLine.match(/([+-]\d+\.?\d*)\s*@\s*([+-]?\d+)/); if(ms) return ms[1]+' ('+ms[2]+')'; const mm=rawLine.match(/@\s*([+-]?\d+)/); if(mm) return mm[1]; const m2=rawLine.match(/([+-]?\d+\.?\d*)/); if(m2) return m2[1]; return rawLine;})();
-          const pick=h.favored_side||'--';
+          const rawLine=h.current_line||h.open_line||'';
+          const rawPick=h.favored_side||'--';
+          const mktU=mk.toUpperCase();
+          let pick=rawPick;
+          if(mktU==='MONEYLINE'&&rawLine){ const jm=rawLine.match(/@\s*([+-]?\d+)/); if(jm) pick=rawPick+' ('+jm[1]+')'; }
+          const pat=(h.pattern_primary||'--').replace(/_/g,' ');
+          const prevPat=i>0?(rows[i-1].pattern_primary||''):'';
+          const patChanged=pat.replace(/ /g,'_')!==prevPat&&prevPat&&i>0;
           const prevTotal=i>0?Number(rows[i-1].total_score||rows[i-1].game_confidence||0):total;
           const totalDelta=total-prevTotal;
           const totalCol=totalDelta>0.5?'color:#00965a;font-weight:700':totalDelta<-0.5?'color:#d63020;font-weight:700':'color:var(--text)';
 
-          const rowBg=decChanged?'background:#fffbeb':'';
+          const rowBg=(decChanged||patChanged)?'background:#fffbeb':'';
           html+='<tr style="border-bottom:1px solid var(--bg4);'+rowBg+'">';
           html+='<td style="padding:4px 8px;color:var(--text3);white-space:nowrap;font-size:10px">'+ts+'</td>';
-          html+='<td style="padding:4px 8px;color:var(--text2);white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis">'+pick+'</td>';
-          html+='<td style="padding:4px 8px;color:var(--text);font-weight:600;white-space:nowrap">'+line+'</td>';
+          html+='<td style="padding:4px 8px;color:var(--text2);white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis">'+pick+'</td>';
+          html+='<td style="padding:4px 8px;color:var(--text);font-weight:600;white-space:nowrap;font-size:10px">'+pat+'</td>';
           html+='<td style="padding:4px 8px;color:var(--text)">'+edge.toFixed(0)+'</td>';
           html+='<td style="padding:4px 8px;'+totalCol+'">'+total.toFixed(1)+'</td>';
           if(decChanged){
@@ -2147,16 +2152,23 @@ async function renderHistory(){
     const curDec=r.game_decision||'';
     const prevDec=r._prevDec||'';
     const decChanged=curDec!==prevDec&&i>0;
-    const pick=r.favored_side||r.side||'--';
-    const rawLine=r.current_line||r.open_line||'--';
-    const line=_fmtLine(rawLine);
-    const prevLine=r._prevLine||'';
-    const lineChanged=prevLine&&line!==_fmtLine(prevLine)&&i>0;
+    const rawPick=r.favored_side||r.side||'--';
+    const rawLine=r.current_line||r.open_line||'';
+    // For ML, append juice from current_line to pick (e.g. "NSH Predators" → "NSH Predators -110")
+    const mkt=(r.market_display||'').toUpperCase();
+    let pick=rawPick;
+    if(mkt==='MONEYLINE'&&rawLine){
+      const jm=rawLine.match(/@\s*([+-]?\d+)/);
+      if(jm) pick=rawPick+' ('+jm[1]+')';
+    }
+    const pat=r.pattern_primary||'--';
+    const prevPat=i>0?(rows[Math.min(i+1,rows.length-1)].pattern_primary||''):'';
+    const patChanged=pat!==prevPat&&prevPat&&i>0;
     const prevTotal=r._prevScore!=null?Number(r._prevScore):total;
     const totalDelta=total-prevTotal;
     const totalCol=totalDelta>0.5?'color:#00965a;font-weight:700':totalDelta<-0.5?'color:#d63020;font-weight:700':'color:var(--text)';
-    const rowBg=(decChanged||lineChanged)?'background:#fffbeb':'';
-    const lineSty=lineChanged?'color:#d48000;font-weight:700':'color:var(--text);font-weight:600';
+    const rowBg=(decChanged||patChanged)?'background:#fffbeb':'';
+    const patSty=patChanged?'color:#d48000;font-weight:700':'color:var(--text);font-weight:600';
     let decHtml;
     if(decChanged){
       decHtml='<td style="padding:4px 8px;font-weight:700;color:#d48000;white-space:nowrap">'+prevDec+' &rarr; '+curDec+'</td>';
@@ -2166,8 +2178,8 @@ async function renderHistory(){
     }
     return '<tr style="border-bottom:1px solid var(--bg4);'+rowBg+'">'+
       '<td style="padding:4px 8px;color:var(--text3);white-space:nowrap;font-size:10px">'+tStr+'</td>'+
-      '<td style="padding:4px 8px;color:var(--text2);white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis">'+pick+'</td>'+
-      '<td style="padding:4px 8px;'+lineSty+';white-space:nowrap;font-family:var(--mono)">'+line+'</td>'+
+      '<td style="padding:4px 8px;color:var(--text2);white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis">'+pick+'</td>'+
+      '<td style="padding:4px 8px;'+patSty+';white-space:nowrap;font-size:10px">'+pat.replace(/_/g,' ')+'</td>'+
       '<td style="padding:4px 8px;color:var(--text)">'+edge.toFixed(0)+'</td>'+
       '<td style="padding:4px 8px;'+totalCol+'">'+total.toFixed(1)+'</td>'+
       decHtml+
