@@ -243,7 +243,7 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
         row.get("freeze_subtype_candidate") or row.get("semantic_reaction_state")
     )
     freeze_role = _text(row.get("freeze_role")).lower()
-    if freeze_subtype == "FREEZE_RESISTANCE":
+    if freeze_subtype == "FREEZE_RESISTANCE" and freeze_role == "opposite":
         state = "FREEZE_RESISTANCE"
 
     score = 50.0
