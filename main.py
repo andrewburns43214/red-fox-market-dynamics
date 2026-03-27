@@ -6204,6 +6204,7 @@ def resolve_results_for_baseline():
     snap_path = data_dir / "snapshots.csv"
     hist_path = data_dir / "final_scores_history.csv"
     out_path  = data_dir / "results_resolved.csv"
+    kpi_path  = data_dir / "kpi_master_dataset.csv"
 
     if not snap_path.exists() or not hist_path.exists():
         print("[outcomes] missing snapshots or final history")
@@ -6591,8 +6592,10 @@ def resolve_results_for_baseline():
     merged = merged[cols]
 
     merged.to_csv(out_path, index=False)
+    merged.to_csv(kpi_path, index=False)
 
     print(f"[outcomes] rebuilt results_resolved.csv with {len(merged)} rows")
+    print(f"[outcomes] rebuilt kpi_master_dataset.csv with {len(merged)} rows")
 
 def cmd_odds_snapshot(args):
     """Fetch L1 (sharp) + L2 (consensus) via The-Odds-API for a sport."""
