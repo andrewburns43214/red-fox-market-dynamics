@@ -5437,6 +5437,8 @@ def cmd_report_live(_args):
     except Exception as _e:
         print(f"[dash] net_edge post-fix failed: {repr(_e)}")
 
+    print("[report] done")
+
 
 def cmd_report_maintenance(_args):
     # ESPN finals (results) update is best-effort; never block maintenance
