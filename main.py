@@ -3801,50 +3801,23 @@ def build_dashboard():
             _semantic_owner.eq("opposite")
         )
         if _freeze_opp_mask.any():
-            _row_fields_to_swap = [
-                "side",
-                "side_key",
-                "current_line",
-                "current_line_val",
-                "current_odds",
-                "open_line",
-                "open_line_val",
-                "open_odds",
-                "prev_current_line",
-                "prev_line_val",
-                "prev_odds",
-                "bets_pct",
-                "money_pct",
-                "v4_score",
-                "confidence_score",
-                "total_score",
-                "net_edge",
-                "score_explanation",
-                "expression",
-                "expression_reason",
-                "color",
-                "move_dir",
-                "market_read",
-                "timing_bucket",
-                "odds_move_open",
-                "line_move_open",
-                "odds_move_prev",
-                "line_move_prev",
-                "effective_move_mag",
-            ]
             for (_gid, _mkt), _grp in latest.loc[_freeze_opp_mask].groupby(["game_id", "market_display"], dropna=False):
                 if len(_grp) != 2:
                     continue
-                _grp_idx = list(_grp.index)
-                _grp_rows = latest.loc[_grp_idx]
-                for _idx in _grp_idx:
-                    _other = _grp_rows.drop(index=_idx)
-                    if len(_other) != 1:
-                        continue
-                    _other_row = _other.iloc[0]
-                    for _field in _row_fields_to_swap:
-                        if _field in latest.columns and _field in _other_row.index:
-                            latest.at[_idx, _field] = _other_row.get(_field, latest.at[_idx, _field])
+                _grp_rows = latest.loc[_grp.index].copy()
+                _bets = pd.to_numeric(_grp_rows.get("bets_pct"), errors="coerce").fillna(0.0)
+                _money = pd.to_numeric(_grp_rows.get("money_pct"), errors="coerce").fillna(0.0)
+                _pressure_idx = (_bets + _money).idxmax()
+                _opp_idx = [i for i in _grp_rows.index if i != _pressure_idx]
+                if len(_opp_idx) != 1:
+                    continue
+                _opp_idx = _opp_idx[0]
+                _pressure_score = pd.to_numeric(latest.at[_pressure_idx, "confidence_score"], errors="coerce")
+                if pd.isna(_pressure_score):
+                    _pressure_score = 50.0
+                latest.at[_opp_idx, "confidence_score"] = float(_pressure_score) + 2.0
+                if "v4_score" in latest.columns:
+                    latest.at[_opp_idx, "v4_score"] = float(_pressure_score) + 2.0
     except Exception:
         pass
     # Temporary debug — ML price credibility (remove after 1-2 runs)
