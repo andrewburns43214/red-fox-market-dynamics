@@ -2668,8 +2668,8 @@ function updateFreshness(f){
   function fmtTime(ts){ if(!ts) return '--'; const d=new Date(ts); if(isNaN(d)) return '--'; return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
   // Per-source: {name, ts, freshThresh, warnThresh}
   const sources=[
-    {name:'DK', ts:f.dk_ts, fresh:15, warn:30},
-    {name:'Engine', ts:f.engine_ts, fresh:15, warn:30}
+    {name:'DK', label:'Last snapshot', ts:f.dk_ts, fresh:15, warn:30},
+    {name:'Engine', label:'Engine run', ts:f.engine_ts, fresh:15, warn:30}
   ];
   let worst=0; // 0=live, 1=degraded, 2=stale
   let srcHtml='';
@@ -2679,7 +2679,7 @@ function updateFreshness(f){
     if(age>s.warn){ st='bad'; lvl=2; }
     else if(age>s.fresh){ st='warn'; lvl=1; }
     worst=Math.max(worst,lvl);
-    srcHtml+=`<span class="fresh-src"><span class="fs-dot ${st}"></span><span class="fs-name">${s.name}</span><span class="fs-age">${fmtTime(s.ts)} (${fmtAge(age)})</span></span>`;
+    srcHtml+=`<span class="fresh-src"><span class="fs-dot ${st}"></span><span class="fs-name">${s.label||s.name}</span><span class="fs-age">${fmtTime(s.ts)} (${fmtAge(age)})</span></span>`;
   });
   const dot=document.getElementById('fresh-dot');
   const lbl=document.getElementById('fresh-label');
@@ -2697,7 +2697,7 @@ function updateFreshness(f){
       const age=ageMin(s.ts);
       let st='ok';
       if(age>s.warn) st='bad'; else if(age>s.fresh) st='warn';
-      sh+=`<div class="si"><span class="fs-dot ${st}" style="width:6px;height:6px;display:inline-block;border-radius:50%;margin-right:4px"></span><span>${s.name}</span><span class="v">${fmtTime(s.ts)} (${fmtAge(age)})</span></div>`;
+      sh+=`<div class="si"><span class="fs-dot ${st}" style="width:6px;height:6px;display:inline-block;border-radius:50%;margin-right:4px"></span><span>${s.label||s.name}</span><span class="v">${fmtTime(s.ts)} (${fmtAge(age)})</span></div>`;
     });
     sbf.innerHTML=sh;
   }
