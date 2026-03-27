@@ -3712,6 +3712,13 @@ def build_dashboard():
             if _semantic_state_hint.startswith("FREEZE_"):
                 _v3_row_dict["freeze_subtype_candidate"] = _semantic_state_hint
                 _v3_row_dict["semantic_reaction_state"] = _semantic_state_hint
+                _pressure_side_hint = str(_semantic_ctx.get("pressure_side") or "").strip()
+                _current_side_hint = str(side).strip()
+                if _pressure_side_hint:
+                    if _current_side_hint == _pressure_side_hint:
+                        _v3_row_dict["freeze_role"] = "pressure"
+                    else:
+                        _v3_row_dict["freeze_role"] = "opposite"
         _v3_row_dict["spread_move_map"] = _spread_move_map
         _v4_result = score_reaction(_v3_row_dict)
         if _semantic_result is None:

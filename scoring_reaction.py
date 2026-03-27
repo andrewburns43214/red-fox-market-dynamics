@@ -242,6 +242,7 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
     freeze_subtype = _upper(
         row.get("freeze_subtype_candidate") or row.get("semantic_reaction_state")
     )
+    freeze_role = _text(row.get("freeze_role")).lower()
     if freeze_subtype == "FREEZE_RESISTANCE":
         state = "FREEZE_RESISTANCE"
 
@@ -289,6 +290,18 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
         if line_dir_changes >= 1:
             score -= 8.0
             reasons.append("resistance lost stability")
+
+    if freeze_subtype == "FREEZE_RESISTANCE" and freeze_role == "pressure":
+        score -= 10.0
+        reasons.append("public side being resisted by book")
+
+        if money_pct >= 75:
+            score -= 4.0
+            reasons.append("heavy money pressure absorbed against this side")
+
+        if bets_pct >= 70:
+            score -= 4.0
+            reasons.append("heavy ticket pressure absorbed against this side")
 
     if divergence >= 25:
         score += 8.0
