@@ -3699,15 +3699,28 @@ def build_dashboard():
         _cm_data = _cross_mkt_ctx.get((_cm_gid, _cm_sk), {})
         _v3_row_dict.update(_cm_data)
         _v3_row_dict.update(_game_favored.get(_cm_gid, {}))
+        _semantic_ctx = _market_context_lookup.get((_cm_gid, str(mkt).strip()), {})
+        _semantic_result = None
+        if _semantic_ctx.get("market_rows"):
+            _semantic_result = classify_reaction_live(
+                _v3_row_dict,
+                market_rows=_semantic_ctx.get("market_rows"),
+                evaluated_side=str(side).strip(),
+                pressure_side=_semantic_ctx.get("pressure_side"),
+            )
+            _semantic_state_hint = str(_semantic_result.get("semantic_reaction_state", "")).strip().upper()
+            if _semantic_state_hint.startswith("FREEZE_"):
+                _v3_row_dict["freeze_subtype_candidate"] = _semantic_state_hint
+                _v3_row_dict["semantic_reaction_state"] = _semantic_state_hint
         _v3_row_dict["spread_move_map"] = _spread_move_map
         _v4_result = score_reaction(_v3_row_dict)
-        _semantic_ctx = _market_context_lookup.get((_cm_gid, str(mkt).strip()), {})
-        _semantic_result = classify_reaction_live(
-            _v3_row_dict,
-            market_rows=_semantic_ctx.get("market_rows"),
-            evaluated_side=str(side).strip(),
-            pressure_side=_semantic_ctx.get("pressure_side"),
-        )
+        if _semantic_result is None:
+            _semantic_result = classify_reaction_live(
+                _v3_row_dict,
+                market_rows=_semantic_ctx.get("market_rows"),
+                evaluated_side=str(side).strip(),
+                pressure_side=_semantic_ctx.get("pressure_side"),
+            )
         _v4_result.update(_semantic_result)
         score = _v4_result["reaction_score"]
         _v3_result = {}

@@ -239,12 +239,18 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
         public_side=public_side,
         move_dir=move_dir,
     )
+    freeze_subtype = _upper(
+        row.get("freeze_subtype_candidate") or row.get("semantic_reaction_state")
+    )
+    if freeze_subtype == "FREEZE_RESISTANCE":
+        state = "FREEZE_RESISTANCE"
 
     score = 50.0
     reasons = []
 
     state_base = {
         "FREEZE": 18.0,
+        "FREEZE_RESISTANCE": 10.0,
         "FOLLOW": 10.0,
         # FADE is an anti-signal for the displayed side and should depress confidence.
         "FADE": -12.0,
@@ -256,6 +262,34 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
     score += state_base[state]
     reasons.append(_state_reason(state))
 
+    if state == "FREEZE_RESISTANCE":
+        score += 10.0
+        reasons.append("meaningful pressure held firm")
+
+        if money_pct >= 75:
+            score += 6.0
+            reasons.append("heavy money pressure absorbed")
+
+        if bets_pct >= 70:
+            score += 4.0
+            reasons.append("heavy ticket pressure absorbed")
+
+        if line_settled_ticks >= 3:
+            score += 6.0
+            reasons.append("held across multiple settled ticks")
+
+        if line_settled_ticks >= 5:
+            score += 4.0
+            reasons.append("extended hold stability")
+
+        if odds_move_open > 0:
+            score += 4.0
+            reasons.append("juice moved against public side")
+
+        if line_dir_changes >= 1:
+            score -= 8.0
+            reasons.append("resistance lost stability")
+
     if divergence >= 25:
         score += 8.0
         reasons.append("large money/bets divergence")
@@ -266,15 +300,16 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
         score -= 6.0
         reasons.append("money trails bets")
 
-    if effective_move_mag >= 1.5:
-        score += 8.0
-        reasons.append("strong market move")
-    elif effective_move_mag >= 0.5:
-        score += 4.0
-        reasons.append("meaningful market move")
-    elif effective_move_mag == 0 and public_side != 0:
-        score -= 2.0
-        reasons.append("no meaningful move")
+    if state != "FREEZE_RESISTANCE":
+        if effective_move_mag >= 1.5:
+            score += 8.0
+            reasons.append("strong market move")
+        elif effective_move_mag >= 0.5:
+            score += 4.0
+            reasons.append("meaningful market move")
+        elif effective_move_mag == 0 and public_side != 0:
+            score -= 2.0
+            reasons.append("no meaningful move")
 
     if persistence == "STABLE":
         score += 6.0
@@ -757,6 +792,7 @@ def _is_stale(
 def _state_reason(state: str) -> str:
     return {
         "FREEZE": "public pressure without meaningful move",
+        "FREEZE_RESISTANCE": "book held firm against meaningful public pressure",
         "FOLLOW": "book moved with pressure",
         "FADE": "book moved against pressure",
         "INITIATED": "book moved before clear public pressure",
