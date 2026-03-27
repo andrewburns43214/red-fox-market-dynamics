@@ -395,7 +395,7 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
             g = str(game_str) if pd.notna(game_str) else ""
             if " @ " in g:
                 parts = g.split(" @ ", 1)
-                return normalize_team_name(parts[1].strip()), normalize_team_name(parts[0].strip())
+                return normalize_team_name(parts[1].strip(), sport=sport_lower), normalize_team_name(parts[0].strip(), sport=sport_lower)
             return "", ""
         _teams = dk_df["game"].apply(_parse_teams)
         dk_df["home_team_norm"] = _teams.apply(lambda t: t[0])
@@ -586,5 +586,227 @@ def merge_all_layers(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
     if "layer_mode" in dk_df.columns:
         mode_counts = dk_df["layer_mode"].value_counts().to_dict()
         print(f"  Layer modes: {mode_counts}")
+
+    return dk_df
+
+
+def enrich_context(dk_df: pd.DataFrame, sport: str = None) -> pd.DataFrame:
+    """
+    Lightweight live-path enricher.
+
+    Keeps situational and sport-context data that still feeds the UI:
+      - injuries / rest / b2b
+      - weather
+      - MLB pitcher + park context
+      - NHL goalie context
+      - NCAAB rankings
+
+    Intentionally skips all L1/L2 sharp/consensus merge work.
+    """
+    if dk_df is None or dk_df.empty:
+        return dk_df
+
+    sport_lower = (sport or "").lower()
+
+    situational = None
+    if sport:
+        try:
+            situational = fetch_all_situational(sport)
+        except Exception as e:
+            print(f"[WARN] situational fetch for {sport}: {repr(e)}")
+            situational = None
+
+    def _build_canon(r):
+        if pd.notna(r.get("game")) and str(r.get("game", "")).strip():
+            game_str = str(r["game"])
+            row_sport = r.get("sport", sport or "")
+            raw_start = r.get("dk_start_iso", "")
+            start_iso = str(raw_start).strip() if pd.notna(raw_start) and raw_start else ""
+            if not start_iso:
+                raw_ts = r.get("timestamp", "")
+                start_iso = str(raw_ts).strip() if pd.notna(raw_ts) and raw_ts else ""
+            if not start_iso:
+                from datetime import datetime, timezone
+                start_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            return build_canonical_key_from_dk(game_str, row_sport, start_iso)
+        return ""
+
+    if "canonical_key" not in dk_df.columns:
+        if "game" in dk_df.columns:
+            dk_df["canonical_key"] = dk_df.apply(_build_canon, axis=1)
+        else:
+            dk_df["canonical_key"] = ""
+    else:
+        empty_mask = dk_df["canonical_key"].isna() | (dk_df["canonical_key"] == "")
+        if empty_mask.any() and "game" in dk_df.columns:
+            dk_df.loc[empty_mask, "canonical_key"] = dk_df.loc[empty_mask].apply(_build_canon, axis=1)
+
+    if "market" not in dk_df.columns and "market_key" in dk_df.columns:
+        dk_df["market"] = dk_df["market_key"]
+    if "side" in dk_df.columns:
+        dk_df["market"] = dk_df.apply(lambda r: _infer_market_type(r), axis=1)
+
+    if "home_team_norm" not in dk_df.columns and "game" in dk_df.columns:
+        def _parse_teams(game_str):
+            g = str(game_str) if pd.notna(game_str) else ""
+            if " @ " in g:
+                parts = g.split(" @ ", 1)
+                return normalize_team_name(parts[1].strip(), sport=sport_lower), normalize_team_name(parts[0].strip(), sport=sport_lower)
+            return "", ""
+        _teams = dk_df["game"].apply(_parse_teams)
+        dk_df["home_team_norm"] = _teams.apply(lambda t: t[0])
+        dk_df["away_team_norm"] = _teams.apply(lambda t: t[1])
+
+    for col, default in SITUATIONAL_DEFAULTS.items():
+        dk_df[col] = default if not isinstance(default, list) else [default.copy() for _ in range(len(dk_df))]
+
+    _pitcher_lookup = {}
+
+    if situational:
+        injuries = situational.get("injuries", {})
+        rest_days = situational.get("rest_days", {})
+        pitchers = situational.get("pitchers", {})
+
+        for idx, row in dk_df.iterrows():
+            home = row.get("home_team_norm", "")
+            away = row.get("away_team_norm", "")
+
+            dk_df.at[idx, "home_injury_count"] = len(injuries.get(home, []))
+            dk_df.at[idx, "away_injury_count"] = len(injuries.get(away, []))
+            dk_df.at[idx, "home_rest_days"] = rest_days.get(home, 1)
+            dk_df.at[idx, "away_rest_days"] = rest_days.get(away, 1)
+
+            home_b2b = rest_days.get(home, 1) == 0
+            away_b2b = rest_days.get(away, 1) == 0
+            if home_b2b and away_b2b:
+                dk_df.at[idx, "b2b_flag"] = "BOTH_B2B"
+            elif home_b2b:
+                dk_df.at[idx, "b2b_flag"] = "HOME_B2B"
+            elif away_b2b:
+                dk_df.at[idx, "b2b_flag"] = "AWAY_B2B"
+
+            if pitchers:
+                match_key = f"{away} @ {home}"
+                pitcher_info = pitchers.get(match_key)
+                if not pitcher_info:
+                    for pk, pv in pitchers.items():
+                        if pv.get("home_team_norm") == home and pv.get("away_team_norm") == away:
+                            pitcher_info = pv
+                            break
+                if pitcher_info:
+                    _pitcher_lookup[idx] = pitcher_info
+
+    _wx_cache = {}
+    for idx, row in dk_df.iterrows():
+        _sport = str(row.get("sport", "")).lower()
+        if _sport not in ("nfl", "ncaaf", "mlb"):
+            continue
+        home = row.get("home_team_norm", "")
+        game_time = str(row.get("dk_start_iso", ""))
+        if not home or not game_time:
+            continue
+        _wx_key = (home, game_time)
+        if _wx_key not in _wx_cache:
+            try:
+                _wx_cache[_wx_key] = get_weather_for_game(_sport, home, game_time)
+            except Exception as e:
+                print(f"[WARN] weather fetch for {_wx_key}: {repr(e)}")
+                _wx_cache[_wx_key] = {}
+        wx = _wx_cache[_wx_key]
+        for col in ("wind_mph", "temp_f", "precip_prob", "weather_flag", "weather_adj"):
+            if col in wx:
+                dk_df.at[idx, col] = wx[col]
+    if _wx_cache:
+        print(f"  Weather: fetched for {len(_wx_cache)} unique game/venue combos")
+
+    _sport_str = str(sport).lower() if sport else ""
+
+    if _sport_str == "mlb":
+        for idx, row in dk_df.iterrows():
+            try:
+                row_dict = row.to_dict()
+                if idx in _pitcher_lookup:
+                    row_dict["pitcher_matchup"] = _pitcher_lookup[idx]
+                ctx = get_mlb_context(row_dict)
+                for col, val in ctx.items():
+                    dk_df.at[idx, col] = val
+                dk_df.at[idx, "sport_context_adj"] = ctx.get("mlb_adj", 0.0)
+                flags = []
+                if ctx.get("sp_flag_home"):
+                    flags.append(f"H:{ctx['sp_flag_home']}")
+                if ctx.get("sp_flag_away"):
+                    flags.append(f"A:{ctx['sp_flag_away']}")
+                if ctx.get("park_factor", 1.0) >= 1.05 or ctx.get("park_factor", 1.0) <= 0.95:
+                    flags.append(f"PF:{ctx['park_factor']:.2f}")
+                dk_df.at[idx, "sport_context_flag"] = "|".join(flags)
+            except Exception as e:
+                print(f"[WARN] MLB context for row {idx}: {repr(e)}")
+        print("  MLB context: pitcher stats + park factors applied")
+
+    elif _sport_str == "nhl":
+        if situational and "goalies" in situational:
+            _goalies = situational["goalies"]
+            for idx, row in dk_df.iterrows():
+                home = row.get("home_team_norm", "")
+                away = row.get("away_team_norm", "")
+                match_key = f"{away} @ {home}"
+                goalie_info = _goalies.get(match_key)
+                if not goalie_info:
+                    for gk, gv in _goalies.items():
+                        if gv.get("home_team_norm") == home and gv.get("away_team_norm") == away:
+                            goalie_info = gv
+                            break
+                try:
+                    row_dict = row.to_dict()
+                    if goalie_info:
+                        row_dict["goalie_matchup"] = goalie_info
+                    ctx = get_nhl_context(row_dict)
+                    for col, val in ctx.items():
+                        dk_df.at[idx, col] = val
+                    dk_df.at[idx, "sport_context_adj"] = ctx.get("nhl_adj", 0.0)
+                    flags = []
+                    if ctx.get("goalie_flag_home"):
+                        flags.append(f"H:{ctx['goalie_flag_home']}")
+                    if ctx.get("goalie_flag_away"):
+                        flags.append(f"A:{ctx['goalie_flag_away']}")
+                    dk_df.at[idx, "sport_context_flag"] = "|".join(flags)
+                except Exception as e:
+                    print(f"[WARN] NHL goalie context for row {idx}: {repr(e)}")
+            print("  NHL context: goalie status applied")
+
+    elif _sport_str == "ncaab":
+        try:
+            _rankings = fetch_ncaab_rankings()
+            if not _rankings.get("error"):
+                _rank_map = _rankings.get("rankings", {})
+                for idx, row in dk_df.iterrows():
+                    home = row.get("home_team_norm", "")
+                    away = row.get("away_team_norm", "")
+                    h_rank = _rank_map.get(home, 0)
+                    a_rank = _rank_map.get(away, 0)
+                    dk_df.at[idx, "rank_home"] = h_rank
+                    dk_df.at[idx, "rank_away"] = a_rank
+                    rank_adj = 0.0
+                    if h_rank > 0 and a_rank > 0:
+                        diff = a_rank - h_rank
+                        if abs(diff) >= 15:
+                            rank_adj = 1.0 if diff > 0 else -1.0
+                        elif abs(diff) >= 8:
+                            rank_adj = 0.5 if diff > 0 else -0.5
+                    elif h_rank > 0 and a_rank == 0:
+                        rank_adj = 0.5
+                    elif a_rank > 0 and h_rank == 0:
+                        rank_adj = -0.5
+                    side = str(row.get("side", "")).lower()
+                    home_lower = str(home).lower()
+                    if home_lower and home_lower in side:
+                        dk_df.at[idx, "sport_context_adj"] = rank_adj
+                    else:
+                        dk_df.at[idx, "sport_context_adj"] = -rank_adj
+                    if h_rank > 0 or a_rank > 0:
+                        dk_df.at[idx, "sport_context_flag"] = f"H:#{h_rank or 'NR'}|A:#{a_rank or 'NR'}"
+                print(f"  NCAAB context: {len(_rank_map)} ranked teams applied")
+        except Exception as e:
+            print(f"  NCAAB rankings skipped: {e}")
 
     return dk_df
