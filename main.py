@@ -3417,7 +3417,11 @@ def build_dashboard():
     # ── Live context enrichment only ──
     # Keeps situational/weather/sport-context data without L1/L2 merge work.
     try:
-        from merge_layers import enrich_context
+        import importlib
+        _merge_layers = importlib.import_module("merge_layers")
+        enrich_context = getattr(_merge_layers, "enrich_context", None)
+        if enrich_context is None:
+            raise AttributeError("merge_layers.enrich_context missing")
         # Enrich per-sport so each sport gets its own situational/context fields
         if "sport" in latest.columns:
             _sport_vals = latest["sport"].dropna().unique()
