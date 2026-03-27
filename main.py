@@ -3635,6 +3635,42 @@ def build_dashboard():
                 _fav["spread_favored_side"] = min(_game_spread_odds[_gid], key=lambda s: _game_spread_odds[_gid][s])
         _game_favored[_gid] = _fav
 
+    # Build deterministic same-market context for semantic classification.
+    # Shape: {(game_id, market_display): {"market_rows": [row_dict, ...], "pressure_side": side|None}}
+    _market_context_lookup = {}
+
+    def _semantic_pressure_score(_row_dict):
+        _bets = _safe_float(_row_dict.get("bets_pct"), 0.0)
+        _money = _safe_float(_row_dict.get("money_pct"), 0.0)
+        _div = _money - _bets
+        _score = 0.0
+        if _bets >= 60:
+            _score = max(_score, _bets)
+        if _money >= 65:
+            _score = max(_score, _money)
+        if _div >= 15:
+            _score = max(_score, _div)
+        return _score
+
+    try:
+        for (_mc_gid, _mc_mkt), _mc_df in latest.groupby(["game_id", "market_display"], dropna=False):
+            _rows = []
+            _pressure_side = None
+            _pressure_score = 0.0
+            for _, _mc_row in _mc_df.iterrows():
+                _row_dict = _mc_row.to_dict()
+                _rows.append(_row_dict)
+                _score = _semantic_pressure_score(_row_dict)
+                if _score > _pressure_score:
+                    _pressure_score = _score
+                    _pressure_side = str(_row_dict.get("side", "")).strip() or None
+            _market_context_lookup[(str(_mc_gid).strip(), str(_mc_mkt).strip())] = {
+                "market_rows": _rows,
+                "pressure_side": _pressure_side if _pressure_score > 0 else None,
+            }
+    except Exception:
+        _market_context_lookup = {}
+
     for _, row in latest.iterrows():
         color, expl = classify_side(
             bets_pct=int(row["bets_pct"]) if pd.notna(row.get("bets_pct")) else None,
@@ -3652,7 +3688,7 @@ def build_dashboard():
         tb = str(row.get("timing_bucket") or "").lower()
 
         # v3 scorer disabled — v4 reaction engine is live
-        from scoring_reaction import score_reaction
+        from scoring_reaction import score_reaction, classify_reaction_live
         from path_behavior import classify_path_behavior
         _v3_row_dict = row.to_dict()
         # Inject path behavior from row_state tracking
@@ -3665,6 +3701,14 @@ def build_dashboard():
         _v3_row_dict.update(_game_favored.get(_cm_gid, {}))
         _v3_row_dict["spread_move_map"] = _spread_move_map
         _v4_result = score_reaction(_v3_row_dict)
+        _semantic_ctx = _market_context_lookup.get((_cm_gid, str(mkt).strip()), {})
+        _semantic_result = classify_reaction_live(
+            _v3_row_dict,
+            market_rows=_semantic_ctx.get("market_rows"),
+            evaluated_side=str(side).strip(),
+            pressure_side=_semantic_ctx.get("pressure_side"),
+        )
+        _v4_result.update(_semantic_result)
         score = _v4_result["reaction_score"]
         _v3_result = {}
 
@@ -3723,6 +3767,11 @@ def build_dashboard():
     latest["v4_state"] = [r.get("reaction_state", "") for r in _v4_results]
     latest["v4_score"] = [r.get("reaction_score", "") for r in _v4_results]
     latest["v4_decision"] = [r.get("decision", "") for r in _v4_results]
+    latest["semantic_reaction_state"] = [r.get("semantic_reaction_state", "") for r in _v4_results]
+    latest["semantic_signal_class"] = [r.get("semantic_signal_class", "") for r in _v4_results]
+    latest["semantic_owning_side"] = [r.get("semantic_owning_side", "none") for r in _v4_results]
+    latest["semantic_decision"] = [r.get("semantic_decision", "") for r in _v4_results]
+    latest["semantic_source"] = [r.get("semantic_source", "") for r in _v4_results]
     # Temporary debug — ML price credibility (remove after 1-2 runs)
     latest["ml_implied_prob"] = 0.0
     latest["ml_cred_mult"] = 1.0
@@ -4019,6 +4068,8 @@ def build_dashboard():
                     "timing_modifier", "cross_market_adj",
                     "market_reaction_score", "market_reaction_detail",
                     "pattern_primary", "pattern_secondary", "score_explanation",
+                    "semantic_reaction_state", "semantic_signal_class", "semantic_owning_side",
+                    "semantic_decision", "semantic_source",
                     "b2b_flag", "home_injury_count", "away_injury_count",
                     "wind_mph", "temp_f", "precip_prob", "weather_flag",
                     "sp_name_home", "sp_name_away", "sp_era_home", "sp_era_away",
@@ -4247,6 +4298,8 @@ def build_dashboard():
                       "timing_modifier", "cross_market_adj",
                       "market_reaction_score", "market_reaction_detail",
                       "pattern_primary", "pattern_secondary", "score_explanation",
+                      "semantic_reaction_state", "semantic_signal_class", "semantic_owning_side",
+                      "semantic_decision", "semantic_source",
                       "expression", "expression_reason",
                       "b2b_flag", "home_injury_count", "away_injury_count",
                       "wind_mph", "temp_f", "precip_prob", "weather_flag",
@@ -4842,7 +4895,9 @@ def build_dashboard():
                          "l1_path_behavior", "pattern_primary", "pattern_secondary", "consensus_tier",
                          "consensus_tier_prev", "l2_book_count_delta",
                          "sharp_score", "consensus_score", "retail_score", "layer_mode",
-                         "market_reaction_score", "market_reaction_detail"):
+                         "market_reaction_score", "market_reaction_detail",
+                         "semantic_reaction_state", "semantic_signal_class", "semantic_owning_side",
+                         "semantic_decision", "semantic_source"):
                 if _lc in latest.columns:
                     _side_cols = _side_cols + [_lc]
             # v3.3j: additional scoring columns for Results tab
@@ -4887,6 +4942,8 @@ def build_dashboard():
                 "sharp_score", "consensus_score", "retail_score",
                 "layer_mode", "l1_path_behavior",
                 "market_reaction_score", "market_reaction_detail",
+                "semantic_reaction_state", "semantic_signal_class", "semantic_owning_side",
+                "semantic_decision", "semantic_source",
                 # v3.3j: additional scoring + lock flag
                 "timing_modifier", "cross_market_adj",
                 "bets_pct", "money_pct", "open_line",
@@ -5054,6 +5111,8 @@ def build_dashboard():
                           "timing_modifier", "cross_market_adj",
                           "market_reaction_score",
                           "l1_path_behavior", "pattern_primary", "pattern_secondary", "consensus_tier",
+                          "semantic_reaction_state", "semantic_signal_class", "semantic_owning_side",
+                          "semantic_decision", "semantic_source",
                           "current_line", "open_line", "move_dir",
                           "bets_pct", "money_pct",
                           "market_read", "layer_mode"]
@@ -5062,7 +5121,18 @@ def build_dashboard():
             _hist_df.insert(0, "snapshot_ts", _hist_ts)
             _hist_path = "data/score_history.csv"
             _hist_header = not os.path.exists(_hist_path) or os.path.getsize(_hist_path) == 0
-            _hist_df.to_csv(_hist_path, mode="a", index=False, header=_hist_header)
+            _hist_mode = "a"
+            if not _hist_header:
+                try:
+                    _existing_cols = list(pd.read_csv(_hist_path, nrows=0).columns)
+                    _new_cols = list(_hist_df.columns)
+                    if _existing_cols != _new_cols:
+                        _hist_header = True
+                        _hist_mode = "w"
+                except Exception:
+                    _hist_header = True
+                    _hist_mode = "w"
+            _hist_df.to_csv(_hist_path, mode=_hist_mode, index=False, header=_hist_header)
             # Prune: keep last 48 hours max (~288 rows per game at 10-min intervals)
             try:
                 _full = pd.read_csv(_hist_path, dtype=str)
@@ -6343,7 +6413,9 @@ def resolve_results_for_baseline():
                         "l1_sharp_agreement", "l1_pinnacle_moved",
                         "l1_support_agreement", "sharp_score", "consensus_score",
                         "retail_score", "layer_mode", "l1_path_behavior",
-                        "market_reaction_score", "market_reaction_detail"):
+                        "market_reaction_score", "market_reaction_detail",
+                        "semantic_reaction_state", "semantic_signal_class", "semantic_owning_side",
+                        "semantic_decision", "semantic_source"):
             if _extra in decision_snapshot.columns:
                 _freeze_cols.append(_extra)
         # v3.3j: additional scoring columns + lock flag
@@ -6365,6 +6437,8 @@ def resolve_results_for_baseline():
                     "l1_support_agreement","sharp_score","consensus_score",
                     "retail_score","layer_mode","l1_path_behavior",
                     "market_reaction_score","market_reaction_detail",
+                    "semantic_reaction_state","semantic_signal_class","semantic_owning_side",
+                    "semantic_decision","semantic_source",
                     "timing_modifier","cross_market_adj","bets_pct","money_pct","open_line","is_locked",
                     "logic_version"):
             if _c in merged.columns:
@@ -6475,6 +6549,8 @@ def resolve_results_for_baseline():
                    "pattern_primary", "pattern_secondary", "layer_mode",
                    "l1_sharp_agreement", "l1_pinnacle_moved", "l1_support_agreement",
                    "l1_path_behavior", "market_reaction_score", "market_reaction_detail",
+                   "semantic_reaction_state", "semantic_signal_class", "semantic_owning_side",
+                   "semantic_decision", "semantic_source",
                    "consensus_tier", "consensus_tier_prev", "l2_book_count_delta",
                    "noisy_signal_flag",
                    "decision_line", "decision_line_val", "decision_odds",

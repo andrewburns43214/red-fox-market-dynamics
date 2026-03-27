@@ -10,6 +10,118 @@ No side effects.
 from typing import Any, Dict
 
 
+def classify_reaction_market(
+    market_rows: list[Dict[str, Any]],
+    evaluated_side: str,
+    pressure_side: str | None,
+) -> Dict[str, Any]:
+    """
+    Market-level semantic classifier used by the scoring spec fixtures.
+
+    This classifier is intentionally spec-driven and does not attempt to
+    calculate confidence weights. It answers:
+      - which semantic pattern applies
+      - what signal class it belongs to
+      - who owns the signal relative to the pressure side
+      - whether the pattern is actionable at the decision layer
+    """
+    rows = market_rows or []
+    evaluated = _find_market_row(rows, evaluated_side)
+    if evaluated is None:
+        raise ValueError(f"evaluated_side not found in market_rows: {evaluated_side!r}")
+
+    pressure = _find_market_row(rows, pressure_side) if pressure_side else None
+    pressure_row = pressure if pressure is not None else evaluated
+
+    if _bool(evaluated.get("market_stale")):
+        return {
+            "reaction_state": "STALE",
+            "signal_class": "directional_price_opportunity",
+            "owning_side": "self",
+            "decision": "LEAN",
+        }
+
+    freeze_subtype = _upper(pressure_row.get("freeze_subtype_candidate"))
+    if freeze_subtype:
+        return _classify_freeze_subtype(freeze_subtype)
+
+    effective_move_mag = abs(_num(evaluated.get("effective_move_mag")))
+    line_dir_changes = int(_num(evaluated.get("line_dir_changes")))
+    move_dir = _row_move_dir(evaluated)
+
+    if line_dir_changes >= 2 and effective_move_mag >= 0.5:
+        return {
+            "reaction_state": "BUYBACK",
+            "signal_class": "non_directional_descriptive",
+            "owning_side": "none",
+            "decision": "NO_BET",
+        }
+
+    if pressure_side:
+        if _text(evaluated.get("side")) == _text(pressure_side):
+            if move_dir == 1 and effective_move_mag >= 0.5:
+                return {
+                    "reaction_state": "FOLLOW",
+                    "signal_class": "directional_conviction",
+                    "owning_side": "self",
+                    "decision": "LEAN",
+                }
+        else:
+            if move_dir == 1 and effective_move_mag >= 0.5:
+                return {
+                    "reaction_state": "FADE",
+                    "signal_class": "directional_conviction",
+                    "owning_side": "opposite",
+                    "decision": "LEAN",
+                }
+
+    if not pressure_side and move_dir == 1 and effective_move_mag >= 0.5:
+        return {
+            "reaction_state": "INITIATED",
+            "signal_class": "directional_conviction",
+            "owning_side": "self",
+            "decision": "LEAN",
+        }
+
+    return {
+        "reaction_state": "NOISE",
+        "signal_class": "non_directional_descriptive",
+        "owning_side": "none",
+        "decision": "NO_BET",
+    }
+
+
+def classify_reaction_live(
+    row: Dict[str, Any],
+    market_rows: list[Dict[str, Any]] | None = None,
+    evaluated_side: str | None = None,
+    pressure_side: str | None = None,
+) -> Dict[str, Any]:
+    """
+    Live semantic adapter.
+
+    Uses market-level semantic classification when true same-market context is
+    available. Otherwise degrades gracefully to a conservative row-level fallback
+    without fabricating semantic certainty.
+    """
+    rows = market_rows or []
+    evaluated = _text(evaluated_side) or _text(row.get("side"))
+
+    if _has_market_context(rows, evaluated):
+        semantic = classify_reaction_market(
+            market_rows=rows,
+            evaluated_side=evaluated,
+            pressure_side=pressure_side,
+        )
+        semantic["semantic_source"] = "market_context"
+        return _prefix_semantic_fields(semantic)
+
+    coarse = score_reaction(row)
+    semantic = _semantic_from_row_fallback(coarse)
+    semantic["semantic_source"] = "row_fallback"
+    return _prefix_semantic_fields(semantic)
+
+
 def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
     """
     Score one normalized side row from observed market behavior only.
@@ -261,6 +373,96 @@ def _classify_state(
     return "NOISE"
 
 
+def _classify_freeze_subtype(freeze_subtype: str) -> Dict[str, Any]:
+    mapping = {
+        "FREEZE_RESISTANCE": {
+            "reaction_state": "FREEZE_RESISTANCE",
+            "signal_class": "directional_conviction",
+            "owning_side": "opposite",
+            "decision": "LEAN",
+        },
+        "FREEZE_BALANCED": {
+            "reaction_state": "FREEZE_BALANCED",
+            "signal_class": "non_directional_descriptive",
+            "owning_side": "none",
+            "decision": "NO_BET",
+        },
+        "FREEZE_KEY_NUMBER": {
+            "reaction_state": "FREEZE_KEY_NUMBER",
+            "signal_class": "non_directional_descriptive",
+            "owning_side": "none",
+            "decision": "NO_BET",
+        },
+        "FREEZE_STALE": {
+            "reaction_state": "FREEZE_STALE",
+            "signal_class": "directional_price_opportunity",
+            "owning_side": "self",
+            "decision": "LEAN",
+        },
+        "FREEZE_WEAK": {
+            "reaction_state": "FREEZE_WEAK",
+            "signal_class": "non_directional_descriptive",
+            "owning_side": "none",
+            "decision": "NO_BET",
+        },
+    }
+    if freeze_subtype not in mapping:
+        raise ValueError(f"unknown freeze subtype: {freeze_subtype}")
+    return mapping[freeze_subtype]
+
+
+def _semantic_from_row_fallback(coarse: Dict[str, Any]) -> Dict[str, Any]:
+    state = _upper(coarse.get("reaction_state"))
+    decision = _upper(coarse.get("decision")) or "NO_BET"
+
+    # Fallback mode must avoid false semantic certainty.
+    if state == "FOLLOW":
+        return {
+            "reaction_state": state,
+            "signal_class": "directional_conviction",
+            "owning_side": "self",
+            "decision": decision,
+        }
+    if state == "INITIATED":
+        return {
+            "reaction_state": state,
+            "signal_class": "directional_conviction",
+            "owning_side": "self",
+            "decision": decision,
+        }
+    if state == "BUYBACK":
+        return {
+            "reaction_state": state,
+            "signal_class": "non_directional_descriptive",
+            "owning_side": "none",
+            "decision": decision,
+        }
+    if state == "NOISE":
+        return {
+            "reaction_state": state,
+            "signal_class": "non_directional_descriptive",
+            "owning_side": "none",
+            "decision": decision,
+        }
+
+    return {
+        "reaction_state": state,
+        "signal_class": "",
+        "owning_side": "none",
+        "decision": decision,
+    }
+
+
+def _prefix_semantic_fields(semantic: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "semantic_reaction_state": _text(semantic.get("reaction_state")),
+        "semantic_signal_class": _text(semantic.get("signal_class")),
+        "semantic_owning_side": _text(semantic.get("owning_side")) or "none",
+        "semantic_decision": _text(semantic.get("decision")) or "NO_BET",
+        "semantic_source": _text(semantic.get("semantic_source")),
+    }
+
+
 def _validate_state_for_side(
     state: str,
     public_side: int,
@@ -499,6 +701,47 @@ def _extract_side_line(side: str) -> float | None:
         return float(num)
     except Exception:
         return None
+
+
+def _find_market_row(rows: list[Dict[str, Any]], side: str | None) -> Dict[str, Any] | None:
+    target = _text(side)
+    if not target:
+        return None
+    for row in rows:
+        if _text(row.get("side")) == target:
+            return row
+    return None
+
+
+def _has_market_context(rows: list[Dict[str, Any]], evaluated_side: str) -> bool:
+    if not rows or len(rows) < 2:
+        return False
+    return _find_market_row(rows, evaluated_side) is not None
+
+
+def _row_move_dir(row: Dict[str, Any]) -> int:
+    return _move_toward_side(
+        sport=_text(row.get("sport")).lower(),
+        market=_upper(row.get("market_display")),
+        side=_text(row.get("side")),
+        open_line_val=_num_or_none(row.get("open_line_val")),
+        current_line_val=_num_or_none(row.get("current_line_val")),
+        prev_line_val=_num_or_none(row.get("prev_line_val")),
+        open_odds=_num_or_none(row.get("open_odds")),
+        current_odds=_num_or_none(row.get("current_odds")),
+        prev_odds=_num_or_none(row.get("prev_odds")),
+        line_move_open=_num(row.get("line_move_open")),
+        line_move_prev=_num(row.get("line_move_prev")),
+        odds_move_open=_num(row.get("odds_move_open")),
+        odds_move_prev=_num(row.get("odds_move_prev")),
+    )
+
+
+def _bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = _text(value).lower()
+    return text in ("1", "true", "yes", "y", "on")
 
 
 def _fallback_effective_move(raw: Any, market: str, line_move_open: float, odds_move_open: float) -> float:
