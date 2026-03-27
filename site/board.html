@@ -1,15 +1,15 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=1440">
-<title>Red Fox · Market Intelligence</title>
+<title>Red Fox - Market Intelligence</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <style>
 :root {
-  /* Colors — light cards, clean backgrounds */
+  /* Colors â€” light cards, clean backgrounds */
   --bg:        #F7F8FA;
   --bg2:       #F0F1F4;
   --bg3:       #F7F8FA;
@@ -26,7 +26,7 @@
   --text4:     #9CA3AF;
   --white:     #111827;
   --white2:    #030712;
-  /* Accent colors — unchanged */
+  /* Accent colors â€” unchanged */
   --red:       #d63020;
   --red2:      #e53935;
   --red3:      #ff6b6b;
@@ -46,7 +46,7 @@
   --accent2:   #2080f0;
   --acc-bg:    #eef5ff;
   --acc-brd:   #b8d4f8;
-  /* Fonts — system stack + JetBrains Mono */
+  /* Fonts â€” system stack + JetBrains Mono */
   --mono:      'JetBrains Mono', 'Courier New', monospace;
   --sans:      system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   /* Typography scale */
@@ -88,7 +88,7 @@ body::before {
   background-size: 128px;
 }
 
-/* ─── TOPBAR ─── */
+/* â”€â”€â”€ TOPBAR â”€â”€â”€ */
 .topbar {
   flex-shrink: 0;
   height: 54px;
@@ -212,7 +212,7 @@ body::before {
 }
 .logout-btn:hover { background: var(--bg3); color: var(--text); }
 
-/* ─── TABS ─── */
+/* â”€â”€â”€ TABS â”€â”€â”€ */
 .tabs {
   flex-shrink: 0;
   height: 44px;
@@ -287,7 +287,7 @@ body::before {
   color: var(--white);
 }
 
-/* ─── METRIC BAR ─── */
+/* â”€â”€â”€ METRIC BAR â”€â”€â”€ */
 .metricbar {
   flex-shrink: 0;
   height: 40px;
@@ -325,7 +325,7 @@ body::before {
 .rfill { height: 100%; background: var(--accent); width: 100%; animation: refill 30s linear infinite; }
 @keyframes refill { from{width:100%}to{width:0%} }
 
-/* ─── LAYOUT ─── */
+/* â”€â”€â”€ LAYOUT â”€â”€â”€ */
 .content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 .tab-content { display: none; flex: 1; overflow: hidden; }
 .tab-content.active { display: flex; }
@@ -381,8 +381,8 @@ thead th {
 }
 thead th:hover { color: var(--text2); }
 thead th.sorted { color: #111827; }
-thead th.sorted::after { content: ' ▼'; color: #2080f0; font-size: 10px; font-weight: 700; margin-left: 2px; }
-thead th.sorted.asc::after { content: ' ▲'; }
+thead th.sorted::after { content: ' v'; color: #2080f0; font-size: 10px; font-weight: 700; margin-left: 2px; }
+thead th.sorted.asc::after { content: ' ^'; }
 
 tbody tr {
   border-bottom: 1px solid var(--border);
@@ -434,7 +434,7 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
   letter-spacing: .3px; text-align: center;
 }
 
-/* SPLITS — compact single-line */
+/* SPLITS â€” compact single-line */
 .td-split { width: 110px; text-align: left; padding: 6px 8px; }
 .srow { display: flex; align-items: center; gap: 4px; }
 .srow + .srow { margin-top: 3px; }
@@ -506,15 +506,6 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .mr-public   { background: #fff2f2; color: #c03800; border: 1px solid #f8c0a8; }
 .mr-neutral  { background: #f4f5f7; color: #8892aa; border: 1px solid #dde0e8; }
 
-/* BREAKDOWN — vertical bars with fractions */
-.td-bkdn { text-align: left; width: 200px; padding: 4px 6px; }
-.bk-row { display: flex; align-items: center; gap: 4px; margin: 2px 0; }
-.bk-lbl { font-size: 9px; font-weight: 600; color: #8892aa; width: 62px; flex-shrink: 0; font-family: var(--sans); }
-.bk-bar { width: 70px; height: 5px; background: #e8eaef; border-radius: 3px; overflow: hidden; flex-shrink: 0; }
-.bk-fill { height: 100%; border-radius: 3px; }
-.bk-fill.pos { background: #00965a; }
-.bk-fill.neg { background: #d63020; }
-.bk-val { font-size: 9px; font-family: var(--mono); width: 32px; text-align: right; flex-shrink: 0; }
 /* DK vs MARKET */
 .td-dvm { text-align: center; width: 56px; padding: 6px 4px; }
 
@@ -546,33 +537,6 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .pat-C { background: #fffbee; color: #8a5a00; border: 1px solid #f0dc80; }
 .pat-E { background: #fff4ee; color: #b84400; border: 1px solid #f8c8a0; }
 .pat-N { background: #f4f5f7; color: #8892aa; border: 1px solid #dde0e8; }
-
-/* LAYER MODE BADGE */
-.td-layer { text-align: center; width: 44px; padding: 6px 4px; }
-.lyr {
-  display: inline-block; padding: 2px 5px; border-radius: 3px;
-  font-family: var(--mono); font-size: 7.5px; font-weight: 700; letter-spacing: .3px;
-}
-.lyr-L123    { background: #edfff5; color: #006e40; border: 1px solid #b0e8cc; }
-.lyr-L13     { background: #fff8ee; color: #b06000; border: 1px solid #f0d8a0; }
-.lyr-L23     { background: #eef5ff; color: #1a6fd4; border: 1px solid #b8d4f8; }
-.lyr-L3_ONLY { background: #f4f5f7; color: #8892aa; border: 1px solid #dde0e8; }
-
-/* SHARP CERTIFIED BADGE */
-.td-sharp { text-align: center; width: 64px; padding: 6px 4px; }
-.sharp-cert {
-  display: inline-block; padding: 2px 6px; border-radius: 3px;
-  font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: .3px;
-  white-space: nowrap;
-}
-.sc-full { background: #edfff5; color: #006e40; border: 1px solid #b0e8cc; animation: sharpPulse 2s ease-in-out infinite; }
-.sc-half { background: #fff8ee; color: #b06000; border: 1px solid #f0d8a0; }
-.sharp-meter {
-  display: inline-block; padding: 1px 5px; border-radius: 3px;
-  font-family: var(--mono); font-size: 8px; font-weight: 600; color: #5a6480;
-  background: #f0f1f4; border: 1px solid #dde0e8;
-}
-@keyframes sharpPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
 
 /* Game inline badges (B2B, injury, weather) */
 .gchip { display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 4px; font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: .2px; vertical-align: middle; line-height: 1.2; }
@@ -616,7 +580,7 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
   overflow: hidden; text-overflow: ellipsis;
 }
 
-/* ─── RIGHT PANE ─── */
+/* â”€â”€â”€ RIGHT PANE â”€â”€â”€ */
 .rpane {
   display: flex; flex-direction: column;
   overflow: hidden;
@@ -701,7 +665,7 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
   flex-shrink: 0; padding-top: 2px;
 }
 
-/* ─── PERFORMANCE TAB ─── */
+/* â”€â”€â”€ PERFORMANCE TAB â”€â”€â”€ */
 .perf-layout {
   padding: 12px 16px;
   flex: 1; overflow: auto;
@@ -810,7 +774,7 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
   font-family: var(--sans); font-style: italic;
 }
 
-/* ─── DRILLDOWN MODAL ─── */
+/* â”€â”€â”€ DRILLDOWN MODAL â”€â”€â”€ */
 .drill-overlay {
   display: none; position: fixed; inset: 0; z-index: 200;
   background: rgba(0,0,0,.55); backdrop-filter: blur(2px);
@@ -853,7 +817,7 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .stat-tbl tbody tr { cursor: pointer; }
 .stat-tbl tbody tr:hover td { background: rgba(0,0,0,.03); }
 
-/* ─── FRESHNESS BANNER ─── */
+/* â”€â”€â”€ FRESHNESS BANNER â”€â”€â”€ */
 .fresh-bar {
   display: flex; align-items: center; gap: 16px;
   padding: 5px 20px; background: var(--bg3);
@@ -883,7 +847,7 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .fresh-src .fs-name { font-weight: 700; color: var(--text2); }
 .fresh-src .fs-age { color: var(--text4); }
 
-/* ─── GAME DETAIL POPUP ─── */
+/* â”€â”€â”€ GAME DETAIL POPUP â”€â”€â”€ */
 .gd-wrap { padding: 12px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .gd-header { grid-column: 1/-1; display: flex; flex-direction: column; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 .gd-game { font-family: var(--sans); font-size: 15px; font-weight: 700; color: var(--text); }
@@ -893,9 +857,9 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .gd-row { display: flex; justify-content: space-between; padding: 2px 0; font-family: var(--mono); font-size: 10px; }
 .gd-lbl { color: var(--text3); }
 .gd-val { color: var(--text); font-weight: 600; }
-/* mobile disabled — desktop layout on all devices */
+/* mobile disabled â€” desktop layout on all devices */
 
-/* ─── PANEL ─── */
+/* â”€â”€â”€ PANEL â”€â”€â”€ */
 .panel {
   background: white;
   border: 1px solid #e5e7eb;
@@ -917,7 +881,7 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 }
 .panel-m { font-family: var(--mono); font-size: 9px; color: var(--text3); }
 
-/* ─── FULL TAB ─── */
+/* â”€â”€â”€ FULL TAB â”€â”€â”€ */
 .full-tab {
   flex: 1; overflow: hidden;
   display: flex; flex-direction: column;
@@ -925,7 +889,7 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 }
 .full-tab .panel { flex: 1; }
 
-/* ─── STATUS BAR ─── */
+/* â”€â”€â”€ STATUS BAR â”€â”€â”€ */
 .statusbar {
   flex-shrink: 0; height: 26px;
   background: var(--bg2);
@@ -938,19 +902,19 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .si { display: flex; gap: 5px; }
 .si .v { color: var(--text2); }
 
-/* ─── RESULTS / LEDGER ─── */
+/* â”€â”€â”€ RESULTS / LEDGER â”€â”€â”€ */
 .res-w { color: var(--green2); font-weight: 700; }
 .res-l { color: var(--red2); font-weight: 700; }
 .res-p { color: var(--gold2); font-weight: 700; }
 
-/* ─── ANIMATIONS ─── */
+/* â”€â”€â”€ ANIMATIONS â”€â”€â”€ */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 .panel { animation: fadeUp .3s ease both; }
 
-/* ─── RPANE COLLAPSE ─── */
+/* â”€â”€â”€ RPANE COLLAPSE â”€â”€â”€ */
 :root { --rpane-w: 220px; }
 .board { transition: grid-template-columns 0.25s ease; }
 .rpane { transition: width 0.25s ease; overflow: hidden; }
@@ -975,19 +939,19 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .srow { display: flex; align-items: center; gap: 2px; margin: 1px 0; }
 .slbl { font-size: 9px; font-weight: 700; color: #aab0c0; width: 22px; font-family: var(--mono); text-transform: uppercase; }
 
-/* Column alignment — th and td consistent */
+/* Column alignment â€” th and td consistent */
 thead th { text-align: center; vertical-align: middle; }
 thead th.th-game { text-align: left; }
 thead th.th-split { text-align: left; }
 thead th.th-play { text-align: left; }
-.td-rank, .td-mkt, .td-edge, .td-conf, .td-total, .td-bkt, .td-pat, .td-layer, .td-sharp, .td-tim, .td-dec { text-align: center; vertical-align: middle; }
+.td-rank, .td-mkt, .td-edge, .td-conf, .td-total, .td-bkt, .td-pat, .td-tim, .td-dec { text-align: center; vertical-align: middle; }
 .td-line { text-align: center; vertical-align: middle; }
 .td-split { text-align: left; vertical-align: middle; }
 .td-pick { text-align: left; vertical-align: middle; }
 
-/* ─── RESPONSIVE ─── */
+/* â”€â”€â”€ RESPONSIVE â”€â”€â”€ */
 
-/* Tablets and small desktops — only collapse right pane */
+/* Tablets and small desktops â€” only collapse right pane */
 @media (max-width: 1024px) {
   .rpane { display: none !important; }
   .board { grid-template-columns: 1fr !important; }
@@ -1002,7 +966,7 @@ thead th.th-play { text-align: left; }
 </head>
 <body>
 
-<!-- ─── TOPBAR ─── -->
+<!-- â”€â”€â”€ TOPBAR â”€â”€â”€ -->
 <header class="topbar">
   <div class="tl">
     <div class="logo-wrap">
@@ -1029,7 +993,7 @@ thead th.th-play { text-align: left; }
         <span class="tkpi-l">Bets</span>
       </div>
       <div class="tkpi">
-        <span class="tkpi-v" id="t-wr">—</span>
+<span class="tkpi-v" id="t-wr">--</span>
         <span class="tkpi-l">Bet Win Rate</span>
       </div>
     </div>
@@ -1040,7 +1004,7 @@ thead th.th-play { text-align: left; }
   </div>
 </header>
 
-<!-- ─── TABS ─── -->
+<!-- â”€â”€â”€ TABS â”€â”€â”€ -->
 <nav class="tabs">
   <div class="tab active" data-tab="board" data-filter="today" onclick="setTab(this)">Today's Games <span class="tbadge" id="b-today">0</span></div>
   <div class="tab" data-tab="board" data-filter="highconf" onclick="setTab(this)">Bets <span class="tbadge" id="b-hc">0</span></div>
@@ -1061,7 +1025,7 @@ thead th.th-play { text-align: left; }
   </div>
 </nav>
 
-<!-- ─── METRIC BAR ─── -->
+<!-- â”€â”€â”€ METRIC BAR â”€â”€â”€ -->
 <div class="metricbar">
   <div class="mmet">
     <div class="mmet-body">
@@ -1077,13 +1041,13 @@ thead th.th-play { text-align: left; }
   </div>
   <div class="mmet">
     <div class="mmet-body">
-      <span class="mmet-v gd" id="m-avg">—</span>
+<span class="mmet-v gd" id="m-avg">--</span>
       <span class="mmet-l">Avg Confidence Today</span>
     </div>
   </div>
   <div class="mmet">
     <div class="mmet-body">
-      <span class="mmet-v g" id="m-wr">—</span>
+<span class="mmet-v g" id="m-wr">--</span>
       <span class="mmet-l">Bet Win Rate</span>
     </div>
   </div>
@@ -1094,7 +1058,7 @@ thead th.th-play { text-align: left; }
   </div>
 </div>
 
-<!-- ─── FRESHNESS BANNER (hidden, logic still runs for status bar) ─── -->
+<!-- â”€â”€â”€ FRESHNESS BANNER (hidden, logic still runs for status bar) â”€â”€â”€ -->
 <div class="fresh-bar" id="fresh-bar" style="display:none">
   <div class="fresh-overall" id="fresh-overall">
     <span class="fresh-dot" id="fresh-dot"></span>
@@ -1103,7 +1067,7 @@ thead th.th-play { text-align: left; }
   <div class="fresh-sources" id="fresh-sources"></div>
 </div>
 
-<!-- ─── CONTENT ─── -->
+<!-- â”€â”€â”€ CONTENT â”€â”€â”€ -->
 <div class="content">
 
   <!-- BOARD -->
@@ -1116,12 +1080,12 @@ thead th.th-play { text-align: left; }
             <select id="book-select" class="grp-btn" onchange="switchBook(this.value)" style="font-size:10px;padding:2px 6px;min-width:auto;cursor:pointer"><option value="dk">Odds: DraftKings</option></select>
             <button class="grp-btn" id="grp-toggle" onclick="toggleGroup(this)">Group by Game</button>
             <button class="grp-btn" id="locked-jump" onclick="jumpToLocked()" style="display:none">Live / Locked Games</button>
-            <button class="grp-btn" onclick="scrollToTop()">Top ▲</button>
+            <button class="grp-btn" onclick="scrollToTop()">Top</button>
             <button class="grp-btn" onclick="exportCSV()" title="Export to CSV">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:-1px;margin-right:3px"><path d="M2 14h12M8 2v9M4 7l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>CSV
             </button>
           </div>
-          <span class="pane-meta" id="board-meta">—</span>
+          <span class="pane-meta" id="board-meta">-</span>
         </div>
         <div class="tscroll">
           <table>
@@ -1135,11 +1099,8 @@ thead th.th-play { text-align: left; }
                 <th class="th-line" onclick="sortBy('current_line',this)">Current</th>
                 <th class="th-edge" onclick="sortBy('net_edge',this)">Score Gap</th>
                 <th class="th-total sorted" onclick="sortBy('total_score',this)">Confidence</th>
-                <th class="th-bkt">Bucket</th>
                 <th class="th-pat" onclick="sortBy('pattern_primary',this)">Pattern <span class="info-btn" style="display:inline-flex;width:14px;height:14px;font-size:10px;margin-top:0;vertical-align:middle" onclick="event.stopPropagation();openPatLegend()" title="Pattern definitions">i</span></th>
-                <th class="th-layer" onclick="sortBy('layer_mode',this)">Layer</th>
                 <th class="th-tim" onclick="sortBy('timing_bucket',this)">Timing</th>
-                <th class="th-bkdn">Breakdown <span class="info-btn" style="display:inline-flex;width:14px;height:14px;font-size:10px;margin-top:0;vertical-align:middle" onclick="event.stopPropagation();openBkdnLegend()" title="Breakdown definitions">i</span></th>
                 <th class="th-dec">Decision</th>
                 <th class="th-play">Play</th>
               </tr>
@@ -1181,7 +1142,6 @@ thead th.th-play { text-align: left; }
             <div class="chart-canvas-wrap" style="height:130px"><canvas id="chart-trend"></canvas></div>
           </div>
         </div>
-        <div class="panel" id="pnl-mread"></div>
       </div>
 
       <!-- CLV Analysis -->
@@ -1190,11 +1150,9 @@ thead th.th-play { text-align: left; }
         <div class="panel" id="pnl-clv-detail"></div>
       </div>
 
-      <!-- Layer Analysis -->
+      <!-- Pattern Analysis -->
       <div class="perf-grid">
         <div class="panel" id="pnl-pattern"></div>
-        <div class="panel" id="pnl-sharp-agree"></div>
-        <div class="panel" id="pnl-pinn-move"></div>
       </div>
 
       <!-- Extended CLV -->
@@ -1235,26 +1193,22 @@ thead th.th-play { text-align: left; }
   <div class="drill-overlay" id="pat-legend-overlay" onclick="if(event.target===this)closePatLegend()">
     <div class="drill-modal" style="max-width:1100px;max-height:none;overflow:visible">
       <div class="drill-hdr">
-        <div class="drill-title">Pattern Definitions (v3.3m)</div>
+        <div class="drill-title">Pattern Definitions (v4)</div>
         <button class="drill-close" onclick="closePatLegend()">&times;</button>
       </div>
       <div style="padding:16px 20px;font-family:var(--sans);font-size:12px;line-height:1.5;display:grid;grid-template-columns:1fr 1fr;gap:0 28px">
+      <div style="padding:16px 20px;font-family:var(--sans);font-size:12px;line-height:1.5;display:grid;grid-template-columns:1fr 1fr;gap:0 28px">
         <div>
-          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">SHARP CONFIRMED</b><br><span style="color:var(--text2)">Multiple sharp books moved in strong agreement with Pinnacle confirming. Clean sharp conviction — no public noise.</span></div>
-          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">SHARP PUBLIC SPLIT</b><br><span style="color:var(--text2)">Sharp books moved this line but &lt;35% of public tickets are on it. Sharps and public on opposite sides. Highest conviction setup.</span></div>
-          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">SHARP BOOK CONFLICT</b><br><span style="color:var(--text2)">Sharp books favor this side but DK moved against it. Two strong signals contradicting — watch for resolution.</span></div>
-          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">BOOK RESISTANCE</b><br><span style="color:var(--text2)">Heavy public action (65%+ bets or money) but the book hasn't moved or moved against. Book is fading its customers.</span></div>
-          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">BOOK INITIATED FOR</b><br><span style="color:var(--text2)">Book moved toward this side with no public pressure. Quiet buy signal — someone the book respects is on this side.</span></div>
-          <div style="padding:7px 0"><b style="color:var(--accent)">BOOK INITIATED AGAINST</b><br><span style="color:var(--text2)">Book moved against this side with no public pressure. Quiet fade — book doesn't like this side.</span></div>
+          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">INITIATED</b><br><span style="color:var(--text2)">Book moved before clear public pressure. Early information signal.</span></div>
+          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">FOLLOW</b><br><span style="color:var(--text2)">Book moved with pressure. Market and public are aligned.</span></div>
+          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">FADE</b><br><span style="color:var(--text2)">Book moved against pressure. Public is one way, price moved the other.</span></div>
+          <div style="padding:7px 0"><b style="color:var(--accent)">FREEZE</b><br><span style="color:var(--text2)">Heavy public pressure but little or no meaningful move.</span></div>
         </div>
         <div>
-          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">FREEZE PRESSURE</b><br><span style="color:var(--text2)">Sharp and consensus books moved but DK is frozen. Pressure building on DK to catch up.</span></div>
-          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">STALE PRICE</b><br><span style="color:var(--text2)">DK price is significantly behind the consensus market. Potential value before DK adjusts.</span></div>
-          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">SHARP REVERSAL</b><br><span style="color:var(--text2)">Sharp books moved this line but it reversed direction. Initial sharp move may have been absorbed or wrong.</span></div>
-          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">CONSENSUS HOLD</b><br><span style="color:var(--text2)">The broad market of 30 books is holding this position despite pressure. Market-wide conviction signal.</span></div>
-          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">RETAIL CROWD</b><br><span style="color:var(--text2)">Extreme public overcrowding (75%+ bets and money) with no sharp support. Classic fade setup.</span></div>
-          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">PUBLIC DRIFT</b><br><span style="color:var(--text2)">Heavy public bet volume pushing the line with no sharp support — no edge.</span></div>
-          <div style="padding:7px 0"><b style="color:var(--text3)">NEUTRAL</b><br><span style="color:var(--text2)">No pattern detected. Score driven purely by component math.</span></div>
+          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">BUYBACK</b><br><span style="color:var(--text2)">The market moved, then reversed direction. Reversal or buyback behavior.</span></div>
+          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">STALE</b><br><span style="color:var(--text2)">Pressure is visible while the displayed book price still looks stale.</span></div>
+          <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">NOISE</b><br><span style="color:var(--text2)">Mixed or weak market behavior. No clean reaction pattern.</span></div>
+          <div style="padding:7px 0"><b style="color:var(--text3)">NEUTRAL</b><br><span style="color:var(--text2)">No pattern detected. Score is driven by component math without a strong market reaction pattern.</span></div>
         </div>
       </div>
     </div>
@@ -1268,11 +1222,8 @@ thead th.th-play { text-align: left; }
         <button class="drill-close" onclick="closeBkdnLegend()">&times;</button>
       </div>
       <div style="padding:16px 20px;font-family:var(--sans);font-size:12px;line-height:1.5">
-        <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">Sharp (0–20 pts)</b><br><span style="color:var(--text2)">Points from L1 sharp book data (Pinnacle, Matchbook, etc). Measures direction agreement, move magnitude, and book-tier weighting. Higher = more sharp books confirming the pick.</span></div>
-        <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">Consensus (0–10 pts)</b><br><span style="color:var(--text2)">Points from L2 cross-market consensus (30+ books). Measures how far the broad market has moved vs Pinnacle's line. Higher = stronger market-wide agreement.</span></div>
-        <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">Retail (0–10 pts)</b><br><span style="color:var(--text2)">Points from L3 DraftKings retail data — line movement, bets %, and money %. Dampened when L1 is absent and L2 agreement is weak to avoid retail-only noise.</span></div>
-        <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">Timing (0–3 pts)</b><br><span style="color:var(--text2)">Bonus/penalty based on when movement occurred. Late moves closer to game time carry more weight. EARLY/MID/LATE timing buckets affect score.</span></div>
-        <div style="padding:7px 0"><b style="color:var(--accent)">Cross-Mkt (-5–5 pts)</b><br><span style="color:var(--text2)">Cross-market reinforcement or contradiction. Positive when spread/total/moneyline signals align for the same game. Negative when they contradict.</span></div>
+        <div style="padding:7px 0;border-bottom:1px solid var(--border)"><b style="color:var(--accent)">Timing (0-3 pts)</b><br><span style="color:var(--text2)">Bonus or penalty based on when movement occurred. Late moves closer to game time carry more weight. EARLY, MID, and LATE timing buckets affect score.</span></div>
+        <div style="padding:7px 0"><b style="color:var(--accent)">Cross-Market (-5 to 5 pts)</b><br><span style="color:var(--text2)">Cross-market reinforcement or contradiction. Positive when spread, total, and moneyline signals align for the same game. Negative when they contradict.</span></div>
       </div>
     </div>
   </div>
@@ -1283,7 +1234,7 @@ thead th.th-play { text-align: left; }
       <div class="panel">
         <div class="panel-h">
           <span class="panel-t">Resolved Results</span>
-          <span class="panel-m" id="res-meta">—</span>
+          <span class="panel-m" id="res-meta">--</span>
         </div>
         <div class="tscroll">
           <table>
@@ -1304,7 +1255,7 @@ thead th.th-play { text-align: left; }
       <div class="panel">
         <div class="panel-h">
           <span class="panel-t">Movement (Last 48h)</span>
-          <span class="panel-m" id="hist-meta">—</span>
+          <span class="panel-m" id="hist-meta">--</span>
         </div>
         <div id="hist-filters" style="padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
           <label style="font-size:11px;color:var(--text2);font-weight:600">Game</label>
@@ -1341,19 +1292,20 @@ thead th.th-play { text-align: left; }
 
 </div>
 
-<!-- ─── STATUS BAR ─── -->
+<!-- STATUS BAR -->
 <footer class="statusbar">
   <div class="sl">
     <div class="si"><span>Engine</span><span class="v">v3.3m</span></div>
     <div class="si"><span>Today's Games</span><span class="v" id="sb-s">0</span></div>
-    <div class="si"><span>Sports</span><span class="v" id="sb-sp">—</span></div>
-    <div class="si"><span>Snapshot</span><span class="v" id="sb-snap">—</span></div>
+    <div class="si"><span>Sports</span><span class="v" id="sb-sp">--</span></div>
+    <div class="si"><span>Snapshot</span><span class="v" id="sb-snap">--</span></div>
   </div>
   <div class="sl" id="sb-fresh" style="gap:12px"></div>
 </footer>
 
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js">
-// ── RPANE TOGGLE ──
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script>
+// RPANE TOGGLE
 let rpaneOpen = true;
 function toggleRpane() {
   const board = document.querySelector('.board');
@@ -1363,12 +1315,12 @@ function toggleRpane() {
   if (rpaneOpen) {
     board.style.gridTemplateColumns = '1fr 220px';
     rpane.style.display = 'flex';
-    btn.textContent = '◀';
+    btn.textContent = '<';
     btn.title = 'Collapse performance panel';
   } else {
     board.style.gridTemplateColumns = '1fr 0px';
     rpane.style.display = 'none';
-    btn.textContent = '▶';
+    btn.textContent = '>';
     btn.title = 'Expand performance panel';
   }
 }
@@ -1411,7 +1363,7 @@ const MOCK_RESULTS = [
   {date:'2026-02-24',game:'TOR @ MTL',market_display:'MONEYLINE',favored_side:'Montreal',game_confidence:66.8,net_edge:8.9,result:'WIN',timing_bucket:'EARLY',sport:'nhl'},
 ];
 
-let allDash=[], allLedger=[], allResults=[];
+let allDash=[], allLedger=[], allResults=[], allKPI=[];
 let sport='ALL', filter='today', tabId='board';
 let sortCol='total_score', sortAsc=false;
 let _bookLines=null, _selectedBook='dk';
@@ -1445,45 +1397,48 @@ function getBookLines(r){
 }
 
 function et(ts){ if(!ts) return '-'; const d=new Date(ts); if(isNaN(d)) return String(ts); return d.toLocaleString('en-US',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
-function etT(ts){ if(!ts) return '-'; const d=new Date(ts); if(isNaN(d)) return '-'; const dt=d.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'America/New_York'}); const tm=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); return dt+' · '+tm; }
+function etT(ts){ if(!ts) return '-'; const d=new Date(ts); if(isNaN(d)) return '-'; const dt=d.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'America/New_York'}); const tm=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); return dt+' | '+tm; }
 function isToday(ts){ if(!ts) return false; const d=new Date(ts),n=new Date(); return d.toLocaleDateString('en-US',{timeZone:'America/New_York'})===n.toLocaleDateString('en-US',{timeZone:'America/New_York'}); }
 function confBkt(c){ const n=Number(c); if(n>=70) return{l:'HIGH',c:'bkt75'}; if(n>=67) return{l:'BET',c:'bkt65'}; if(n>=60) return{l:'LEAN',c:'bkt60'}; return{l:'<60',c:'bktlo'}; }
 function eC(e){ return e>=13?'h':e>=5?'m':'l'; }
 function cC(c){ return c>=72?'hi':c>=60?'md':'lo'; }
-function decInfo(d){ const s=(d||'').toUpperCase(); if(s==='STRONG_BET') return['Strong Bet','dec-bet dec-strong']; if(s==='BET') return['Bet','dec-bet']; if(s==='LEAN') return['Lean','dec-lean']; return['No Bet','dec-no']; }
+function decInfo(d){ const s=(d||'').toUpperCase(); if(s==='BET') return['Bet','dec-bet']; if(s==='LEAN') return['Lean','dec-lean']; return['No Bet','dec-no']; }
 function isLocked(r){ return String(r.is_locked||'').toLowerCase()==='true' || (r.game_decision||'').toUpperCase()==='LOCKED' || (r.timing_bucket||'').toUpperCase()==='LIVE'; }
 function spChip(s){ const k=(s||'').toLowerCase(); return `<span class="sport-chip sc-${k}">${(s||'').toUpperCase()}</span>`; }
 function timBadge(b){ const k=(b||'EARLY').toUpperCase(); return `<span class="tim t${k}">${k}</span>`; }
-function mrBadge(m){ const s=(m||'').trim(); if(!s||s==='-') return '-'; const lu=s.toUpperCase(); const map={'STEALTH MOVE':'mr-stealth','FREEZE PRESSURE':'mr-freeze','ALIGNED SHARP':'mr-aligned','REVERSE PRESSURE':'mr-reverse','CONTRADICTION':'mr-contra','PUBLIC DRIFT':'mr-public','NEUTRAL':'mr-neutral'}; const cls=map[lu]||'mr-neutral'; const labels={'STEALTH MOVE':'Hidden $','FREEZE PRESSURE':'$ No Move','ALIGNED SHARP':'$ + Move','REVERSE PRESSURE':'$ vs Line','CONTRADICTION':'Mixed','PUBLIC DRIFT':'Crowd Push','NEUTRAL':'Flat'}; const tips={'STEALTH MOVE':'Money flowing in quietly — low bets, significant money','FREEZE PRESSURE':'Big money divergence but line not moving yet','ALIGNED SHARP':'Money and line movement both pointing same direction','REVERSE PRESSURE':'Money pushing one way, line moved opposite','CONTRADICTION':'Signals conflict — money says one thing, line says another','PUBLIC DRIFT':'High public bet volume pushing the line — no edge','NEUTRAL':'No meaningful money or line signal detected'}; return `<span class="mr ${cls}" title="${tips[lu]||''}">${labels[lu]||s}</span>`; }
+function mrBadge(m){ const s=(m||'').trim(); if(!s||s==='-') return '-'; const lu=s.toUpperCase(); const map={'STEALTH MOVE':'mr-stealth','FREEZE PRESSURE':'mr-freeze','ALIGNED SHARP':'mr-aligned','REVERSE PRESSURE':'mr-reverse','CONTRADICTION':'mr-contra','PUBLIC DRIFT':'mr-public','NEUTRAL':'mr-neutral'}; const cls=map[lu]||'mr-neutral'; const labels={'STEALTH MOVE':'Hidden $','FREEZE PRESSURE':'$ No Move','ALIGNED SHARP':'$ + Move','REVERSE PRESSURE':'$ vs Line','CONTRADICTION':'Mixed','PUBLIC DRIFT':'Crowd Push','NEUTRAL':'Flat'}; const tips={'STEALTH MOVE':'Money flowing in quietly - low bets, significant money','FREEZE PRESSURE':'Big money divergence but line not moving yet','ALIGNED SHARP':'Money and line movement both pointing same direction','REVERSE PRESSURE':'Money pushing one way, line moved opposite','CONTRADICTION':'Signals conflict - money says one thing, line says another','PUBLIC DRIFT':'High public bet volume pushing the line - no edge','NEUTRAL':'No meaningful money or line signal detected'}; return `<span class="mr ${cls}" title="${tips[lu]||''}">${labels[lu]||s}</span>`; }
 function regBadge(r){ const k=(r||'N').toUpperCase().trim(); if(!k||k==='-') return '-'; const cls='reg-'+(k.charAt(0)||'N'); const labels={A:"Stealth",B:"Fade",C:"Weak Push",D:"Surge",N:"Flat"}; const tips={A:"Low bets, high money, line moved against",B:"High bets + money, line fading",C:"Weak public push amplified",D:"Strong money divergence into the side",N:"No clear regime detected"}; return `<span class="reg ${cls}" title="${tips[k]||''}">${labels[k]||k}</span>`; }
-function patBadge(p){ const k=(p||'').toUpperCase().trim(); if(!k||k==='NEUTRAL') return '<span class="pat" style="opacity:.4" title="No pattern detected. Score driven purely by component math.">NEUTRAL</span>'; const tips={SHARP_CONFIRMED:'Multiple sharp books moved in strong agreement with Pinnacle confirming. Clean sharp conviction \u2014 no public noise.',SHARP_PUBLIC_SPLIT:'Sharp books moved this line but less than 35% of public tickets are on it. Sharps and public on opposite sides. Highest conviction setup.',SHARP_BOOK_CONFLICT:'Sharp books favor this side but DK moved the line against it. Two strong signals contradicting each other \u2014 watch for resolution.',BOOK_RESISTANCE:'Heavy public action (65%+ bets or money) but the book hasn\u2019t moved toward them. Book disagrees with its customers and is holding firm.',BOOK_INITIATED_FOR:'Book moved toward this side with no public pressure driving it. Quiet buy signal \u2014 someone the book respects is on this side.',BOOK_INITIATED_AGAINST:'Book moved against this side with no public pressure. Quiet fade \u2014 the book is signaling it doesn\u2019t like this side.',FREEZE_PRESSURE:'Sharp and consensus books moved but DK is frozen and hasn\u2019t followed. Pressure building on DK to catch up.',STALE_PRICE:'DK price is significantly behind the consensus market. Potential value before DK adjusts.',SHARP_REVERSAL:'Sharp books moved this line but it reversed direction. Initial sharp move may have been absorbed or wrong.',CONSENSUS_HOLD:'The broad market of 30 books is holding this position despite pressure. Market-wide conviction signal.',RETAIL_CROWD:'Extreme public overcrowding (75%+ bets and money) with no sharp support. Classic fade setup.',PUBLIC_DRIFT:'Heavy public bet volume pushing the line with no sharp support \u2014 no edge.'}; return `<span class="pat" title="${tips[k]||k}">${k.replace('_',' ')}</span>`; }
-function lyrBadge(l){ const k=(l||'').trim(); if(!k) return '-'; const labels={L123:'FULL',L13:'PARTIAL',L23:'PARTIAL',L3_ONLY:'LIMITED'}; const tips={L123:'All 3 data layers active',L13:'2 of 3 layers (missing consensus)',L23:'2 of 3 layers (missing primary)',L3_ONLY:'Single layer — limited confidence'}; return `<span class="lyr lyr-${k}" title="${tips[k]||k}">${labels[k]||k}</span>`; }
-function sharpBadge(r){ const tier=(r.sharp_cert_tier||'').toUpperCase().trim(); const nBooks=Number(r.l1_n_books)||0; let html=''; if(tier==='FULL') html='<span class="sharp-cert sc-full" title="Sharp Certified: multiple sharp books confirm">SHARP &#x2713;</span>'; else if(tier==='HALF') html='<span class="sharp-cert sc-half" title="Sharp Lean: Pinnacle moved meaningfully">SHARP ~</span>'; else if(nBooks>0){ const pct=Math.round(nBooks/6*100); html=`<span class="sharp-meter" title="${nBooks} of 6 sharp books">${pct}%</span>`; } else html='<span style="color:#aab2c4">—</span>'; return html; }
+function patBadge(p){ const k=(p||'').toUpperCase().trim(); if(!k||k==='NEUTRAL') return '<span class="pat" style="opacity:.4" title="No pattern detected. Score driven purely by component math.">NEUTRAL</span>'; const tips={INITIATED:'Book moved before clear public pressure. Early information signal.',FOLLOW:'Book moved with pressure. Market and public are aligned.',FADE:'Book moved against pressure. Public is one way, price moved the other.',FREEZE:'Heavy public pressure but little or no meaningful move.',BUYBACK:'The market moved, then reversed direction. Reversal / buyback behavior.',STALE:'Pressure is visible while the displayed book price still looks stale.',NOISE:'Mixed or weak market behavior. No clean reaction pattern.'}; return `<span class="pat" title="${tips[k]||k}">${k.replace('_',' ')}</span>`; }
 function gameChips(r){
   // Build all candidate chips with priority order
   const all=[];
+  const sp=(r.sport||'').toLowerCase();
   // 1. B2B
   const b2b=(r.b2b_flag||'').trim();
   if(b2b&&b2b!=='nan'){const lbl={HOME_B2B:'H-B2B',AWAY_B2B:'A-B2B',BOTH_B2B:'B2B'}; all.push({html:'<span class="gchip gc-b2b" title="Back-to-back">'+(lbl[b2b]||b2b)+'</span>',detail:'Back-to-back: '+(lbl[b2b]||b2b)});}
   // 2. Injuries
   const hi=Number(r.home_injury_count)||0, ai=Number(r.away_injury_count)||0;
-  if(hi>=2) all.push({html:'<span class="gchip gc-inj" title="Home '+hi+' injuries">H:'+hi+'inj</span>',detail:'Home injuries: '+hi});
-  if(ai>=2) all.push({html:'<span class="gchip gc-inj" title="Away '+ai+' injuries">A:'+ai+'inj</span>',detail:'Away injuries: '+ai});
+  if(sp!=='mlb'){
+    if(hi>=2) all.push({html:'<span class="gchip gc-inj" title="Home '+hi+' injuries">H:'+hi+'inj</span>',detail:'Home injuries: '+hi});
+    if(ai>=2) all.push({html:'<span class="gchip gc-inj" title="Away '+ai+' injuries">A:'+ai+'inj</span>',detail:'Away injuries: '+ai});
+  }
   // 3. Weather
   const wx=(r.weather_flag||'').trim();
   if(wx&&wx!=='nan'&&wx!=='DOME'){
     const wind=Number(r.wind_mph)||0,temp=Number(r.temp_f)||0,prec=Number(r.precip_prob)||0;
-    const tip=temp+'°F '+wind+'mph'+(prec>0?' '+prec+'%rain':'');
-    all.push({html:'<span class="gchip gc-wx" title="'+tip+'">'+temp+'°F '+wind+'mph</span>',detail:'Weather: '+tip});
+    const tip=temp+'F '+wind+'mph'+(prec>0?' '+prec+'%rain':'');
+    all.push({html:'<span class="gchip gc-wx" title="'+tip+'">'+temp+'F '+wind+'mph</span>',detail:'Weather: '+tip});
   }
   // 4. SP (MLB)
-  const sp=(r.sport||'').toLowerCase();
   if(sp==='mlb'){
     const h=r.sp_name_home,a=r.sp_name_away;
-    if(h&&h!=='nan'&&a&&a!=='nan'){
-      const he=(r.sp_era_home&&r.sp_era_home!=='nan')?r.sp_era_home:'?';
-      const ae=(r.sp_era_away&&r.sp_era_away!=='nan')?r.sp_era_away:'?';
-      all.push({html:'<span class="gchip gc-sp" title="'+h+' vs '+a+'">SP:'+he+'/'+ae+'</span>',detail:'Pitchers: '+h+' ('+he+' ERA) vs '+a+' ('+ae+' ERA)'});
+    const hOk=h&&h!=='nan', aOk=a&&a!=='nan';
+    if(hOk||aOk){
+      const hLast=hOk ? h.split(' ').slice(-1)[0] : 'TBD';
+      const aLast=aOk ? a.split(' ').slice(-1)[0] : 'TBD';
+      const he=(r.sp_era_home&&r.sp_era_home!=='nan')?r.sp_era_home:'TBD';
+      const ae=(r.sp_era_away&&r.sp_era_away!=='nan')?r.sp_era_away:'TBD';
+      all.push({html:'<span class="gchip gc-sp" title="'+(hOk?h:'TBD')+' vs '+(aOk?a:'TBD')+'">SP:'+hLast+'/'+aLast+'</span>',detail:'Pitchers: '+(hOk?h:'TBD')+' ('+he+' ERA) vs '+(aOk?a:'TBD')+' ('+ae+' ERA)'});
     }
     const pf=Number(r.park_factor)||1;
     if(pf>=1.05||pf<=0.95) all.push({html:'<span class="gchip gc-pf" title="Park Factor">PF:'+pf.toFixed(2)+'</span>',detail:'Park Factor: '+pf.toFixed(2)});
@@ -1512,6 +1467,8 @@ function setTab(el){
   document.getElementById('tab-'+tabId).classList.add('active');
   if(tabId==='board') renderBoard();
   if(tabId==='history') renderHistory();
+  if(tabId==='results') renderResults();
+  if(tabId==='perf' && typeof Chart!=='undefined') buildKPIs();
 }
 function setSport(s,el){ sport=s; document.querySelectorAll('.sfilters .schip:not(#grp-toggle)').forEach(x=>x.classList.remove('on')); el.classList.add('on'); renderBoard(); }
 function sortBy(col,th){ if(sortCol===col) sortAsc=!sortAsc; else{sortCol=col;sortAsc=false;} document.querySelectorAll('thead th').forEach(t=>t.classList.remove('sorted','asc')); th.classList.add('sorted'); if(sortAsc) th.classList.add('asc'); renderBoard(); }
@@ -1523,7 +1480,7 @@ function jumpToLocked(){
   // Open the locked section if collapsed
   if(!window._lockedOpen){
     window._lockedOpen=true;
-    const arrow=div.querySelector('.lk-arrow'); if(arrow) arrow.textContent='▾';
+    const arrow=div.querySelector('.lk-arrow'); if(arrow) arrow.textContent='v';
     document.querySelectorAll('.row-locked').forEach(r=>r.style.display='');
   }
   div.scrollIntoView({behavior:'smooth',block:'start'});
@@ -1535,8 +1492,8 @@ function scrollToTop(){
 function exportCSV(){
   const data=filtered();
   if(!data.length) return;
-  const cols=['game','sport','market_display','favored_side','total_score','net_edge','game_decision','timing_bucket','layer_mode','sharp_score','consensus_score','retail_score','bets_pct','money_pct','open_line','current_line','current_odds','pattern_primary','pattern_secondary','_game_time'];
-  const headers=['Game','Sport','Market','Side','Confidence','Score Gap','Decision','Timing','Layer','Sharp','Consensus','Retail','Bets%','Money%','Open Line','Current Line','Odds','Pattern','Pattern 2','Game Time'];
+  const cols=['game','sport','market_display','favored_side','total_score','net_edge','game_decision','timing_bucket','bets_pct','money_pct','open_line','current_line','current_odds','pattern_primary','pattern_secondary','_game_time'];
+  const headers=['Game','Sport','Market','Side','Confidence','Score Gap','Decision','Timing','Bets%','Money%','Open Line','Current Line','Odds','Pattern','Pattern 2','Game Time'];
   let csv=headers.join(',')+'\n';
   data.forEach(r=>{
     csv+=cols.map(c=>{
@@ -1553,7 +1510,7 @@ function exportCSV(){
   a.click();
 }
 
-function _decRank(d,r){ const k=(d||'').toUpperCase(); if(k==='STRONG_BET') return 0; if(k==='BET') return 1; if(k==='LEAN') return (r&&isLocked(r))?3:2; return 4; }
+function _decRank(d,r){ const k=(d||'').toUpperCase(); if(k==='BET') return 1; if(k==='LEAN') return (r&&isLocked(r))?3:2; return 4; }
 function filtered(){ const now=new Date(); const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d; if(filter==='today') d=allDash.filter(r=>isToday(r._game_time)).filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport); else if(filter==='highconf') d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now).filter(r=>isBetPlus(r)); else d=allDash.filter(r=>sport==='ALL'||(r.sport||'').toUpperCase()===sport).filter(r=>!r._game_time||new Date(r._game_time)>now||isLocked(r)); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.favored_side||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)); return d.sort((a,b)=>{ const aLocked=isLocked(a)?1:0; const bLocked=isLocked(b)?1:0; if(aLocked!==bLocked) return aLocked-bLocked; let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
 
 window._boardRows=[];
@@ -1579,12 +1536,12 @@ function renderBoard(){
     groups.forEach(g=>{ g.rows.forEach((r,j)=>{ r._grpSub=j>0; r._grpFirst=j===0&&g.rows.length>1; data.push(r); }); });
   }
   window._boardRows=data;
-  const titles={all:'Upcoming Games',highconf:'Strong Bets',today:'Upcoming Games'};
+  const titles={all:'Upcoming Games',highconf:'Bets',today:'Upcoming Games'};
   document.getElementById('board-title').textContent=titles[filter]||'Upcoming Games';
   const _hasLocked=data.some(r=>isLocked(r));
   document.getElementById('locked-jump').style.display=_hasLocked?'':'none';
   const _nGames=new Set(data.map(r=>r.game_id||r.game||'?')).size;
-  document.getElementById('board-meta').textContent=`${_nGames} games · ${data.length} markets · sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' · grouped':''}`;
+  document.getElementById('board-meta').textContent=`${_nGames} games | ${data.length} markets | sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' | grouped':''}`;
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
   let _lockedDividerShown=false;
   if(window._lockedOpen===undefined) window._lockedOpen=false;
@@ -1598,11 +1555,11 @@ function renderBoard(){
       const _nLocked=data.filter(x=>isLocked(x)).length;
       const divtr=document.createElement('tr');
       divtr.className='locked-divider';
-      divtr.innerHTML='<td colspan="99" style="padding:12px 16px;background:#f0f1f5;border-top:2px solid #d0d3de;border-bottom:1px solid #d0d3de;font-size:11px;font-weight:700;color:#7a7f96;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;user-select:none" onclick="window._lockedOpen=!window._lockedOpen;this.querySelector(\'.lk-arrow\').textContent=window._lockedOpen?\'▾\':\'▸\';this.closest(\'tbody\').querySelectorAll(\'.row-locked\').forEach(r=>r.style.display=window._lockedOpen?\'\':\'none\')"><span class="lk-arrow">'+(window._lockedOpen?'▾':'▸')+'</span> Live / Locked Games · '+_nLocked+' markets</td>';
+      divtr.innerHTML='<td colspan="99" style="padding:12px 16px;background:#f0f1f5;border-top:2px solid #d0d3de;border-bottom:1px solid #d0d3de;font-size:11px;font-weight:700;color:#7a7f96;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;user-select:none" onclick="window._lockedOpen=!window._lockedOpen;this.querySelector(\'.lk-arrow\').textContent=window._lockedOpen?\'v\':\'>\';this.closest(\'tbody\').querySelectorAll(\'.row-locked\').forEach(r=>r.style.display=window._lockedOpen?\'\':\'none\')"><span class="lk-arrow">'+(window._lockedOpen?'v':'>')+'</span> Live / Locked Games | '+_nLocked+' markets</td>';
       tbody.appendChild(divtr);
     }
     const tr=document.createElement('tr');
-    if(isLocked(r)){ tr.classList.add('row-locked'); if(!window._lockedOpen) tr.style.display='none'; } else if((r.game_decision||'').toUpperCase()==='STRONG_BET') tr.classList.add('row-strong'); else if(score>=70) tr.classList.add('row-hi'); else if(score>=60) tr.classList.add('row-mid');
+    if(isLocked(r)){ tr.classList.add('row-locked'); if(!window._lockedOpen) tr.style.display='none'; } else if(score>=70) tr.classList.add('row-hi'); else if(score>=60) tr.classList.add('row-mid');
     if(r._grpSub) tr.classList.add('row-grp-sub');
     if(r._grpFirst) tr.classList.add('row-grp-first');
     tr.innerHTML=`
@@ -1642,40 +1599,21 @@ function renderBoard(){
         const moved=!isNaN(openNum)&&!isNaN(curNum)&&openNum!==curNum;
         if(!moved) return '<span style="color:#8892aa">'+curL+'</span>';
         const up=curNum>openNum;
-        const arrow=up?'▲':'▼';
         const color=up?'#1a6fd4':'#e05c2a';
-        return '<span style="color:'+color+';font-weight:700">'+curL+'</span> <span style="font-size:9px;color:'+color+'">'+arrow+'</span>';
+        return '<span style="color:'+color+';font-weight:700">'+curL+'</span>';
       })()}</td>
       <td class="td-edge"><span class="ev ${eC(edge)}">${edge}</span></td>
       <td class="td-total">${Math.round(Number(r.total_score)||0)}</td>
-      <td class="td-bkt"><span class="bkt ${bk.c}">${bk.l}</span></td>
       <td class="td-pat">${patBadge(r.pattern_primary)}${(()=>{const s=(r.pattern_secondary||'').trim();return s&&s!=='NEUTRAL'?'<br><span style="font-size:8px;opacity:.55">+ '+s.replace(/_/g,' ')+'</span>':'';})()}</td>
-      <td class="td-layer">${lyrBadge(r.layer_mode)}</td>
       <td class="td-tim">${timBadge(r.timing_bucket)}</td>
-      <td class="td-bkdn">${(()=>{
-        const items=[
-          {lbl:'Sharp',v:Number(r.sharp_score)||0,max:20},
-          {lbl:'Consensus',v:Number(r.consensus_score)||0,max:10},
-          {lbl:'Retail',v:Number(r.retail_score)||0,max:10},
-          {lbl:'Timing',v:Number(r.timing_modifier)||0,max:3},
-          {lbl:'Cross-Mkt',v:Number(r.cross_market_adj)||0,max:5},
-        ];
-        return items.map(i=>{
-          const n=Math.round(i.v);
-          const pct=Math.min(Math.abs(n)/i.max*100,100);
-          const cls=n>=0?'pos':'neg';
-          const clr=n>0?'#00965a':n<0?'#d63020':'#aab2c4';
-          return '<div class="bk-row"><span class="bk-lbl">'+i.lbl+'</span><div class="bk-bar"><div class="bk-fill '+cls+'" style="width:'+pct+'%"></div></div><span class="bk-val" style="color:'+clr+'">'+(n>0?'+':'')+n+'/'+i.max+'</span></div>';
-        }).join('');
-      })()}</td>
-      <td class="td-dec"><span class="dec ${dc}">${dt}</span>${isLocked(r)?'<span style="font-size:9px;opacity:.6" title="Game started">🔒</span>':''}</td>
+      <td class="td-dec"><span class="dec ${dc}">${dt}</span>${isLocked(r)?'<span style="font-size:9px;opacity:.7;margin-left:4px;color:#7a7f96" title="Game started">Locked</span>':''}</td>
       <td class="td-pick">${r.favored_side||'-'}</td>
     `;
     tbody.appendChild(tr);
   });
 }
 
-function kpiRows(items,el){ items.forEach(item=>{ const n=item.w+item.l; const pct=n>0?Math.round(100*item.w/n):null; const cls=pct!==null?wrCol(pct):'r'; const d=document.createElement('div'); d.className='krow'; d.innerHTML=`<div class="krow-head"><span class="kname">${item.label}</span><span class="kpct ${cls}">${pct!==null?pct+'%':'—'} <span class="kn">(${n})</span></span></div><div class="kbar"><div class="kfill" style="width:${pct||0}%;background:${wrClr(pct||0)}"></div></div>`; el.appendChild(d); }); }
+function kpiRows(items,el){ items.forEach(item=>{ const n=item.w+item.l; const pct=n>0?Math.round(100*item.w/n):null; const cls=pct!==null?wrCol(pct):'r'; const d=document.createElement('div'); d.className='krow'; d.innerHTML=`<div class="krow-head"><span class="kname">${item.label}</span><span class="kpct ${cls}">${pct!==null?pct+'%':'--'} <span class="kn">(${n})</span></span></div><div class="kbar"><div class="kfill" style="width:${pct||0}%;background:${wrClr(pct||0)}"></div></div>`; el.appendChild(d); }); }
 function kpiSection(label, items, el){ const hdr=document.createElement('div'); hdr.className='ksidebar-section-hdr'; hdr.textContent=label; el.appendChild(hdr); kpiRows(items,el); }
 
 // Chart instances - destroy before recreate
@@ -1689,25 +1627,33 @@ function makeChart(id, config) {
 
 function isHighConf(r) {
   const d=(r.game_decision||'').toUpperCase();
-  return d==='STRONG_BET'||d.replace(/_/g,' ')==='STRONG BET';
+  return d==='BET';
 }
 function isBetPlus(r) {
   const d=(r.game_decision||'').toUpperCase().replace(/_/g,' ');
-  return d==='STRONG BET'||d==='STRONG_BET'||d==='BET';
+  return d==='BET';
 }
 
-// ── v2.4 epoch: only count results resolved on or after this date ──
+// â”€â”€ v2.4 epoch: only count results resolved on or after this date â”€â”€
 // Reset for v2.4 scoring recalibration (net_edge fix, juice guard)
-const V2_EPOCH = '2026-03-06T05:00:00';  // midnight Mar 6 EST in UTC
+const V2_EPOCH = '2026-03-20T00:00:00Z';  // v4 launch epoch
 const V12_EPOCH = V2_EPOCH;
 
-// ── Shared denominator helpers (single source of truth) ──
+function resultTs(r) {
+  return r._frozen_at_utc || r.resolved_at_utc || '';
+}
+
+function resultGameLabel(r) {
+  return r.game || r.game_id || [r.team1, r.team2].filter(Boolean).join(' @ ') || r.side || '--';
+}
+
+// â”€â”€ Shared denominator helpers (single source of truth) â”€â”€
 function gradedRows(data) {
   return data.filter(r => {
     if (!['WIN','LOSS'].includes((r.result||r.outcome||'').toUpperCase())) return false;
-    const ts = r.resolved_at_utc || '';
+    const ts = resultTs(r);
     if (ts && ts < V12_EPOCH) return false;   // pre-v1.2 data excluded
-    // Only count the picked side — both sides exist in CSV, skip the non-pick
+    // Only count the picked side â€” both sides exist in CSV, skip the non-pick
     if (r.side && r.favored_side && r.side.trim() !== r.favored_side.trim()) return false;
     return true;
   });
@@ -1716,32 +1662,32 @@ function mrEligible(data) { return gradedRows(data).filter(r => (r.market_read||
 function isWin(r) { return (r.result||r.outcome||'').toUpperCase()==='WIN'; }
 function winRate(rows) { return rows.length ? parseFloat((100*rows.filter(isWin).length/rows.length).toFixed(1)) : null; }
 
-// ── Bucket constants (locked — single edit point) ──
+// Bucket constants (locked - single edit point)
 const CONF_BUCKETS = [
-  {label:'75+', min:75, max:999}, {label:'70–74', min:70, max:74.99},
-  {label:'65–69', min:65, max:69.99}, {label:'60–64', min:60, max:64.99},
+  {label:'75+', min:75, max:999}, {label:'70-74', min:70, max:74.99},
+  {label:'65-69', min:65, max:69.99}, {label:'60-64', min:60, max:64.99},
   {label:'<60', min:0, max:59.99}
 ];
 const EDGE_BUCKETS = [
-  {label:'13+', min:13, max:999}, {label:'9–12', min:9, max:12.99},
-  {label:'5–8', min:5, max:8.99}, {label:'0–4', min:0, max:4.99}
+  {label:'13+', min:13, max:999}, {label:'9-12', min:9, max:12.99},
+  {label:'5-8', min:5, max:8.99}, {label:'0-4', min:0, max:4.99}
 ];
 const TOTAL_SCORE_BUCKETS = [
-  {label:'75+', min:75, max:999}, {label:'70–74', min:70, max:74.99},
-  {label:'67–69', min:67, max:69.99}, {label:'60–66', min:60, max:66.99},
+  {label:'75+', min:75, max:999}, {label:'70-74', min:70, max:74.99},
+  {label:'67-69', min:67, max:69.99}, {label:'60-66', min:60, max:66.99},
   {label:'<60', min:0, max:59.99}
 ];
-const DECISION_ORDER = ['STRONG_BET','BET','LEAN','NO BET'];
+const DECISION_ORDER = ['BET','LEAN','NO BET'];
 
-// ── Drilldown Modal ──
+// â”€â”€ Drilldown Modal â”€â”€
 let _drillRows = [];
 let _drillTitle = '';
 
 function confBucket(c) {
   const v = parseFloat(c);
-  if (isNaN(v)) return '—';
+  if (isNaN(v)) return '--';
   for (const b of CONF_BUCKETS) { if (v >= b.min && v <= b.max) return b.label; }
-  return '—';
+  return '--';
 }
 
 function openDrill(title, rows) {
@@ -1749,18 +1695,17 @@ function openDrill(title, rows) {
   _drillTitle = title;
   _drillRows = rows;
   const w = rows.filter(isWin).length, l = rows.length - w;
-  const wr = rows.length ? (100*w/rows.length).toFixed(1) : '—';
-  document.getElementById('drill-title').textContent = title + '  —  ' + w + 'W ' + l + 'L (' + wr + '%)';
+  const wr = rows.length ? (100*w/rows.length).toFixed(1) : '--';
+  document.getElementById('drill-title').textContent = title + ' | ' + w + 'W ' + l + 'L (' + wr + '%)';
   const tbl = document.getElementById('drill-tbl');
   let h = '<thead><tr>';
-  ['Date','Sport','Game','Market','Side','Line','Confidence','Edge','Bucket','Timing','DK Signal','Layer','Decision','Final','Result'].forEach(c => h += '<th>'+c+'</th>');
+  ['Date','Sport','Game','Market','Side','Line','Confidence','Edge','Bucket','Timing','DK Signal','Decision','Final','Result'].forEach(c => h += '<th>'+c+'</th>');
   h += '</tr></thead><tbody>';
-  rows.sort((a,b) => new Date(b.resolved_at_utc||0) - new Date(a.resolved_at_utc||0)).forEach((r,i) => {
+  rows.sort((a,b) => new Date(resultTs(b)||0) - new Date(resultTs(a)||0)).forEach((r,i) => {
     const bg = i%2===0 ? '' : 'background:rgba(0,0,0,.02);';
-    const dt = r.resolved_at_utc ? new Date(r.resolved_at_utc).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',timeZone:'America/New_York'}) : '--';
+    const dt = resultTs(r) ? new Date(resultTs(r)).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',timeZone:'America/New_York'}) : '--';
     const dec = (r.game_decision||'').replace(/_/g,' ');
-    const decBadge = dec.toUpperCase().includes('STRONG') ? '<span class="decision dec-bet dec-strong">Strong Bet</span>' :
-      dec==='BET' ? '<span class="decision dec-bet">Bet</span>' :
+    const decBadge = dec==='BET' ? '<span class="decision dec-bet">Bet</span>' :
       dec==='LEAN' ? '<span class="decision dec-lean">Lean</span>' :
       '<span class="decision dec-no">'+dec+'</span>';
     const win = (r.result||'').toUpperCase()==='WIN';
@@ -1770,8 +1715,8 @@ function openDrill(title, rows) {
     const tb = (r.timing_bucket||'').trim();
     const tbBdg = tb ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:'+(tb==='EARLY'?'#e8f5e9':tb==='LIVE'?'#fff3e0':'#e3f2fd')+';color:'+(tb==='EARLY'?'#2e7d32':tb==='LIVE'?'#e65100':'#1565c0')+'">'+tb+'</span>' : '';
     const sc1 = r.team1_score, sc2 = r.team2_score;
-    const final = (sc1!==undefined && sc1!=='') ? sc1+'–'+sc2 : '--';
-    h += '<tr style="'+bg+'"><td>'+dt+'</td><td>'+spChip(r.sport||'')+'</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">'+(r.game||r.side||'--')+'</td>';
+    const final = (sc1!==undefined && sc1!=='') ? sc1+'-'+sc2 : '--';
+    h += '<tr style="'+bg+'"><td>'+dt+'</td><td>'+spChip(r.sport||'')+'</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">'+resultGameLabel(r)+'</td>';
     h += '<td><span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#eef2ff;color:#2255cc">'+(r.market_display||'--')+'</span></td>';
     h += '<td>'+(r.favored_side||r.side||'--')+'</td>';
     h += '<td>'+(r.current_line||'--')+'</td>';
@@ -1779,7 +1724,6 @@ function openDrill(title, rows) {
     h += '<td>'+(r.net_edge?Number(r.net_edge).toFixed(1):'--')+'</td>';
     h += '<td>'+confBucket(r.total_score||r.game_confidence)+'</td>';
     h += '<td>'+tbBdg+'</td><td>'+mrBdg+'</td>';
-    h += '<td style="font-weight:700">'+(r.layer_mode||'--')+'</td>';
     h += '<td>'+decBadge+'</td><td style="font-weight:700">'+final+'</td><td>'+res+'</td></tr>';
   });
   h += '</tbody>';
@@ -1821,13 +1765,13 @@ function openGameDetail(r){
 
   let html='<div style="padding:16px 20px">';
 
-  // ── GAME HEADER ──
+  // â”€â”€ GAME HEADER â”€â”€
   html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--border)">';
   html+=spChip(r.sport);
   html+='<div><div style="font-size:16px;font-weight:800;color:var(--text);">'+(r.game||'--')+'</div>';
   html+='<div style="font-size:11px;color:var(--text3);margin-top:2px">'+et(r._game_time)+'</div></div></div>';
 
-  // ── MARKET CARDS ──
+  // â”€â”€ MARKET CARDS â”€â”€
   mkts.forEach(m=>{
     const mkt=(m.market_display||'').toUpperCase();
     const [dt,dc]=decInfo(m.game_decision);
@@ -1860,7 +1804,7 @@ function openGameDetail(r){
     html+='Line: '+openL+(lineMoved?' &rarr; '+curL:'');
     html+='</div>';
 
-    // Plain-English summary (no signals, no arrows — just bets/money/line)
+    // Plain-English summary (no signals, no arrows â€” just bets/money/line)
     const parts=[];
     if(bets!==null&&money!==null){
       parts.push(bets.toFixed(0)+'% of bets, '+money.toFixed(0)+'% of money on '+pick);
@@ -1873,69 +1817,47 @@ function openGameDetail(r){
     html+='</div>';
   });
 
-  // ── GAME DETAILS (foldable) ──
+  // â”€â”€ GAME DETAILS (foldable) â”€â”€
   const d=r;
   const sp=(d.sport||'').toLowerCase();
   html+='<details style="margin-top:8px;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
   html+='<summary style="font-size:11px;font-weight:700;color:var(--text);cursor:pointer;padding:10px 16px;background:var(--bg3);text-transform:uppercase;letter-spacing:.5px">Game Details</summary>';
   html+='<div style="padding:12px 16px">';
 
-  // v3.2 Scoring breakdown (5 components + base 50)
-  const sh=n(d.sharp_score),co=n(d.consensus_score),rt=n(d.retail_score),tm=n(d.timing_modifier),xm=n(d.cross_market_adj);
+  const tm=n(d.timing_modifier),xm=n(d.cross_market_adj);
   const fs=n(d.game_confidence);
-  html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px">Scoring (v3.2)</div>';
+  html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px">Score Details</div>';
   html+=_row('Base','50.0');
-  html+=_row('Sharp',sh!==null?(sh>0?'+':'')+sh.toFixed(1):null);
-  html+=_row('Consensus',co!==null?(co>0?'+':'')+co.toFixed(1):null);
-  html+=_row('Retail',rt!==null?(rt>0?'+':'')+rt.toFixed(1):null);
   html+=_row('Timing',tm!==null?(tm>0?'+':'')+tm.toFixed(1):null);
   html+=_row('Cross-Market',xm!==null?(xm>0?'+':'')+xm.toFixed(1):null);
   html+=_row('Final Score',fs!==null?'<b>'+fs.toFixed(1)+'</b>':null);
-  if(v(d.l1_path_behavior)) html+=_row('Path Behavior',d.l1_path_behavior);
   if(v(d.pattern_primary)&&d.pattern_primary!=='NEUTRAL') html+=_row('Pattern',d.pattern_primary);
   if(v(d.expression)) html+=_row('Expression',d.expression);
   if(v(d.expression_reason)) html+=_row('Expr Reason',d.expression_reason);
   if(v(d.score_explanation)) html+=_row('Explanation',d.score_explanation);
 
-  // Sharp data
-  if(v(d.l1_n_books)){
-    html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 6px;border-bottom:1px solid var(--border);padding-bottom:4px">Sharp Books (L1)</div>';
-    html+=_row('Books Tracked',v(d.l1_n_books));
-    html+=_row('Agreement',v(d.l1_sharp_agreement));
-    html+=_row('Strength',v(d.l1_sharp_strength));
-    html+=_row('Certification',v(d.sharp_cert_tier));
-  }
-
-  // Consensus data
-  if(v(d.l2_n_books)){
-    html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 6px;border-bottom:1px solid var(--border);padding-bottom:4px">Consensus (L2)</div>';
-    html+=_row('Books',v(d.l2_n_books));
-    html+=_row('Dispersion',v(d.l2_dispersion_label));
-    html+=_row('Consensus Line',v(d.l2_consensus_line));
-    html+=_row('Pinnacle Line',v(d.l2_pinn_line));
-    html+=_row('DK vs Market',v(d.dk_vs_mkt));
-  }
-
   // Conditions
-  const hasConditions=v(d.temp_f)||v(d.wind_mph)||v(d.b2b_flag)||n(d.home_injury_count)>0||n(d.away_injury_count)>0||(sp==='mlb'&&v(d.sp_name_home))||(sp==='nhl'&&v(d.goalie_home));
+  const hasConditions=v(d.temp_f)||v(d.wind_mph)||v(d.b2b_flag)||((sp!=='mlb')&&(n(d.home_injury_count)>0||n(d.away_injury_count)>0))||(sp==='mlb'&&v(d.sp_name_home))||(sp==='nhl'&&v(d.goalie_home));
   if(hasConditions){
     html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 6px;border-bottom:1px solid var(--border);padding-bottom:4px">Conditions</div>';
-    html+=_row('Temperature',v(d.temp_f)?d.temp_f+'°F':null);
+    html+=_row('Temperature',v(d.temp_f)?d.temp_f+'F':null);
     html+=_row('Wind',v(d.wind_mph)?d.wind_mph+' mph':null);
     html+=_row('Precipitation',v(d.precip_prob)?d.precip_prob+'%':null);
     html+=_row('Weather',v(d.weather_flag)&&d.weather_flag!=='DOME'?d.weather_flag:null);
     html+=_row('Back-to-Back',v(d.b2b_flag));
-    if(n(d.home_injury_count)>0) html+=_row('Home Injuries',d.home_injury_count+' out');
-    if(n(d.away_injury_count)>0) html+=_row('Away Injuries',d.away_injury_count+' out');
+    if(sp!=='mlb'){
+      if(n(d.home_injury_count)>0) html+=_row('Home Injuries',d.home_injury_count+' out');
+      if(n(d.away_injury_count)>0) html+=_row('Away Injuries',d.away_injury_count+' out');
+    }
   }
 
   // Sport-specific
   if(sp==='mlb'){
     html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 6px;border-bottom:1px solid var(--border);padding-bottom:4px">Pitching Matchup</div>';
-    html+=_row('Home SP',v(d.sp_name_home));
-    html+=_row('Home ERA',v(d.sp_era_home));
-    html+=_row('Away SP',v(d.sp_name_away));
-    html+=_row('Away ERA',v(d.sp_era_away));
+    html+=_row('Home SP',v(d.sp_name_home)||'TBD');
+    html+=_row('Home ERA',v(d.sp_era_home)||'TBD');
+    html+=_row('Away SP',v(d.sp_name_away)||'TBD');
+    html+=_row('Away ERA',v(d.sp_era_away)||'TBD');
     html+=_row('Park Factor',v(d.park_factor));
   }
   if(sp==='nhl'){
@@ -1948,7 +1870,7 @@ function openGameDetail(r){
 
   html+='</div></details>';
 
-  // ── MOVEMENT (foldable, with market picker) ──
+  // â”€â”€ MOVEMENT (foldable, with market picker) â”€â”€
   html+='<details style="margin-top:8px;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
   html+='<summary style="font-size:11px;font-weight:700;color:var(--text);cursor:pointer;padding:10px 16px;background:var(--bg3);text-transform:uppercase;letter-spacing:.5px">Movement</summary>';
   html+='<div style="padding:12px 16px">';
@@ -2013,7 +1935,7 @@ function openGameDetail(r){
           if(decChanged){
             html+='<td style="padding:4px 8px;font-weight:700;color:#d48000;white-space:nowrap">'+prevDec+' &rarr; '+dec+'</td>';
           } else {
-            const decCol=dec==='BET'||dec==='STRONG_BET'?'color:#00965a;font-weight:600':dec==='LEAN'?'color:#d48000':'color:var(--text3)';
+            const decCol=dec==='BET'?'color:#00965a;font-weight:600':dec==='LEAN'?'color:#d48000':'color:var(--text3)';
             html+='<td style="padding:4px 8px;'+decCol+'">'+dec+'</td>';
           }
           html+='</tr>';
@@ -2037,26 +1959,36 @@ function openGameDetail(r){
   document.getElementById('drill-overlay').classList.add('open');
 }
 
-// ── SCORE HISTORY TAB ──
+// SCORE HISTORY TAB
 let _histData=null;
-let _histGame='ALL';
+let _histGame='';
 let _histMkt='';
 function _utcToET(ts){
   if(!ts) return '--';
-  // snapshot_ts is "YYYY-MM-DD HH:MM:SS" in UTC — append Z to parse as UTC
+  // snapshot_ts is "YYYY-MM-DD HH:MM:SS" in UTC - append Z to parse as UTC
   const d=new Date(ts.replace(' ','T')+'Z');
   if(isNaN(d)) return ts;
   return d.toLocaleString('en-US',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true,timeZone:'America/New_York'});
 }
 async function renderHistory(){
+  const promptEl = document.getElementById('hist-prompt');
+  const wrapEl = document.getElementById('hist-table-wrap');
+  const metaEl = document.getElementById('hist-meta');
+  if(promptEl) {
+    promptEl.style.display = '';
+    if(!promptEl.textContent.trim()) promptEl.textContent = 'Loading movement history...';
+  }
+  if(wrapEl) wrapEl.style.display = 'none';
   if(!_histData){
     try{
       _histData=await loadCSV('data/score_history.csv');
     }catch(e){}
     if(!_histData||!_histData.length){
-      document.getElementById('hist-prompt').textContent='No history yet — data appears after next engine run';
-      document.getElementById('hist-prompt').style.display='';
-      document.getElementById('hist-table-wrap').style.display='none';
+      if(promptEl) {
+        promptEl.textContent='No history yet - data appears after next engine run';
+        promptEl.style.display='';
+      }
+      if(wrapEl) wrapEl.style.display='none';
       return;
     }
   }
@@ -2071,25 +2003,29 @@ async function renderHistory(){
   const mktSel=document.getElementById('hist-mkt-select');
   if(!_histGame){
     mktLabel.style.display='none'; mktSel.style.display='none';
-    document.getElementById('hist-prompt').style.display='';
-    document.getElementById('hist-prompt').textContent='Select a game to view movement history';
-    document.getElementById('hist-table-wrap').style.display='none';
-    document.getElementById('hist-meta').textContent='—';
+    if(promptEl) {
+      promptEl.style.display='';
+      promptEl.textContent='Select a game to view movement history';
+    }
+    if(wrapEl) wrapEl.style.display='none';
+    if(metaEl) metaEl.textContent='--';
     return;
   }
   mktLabel.style.display=''; mktSel.style.display='';
   if(!_histMkt){
-    document.getElementById('hist-prompt').style.display='';
-    document.getElementById('hist-prompt').textContent='Select a market';
-    document.getElementById('hist-table-wrap').style.display='none';
+    if(promptEl) {
+      promptEl.style.display='';
+      promptEl.textContent='Select a market';
+    }
+    if(wrapEl) wrapEl.style.display='none';
     return;
   }
   // Filter
   let rows=_histData;
   rows=rows.filter(r=>(r.game||r.game_id)===_histGame);
   rows=rows.filter(r=>(r.market_display||'').toUpperCase()===_histMkt);
-  document.getElementById('hist-prompt').style.display='none';
-  document.getElementById('hist-table-wrap').style.display='';
+  if(promptEl) promptEl.style.display='none';
+  if(wrapEl) wrapEl.style.display='';
   // Sort by time desc
   rows.sort((a,b)=>(b.snapshot_ts||'').localeCompare(a.snapshot_ts||''));
   // Build prev-score map for delta arrows
@@ -2109,7 +2045,7 @@ async function renderHistory(){
     r._prevDec=idx>0?(arr[idx-1].game_decision||''):'';
     r._prevLine=idx>0?(arr[idx-1].current_line||arr[idx-1].open_line||''):'';
   });
-  document.getElementById('hist-meta').textContent=rows.length+' snapshots';
+  if(metaEl) metaEl.textContent=rows.length+' snapshots';
   const tb=document.getElementById('hist-tbody');
   if(!rows.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:#888">No data for this selection</td></tr>'; return; }
   const _v=s=>(s&&s!=='nan'&&s!==''&&s!=='0')?s:'--';
@@ -2117,28 +2053,28 @@ async function renderHistory(){
   const _delta=(cur,prev)=>{
     if(prev===null) return '';
     const d=cur-prev;
-    if(Math.abs(d)<0.05) return '<span style="color:#888">—</span>';
-    if(d>0) return '<span style="color:#22c55e;font-weight:600">▲+'+d.toFixed(1)+'</span>';
-    return '<span style="color:#ef4444;font-weight:600">▼'+d.toFixed(1)+'</span>';
+    if(Math.abs(d)<0.05) return '<span style="color:#888">--</span>';
+    if(d>0) return '<span style="color:#22c55e;font-weight:600">^ +'+d.toFixed(1)+'</span>';
+    return '<span style="color:#ef4444;font-weight:600">v '+d.toFixed(1)+'</span>';
   };
   const _decChg=(cur,prev)=>{
     if(!prev||prev===cur) return '';
-    const rank={"NO BET":0,"NO_BET":0,"LEAN":1,"BET":2,"STRONG_BET":3};
+    const rank={"NO BET":0,"NO_BET":0,"LEAN":1,"BET":2};
     const rc=rank[cur]??0, rp=rank[prev]??0;
-    if(rc>rp) return ' <span style="color:#22c55e;font-size:11px">⬆ from '+prev+'</span>';
-    if(rc<rp) return ' <span style="color:#ef4444;font-size:11px">⬇ from '+prev+'</span>';
+    if(rc>rp) return ' <span style="color:#22c55e;font-size:11px">up from '+prev+'</span>';
+    if(rc<rp) return ' <span style="color:#ef4444;font-size:11px">down from '+prev+'</span>';
     return '';
   };
   // Parse line string with market-aware formatting
   const _fmtLine=(raw)=>{
     if(!raw||raw==='--'||raw==='nan') return '--';
-    // Total: "Over 225.5 @ -105" → "O 225.5 (-105)"
+    // Total: "Over 225.5 @ -105" -> "O 225.5 (-105)"
     const mt=raw.match(/^(Over|Under)\s+(\d+\.?\d*)\s*@\s*([+-]?\d+)/);
     if(mt) return (mt[1]==='Over'?'O':'U')+' '+mt[2]+' ('+mt[3]+')';
-    // Spread: "Team -5.5 @ -110" → "-5.5 (-110)"
+    // Spread: "Team -5.5 @ -110" -> "-5.5 (-110)"
     const ms=raw.match(/([+-]\d+\.?\d*)\s*@\s*([+-]?\d+)/);
     if(ms) return ms[1]+' ('+ms[2]+')';
-    // ML: "Team @ +225" → "+225"
+    // ML: "Team @ +225" -> "+225"
     const mm=raw.match(/@\s*([+-]?\d+)/);
     if(mm) return mm[1];
     // Fallback
@@ -2155,7 +2091,7 @@ async function renderHistory(){
     const decChanged=curDec!==prevDec&&i>0;
     const rawPick=r.favored_side||r.side||'--';
     const rawLine=r.current_line||r.open_line||'';
-    // For ML, append juice from current_line to pick (e.g. "NSH Predators" → "NSH Predators -110")
+    // For ML, append juice from current_line to pick (e.g. "NSH Predators" -> "NSH Predators -110")
     const mkt=(r.market_display||'').toUpperCase();
     let pick=rawPick;
     if(mkt==='MONEYLINE'&&rawLine){
@@ -2172,9 +2108,9 @@ async function renderHistory(){
     const patSty=patChanged?'color:#d48000;font-weight:700':'color:var(--text);font-weight:600';
     let decHtml;
     if(decChanged){
-      decHtml='<td style="padding:4px 8px;font-weight:700;color:#d48000;white-space:nowrap">'+prevDec+' &rarr; '+curDec+'</td>';
+      decHtml='<td style="padding:4px 8px;font-weight:700;color:#d48000;white-space:nowrap">'+prevDec+' -> '+curDec+'</td>';
     } else {
-      const decCol=curDec==='BET'||curDec==='STRONG_BET'?'color:#00965a;font-weight:600':curDec==='LEAN'?'color:#d48000':'color:var(--text3)';
+      const decCol=curDec==='BET'?'color:#00965a;font-weight:600':curDec==='LEAN'?'color:#d48000':'color:var(--text3)';
       decHtml='<td style="padding:4px 8px;'+decCol+'">'+curDec+'</td>';
     }
     return '<tr style="border-bottom:1px solid var(--bg4);'+rowBg+'">'+
@@ -2201,7 +2137,7 @@ function setHistMkt(m){
 
 function exportDrillCSV() {
   if (!_drillRows.length) return;
-  const cols = ['resolved_at_utc','sport','game','market_display','favored_side','current_line','game_confidence','net_edge','timing_bucket','market_read','layer_mode','pattern_primary','game_decision','expression','team1','team1_score','team2','team2_score','result'];
+  const cols = ['resolved_at_utc','sport','game','market_display','favored_side','current_line','game_confidence','net_edge','timing_bucket','market_read','pattern_primary','game_decision','expression','team1','team1_score','team2','team2_score','result'];
   let csv = cols.join(',') + '\n';
   _drillRows.forEach(r => {
     csv += cols.map(c => {
@@ -2230,7 +2166,7 @@ function buildKPIs(){
   const FONT = "system-ui, -apple-system, sans-serif";
   const MONO = "'JetBrains Mono', monospace";
 
-  // ── Color helper: 5-tier based on win% ──
+  // â”€â”€ Color helper: 5-tier based on win% â”€â”€
   function pctClass(p) {
     if (p === null) return '';
     if (p >= 56) return 'g';
@@ -2248,7 +2184,7 @@ function buildKPIs(){
     return '#d63020';
   }
 
-  // ── Build stat-table HTML ──
+  // Build stat-table HTML
   // Stash for drilldown row data
   if (!window._drillStash) window._drillStash = [];
   window._drillStash = [];
@@ -2258,9 +2194,9 @@ function buildKPIs(){
     html += '<table class="stat-tbl"><thead><tr><th>Category</th><th></th><th>Win %</th><th>Record</th><th>N</th></tr></thead><tbody>';
     rows.forEach(r => {
       const idx = window._drillStash.length;
-      window._drillStash.push({ title: title + ' — ' + r.label + ' (' + r.w + 'W-' + r.l + 'L)', rows: r._rows || [] });
+      window._drillStash.push({ title: title + ' - ' + r.label + ' (' + r.w + 'W-' + r.l + 'L)', rows: r._rows || [] });
       const pct = r.pct;
-      const pctStr = pct !== null ? pct.toFixed(1) + '%' : '—';
+      const pctStr = pct !== null ? pct.toFixed(1) + '%' : '--';
       const cls = pctClass(pct);
       const clr = barClr(pct);
       const barW = pct !== null ? Math.max(2, pct) : 0;
@@ -2291,38 +2227,38 @@ function buildKPIs(){
     });
   }
 
-  // ── 1. Decision ──
+  // â”€â”€ 1. Decision â”€â”€
   const decRows = DECISION_ORDER.map(d => {
     const dNorm = d.replace(/_/g,' ');
     const rows = graded.filter(r => {
       const rd = (r.game_decision||'').toUpperCase().replace(/_/g,' ');
       return rd === dNorm || rd === d;
     });
-    return { label: d === 'STRONG_BET' ? 'Strong Bet' : d === 'NO BET' ? 'No Bet' : d.charAt(0)+d.slice(1).toLowerCase(), rows };
+    return { label: d === 'NO BET' ? 'No Bet' : d.charAt(0)+d.slice(1).toLowerCase(), rows };
   });
   statPanel(document.getElementById('pnl-decision'), 'By Decision', dataRows(decRows));
 
-  // ── 2. Confidence ──
-  statPanel(document.getElementById('pnl-confidence'), 'By Confidence', dataRows(bucketize(graded, CONF_BUCKETS, 'game_confidence')));
+  // â”€â”€ 2. Confidence â”€â”€
+  statPanel(document.getElementById('pnl-confidence'), 'By Score Band', dataRows(bucketize(graded, CONF_BUCKETS, 'game_confidence')));
 
-  // ── 3. Net Edge ──
+  // â”€â”€ 3. Net Edge â”€â”€
   statPanel(document.getElementById('pnl-edge'), 'By Score Gap', dataRows(bucketize(graded, EDGE_BUCKETS, 'net_edge')));
 
-  // ── Dual-view stat panel: BET+ primary, All graded secondary ──
+  // â”€â”€ Dual-view stat panel: BET+ primary, All graded secondary â”€â”€
   function statPanelDual(el, title, sbData, allData) {
     const sbN = sbData.reduce((s,r)=>s+r.n, 0);
     const allN = allData.reduce((s,r)=>s+r.n, 0);
-    let html = `<div class="panel-h"><span class="panel-t">${title}</span><span class="panel-m">BET+ ${sbN} · All ${allN}</span></div>`;
+    let html = `<div class="panel-h"><span class="panel-t">${title}</span><span class="panel-m">BET+ ${sbN} | All ${allN}</span></div>`;
     html += '<table class="stat-tbl"><thead><tr><th>Category</th><th></th><th>BET+ %</th><th>BET+ Rec</th><th>All %</th></tr></thead><tbody>';
     for (let i=0; i<sbData.length; i++) {
       const sb = sbData[i];
       const al = allData[i];
       const idx = window._drillStash.length;
       const alW = al._rows ? al._rows.filter(isWin).length : al.w;
-      const drillTitle = title + ' — ' + al.label + ' (' + alW + 'W-' + (al.n-alW) + 'L)';
+      const drillTitle = title + ' - ' + al.label + ' (' + alW + 'W-' + (al.n-alW) + 'L)';
       window._drillStash.push({ title: drillTitle, rows: al._rows || [] });
-      const sbStr = sb.pct !== null ? sb.pct.toFixed(1)+'%' : '—';
-      const alStr = al.pct !== null ? al.pct.toFixed(1)+'%' : '—';
+      const sbStr = sb.pct !== null ? sb.pct.toFixed(1)+'%' : '--';
+      const alStr = al.pct !== null ? al.pct.toFixed(1)+'%' : '--';
       const cls = pctClass(sb.pct);
       const clr = barClr(sb.pct);
       const barW = sb.pct !== null ? Math.max(2, sb.pct) : 0;
@@ -2330,7 +2266,7 @@ function buildKPIs(){
         <td class="st-label">${sb.label}</td>
         <td class="st-bar-cell"><div class="st-bar-wrap"><div class="st-bar-mark"></div><div class="st-bar-fill" style="width:${barW}%;background:${clr}"></div></div></td>
         <td class="st-pct ${cls}">${sbStr}</td>
-        <td class="st-rec">${sb.n>0?sb.w+'W-'+sb.l+'L':'—'}</td>
+        <td class="st-rec">${sb.n>0?sb.w+'W-'+sb.l+'L':'--'}</td>
         <td class="st-n" style="color:var(--text4)">${alStr} <span style="font-size:8px">(${al.n})</span></td>
       </tr>`;
     }
@@ -2367,21 +2303,21 @@ function buildKPIs(){
     return [sbD, alD];
   }
 
-  // ── 4. Sport (SB primary, All secondary) ──
+  // â”€â”€ 4. Sport (SB primary, All secondary) â”€â”€
   const sportAllMap = groupBy(graded, 'sport', s=>s.toUpperCase());
   const sportSBMap = groupBy(betPlusRows, 'sport', s=>s.toUpperCase());
   const sportKeys = Object.keys(sportAllMap).sort((a,b)=>(sportAllMap[b]||[]).length-(sportAllMap[a]||[]).length);
   const [sportSBD, sportAlD] = dualData(sportKeys, sportSBMap, sportAllMap);
   statPanelDual(document.getElementById('pnl-sport'), 'By Sport', sportSBD, sportAlD);
 
-  // ── 5. Market (SB primary, All secondary) ──
+  // â”€â”€ 5. Market (SB primary, All secondary) â”€â”€
   const mktAllMap = groupBy(graded, 'market_display', s=>s.toUpperCase());
   const mktSBMap = groupBy(betPlusRows, 'market_display', s=>s.toUpperCase());
   const mktKeys = Object.keys(mktAllMap).sort((a,b)=>(mktAllMap[b]||[]).length-(mktAllMap[a]||[]).length);
   const [mktSBD, mktAlD] = dualData(mktKeys, mktSBMap, mktAllMap);
   statPanelDual(document.getElementById('pnl-market'), 'By Market', mktSBD, mktAlD);
 
-  // ── 6. Fav vs Dog — SPREAD only (only market where fav/dog is meaningful) ──
+  // â”€â”€ 6. Fav vs Dog â€” SPREAD only (only market where fav/dog is meaningful) â”€â”€
   const spreadGraded = graded.filter(r => (r.market_display||'').toUpperCase() === 'SPREAD');
   const spreadSB = betPlusRows.filter(r => (r.market_display||'').toUpperCase() === 'SPREAD');
   function classifySpread(r) {
@@ -2397,29 +2333,7 @@ function buildKPIs(){
   const [fdSBD, fdAlD] = dualData(fdKeys, fdSBMap, fdAllMap);
   statPanelDual(document.getElementById('pnl-favdog'), 'Spread: Fav vs Dog', fdSBD, fdAlD);
 
-  // ── 7. Market Read (all graded — sparse v1.2 data) ──
-  const mrPanel = document.getElementById('pnl-mread');
-  if (mrRows.length === 0) {
-    mrPanel.innerHTML = `<div class="panel-h"><span class="panel-t">By DK Signal</span><span class="panel-m">v1.2 rows only</span></div><div class="mr-empty-msg">No resolved rows with market read data yet</div>`;
-  } else {
-    const mrMap = groupBy(mrRows, 'market_read', s=>s.trim());
-    const mrKeys = Object.keys(mrMap).sort((a,b)=>(mrMap[b]||[]).length-(mrMap[a]||[]).length);
-    const mrData = mrKeys.map(k => { const rows=mrMap[k]||[]; const w=rows.filter(isWin).length; return {label:k, pct:winRate(rows), w, l:rows.length-w, n:rows.length, _rows:rows}; });
-    let html = `<div class="panel-h"><span class="panel-t">By DK Signal</span><span class="panel-m">${mrRows.length} graded w/ read</span></div>`;
-    html += '<table class="stat-tbl"><thead><tr><th>Read</th><th></th><th>Win %</th><th>Record</th><th>N</th></tr></thead><tbody>';
-    mrData.forEach(r => {
-      const idx = window._drillStash.length;
-      window._drillStash.push({ title: 'Market Read — ' + r.label + ' (' + r.w + 'W-' + r.l + 'L)', rows: r._rows || [] });
-      const pctStr = r.pct !== null ? r.pct.toFixed(1)+'%' : '—';
-      const cls = pctClass(r.pct); const clr = barClr(r.pct);
-      const barW = r.pct !== null ? Math.max(2, r.pct) : 0;
-      html += `<tr onclick="openDrill(window._drillStash[${idx}].title, window._drillStash[${idx}].rows)"><td class="st-label">${r.label}</td><td class="st-bar-cell"><div class="st-bar-wrap"><div class="st-bar-mark"></div><div class="st-bar-fill" style="width:${barW}%;background:${clr}"></div></div></td><td class="st-pct ${cls}">${pctStr}</td><td class="st-rec">${r.w}W-${r.l}L</td><td class="st-n">${r.n}</td></tr>`;
-    });
-    html += '</tbody></table>';
-    mrPanel.innerHTML = html;
-  }
-
-  // ── 8. Trend chart: SB line (primary) + All graded line (secondary) ──
+  // â”€â”€ 7. Trend chart: Bet line (primary) + All graded line (secondary) â”€â”€
   function buildTrend(rows) {
     const byD = {};
     rows.forEach(r => {
@@ -2513,7 +2427,7 @@ function buildKPIs(){
     }
   });
 
-  // ── 9. CLV Analysis ──
+  // â”€â”€ 9. CLV Analysis â”€â”€
   const clvPanel = document.getElementById('pnl-clv');
   const clvDetailPanel = document.getElementById('pnl-clv-detail');
   const clvRows = graded.filter(r => r.clv && r.clv !== '' && !isNaN(parseFloat(r.clv)));
@@ -2550,14 +2464,14 @@ function buildKPIs(){
       });
       let html = `<div class="panel-h"><span class="panel-t">CLV by Decision</span><span class="panel-m">positive = beat the close</span></div>`;
       html += '<table class="stat-tbl"><thead><tr><th>Decision</th><th>Avg CLV</th><th>Beat %</th><th>N</th></tr></thead><tbody>';
-      ['STRONG BET','BET','LEAN','NO BET'].forEach(d => {
+      ['BET','LEAN','NO BET'].forEach(d => {
         const vals = clvByDec[d] || [];
         if (vals.length === 0) return;
         const avg = vals.reduce((s,v)=>s+v,0)/vals.length;
         const beat = vals.filter(v=>v>0).length;
         const beatP = (100*beat/vals.length).toFixed(1);
         const clr = avg > 0 ? '#00965a' : avg < 0 ? '#d63020' : '#8892aa';
-        const label = d === 'STRONG BET' ? 'Strong Bet' : d === 'NO BET' ? 'No Bet' : d.charAt(0)+d.slice(1).toLowerCase();
+        const label = d === 'NO BET' ? 'No Bet' : d.charAt(0)+d.slice(1).toLowerCase();
         html += `<tr><td class="st-label">${label}</td><td style="font-family:var(--mono);font-weight:700;color:${clr}">${avg>0?'+':''}${avg.toFixed(2)}</td><td style="font-family:var(--mono)">${beatP}%</td><td class="st-n">${vals.length}</td></tr>`;
       });
       html += '</tbody></table>';
@@ -2565,13 +2479,14 @@ function buildKPIs(){
     }
   }
 
-  // ── 10. By Pattern ──
+  // â”€â”€ 10. By Pattern â”€â”€
   (function(){
     const el = document.getElementById('pnl-pattern');
     if (!el) return;
-    const patRows = graded.filter(r => (r.pattern_primary||'').trim() !== '');
+    const V4_PATTERNS = new Set(['INITIATED','FOLLOW','FADE','FREEZE','BUYBACK','STALE','NOISE']);
+    const patRows = graded.filter(r => V4_PATTERNS.has((r.pattern_primary||'').trim().toUpperCase()));
     if (patRows.length === 0) {
-      el.innerHTML = `<div class="panel-h"><span class="panel-t">By Pattern</span><span class="panel-m">awaiting data</span></div><div class="mr-empty-msg">Awaiting v3.2 freeze data</div>`;
+      el.innerHTML = `<div class="panel-h"><span class="panel-t">By Pattern</span><span class="panel-m">awaiting data</span></div><div class="mr-empty-msg">Awaiting v4 graded pattern data</div>`;
       return;
     }
     const patMap = groupBy(patRows, 'pattern_primary', s=>s.trim());
@@ -2581,8 +2496,8 @@ function buildKPIs(){
     html += '<table class="stat-tbl"><thead><tr><th>Pattern</th><th></th><th>Win %</th><th>Record</th><th>N</th></tr></thead><tbody>';
     patData.forEach(r => {
       const idx = window._drillStash.length;
-      window._drillStash.push({ title: 'Pattern — ' + r.label + ' (' + r.w + 'W-' + r.l + 'L)', rows: r._rows || [] });
-      const pctStr = r.pct !== null ? r.pct.toFixed(1)+'%' : '—';
+      window._drillStash.push({ title: 'Pattern - ' + r.label + ' (' + r.w + 'W-' + r.l + 'L)', rows: r._rows || [] });
+      const pctStr = r.pct !== null ? r.pct.toFixed(1)+'%' : '--';
       const cls = pctClass(r.pct); const clr = barClr(r.pct);
       const barW = r.pct !== null ? Math.max(2, r.pct) : 0;
       html += `<tr onclick="openDrill(window._drillStash[${idx}].title, window._drillStash[${idx}].rows)"><td class="st-label">${r.label}</td><td class="st-bar-cell"><div class="st-bar-wrap"><div class="st-bar-mark"></div><div class="st-bar-fill" style="width:${barW}%;background:${clr}"></div></div></td><td class="st-pct ${cls}">${pctStr}</td><td class="st-rec">${r.w}W-${r.l}L</td><td class="st-n">${r.n}</td></tr>`;
@@ -2591,64 +2506,7 @@ function buildKPIs(){
     el.innerHTML = html;
   })();
 
-  // ── 11. By Sharp Agreement ──
-  (function(){
-    const el = document.getElementById('pnl-sharp-agree');
-    if (!el) return;
-    const saRows = graded.filter(r => r.l1_sharp_agreement !== undefined && r.l1_sharp_agreement !== '');
-    if (saRows.length === 0) {
-      el.innerHTML = `<div class="panel-h"><span class="panel-t">By Sharp Agreement</span><span class="panel-m">awaiting data</span></div><div class="mr-empty-msg">Awaiting L1 data</div>`;
-      return;
-    }
-    function saBucket(v) { const n = parseInt(v); if (isNaN(n)) return null; if (n === 0) return '0'; if (n === 1) return '1'; return '2+'; }
-    const saMap = {};
-    saRows.forEach(r => { const k = saBucket(r.l1_sharp_agreement); if (k !== null) { if (!saMap[k]) saMap[k] = []; saMap[k].push(r); } });
-    const saKeys = ['0','1','2+'];
-    const saData = saKeys.map(k => { const rows=saMap[k]||[]; const w=rows.filter(isWin).length; return {label:k+' books', pct:winRate(rows), w, l:rows.length-w, n:rows.length, _rows:rows}; }).filter(r=>r.n>0);
-    let html = `<div class="panel-h"><span class="panel-t">By Sharp Agreement</span><span class="panel-m">${saRows.length} graded</span></div>`;
-    html += '<table class="stat-tbl"><thead><tr><th>Agreement</th><th></th><th>Win %</th><th>Record</th><th>N</th></tr></thead><tbody>';
-    saData.forEach(r => {
-      const idx = window._drillStash.length;
-      window._drillStash.push({ title: 'Sharp Agreement — ' + r.label + ' (' + r.w + 'W-' + r.l + 'L)', rows: r._rows || [] });
-      const pctStr = r.pct !== null ? r.pct.toFixed(1)+'%' : '—';
-      const cls = pctClass(r.pct); const clr = barClr(r.pct);
-      const barW = r.pct !== null ? Math.max(2, r.pct) : 0;
-      html += `<tr onclick="openDrill(window._drillStash[${idx}].title, window._drillStash[${idx}].rows)"><td class="st-label">${r.label}</td><td class="st-bar-cell"><div class="st-bar-wrap"><div class="st-bar-mark"></div><div class="st-bar-fill" style="width:${barW}%;background:${clr}"></div></div></td><td class="st-pct ${cls}">${pctStr}</td><td class="st-rec">${r.w}W-${r.l}L</td><td class="st-n">${r.n}</td></tr>`;
-    });
-    html += '</tbody></table>';
-    el.innerHTML = html;
-  })();
-
-  // ── 12. By Pinnacle Move ──
-  (function(){
-    const el = document.getElementById('pnl-pinn-move');
-    if (!el) return;
-    const pmRows = graded.filter(r => r.l1_pinnacle_moved !== undefined && r.l1_pinnacle_moved !== '');
-    if (pmRows.length === 0) {
-      el.innerHTML = `<div class="panel-h"><span class="panel-t">By Pinnacle Move</span><span class="panel-m">awaiting data</span></div><div class="mr-empty-msg">Awaiting L1 data</div>`;
-      return;
-    }
-    const pmMap = {'Pinnacle Moved':[], 'No Move':[]};
-    pmRows.forEach(r => {
-      const moved = String(r.l1_pinnacle_moved).toLowerCase() === 'true';
-      (moved ? pmMap['Pinnacle Moved'] : pmMap['No Move']).push(r);
-    });
-    const pmData = ['Pinnacle Moved','No Move'].map(k => { const rows=pmMap[k]||[]; const w=rows.filter(isWin).length; return {label:k, pct:winRate(rows), w, l:rows.length-w, n:rows.length, _rows:rows}; }).filter(r=>r.n>0);
-    let html = `<div class="panel-h"><span class="panel-t">By Pinnacle Move</span><span class="panel-m">${pmRows.length} graded</span></div>`;
-    html += '<table class="stat-tbl"><thead><tr><th>Status</th><th></th><th>Win %</th><th>Record</th><th>N</th></tr></thead><tbody>';
-    pmData.forEach(r => {
-      const idx = window._drillStash.length;
-      window._drillStash.push({ title: 'Pinnacle Move — ' + r.label + ' (' + r.w + 'W-' + r.l + 'L)', rows: r._rows || [] });
-      const pctStr = r.pct !== null ? r.pct.toFixed(1)+'%' : '—';
-      const cls = pctClass(r.pct); const clr = barClr(r.pct);
-      const barW = r.pct !== null ? Math.max(2, r.pct) : 0;
-      html += `<tr onclick="openDrill(window._drillStash[${idx}].title, window._drillStash[${idx}].rows)"><td class="st-label">${r.label}</td><td class="st-bar-cell"><div class="st-bar-wrap"><div class="st-bar-mark"></div><div class="st-bar-fill" style="width:${barW}%;background:${clr}"></div></div></td><td class="st-pct ${cls}">${pctStr}</td><td class="st-rec">${r.w}W-${r.l}L</td><td class="st-n">${r.n}</td></tr>`;
-    });
-    html += '</tbody></table>';
-    el.innerHTML = html;
-  })();
-
-  // ── 13. CLV by Score ──
+  // â”€â”€ 11. CLV by Score â”€â”€
   (function(){
     const el = document.getElementById('pnl-clv-score');
     if (!el) return;
@@ -2672,7 +2530,7 @@ function buildKPIs(){
     el.innerHTML = html;
   })();
 
-  // ── 14. CLV by Edge ──
+  // â”€â”€ 14. CLV by Edge â”€â”€
   (function(){
     const el = document.getElementById('pnl-clv-edge');
     if (!el) return;
@@ -2696,11 +2554,12 @@ function buildKPIs(){
     el.innerHTML = html;
   })();
 
-  // ── 15. CLV by Pattern ──
+  // â”€â”€ 15. CLV by Pattern â”€â”€
   (function(){
     const el = document.getElementById('pnl-clv-pattern');
     if (!el) return;
-    const clvPat = clvRows.filter(r => (r.pattern_primary||'').trim() !== '');
+    const V4_PATTERNS = new Set(['INITIATED','FOLLOW','FADE','FREEZE','BUYBACK','STALE','NOISE']);
+    const clvPat = clvRows.filter(r => V4_PATTERNS.has((r.pattern_primary||'').trim().toUpperCase()));
     if (clvPat.length === 0) {
       el.innerHTML = `<div class="panel-h"><span class="panel-t">CLV by Pattern</span></div><div class="mr-empty-msg">Awaiting data</div>`;
       return;
@@ -2723,14 +2582,14 @@ function buildKPIs(){
     el.innerHTML = html;
   })();
 
-  // ── 16. Score Distribution Histogram ──
+  // 16. Score Distribution Histogram
   (function(){
     const canvas = document.getElementById('chart-score-dist');
     if (!canvas) return;
     const bins = [
-      {label:'<55', min:0, max:54.99}, {label:'55–59', min:55, max:59.99},
-      {label:'60–64', min:60, max:64.99}, {label:'65–69', min:65, max:69.99},
-      {label:'70–74', min:70, max:74.99}, {label:'75+', min:75, max:999}
+      {label:'<55', min:0, max:54.99}, {label:'55-59', min:55, max:59.99},
+      {label:'60-64', min:60, max:64.99}, {label:'65-69', min:65, max:69.99},
+      {label:'70-74', min:70, max:74.99}, {label:'75+', min:75, max:999}
     ];
     const counts = bins.map(b => {
       return graded.filter(r => { const s = parseFloat(r.total_score||r.game_confidence||0); return s >= b.min && s <= b.max; }).length;
@@ -2766,7 +2625,7 @@ function buildKPIs(){
     });
   })();
 
-  // ── Summary row ──
+  // Summary row
   const bpW = betPlusRows.filter(isWin).length;
   const bpL = betPlusRows.length - bpW;
   const lnW = leanRows.filter(isWin).length;
@@ -2777,11 +2636,11 @@ function buildKPIs(){
   const summEl = document.getElementById('p-summary');
   summEl.innerHTML = '';
   [
-    {label:'Bet Record', val: betPlusRows.length ? `${bpW}–${bpL}` : '—', sub: `${betPlusRows.length} Bet + Strong Bet`, cls:''},
-    {label:'Bet Win %', val: pBP !== null ? pBP.toFixed(1)+'%' : '—', sub: 'Bet + Strong Bet', cls: pBP!==null?pctClass(pBP):''},
-    {label:'Lean Record', val: leanRows.length ? `${lnW}–${lnL}` : '—', sub: `${leanRows.length} Lean`, cls:''},
-    {label:'Lean Win %', val: pLean !== null ? pLean.toFixed(1)+'%' : '—', sub: 'Lean plays', cls: pLean!==null?pctClass(pLean):''},
-    {label:'Avg CLV', val: (()=>{const cv=clvRows.map(r=>parseFloat(r.clv));if(!cv.length) return '—';const a=cv.reduce((s,v)=>s+v,0)/cv.length;return (a>0?'+':'')+a.toFixed(2);})(), sub: clvRows.length+' tracked', cls: (()=>{const cv=clvRows.map(r=>parseFloat(r.clv));if(!cv.length) return '';const a=cv.reduce((s,v)=>s+v,0)/cv.length;return a>0?'g':a<0?'r':'';})()},
+    {label:'Bet Record', val: betPlusRows.length ? `${bpW}-${bpL}` : '--', sub: `${betPlusRows.length} Bet`, cls:''},
+    {label:'Bet Win %', val: pBP !== null ? pBP.toFixed(1)+'%' : '--', sub: 'Bet only', cls: pBP!==null?pctClass(pBP):''},
+    {label:'Lean Record', val: leanRows.length ? `${lnW}-${lnL}` : '--', sub: `${leanRows.length} Lean`, cls:''},
+    {label:'Lean Win %', val: pLean !== null ? pLean.toFixed(1)+'%' : '--', sub: 'Lean plays', cls: pLean!==null?pctClass(pLean):''},
+    {label:'Avg CLV', val: (()=>{const cv=clvRows.map(r=>parseFloat(r.clv));if(!cv.length) return '--';const a=cv.reduce((s,v)=>s+v,0)/cv.length;return (a>0?'+':'')+a.toFixed(2);})(), sub: clvRows.length+' tracked', cls: (()=>{const cv=clvRows.map(r=>parseFloat(r.clv));if(!cv.length) return '';const a=cv.reduce((s,v)=>s+v,0)/cv.length;return a>0?'g':a<0?'r':'';})()},
   ].forEach(item => {
     const d = document.createElement('div');
     d.className = 'perf-summary-cell';
@@ -2789,8 +2648,8 @@ function buildKPIs(){
     summEl.appendChild(d);
   });
 
-  // ── Update topbar BET+ Win Rate ──
-  const bpWrStr = pBP !== null ? pBP.toFixed(1)+'%' : '—';
+  // Update topbar BET+ Win Rate
+  const bpWrStr = pBP !== null ? pBP.toFixed(1)+'%' : '--';
   document.getElementById('t-wr').textContent = bpWrStr;
   document.getElementById('m-wr').textContent = bpWrStr;
 }
@@ -2802,7 +2661,7 @@ function updateFreshness(f){
   const bar=document.getElementById('fresh-bar');
   if(!bar) return;
   if(!f){ return; }
-  // bar stays hidden — freshness now shows in status bar
+  // bar stays hidden â€” freshness now shows in status bar
   const now=Date.now();
   function ageMin(ts){ if(!ts) return Infinity; const d=new Date(ts); return isNaN(d)?Infinity:Math.round((now-d.getTime())/60000); }
   function fmtAge(m){ if(m===Infinity) return 'N/A'; if(m<1) return '<1m'; if(m<60) return m+'m'; return Math.floor(m/60)+'h '+m%60+'m'; }
@@ -2810,8 +2669,6 @@ function updateFreshness(f){
   // Per-source: {name, ts, freshThresh, warnThresh}
   const sources=[
     {name:'DK', ts:f.dk_ts, fresh:15, warn:30},
-    {name:'L1 Sharp', ts:f.l1_ts, fresh:1080, warn:1500},   // 18h fresh, 25h warn (pulls 3x/day, overnight gap is 17h)
-    {name:'L2 Consensus', ts:f.l2_ts, fresh:1080, warn:1500},
     {name:'Engine', ts:f.engine_ts, fresh:15, warn:30}
   ];
   let worst=0; // 0=live, 1=degraded, 2=stale
@@ -2821,8 +2678,7 @@ function updateFreshness(f){
     let st='ok', lvl=0;
     if(age>s.warn){ st='bad'; lvl=2; }
     else if(age>s.fresh){ st='warn'; lvl=1; }
-    if(s.name==='DK'||s.name==='Engine'){ worst=Math.max(worst,lvl); }
-    else { if(lvl>0) worst=Math.max(worst,1); } // L1/L2 stale = degraded, not full stale
+    worst=Math.max(worst,lvl);
     srcHtml+=`<span class="fresh-src"><span class="fs-dot ${st}"></span><span class="fs-name">${s.name}</span><span class="fs-age">${fmtTime(s.ts)} (${fmtAge(age)})</span></span>`;
   });
   const dot=document.getElementById('fresh-dot');
@@ -2877,12 +2733,12 @@ async function loadAll(){
   allLedger=ledger||MOCK_LEDGER;
   allResults=results||MOCK_RESULTS;
   allKPI=kpi||[];
-  // Build freeze ledger lookup: (game_id|market_display) → highest frozen decision
+  // Build freeze ledger lookup: (game_id|market_display) â†’ highest frozen decision
   const _freezeMap={};
-  const _decRankMap={"NO_BET":0,"NO BET":0,"LOCKED":0,"LEAN":1,"BET":2,"STRONG_BET":3};
+  const _decRankMap={"NO_BET":0,"NO BET":0,"LOCKED":0,"LEAN":1,"BET":2};
   if(freeze&&freeze.length){
     freeze.forEach(r=>{
-      // Only use favored side's freeze entry — non-favored side keeps its own decision
+      // Only use favored side's freeze entry â€” non-favored side keeps its own decision
       const s=(r.side||'').replace(/\s*[+-]?\d+\.?\d*\s*$/,'').trim();
       const f=(r.favored_side||'').replace(/\s*[+-]?\d+\.?\d*\s*$/,'').trim();
       if(s&&f&&s!==f) return;
@@ -2915,7 +2771,7 @@ async function loadAll(){
   });
 
   allDash.sort((a,b)=>{
-    const rank=r=>{const d=(r.game_decision||'').toUpperCase();return d==='STRONG_BET'?0:d==='BET'?1:d==='LEAN'?2:3;};
+    const rank=r=>{const d=(r.game_decision||'').toUpperCase();return d==='BET'?1:d==='LEAN'?2:3;};
     const ra=rank(a),rb=rank(b);
     if(ra!==rb) return ra-rb;
     const ta=Number(a.total_score||0), tb=Number(b.total_score||0);
@@ -2928,7 +2784,9 @@ async function loadAll(){
   const _changed=_hash!==_lastDashHash;
   _lastDashHash=_hash;
   updateStats();
-  if(_changed){ renderBoard();renderResults();if(typeof Chart!=='undefined') buildKPIs(); }
+  renderResults();
+  if(tabId==='history') renderHistory();
+  if(_changed){ renderBoard(); if(typeof Chart!=='undefined') buildKPIs(); }
 
   // Phase 2: load book lines + score history in background (non-blocking)
   Promise.all([
@@ -2948,6 +2806,7 @@ async function loadAll(){
       });
       bSel.value=cur;
     }
+    if(tabId==='history') renderHistory();
   });
 }
 
@@ -3046,74 +2905,44 @@ function updateStats(){
 function renderResults(){
   const el=document.getElementById('tab-results');
   if(!el) return;
+  const metaEl = document.getElementById('res-meta');
+  const bodyEl = document.getElementById('res-tbody');
+  if(!bodyEl) return;
   const src=allKPI.length?allKPI:allResults;
   const resolved=src.filter(r=>{
     if(!['WIN','LOSS'].includes((r.result||'').toUpperCase())) return false;
-    const ts=r.resolved_at_utc||'';
+    const ts=resultTs(r);
     if(ts && ts < V12_EPOCH) return false;
     // Only show the picked side
     if(r.side && r.favored_side && r.side.trim() !== r.favored_side.trim()) return false;
     return true;
-  }).sort((a,b)=>new Date(b.resolved_at_utc||0)-new Date(a.resolved_at_utc||0));
+  }).sort((a,b)=>new Date(resultTs(b)||0)-new Date(resultTs(a)||0));
+  if(metaEl) metaEl.textContent = resolved.length ? `${resolved.length} resolved plays` : '--';
   if(!resolved.length){
-    const inner=el.querySelector('.full-tab')||el;
-    inner.innerHTML='<div style="padding:40px;text-align:center;color:#8892aa">No resolved results yet</div>';
+    bodyEl.innerHTML = '<tr><td colspan="9" style="padding:28px;text-align:center;color:#8892aa">No resolved results yet</td></tr>';
     return;
   }
-  const _sc = v => { const n=Number(v); if(isNaN(n)||!v) return '<span style="color:#aab">--</span>'; const clr=n>0?'#00965a':n<0?'#d63020':'#8892aa'; return `<span style="color:${clr};font-weight:600">${n>0?'+':''}${n.toFixed(1)}</span>`; };
-  const _lyr = l => { const u=(l||'').toUpperCase(); if(u==='L123') return '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#dbeafe;color:#1e40af">L123</span>'; if(u==='L13') return '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#ccfbf1;color:#0f766e">L13</span>'; if(u==='L23') return '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#e0e7ff;color:#4338ca">L23</span>'; return '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#f3f4f6;color:#6b7280">'+(l||'--')+'</span>'; };
-  const _clv = r => { const cv=parseFloat(r.clv); if(isNaN(cv)||!r.clv) return '<span style="color:#aab">--</span>'; const clr=cv>0?'#00965a':cv<0?'#d63020':'#8892aa'; return '<span style="color:'+clr+';font-weight:700">'+(cv>0?'+':'')+cv.toFixed(1)+'</span>'; };
-  const _pct = v => { const n=Number(v); if(isNaN(n)||!v) return '<span style="color:#aab">--</span>'; return `<span style="font-weight:600">${n.toFixed(0)}%</span>`; };
   let trs='';
   resolved.slice(0,300).forEach((r,i)=>{
     const win=(r.result||'').toUpperCase()==='WIN';
     const res=win?'<span style="color:#00965a;font-weight:800">WIN</span>':'<span style="color:#d63020;font-weight:800">LOSS</span>';
-    const dec=(r.game_decision||'').replace(/_/g,' ');
-    const lockIcon=isLocked(r)?'<span style="font-size:9px;opacity:.6" title="Game started">🔒</span>':'';
-    const decBadge=dec.toUpperCase().includes('STRONG')?'<span class="decision dec-bet dec-strong">Strong Bet</span>':
-      dec==='BET'?'<span class="decision dec-bet">Bet</span>':
-      dec==='LEAN'?'<span class="decision dec-lean">Lean</span>':'<span class="decision dec-no">'+dec+'</span>';
     const dt=(r._frozen_at_utc||r.resolved_at_utc)?new Date(r._frozen_at_utc||r.resolved_at_utc).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',timeZone:'America/New_York'}):'--';
-    const pat2=(r.pattern_secondary||'').trim();
-    const patSub=pat2&&pat2!=='NEUTRAL'?'<br><span style="font-size:8px;opacity:.55">+ '+pat2.replace(/_/g,' ')+'</span>':'';
     const conf=Number(r.game_confidence||0); const confStr=conf?conf.toFixed(1):'--';
     const gap=Number(r.net_edge||0); const gapStr=gap?gap.toFixed(1):'--';
-    const gapClr=gap>0?'#00965a':gap<0?'#d63020':'#8892aa';
-    const openLine=r.open_line||'--';
-    const curLine=r.decision_line||r.current_line||'--';
-    const c='text-align:center;';
+    const timing = (r.timing_bucket||'').toUpperCase() || '--';
     trs+=`<tr style="background:${i%2===0?'#fff':'#f9fafb'};border-bottom:1px solid #eee">
-      <td style="padding:5px 8px;color:#8892aa;font-size:11px;white-space:nowrap;text-align:left">${dt}</td>
-      <td style="padding:5px 8px;white-space:nowrap;${c}">${spChip(r.sport||'')}</td>
-      <td style="padding:5px 8px;font-weight:600;white-space:nowrap;text-align:left">${r.game||r.side||'--'}</td>
-      <td style="padding:5px 8px;white-space:nowrap;${c}"><span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;background:#eef2ff;color:#2255cc">${r.market_display||'--'}</span></td>
-      <td style="padding:5px 8px;white-space:nowrap;${c}">${res}</td>
-      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;${c}">${_pct(r.bets_pct)}</td>
-      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;${c}">${_pct(r.money_pct)}</td>
-      <td style="padding:5px 6px;font-size:10px;white-space:nowrap;${c}">${openLine}</td>
-      <td style="padding:5px 6px;font-size:10px;white-space:nowrap;${c}">${curLine}</td>
-      <td style="padding:5px 8px;font-family:var(--mono);${c};white-space:nowrap"><span style="color:${gapClr};font-weight:600">${gapStr}</span></td>
-      <td style="padding:5px 8px;font-family:var(--mono);font-weight:700;${c};white-space:nowrap">${confStr}</td>
-      <td style="padding:5px 6px;white-space:nowrap;font-size:10px;${c}">${patBadge(r.pattern_primary)}${patSub}</td>
-      <td style="padding:5px 6px;${c}">${_lyr(r.layer_mode)}</td>
-      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;${c}">${_sc(r.sharp_score)}</td>
-      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;${c}">${_sc(r.consensus_score)}</td>
-      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;${c}">${_sc(r.retail_score)}</td>
-      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;${c}">${_sc(r.timing_modifier)}</td>
-      <td style="padding:5px 6px;font-family:var(--mono);font-size:11px;${c}">${_sc(r.cross_market_adj)}</td>
-      <td style="padding:5px 8px;font-family:var(--mono);font-size:11px;${c};white-space:nowrap">${_clv(r)}</td>
-      <td style="padding:5px 8px;white-space:nowrap;${c}">${decBadge}${lockIcon}</td>
-      <td style="padding:5px 6px;font-size:10px;white-space:nowrap;${c}">${r.favored_side||'--'}</td>
+      <td style="padding:6px 8px;color:#8892aa;font-size:11px;white-space:nowrap">${dt}</td>
+      <td style="padding:6px 8px;font-weight:600;white-space:nowrap">${resultGameLabel(r)}</td>
+      <td style="padding:6px 8px;white-space:nowrap"><span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;background:#eef2ff;color:#2255cc">${r.market_display||'--'}</span></td>
+      <td style="padding:6px 8px;white-space:nowrap">${r.favored_side||r.side||'--'}</td>
+      <td style="padding:6px 8px;font-family:var(--mono);font-weight:700">${confStr}</td>
+      <td style="padding:6px 8px">${confBucket(r.total_score||r.game_confidence)}</td>
+      <td style="padding:6px 8px;font-family:var(--mono)">${gapStr}</td>
+      <td style="padding:6px 8px">${timing}</td>
+      <td style="padding:6px 8px">${res}</td>
     </tr>`;
   });
-  const _cols=['Date','Sport','Game','Market','Result','Tix%','$%','Open','Current','Score Gap','Confidence','Pattern','Layer','Sharp','Cons','Retail','Time','Cross','CLV','Decision','Play'];
-  const _ra=[];
-  const inner=el.querySelector('.full-tab')||el;
-  inner.innerHTML=`<div style="overflow-x:auto">
-    <div style="padding:10px 14px;font-size:11px;color:#8892aa;border-bottom:1px solid #eee">${resolved.length} resolved plays</div>
-    <table style="border-collapse:collapse;font-size:12px">
-    <thead><tr style="background:#f1f3f5">${_cols.map((c,i)=>{const la=(c==='Date'||c==='Game')?'text-align:left;':'text-align:center;';return '<th style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:10px;font-weight:600;color:#6b7280;white-space:nowrap;'+la+'">'+c+'</th>';}).join('')}</tr></thead>
-    <tbody>${trs}</tbody></table></div>`;
+  bodyEl.innerHTML = trs;
 }
 
 function renderLedger(){
@@ -3162,14 +2991,14 @@ async function loadCSV(url){
   }catch(e){return null;}
 }
 
-// ── ACCESS GATE ──
+// â”€â”€ ACCESS GATE â”€â”€
 (async function() {
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = '/?auth=required'; return; }
   const { data: hasAccess } = await sb.rpc('has_active_access');
   if (!hasAccess) { window.location.href = '/?payment=required'; return; }
-  // Access granted — start dashboard
+  // Access granted â€” start dashboard
   loadAll();
   setInterval(updateStats, 1000);
   setInterval(loadAll, 60000);
