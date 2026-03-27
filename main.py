@@ -3772,8 +3772,8 @@ def build_dashboard():
     latest["semantic_owning_side"] = [r.get("semantic_owning_side", "none") for r in _v4_results]
     latest["semantic_decision"] = [r.get("semantic_decision", "") for r in _v4_results]
     latest["semantic_source"] = [r.get("semantic_source", "") for r in _v4_results]
-    # Controlled semantic consumption: only replace FOLLOW/FADE coarse labels when
-    # true same-market context exists and the semantic layer has a directional verdict.
+    # Controlled semantic consumption: semantic layer corrects displayed state/ownership
+    # when true same-market context exists. Decision stays with scorer/certification.
     try:
         _semantic_source = latest["semantic_source"].fillna("").astype(str).str.lower()
         _semantic_state = latest["semantic_reaction_state"].fillna("").astype(str).str.upper()
@@ -3786,6 +3786,14 @@ def build_dashboard():
         if _ff_mask.any():
             latest.loc[_ff_mask, "pattern_primary"] = latest.loc[_ff_mask, "semantic_reaction_state"]
             latest.loc[_ff_mask, "v4_state"] = latest.loc[_ff_mask, "semantic_reaction_state"]
+        _freeze_mask = (
+            _semantic_source.eq("market_context") &
+            _semantic_state.str.startswith("FREEZE_") &
+            _coarse_state.isin(["FREEZE", "STALE", "NOISE"])
+        )
+        if _freeze_mask.any():
+            latest.loc[_freeze_mask, "pattern_primary"] = latest.loc[_freeze_mask, "semantic_reaction_state"]
+            latest.loc[_freeze_mask, "v4_state"] = latest.loc[_freeze_mask, "semantic_reaction_state"]
     except Exception:
         pass
     # Temporary debug — ML price credibility (remove after 1-2 runs)
