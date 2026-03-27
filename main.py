@@ -3778,7 +3778,6 @@ def build_dashboard():
         _semantic_source = latest["semantic_source"].fillna("").astype(str).str.lower()
         _semantic_state = latest["semantic_reaction_state"].fillna("").astype(str).str.upper()
         _coarse_state = latest["v4_state"].fillna("").astype(str).str.upper()
-        _semantic_decision = latest["semantic_decision"].fillna("").astype(str).str.upper()
         _ff_mask = (
             _semantic_source.eq("market_context") &
             _semantic_state.isin(["FOLLOW", "FADE"]) &
@@ -3787,8 +3786,6 @@ def build_dashboard():
         if _ff_mask.any():
             latest.loc[_ff_mask, "pattern_primary"] = latest.loc[_ff_mask, "semantic_reaction_state"]
             latest.loc[_ff_mask, "v4_state"] = latest.loc[_ff_mask, "semantic_reaction_state"]
-            _ff_decision_mask = _ff_mask & _semantic_decision.ne("")
-            latest.loc[_ff_decision_mask, "v4_decision"] = latest.loc[_ff_decision_mask, "semantic_decision"]
     except Exception:
         pass
     # Temporary debug — ML price credibility (remove after 1-2 runs)
