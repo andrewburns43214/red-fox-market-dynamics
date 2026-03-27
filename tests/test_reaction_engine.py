@@ -1,8 +1,10 @@
 import csv
 import unittest
 from pathlib import Path
+from copy import deepcopy
 
-from scoring_reaction import score_reaction
+from scoring_reaction import classify_reaction_live, score_reaction
+from tests.fixtures.scoring_fixtures import SCORING_FIXTURES
 
 
 def _base_row(**overrides):
@@ -34,6 +36,60 @@ def _base_row(**overrides):
 
 
 class TestReactionEngine(unittest.TestCase):
+    def test_live_adapter_derives_freeze_subtypes_from_market_rows(self):
+        expected_by_fixture = {
+            "freeze_resistance_houston_illinois": "FREEZE_RESISTANCE",
+            "freeze_weak_mild_morning_pressure": "FREEZE_WEAK",
+            "freeze_key_number_nfl_spread_three": "FREEZE_KEY_NUMBER",
+            "freeze_balanced_real_money_dog": "FREEZE_BALANCED",
+        }
+
+        for fixture in SCORING_FIXTURES:
+            name = fixture["name"]
+            if name not in expected_by_fixture:
+                continue
+            with self.subTest(fixture=name):
+                market_rows = []
+                for row in fixture["market_rows"]:
+                    clean = deepcopy(row)
+                    clean.pop("meaningful_pressure", None)
+                    clean.pop("balanced_counteraction", None)
+                    clean.pop("key_number_pinned", None)
+                    clean.pop("market_stale", None)
+                    clean.pop("freeze_subtype_candidate", None)
+                    market_rows.append(clean)
+                if len(market_rows) == 1:
+                    market_rows.append(self._synthetic_opposite_row(market_rows[0]))
+                evaluated_row = next(
+                    row for row in market_rows if row["side"] == fixture["evaluated_side"]
+                )
+                result = classify_reaction_live(
+                    evaluated_row,
+                    market_rows=market_rows,
+                    evaluated_side=fixture["evaluated_side"],
+                    pressure_side=fixture["pressure_side"],
+                )
+                self.assertEqual(
+                    result["semantic_reaction_state"],
+                    expected_by_fixture[name],
+                )
+                self.assertEqual(result["semantic_source"], "market_context")
+
+    def _synthetic_opposite_row(self, row):
+        other = deepcopy(row)
+        side = str(other.get("side", ""))
+        if other.get("market_display") == "SPREAD":
+            if "+" in side:
+                other["side"] = side.replace("+", "-", 1)
+            elif "-" in side:
+                other["side"] = side.replace("-", "+", 1)
+            for key in ("open_line_val", "current_line_val", "prev_line_val"):
+                if other.get(key) is not None:
+                    other[key] = -float(other[key])
+        other["bets_pct"] = max(0.0, 100.0 - float(row.get("bets_pct", 0) or 0))
+        other["money_pct"] = max(0.0, 100.0 - float(row.get("money_pct", 0) or 0))
+        return other
+
     def test_fade_state_never_recommends_same_side(self):
         result = score_reaction(_base_row())
         self.assertEqual(result["reaction_state"], "FADE")

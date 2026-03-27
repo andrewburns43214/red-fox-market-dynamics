@@ -104,7 +104,7 @@ def classify_reaction_live(
     available. Otherwise degrades gracefully to a conservative row-level fallback
     without fabricating semantic certainty.
     """
-    rows = market_rows or []
+    rows = _derive_live_market_rows(market_rows or [], pressure_side)
     evaluated = _text(evaluated_side) or _text(row.get("side"))
 
     if _has_market_context(rows, evaluated):
@@ -409,6 +409,89 @@ def _classify_freeze_subtype(freeze_subtype: str) -> Dict[str, Any]:
     if freeze_subtype not in mapping:
         raise ValueError(f"unknown freeze subtype: {freeze_subtype}")
     return mapping[freeze_subtype]
+
+
+def _derive_live_market_rows(
+    rows: list[Dict[str, Any]],
+    pressure_side: str | None,
+) -> list[Dict[str, Any]]:
+    derived = [dict(r) for r in (rows or [])]
+    if not derived or not pressure_side:
+        return derived
+
+    pressure_row = _find_market_row(derived, pressure_side)
+    if pressure_row is None:
+        return derived
+
+    if _upper(pressure_row.get("freeze_subtype_candidate")):
+        return derived
+
+    meaningful_pressure = _meaningful_pressure(pressure_row)
+    balanced_counteraction = _balanced_counteraction(pressure_row)
+    key_number_pinned = _key_number_pinned(pressure_row)
+    market_stale = _bool(pressure_row.get("market_stale"))
+    effective_move_mag = abs(_num(pressure_row.get("effective_move_mag")))
+    if effective_move_mag == 0:
+        effective_move_mag = _fallback_effective_move(
+            pressure_row.get("effective_move_mag"),
+            _upper(pressure_row.get("market_display")),
+            _num(pressure_row.get("line_move_open")),
+            _num(pressure_row.get("odds_move_open")),
+        )
+    move_dir = _row_move_dir(pressure_row)
+
+    freeze_subtype = None
+    if move_dir == 0 and effective_move_mag < 0.5:
+        if market_stale:
+            freeze_subtype = "FREEZE_STALE"
+        elif key_number_pinned:
+            freeze_subtype = "FREEZE_KEY_NUMBER"
+        elif balanced_counteraction:
+            freeze_subtype = "FREEZE_BALANCED"
+        elif meaningful_pressure:
+            freeze_subtype = "FREEZE_RESISTANCE"
+        else:
+            freeze_subtype = "FREEZE_WEAK"
+
+    pressure_row["meaningful_pressure"] = meaningful_pressure
+    pressure_row["balanced_counteraction"] = balanced_counteraction
+    pressure_row["key_number_pinned"] = key_number_pinned
+    pressure_row["market_stale"] = market_stale
+    pressure_row["freeze_subtype_candidate"] = freeze_subtype
+    return derived
+
+
+def _meaningful_pressure(row: Dict[str, Any]) -> bool:
+    bets_pct = _num(row.get("bets_pct"))
+    money_pct = _num(row.get("money_pct"))
+    divergence = money_pct - bets_pct
+    return bets_pct >= 60 or money_pct >= 65 or divergence >= 15
+
+
+def _balanced_counteraction(row: Dict[str, Any]) -> bool:
+    bets_pct = _num(row.get("bets_pct"))
+    money_pct = _num(row.get("money_pct"))
+    divergence = money_pct - bets_pct
+    return bets_pct >= 60 and money_pct <= 55 and divergence <= -8
+
+
+def _key_number_pinned(row: Dict[str, Any]) -> bool:
+    if _upper(row.get("market_display")) != "SPREAD":
+        return False
+    if _text(row.get("sport")).lower() not in {"nfl", "ncaafb"}:
+        return False
+
+    current_line_val = _num_or_none(row.get("current_line_val"))
+    open_line_val = _num_or_none(row.get("open_line_val"))
+    if current_line_val is None:
+        return False
+
+    current_abs = abs(current_line_val)
+    open_abs = abs(open_line_val) if open_line_val is not None else current_abs
+    for key in (3.0, 7.0, 10.0, 14.0, 17.0):
+        if abs(current_abs - key) <= 0.05 and abs(open_abs - key) <= 0.05:
+            return True
+    return False
 
 
 def _semantic_from_row_fallback(coarse: Dict[str, Any]) -> Dict[str, Any]:
