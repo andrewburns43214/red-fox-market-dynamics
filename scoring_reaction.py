@@ -430,6 +430,9 @@ def _derive_live_market_rows(
     balanced_counteraction = _balanced_counteraction(pressure_row)
     key_number_pinned = _key_number_pinned(pressure_row)
     market_stale = _bool(pressure_row.get("market_stale"))
+    sport = _text(pressure_row.get("sport")).lower()
+    market = _upper(pressure_row.get("market_display"))
+    current_line_val = _num_or_none(pressure_row.get("current_line_val"))
     effective_move_mag = abs(_num(pressure_row.get("effective_move_mag")))
     if effective_move_mag == 0:
         effective_move_mag = _fallback_effective_move(
@@ -438,6 +441,14 @@ def _derive_live_market_rows(
             _num(pressure_row.get("line_move_open")),
             _num(pressure_row.get("odds_move_open")),
         )
+    runline_or_puckline = (
+        market == "SPREAD"
+        and sport in {"mlb", "nhl"}
+        and current_line_val is not None
+        and abs(current_line_val) == 1.5
+    )
+    if runline_or_puckline:
+        effective_move_mag = abs(_num(pressure_row.get("odds_move_open")))
     move_dir = _row_move_dir(pressure_row)
 
     freeze_subtype = None
@@ -448,7 +459,7 @@ def _derive_live_market_rows(
             freeze_subtype = "FREEZE_KEY_NUMBER"
         elif balanced_counteraction:
             freeze_subtype = "FREEZE_BALANCED"
-        elif meaningful_pressure:
+        elif meaningful_pressure and not runline_or_puckline:
             freeze_subtype = "FREEZE_RESISTANCE"
         else:
             freeze_subtype = "FREEZE_WEAK"
