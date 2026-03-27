@@ -3777,6 +3777,7 @@ def build_dashboard():
     try:
         _semantic_source = latest["semantic_source"].fillna("").astype(str).str.lower()
         _semantic_state = latest["semantic_reaction_state"].fillna("").astype(str).str.upper()
+        _semantic_owner = latest["semantic_owning_side"].fillna("").astype(str).str.lower()
         _coarse_state = latest["v4_state"].fillna("").astype(str).str.upper()
         _ff_mask = (
             _semantic_source.eq("market_context") &
@@ -3794,6 +3795,56 @@ def build_dashboard():
         if _freeze_mask.any():
             latest.loc[_freeze_mask, "pattern_primary"] = latest.loc[_freeze_mask, "semantic_reaction_state"]
             latest.loc[_freeze_mask, "v4_state"] = latest.loc[_freeze_mask, "semantic_reaction_state"]
+        _freeze_opp_mask = (
+            _semantic_source.eq("market_context") &
+            _semantic_state.eq("FREEZE_RESISTANCE") &
+            _semantic_owner.eq("opposite")
+        )
+        if _freeze_opp_mask.any():
+            _row_fields_to_swap = [
+                "side",
+                "side_key",
+                "current_line",
+                "current_line_val",
+                "current_odds",
+                "open_line",
+                "open_line_val",
+                "open_odds",
+                "prev_current_line",
+                "prev_line_val",
+                "prev_odds",
+                "bets_pct",
+                "money_pct",
+                "v4_score",
+                "confidence_score",
+                "total_score",
+                "net_edge",
+                "score_explanation",
+                "expression",
+                "expression_reason",
+                "color",
+                "move_dir",
+                "market_read",
+                "timing_bucket",
+                "odds_move_open",
+                "line_move_open",
+                "odds_move_prev",
+                "line_move_prev",
+                "effective_move_mag",
+            ]
+            for (_gid, _mkt), _grp in latest.loc[_freeze_opp_mask].groupby(["game_id", "market_display"], dropna=False):
+                if len(_grp) != 2:
+                    continue
+                _grp_idx = list(_grp.index)
+                _grp_rows = latest.loc[_grp_idx]
+                for _idx in _grp_idx:
+                    _other = _grp_rows.drop(index=_idx)
+                    if len(_other) != 1:
+                        continue
+                    _other_row = _other.iloc[0]
+                    for _field in _row_fields_to_swap:
+                        if _field in latest.columns and _field in _other_row.index:
+                            latest.at[_idx, _field] = _other_row.get(_field, latest.at[_idx, _field])
     except Exception:
         pass
     # Temporary debug — ML price credibility (remove after 1-2 runs)
