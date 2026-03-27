@@ -3814,23 +3814,7 @@ def build_dashboard():
             _semantic_owner.eq("opposite")
         )
         if _freeze_opp_mask.any():
-            for (_gid, _mkt), _grp in latest.loc[_freeze_opp_mask].groupby(["game_id", "market_display"], dropna=False):
-                if len(_grp) != 2:
-                    continue
-                _grp_rows = latest.loc[_grp.index].copy()
-                _bets = pd.to_numeric(_grp_rows.get("bets_pct"), errors="coerce").fillna(0.0)
-                _money = pd.to_numeric(_grp_rows.get("money_pct"), errors="coerce").fillna(0.0)
-                _pressure_idx = (_bets + _money).idxmax()
-                _opp_idx = [i for i in _grp_rows.index if i != _pressure_idx]
-                if len(_opp_idx) != 1:
-                    continue
-                _opp_idx = _opp_idx[0]
-                _pressure_score = pd.to_numeric(latest.at[_pressure_idx, "confidence_score"], errors="coerce")
-                if pd.isna(_pressure_score):
-                    _pressure_score = 50.0
-                latest.at[_opp_idx, "confidence_score"] = float(_pressure_score) + 2.0
-                if "v4_score" in latest.columns:
-                    latest.at[_opp_idx, "v4_score"] = float(_pressure_score) + 2.0
+            pass
     except Exception:
         pass
     # Temporary debug — ML price credibility (remove after 1-2 runs)
