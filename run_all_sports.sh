@@ -32,25 +32,25 @@ SPORTS="ufc"  # UFC always on
 in_season() {
   local s=$1 e=$2
   if [ "$s" -le "$e" ]; then
-    # same-year range (e.g. Mar 26 – Nov 6)
+    # same-year range (e.g. Mar 26 - Nov 6)
     [ "$MMDD" -ge "$s" ] && [ "$MMDD" -le "$e" ]
   else
-    # wraps around year (e.g. Sep 7 – Feb 25)
+    # wraps around year (e.g. Sep 7 - Feb 25)
     [ "$MMDD" -ge "$s" ] || [ "$MMDD" -le "$e" ]
   fi
 }
 
-# NFL: Sep 7 – Feb 25
+# NFL: Sep 7 - Feb 25
 if in_season 907 225; then SPORTS="nfl $SPORTS"; fi
-# NCAAF: Aug 24 – Feb 1
+# NCAAF: Aug 24 - Feb 1
 if in_season 824 201; then SPORTS="ncaaf $SPORTS"; fi
-# MLB: Mar 26 – Nov 6
+# MLB: Mar 26 - Nov 6
 if in_season 326 1106; then SPORTS="mlb $SPORTS"; fi
-# NBA: Oct 22 – Jul 5
+# NBA: Oct 22 - Jul 5
 if in_season 1022 705; then SPORTS="nba $SPORTS"; fi
-# NHL: Oct 10 – Jul 5
+# NHL: Oct 10 - Jul 5
 if in_season 1010 705; then SPORTS="nhl $SPORTS"; fi
-# NCAAB: Nov 5 – Apr 10
+# NCAAB: Nov 5 - Apr 10
 if in_season 1105 410; then SPORTS="ncaab $SPORTS"; fi
 
 echo "--- active sports: $SPORTS ---" >> "$LOG"
