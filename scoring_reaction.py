@@ -515,7 +515,7 @@ def _derive_live_market_rows(
             freeze_subtype = "FREEZE_KEY_NUMBER"
         elif balanced_counteraction:
             freeze_subtype = "FREEZE_BALANCED"
-        elif meaningful_pressure and not runline_or_puckline:
+        elif meaningful_pressure and not runline_or_puckline and _num(pressure_row.get("line_settled_ticks")) >= 2:
             freeze_subtype = "FREEZE_RESISTANCE"
         else:
             freeze_subtype = "FREEZE_WEAK"

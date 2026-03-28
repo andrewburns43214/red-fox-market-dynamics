@@ -6606,7 +6606,7 @@ def resolve_results_for_baseline():
                    "semantic_decision", "semantic_source",
                    "consensus_tier", "consensus_tier_prev", "l2_book_count_delta",
                    "noisy_signal_flag",
-                   "decision_line", "decision_line_val", "decision_odds",
+                   "decision_line", "decision_line_val", "decision_odds", "dk_start_iso",
                    "closing_line", "closing_line_val", "clv",
                    "logic_version"]
     for _c in _extra_cols:
@@ -6617,6 +6617,11 @@ def resolve_results_for_baseline():
     for _c in cols:
         if _c not in merged.columns:
             merged[_c] = ""
+    if "timing_bucket" in merged.columns:
+        _live_mask = merged["timing_bucket"].astype(str).str.upper().eq("LIVE")
+        if "is_locked" not in merged.columns:
+            merged["is_locked"] = False
+        merged.loc[_live_mask, "is_locked"] = True
     merged = merged[cols]
 
     merged.to_csv(out_path, index=False)

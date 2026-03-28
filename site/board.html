@@ -2748,8 +2748,10 @@ async function loadAll(){
       if(s&&f&&s!==f) return;
       const k=(r.game_id||'')+'|'+(r.market_display||'');
       const rank=_decRankMap[(r.game_decision||'').toUpperCase()]||0;
-      if(!_freezeMap[k]||rank>(_decRankMap[(_freezeMap[k]).toUpperCase()]||0)){
-        _freezeMap[k]=r.game_decision;
+      const prev=_freezeMap[k];
+      const prevRank=prev?(_decRankMap[((prev.game_decision)||'').toUpperCase()]||0):0;
+      if(!prev||rank>prevRank){
+        _freezeMap[k]=r;
       }
     });
   }
@@ -2759,17 +2761,25 @@ async function loadAll(){
     const mkt=r.market_display;
     // Overlay frozen decision if it exists and is higher rank
     const fk=(r.game_id||'')+'|'+(r.market_display||'');
-    const frozenDec=_freezeMap[fk]||'';
+    const frozenRow=_freezeMap[fk]||null;
+    const frozenDec=frozenRow?(frozenRow.game_decision||''):'';
     const curDec=(r.game_decision||'').toUpperCase();
     const frozenRank=_decRankMap[frozenDec.toUpperCase()]||0;
     const curRank=_decRankMap[curDec]||0;
     const useFrozen=frozenDec&&frozenRank>curRank;
+    const mergedOpen=useFrozen?(frozenRow.open_line||r.open_line):r.open_line;
+    const mergedCurrent=useFrozen?(frozenRow.decision_line||r.current_line):r.current_line;
     return {...r,
       bets_pct:Number(r.bets_pct)||null,
       money_pct:Number(r.money_pct)||null,
-      open_line:r.open_line?parseLine(r.open_line,mkt):null,
-      current_line:r.current_line?parseLine(r.current_line,mkt):null,
+      open_line:mergedOpen?parseLine(mergedOpen,mkt):null,
+      current_line:mergedCurrent?parseLine(mergedCurrent,mkt):null,
+      current_odds:useFrozen?(frozenRow.decision_odds||r.current_odds):r.current_odds,
+      favored_side:useFrozen?(frozenRow.favored_side||frozenRow.side||r.favored_side):r.favored_side,
       game_decision:useFrozen?frozenDec:r.game_decision,
+      game_confidence:useFrozen?(frozenRow.game_confidence||r.game_confidence):r.game_confidence,
+      net_edge:useFrozen?(frozenRow.net_edge||r.net_edge):r.net_edge,
+      total_score:useFrozen?(frozenRow.total_score||r.total_score):r.total_score,
       _frozen_decision:useFrozen,
     };
   });
