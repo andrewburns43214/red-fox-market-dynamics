@@ -506,6 +506,7 @@ def _derive_live_market_rows(
     if runline_or_puckline:
         effective_move_mag = abs(_num(pressure_row.get("odds_move_open")))
     move_dir = _row_move_dir(pressure_row)
+    meaningful_move = effective_move_mag >= 0.35
 
     freeze_subtype = None
     if move_dir == 0 and effective_move_mag < 0.5:
@@ -515,7 +516,7 @@ def _derive_live_market_rows(
             freeze_subtype = "FREEZE_KEY_NUMBER"
         elif balanced_counteraction:
             freeze_subtype = "FREEZE_BALANCED"
-        elif meaningful_pressure and not runline_or_puckline and _num(pressure_row.get("line_settled_ticks")) >= 2:
+        elif meaningful_pressure and meaningful_move and not runline_or_puckline and _num(pressure_row.get("line_settled_ticks")) >= 3:
             freeze_subtype = "FREEZE_RESISTANCE"
         else:
             freeze_subtype = "FREEZE_WEAK"

@@ -5560,6 +5560,65 @@ def cmd_report_live(_args):
 
             _d.to_csv(_dpath, index=False)
             print("[ok] added net_edge to data/dashboard.csv")
+
+        # For LIVE rows, preserve the strongest frozen pregame pick on the
+        # exported board so CSV/UI/downstream tools all reflect the same side.
+        try:
+            _freeze_path = "data/decision_freeze_ledger.csv"
+            _freeze = _pd.read_csv(_freeze_path, keep_default_na=False)
+            _dec_rank = {"NO_BET": 0, "NO BET": 0, "LOCKED": 0, "LEAN": 1, "BET": 2, "STRONG_BET": 3}
+
+            def _norm_side(_s):
+                return re.sub(r"\s*[+-]?\d+\.?\d*\s*$", "", str(_s or "")).strip()
+
+            if not _freeze.empty:
+                _freeze = _freeze.copy()
+                _freeze["_side_norm"] = _freeze.get("side", "").apply(_norm_side)
+                _freeze["_fav_norm"] = _freeze.get("favored_side", "").apply(_norm_side)
+                _freeze = _freeze[_freeze["_side_norm"] == _freeze["_fav_norm"]].copy()
+                _freeze["_rank"] = _freeze.get("game_decision", "").astype(str).str.upper().map(_dec_rank).fillna(0)
+                _freeze["_frozen_sort"] = _pd.to_datetime(_freeze.get("_frozen_at_utc", ""), errors="coerce", utc=True)
+                _freeze = _freeze.sort_values(["_rank", "_frozen_sort"], ascending=[False, False])
+                _freeze = _freeze.drop_duplicates(subset=["sport", "game_id", "market_display"], keep="first")
+                _freeze_map = {
+                    (str(r.get("sport", "")), str(r.get("game_id", "")), str(r.get("market_display", ""))): r
+                    for _, r in _freeze.iterrows()
+                }
+
+                _live_count = 0
+                _overwrite_count = 0
+                for _idx, _row in _d.iterrows():
+                    if str(_row.get("timing_bucket", "")).upper() != "LIVE":
+                        continue
+                    _live_count += 1
+                    _key = (str(_row.get("sport", "")), str(_row.get("game_id", "")), str(_row.get("market_display", "")))
+                    _frow = _freeze_map.get(_key)
+                    if _frow is None:
+                        continue
+                    _cur_rank = _dec_rank.get(str(_row.get("game_decision", "")).upper(), 0)
+                    _frz_rank = _dec_rank.get(str(_frow.get("game_decision", "")).upper(), 0)
+                    if _frz_rank <= _cur_rank:
+                        continue
+                    _d.at[_idx, "game_decision"] = _frow.get("game_decision", _row.get("game_decision", ""))
+                    _d.at[_idx, "favored_side"] = _frow.get("favored_side", _frow.get("side", _row.get("favored_side", "")))
+                    if "open_line" in _d.columns:
+                        _d.at[_idx, "open_line"] = _frow.get("open_line", _row.get("open_line", ""))
+                    if "current_line" in _d.columns:
+                        _d.at[_idx, "current_line"] = _frow.get("decision_line", _row.get("current_line", ""))
+                    if "current_odds" in _d.columns:
+                        _d.at[_idx, "current_odds"] = _frow.get("decision_odds", _row.get("current_odds", ""))
+                    if "game_confidence" in _d.columns:
+                        _d.at[_idx, "game_confidence"] = _frow.get("game_confidence", _row.get("game_confidence", ""))
+                    if "net_edge" in _d.columns:
+                        _d.at[_idx, "net_edge"] = _frow.get("net_edge", _row.get("net_edge", ""))
+                    if "total_score" in _d.columns:
+                        _d.at[_idx, "total_score"] = _frow.get("total_score", _row.get("total_score", ""))
+                    _overwrite_count += 1
+
+                _d.to_csv(_dpath, index=False)
+                print(f"[ok] applied freeze override to LIVE dashboard rows: {_overwrite_count}/{_live_count}")
+        except Exception as _freeze_e:
+            print(f"[dash] live freeze override failed: {repr(_freeze_e)}")
     except Exception as _e:
         print(f"[dash] net_edge post-fix failed: {repr(_e)}")
 
