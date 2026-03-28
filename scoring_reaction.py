@@ -373,7 +373,15 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
         score = 75.0
 
     score = round(_clamp(score, 0.0, 100.0), 1)
-    decision = _decision_from_score(score, state, persistence, timing_bucket, effective_move_mag)
+    decision = _decision_from_score(
+        score,
+        state,
+        persistence,
+        timing_bucket,
+        effective_move_mag,
+        market=market,
+        current_odds=current_odds,
+    )
 
     return {
         "reaction_state": state,
@@ -626,9 +634,15 @@ def _decision_from_score(
     persistence: str,
     timing_bucket: str,
     effective_move_mag: float,
+    market: str | None = None,
+    current_odds: float | None = None,
 ) -> str:
     if timing_bucket == "LIVE":
         return "NO_BET"
+
+    if market == "MONEYLINE" and current_odds is not None:
+        if current_odds <= -500 or current_odds >= 500:
+            return "NO_BET"
 
     # Directional anti-signals should never produce a recommendation
     # on the same displayed side.
