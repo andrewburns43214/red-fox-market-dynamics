@@ -638,7 +638,7 @@ def _decision_from_score(
     if persistence not in ("FORMING", "STABLE"):
         return "NO_BET"
 
-    if effective_move_mag < 0.35 and state not in ("FREEZE", "STALE"):
+    if effective_move_mag < 0.35 and state not in ("FREEZE", "FREEZE_RESISTANCE", "STALE"):
         return "NO_BET"
 
     if state == "FADE" and effective_move_mag < 0.5:
