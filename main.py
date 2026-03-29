@@ -2930,8 +2930,11 @@ def build_dashboard():
     _line_u = _line_txt.str.upper()
     _side_u = _side_txt.str.upper()
 
-    _is_total = (_side_u.str.contains("UNDER") | _side_u.str.contains("OVER") |
-                 _line_u.str.contains("UNDER") | _line_u.str.contains("OVER"))
+    _total_word_re = r"\b(?:UNDER|OVER)\b"
+    _is_total = (
+        _side_u.str.contains(_total_word_re, regex=True, na=False) |
+        _line_u.str.contains(_total_word_re, regex=True, na=False)
+    )
 
     # ML: detect "@ -115" style odds in current_line (preferred), fallback to side if ever present
     _is_ml = _line_u.str.contains(r"@\s*[-+]?\d+")
