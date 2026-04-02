@@ -4976,7 +4976,7 @@ def build_dashboard():
                          "sharp_score", "consensus_score", "retail_score", "layer_mode",
                          "market_reaction_score", "market_reaction_detail",
                          "semantic_reaction_state", "semantic_signal_class", "semantic_owning_side",
-                         "semantic_decision", "semantic_source"):
+                         "semantic_decision", "semantic_source", "v4_decision"):
                 if _lc in latest.columns:
                     _side_cols = _side_cols + [_lc]
             # v3.3j: additional scoring columns for Results tab
@@ -5004,6 +5004,50 @@ def build_dashboard():
                 on=["sport","game_id","market_display"],
                 how="left"
             )
+
+            # Hard invariant at export/freeze source-of-truth:
+            # never allow frozen/dashboard/history game_decision to outrank the
+            # scorer's own v4_decision for the same favored-side market row.
+            if "v4_decision" in _ds.columns:
+                _dec_rank_cap = {
+                    "": 0,
+                    "NO_BET": 0,
+                    "NO BET": 0,
+                    "LOCKED": 0,
+                    "LEAN": 1,
+                    "BET": 2,
+                    "STRONG_BET": 3,
+                }
+                _rank_to_dec_cap = {0: "NO_BET", 1: "LEAN", 2: "BET", 3: "STRONG_BET"}
+
+                def _canon_dec_cap(_v):
+                    return str(_v or "").strip().upper()
+
+                def _norm_side_cap(_s):
+                    return re.sub(r"\s*[+-]?\d+\.?\d*\s*$", "", str(_s or "")).strip()
+
+                _ds["_side_norm_cap"] = _ds.get("side", "").apply(_norm_side_cap)
+                _ds["_fav_norm_cap"] = _ds.get("favored_side", "").apply(_norm_side_cap)
+                _ds["_game_rank_cap"] = _ds.get("game_decision", "").apply(_canon_dec_cap).map(_dec_rank_cap).fillna(0).astype(int)
+                _ds["_v4_rank_cap"] = _ds.get("v4_decision", "").apply(_canon_dec_cap).map(_dec_rank_cap).fillna(0).astype(int)
+                _ds["_cap_rank"] = _ds[["_game_rank_cap", "_v4_rank_cap"]].min(axis=1).astype(int)
+                _ds["game_decision"] = _ds["_cap_rank"].map(_rank_to_dec_cap).fillna("NO_BET")
+
+                _ds_fav = _ds[_ds["_side_norm_cap"] == _ds["_fav_norm_cap"]][
+                    ["sport", "game_id", "market_display", "game_decision"]
+                ].drop_duplicates(subset=["sport", "game_id", "market_display"], keep="last")
+                game_view = game_view.drop(columns=["game_decision"], errors="ignore").merge(
+                    _ds_fav,
+                    on=["sport", "game_id", "market_display"],
+                    how="left",
+                )
+                _ds = _ds.drop(
+                    columns=[
+                        "_side_norm_cap", "_fav_norm_cap", "_game_rank_cap",
+                        "_v4_rank_cap", "_cap_rank"
+                    ],
+                    errors="ignore",
+                )
 
             _cols = [
                 "sport","game_id","market_display","side",
