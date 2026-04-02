@@ -4312,6 +4312,30 @@ def build_dashboard():
         _extreme_fav_mask | _extreme_dog_mask | _spread_plus_mask | _freeze_bet_mask,
         "game_decision"
     ] = "LEAN"
+
+    # Hard invariant: final market decision must never outrank the scorer's own
+    # v4_decision for that same favored row. This prevents downstream
+    # certification / guardrail drift from resurfacing rows the scorer rejected.
+    if "v4_decision" in game_view.columns:
+        _dec_rank_cap = {
+            "": 0,
+            "NO_BET": 0,
+            "NO BET": 0,
+            "LOCKED": 0,
+            "LEAN": 1,
+            "BET": 2,
+            "STRONG_BET": 3,
+        }
+        _rank_to_dec_cap = {0: "NO_BET", 1: "LEAN", 2: "BET", 3: "STRONG_BET"}
+
+        def _canon_dec_cap(val):
+            return str(val or "").strip().upper()
+
+        _final_rank = game_view["game_decision"].apply(_canon_dec_cap).map(_dec_rank_cap).fillna(0).astype(int)
+        _v4_rank = game_view["v4_decision"].apply(_canon_dec_cap).map(_dec_rank_cap).fillna(0).astype(int)
+        _capped_rank = pd.concat([_final_rank, _v4_rank], axis=1).min(axis=1).astype(int)
+        game_view["game_decision"] = _capped_rank.map(_rank_to_dec_cap).fillna("NO_BET")
+
     print(f"[v4] certified {len(game_view)} rows: "
           f"{(game_view['game_decision'] == 'STRONG_BET').sum()} STRONG, "
           f"{(game_view['game_decision'] == 'BET').sum()} BET, "
