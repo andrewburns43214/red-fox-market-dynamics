@@ -5052,6 +5052,7 @@ def build_dashboard():
             _cols = [
                 "sport","game_id","market_display","side",
                 "favored_side","game_confidence","net_edge","total_score","game_decision",
+                "v4_decision",
                 "market_read",       # v1.2: persisted for historical evaluation
                 "timing_bucket",     # v1.2: persisted for KPI by timing
                 "decision_line",     # v2.1: CLV — full line string at decision time
@@ -5093,7 +5094,29 @@ def build_dashboard():
                 if _c not in _ds.columns:
                     _ds[_c] = ""
 
-            _ds = _ds[_cols]
+                _ds = _ds[_cols]
+
+                # Final freeze/export cap: never allow stored game_decision to
+                # outrank the scorer's own v4_decision when present.
+                if "v4_decision" in _ds.columns:
+                    _dec_rank_cap = {
+                        "": 0,
+                        "NO_BET": 0,
+                        "NO BET": 0,
+                        "LOCKED": 0,
+                        "LEAN": 1,
+                        "BET": 2,
+                        "STRONG_BET": 3,
+                    }
+                    _rank_to_dec_cap = {0: "NO_BET", 1: "LEAN", 2: "BET", 3: "STRONG_BET"}
+
+                    def _canon_freeze_dec(_v):
+                        return str(_v or "").strip().upper()
+
+                    _freeze_game_rank = _ds["game_decision"].apply(_canon_freeze_dec).map(_dec_rank_cap).fillna(0).astype(int)
+                    _freeze_v4_rank = _ds["v4_decision"].apply(_canon_freeze_dec).map(_dec_rank_cap).fillna(0).astype(int)
+                    _freeze_cap_rank = pd.concat([_freeze_game_rank, _freeze_v4_rank], axis=1).min(axis=1).astype(int)
+                    _ds["game_decision"] = _freeze_cap_rank.map(_rank_to_dec_cap).fillna("NO_BET")
 
             # -----------------------------
             # APPEND TO FREEZE LEDGER (append-only)
@@ -5155,15 +5178,30 @@ def build_dashboard():
                 # Prefer STRONG_BET over BET when deduplicating (upgrade path)
                 _decision_rank = {"NO BET": 0, "NO_BET": 0, "LOCKED": 0, "LEAN": 1, "BET": 2, "STRONG_BET": 3}
                 _combined["_rank"] = _combined["game_decision"].map(_decision_rank).fillna(0)
-                _combined = _combined.sort_values("_rank", ascending=False)
                 _combined["_norm_side"] = _combined["side"].apply(
                     lambda s: re.sub(r"\s*[+-]?\d+\.?\d*\s*$", "", str(s)).strip()
                 )
-                _combined = _combined.drop_duplicates(
-                    subset=["sport","game_id","market_display","_norm_side"],
-                    keep="first"
+                _combined["_frozen_sort"] = _pd.to_datetime(_combined.get("_frozen_at_utc", ""), errors="coerce", utc=True)
+                _combined["_start_sort"] = _pd.to_datetime(_combined.get("dk_start_iso", ""), errors="coerce", utc=True)
+                _now_utc = _pd.Timestamp.now(tz="UTC")
+                _combined["_is_future"] = _combined["_start_sort"].isna() | (_combined["_start_sort"] > _now_utc)
+
+                _dedupe_keys = ["sport","game_id","market_display","_norm_side"]
+                _future = _combined[_combined["_is_future"]].sort_values(
+                    ["_frozen_sort", "_rank"],
+                    ascending=[False, False],
+                    kind="mergesort",
+                ).drop_duplicates(subset=_dedupe_keys, keep="first")
+                _past = _combined[~_combined["_is_future"]].sort_values(
+                    ["_rank", "_frozen_sort"],
+                    ascending=[False, False],
+                    kind="mergesort",
+                ).drop_duplicates(subset=_dedupe_keys, keep="first")
+                _combined = _pd.concat([_future, _past], ignore_index=True)
+                _combined = _combined.drop(
+                    columns=["_rank","_norm_side","_frozen_sort","_start_sort","_is_future"],
+                    errors="ignore",
                 )
-                _combined = _combined.drop(columns=["_rank","_norm_side"], errors="ignore")
 
                 _combined.to_csv(_ledger_path, index=False)
                 print("[ok] updated decision_freeze_ledger.csv")
@@ -5619,6 +5657,26 @@ def cmd_report_live(_args):
         import pandas as _pd
         _dpath = "data/dashboard.csv"
         _d = _pd.read_csv(_dpath, keep_default_na=False)
+
+        if "game_decision" in _d.columns and "v4_decision" in _d.columns:
+            _dec_rank_cap = {
+                "": 0,
+                "NO_BET": 0,
+                "NO BET": 0,
+                "LOCKED": 0,
+                "LEAN": 1,
+                "BET": 2,
+                "STRONG_BET": 3,
+            }
+            _rank_to_dec_cap = {0: "NO_BET", 1: "LEAN", 2: "BET", 3: "STRONG_BET"}
+
+            def _canon_dash_dec(_v):
+                return str(_v or "").strip().upper()
+
+            _dash_game_rank = _d["game_decision"].apply(_canon_dash_dec).map(_dec_rank_cap).fillna(0).astype(int)
+            _dash_v4_rank = _d["v4_decision"].apply(_canon_dash_dec).map(_dec_rank_cap).fillna(0).astype(int)
+            _dash_cap_rank = _pd.concat([_dash_game_rank, _dash_v4_rank], axis=1).min(axis=1).astype(int)
+            _d["game_decision"] = _dash_cap_rank.map(_rank_to_dec_cap).fillna("NO_BET")
 
         if "net_edge" not in _d.columns:
             # Prefer any per-market net edge columns already present
