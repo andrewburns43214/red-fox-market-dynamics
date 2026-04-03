@@ -250,7 +250,7 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
     reasons = []
 
     state_base = {
-        "FREEZE": 18.0,
+        "FREEZE": 12.0,
         "FREEZE_RESISTANCE": 10.0,
         "FOLLOW": 10.0,
         # FADE is an anti-signal for the displayed side and should depress confidence.
@@ -308,11 +308,18 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
     # side, especially on expensive favorites, confidence should come down.
     if state == "FOLLOW":
         if bets_pct >= 70 and money_pct >= 70:
-            score -= 10.0
+            score -= 12.0
             reasons.append("public steam follow")
+        elif bets_pct >= 65 and money_pct >= 65:
+            score -= 7.0
+            reasons.append("crowded consensus follow")
         elif bets_pct >= 70 or money_pct >= 70:
             score -= 5.0
             reasons.append("crowded follow side")
+
+        if max(bets_pct, money_pct) >= 65 and divergence < 8:
+            score -= 6.0
+            reasons.append("follow lacks money separation")
 
         if market == "MONEYLINE" and current_odds is not None:
             if current_odds <= -450:
@@ -322,16 +329,36 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
                 score -= 6.0
                 reasons.append("heavy favorite follow")
 
+        if market == "SPREAD" and current_line_val is not None and abs(current_line_val) == 1.5:
+            if sport == "mlb":
+                score -= 8.0
+                reasons.append("mlb run line follow noise")
+            elif sport == "nhl":
+                score -= 5.0
+                reasons.append("nhl puck line follow noise")
+
     # Coarse FREEZE should not stay actionable when the displayed side is also
     # the heavy public side. Those rows are descriptive at best unless they
     # graduate into the resistance path.
     if state == "FREEZE":
+        if line_settled_ticks < 2:
+            score -= 6.0
+            reasons.append("freeze hold not proven")
+
         if money_pct >= 75 or bets_pct >= 75:
-            score -= 12.0
+            score -= 14.0
             reasons.append("freeze on heavy public side")
         elif money_pct >= 65 or bets_pct >= 65:
-            score -= 8.0
+            score -= 10.0
             reasons.append("freeze on crowded side")
+
+        if market == "SPREAD" and current_line_val is not None and abs(current_line_val) == 1.5:
+            if sport == "mlb":
+                score -= 10.0
+                reasons.append("mlb run line freeze noise")
+            elif sport == "nhl":
+                score -= 6.0
+                reasons.append("nhl puck line freeze noise")
 
     if divergence >= 25:
         score += 8.0
