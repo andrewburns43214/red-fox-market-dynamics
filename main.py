@@ -5094,29 +5094,29 @@ def build_dashboard():
                 if _c not in _ds.columns:
                     _ds[_c] = ""
 
-                _ds = _ds[_cols]
+            _ds = _ds[_cols]
 
-                # Final freeze/export cap: never allow stored game_decision to
-                # outrank the scorer's own v4_decision when present.
-                if "v4_decision" in _ds.columns:
-                    _dec_rank_cap = {
-                        "": 0,
-                        "NO_BET": 0,
-                        "NO BET": 0,
-                        "LOCKED": 0,
-                        "LEAN": 1,
-                        "BET": 2,
-                        "STRONG_BET": 3,
-                    }
-                    _rank_to_dec_cap = {0: "NO_BET", 1: "LEAN", 2: "BET", 3: "STRONG_BET"}
+            # Final freeze/export cap: never allow stored game_decision to
+            # outrank the scorer's own v4_decision when present.
+            if "v4_decision" in _ds.columns:
+                _dec_rank_cap = {
+                    "": 0,
+                    "NO_BET": 0,
+                    "NO BET": 0,
+                    "LOCKED": 0,
+                    "LEAN": 1,
+                    "BET": 2,
+                    "STRONG_BET": 3,
+                }
+                _rank_to_dec_cap = {0: "NO_BET", 1: "LEAN", 2: "BET", 3: "STRONG_BET"}
 
-                    def _canon_freeze_dec(_v):
-                        return str(_v or "").strip().upper()
+                def _canon_freeze_dec(_v):
+                    return str(_v or "").strip().upper()
 
-                    _freeze_game_rank = _ds["game_decision"].apply(_canon_freeze_dec).map(_dec_rank_cap).fillna(0).astype(int)
-                    _freeze_v4_rank = _ds["v4_decision"].apply(_canon_freeze_dec).map(_dec_rank_cap).fillna(0).astype(int)
-                    _freeze_cap_rank = pd.concat([_freeze_game_rank, _freeze_v4_rank], axis=1).min(axis=1).astype(int)
-                    _ds["game_decision"] = _freeze_cap_rank.map(_rank_to_dec_cap).fillna("NO_BET")
+                _freeze_game_rank = _ds["game_decision"].apply(_canon_freeze_dec).map(_dec_rank_cap).fillna(0).astype(int)
+                _freeze_v4_rank = _ds["v4_decision"].apply(_canon_freeze_dec).map(_dec_rank_cap).fillna(0).astype(int)
+                _freeze_cap_rank = pd.concat([_freeze_game_rank, _freeze_v4_rank], axis=1).min(axis=1).astype(int)
+                _ds["game_decision"] = _freeze_cap_rank.map(_rank_to_dec_cap).fillna("NO_BET")
 
             # -----------------------------
             # APPEND TO FREEZE LEDGER (append-only)
