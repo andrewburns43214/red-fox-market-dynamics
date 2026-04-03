@@ -303,6 +303,36 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
             score -= 4.0
             reasons.append("heavy ticket pressure absorbed against this side")
 
+    # FOLLOW should confirm real directional support, not just public steam.
+    # When both tickets and dollars are heavily concentrated on the displayed
+    # side, especially on expensive favorites, confidence should come down.
+    if state == "FOLLOW":
+        if bets_pct >= 70 and money_pct >= 70:
+            score -= 10.0
+            reasons.append("public steam follow")
+        elif bets_pct >= 70 or money_pct >= 70:
+            score -= 5.0
+            reasons.append("crowded follow side")
+
+        if market == "MONEYLINE" and current_odds is not None:
+            if current_odds <= -450:
+                score -= 10.0
+                reasons.append("extreme chalk follow")
+            elif current_odds <= -300:
+                score -= 6.0
+                reasons.append("heavy favorite follow")
+
+    # Coarse FREEZE should not stay actionable when the displayed side is also
+    # the heavy public side. Those rows are descriptive at best unless they
+    # graduate into the resistance path.
+    if state == "FREEZE":
+        if money_pct >= 75 or bets_pct >= 75:
+            score -= 12.0
+            reasons.append("freeze on heavy public side")
+        elif money_pct >= 65 or bets_pct >= 65:
+            score -= 8.0
+            reasons.append("freeze on crowded side")
+
     if divergence >= 25:
         score += 8.0
         reasons.append("large money/bets divergence")
