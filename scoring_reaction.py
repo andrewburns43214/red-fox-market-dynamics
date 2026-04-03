@@ -321,6 +321,10 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
             score -= 6.0
             reasons.append("follow lacks money separation")
 
+        if money_pct >= 90 and bets_pct >= 55:
+            score -= 8.0
+            reasons.append("extreme money concentration")
+
         if market == "MONEYLINE" and current_odds is not None:
             if current_odds <= -450:
                 score -= 10.0
@@ -331,7 +335,7 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
 
         if market == "SPREAD" and current_line_val is not None and abs(current_line_val) == 1.5:
             if sport == "mlb":
-                score -= 8.0
+                score -= 12.0
                 reasons.append("mlb run line follow noise")
             elif sport == "nhl":
                 score -= 5.0
