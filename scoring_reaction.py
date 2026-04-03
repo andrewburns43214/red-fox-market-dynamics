@@ -317,8 +317,8 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
             score -= 5.0
             reasons.append("crowded follow side")
 
-        if max(bets_pct, money_pct) >= 65 and divergence < 8:
-            score -= 6.0
+        if max(bets_pct, money_pct) >= 75 and divergence < 8:
+            score -= 4.0
             reasons.append("follow lacks money separation")
 
         if money_pct >= 90 and bets_pct >= 55:
@@ -364,10 +364,10 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
                 score -= 6.0
                 reasons.append("nhl puck line freeze noise")
 
-    if divergence >= 25:
+    if divergence >= 25 and money_pct < 85:
         score += 8.0
         reasons.append("large money/bets divergence")
-    elif divergence >= 15:
+    elif divergence >= 15 and money_pct < 85:
         score += 5.0
         reasons.append("meaningful money/bets divergence")
     elif divergence <= -15:
@@ -426,6 +426,15 @@ def score_reaction(row: Dict[str, Any]) -> Dict[str, Any]:
 
     if stale_flag:
         reasons.append("book appears stale")
+
+    if market == "MONEYLINE" and current_odds is not None and current_odds >= 400:
+        score = min(score, 55.0)
+        reasons.append("extreme dog confidence cap")
+
+    _fsub = _upper(row.get("freeze_subtype_candidate") or row.get("semantic_reaction_state"))
+    if state == "FREEZE" and _fsub == "FREEZE_WEAK":
+        score = min(score, 52.0)
+        reasons.append("freeze weak ceiling")
 
     if score > 72.0:
         if line_settled_ticks < 2 or line_dir_changes > 0:
@@ -577,7 +586,7 @@ def _derive_live_market_rows(
             freeze_subtype = "FREEZE_KEY_NUMBER"
         elif balanced_counteraction:
             freeze_subtype = "FREEZE_BALANCED"
-        elif meaningful_pressure and meaningful_move and not runline_or_puckline and _num(pressure_row.get("line_settled_ticks")) >= 3:
+        elif meaningful_pressure and not runline_or_puckline and _num(pressure_row.get("line_settled_ticks")) >= 3 and (meaningful_move or _num(pressure_row.get("line_settled_ticks")) >= 4):
             freeze_subtype = "FREEZE_RESISTANCE"
         else:
             freeze_subtype = "FREEZE_WEAK"
@@ -717,9 +726,6 @@ def _decision_from_score(
     if effective_move_mag < 0.35 and state not in ("FREEZE", "FREEZE_RESISTANCE", "STALE"):
         return "NO_BET"
 
-    if state == "FADE" and effective_move_mag < 0.5:
-        return "NO_BET"
-
     if score >= 68.0:
         return "BET"
     if score >= 60.0:
@@ -728,13 +734,13 @@ def _decision_from_score(
 
 
 def _public_side(bets_pct: float, money_pct: float, divergence: float) -> int:
-    if bets_pct >= 60 or money_pct >= 60:
+    if bets_pct >= 55 or money_pct >= 60:
         return 1
     if bets_pct <= 40 and money_pct <= 40:
         return -1
-    if divergence >= 12 and bets_pct <= 55:
+    if divergence >= 15 and money_pct >= 45:
         return 1
-    if divergence <= -12 and bets_pct >= 45:
+    if divergence <= -15 and bets_pct >= 45:
         return -1
     return 0
 

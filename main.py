@@ -3825,13 +3825,26 @@ def build_dashboard():
         )
         if _freeze_opp_mask.any():
             pass
+        _semantic_reason_map = {
+            "FOLLOW": "book moved with pressure",
+            "FADE": "book moved against pressure",
+            "INITIATED": "book moved before clear public pressure",
+            "FREEZE_RESISTANCE": "book held firm against meaningful public pressure",
+            "FREEZE_WEAK": "freeze signal lacks directional conviction",
+            "FREEZE_BALANCED": "freeze pressure balanced with no clear edge",
+            "FREEZE_STALE": "pressure visible while book price held stale",
+            "FREEZE_KEY_NUMBER": "book held at a key number without clear directional edge",
+        }
+        _relabel_mask = _ff_mask | _freeze_mask
+        if _relabel_mask.any():
+            for _idx in latest.index[_relabel_mask]:
+                _sem = str(latest.at[_idx, "semantic_reaction_state"] or "").strip().upper()
+                _base = _semantic_reason_map.get(_sem, "")
+                _old = str(latest.at[_idx, "score_explanation"] or "").strip()
+                if _base and (_base.lower() not in _old.lower()):
+                    latest.at[_idx, "score_explanation"] = f"{_base}; {_old}" if _old else _base
     except Exception:
         pass
-    # Temporary debug — ML price credibility (remove after 1-2 runs)
-    latest["ml_implied_prob"] = 0.0
-    latest["ml_cred_mult"] = 1.0
-    latest["sharp_base_pre_cred"] = 0.0
-    latest["sharp_base_post_cred"] = 0.0
 
     # [v3.3b DEBUG] ML Direction Audit — sample ML rows for verification
 
@@ -4069,6 +4082,44 @@ def build_dashboard():
     # --- end score vars ---
     
     latest["_score_num"] = pd.to_numeric(latest["confidence_score"], errors="coerce").fillna(50.0)
+    _side_counts = latest.groupby(game_keys).size().reset_index(name="_side_count")
+    latest = latest.merge(_side_counts, on=game_keys, how="left")
+    latest["cross_conflict_flag"] = False
+    try:
+        _team_df = latest.loc[
+            latest["market_display"].fillna("").astype(str).str.upper().ne("TOTAL"),
+            ["sport", "game_id", "side_key", "pattern_primary", "_score_num", "v4_decision", "score_explanation", "confidence_score"]
+        ].copy()
+        _team_df["pattern_primary"] = _team_df["pattern_primary"].fillna("").astype(str).str.upper()
+        _team_df["_score_num"] = pd.to_numeric(_team_df["_score_num"], errors="coerce").fillna(0.0)
+        for (_csport, _cgid, _cside), _cg in _team_df.groupby(["sport", "game_id", "side_key"], dropna=False):
+            if not str(_cside or "").strip():
+                continue
+            _has_fade = _cg["pattern_primary"].eq("FADE").any()
+            _has_pos = _cg["pattern_primary"].isin(["FOLLOW", "INITIATED"]).any()
+            if not (_has_fade and _has_pos):
+                continue
+            _mask = (
+                (latest["sport"].astype(str) == str(_csport)) &
+                (latest["game_id"].astype(str) == str(_cgid)) &
+                (latest["side_key"].fillna("").astype(str) == str(_cside))
+            )
+            latest.loc[_mask, "cross_conflict_flag"] = True
+            _max_conf = _cg["_score_num"].max()
+            _downgrade_idx = _cg.index[_cg["_score_num"] < _max_conf]
+            if len(_downgrade_idx) > 0:
+                latest.loc[_downgrade_idx, "confidence_score"] = pd.to_numeric(
+                    latest.loc[_downgrade_idx, "confidence_score"], errors="coerce"
+                ).fillna(0.0).clip(upper=45.0)
+                latest.loc[_downgrade_idx, "_score_num"] = pd.to_numeric(
+                    latest.loc[_downgrade_idx, "_score_num"], errors="coerce"
+                ).fillna(0.0).clip(upper=45.0)
+                latest.loc[_downgrade_idx, "v4_decision"] = "NO_BET"
+                latest.loc[_downgrade_idx, "score_explanation"] = latest.loc[_downgrade_idx, "score_explanation"].fillna("").astype(str).apply(
+                    lambda _s: (_s + "; cross-market conflict").strip("; ").strip()
+                )
+    except Exception as _conflict_e:
+        print(f"[cross-conflict] guard skipped: {repr(_conflict_e)}")
     # --- v1.1 METRICS TAP (true side-state before aggregation) ---
     try:
         _metrics_df = latest.copy()
@@ -4132,7 +4183,7 @@ def build_dashboard():
                     "park_factor", "goalie_home", "goalie_away",
                     "goalie_flag_home", "goalie_flag_away",
                     "sport_context_adj", "sport_context_flag",
-                    "v4_state", "v4_score", "v4_decision", "confidence_score",
+                    "v4_state", "v4_score", "v4_decision", "confidence_score", "_side_count", "cross_conflict_flag",
                     # DK signal data — must carry through to dashboard
                     "bets_pct", "money_pct", "divergence_D",
                     "open_line", "current_line", "open_odds", "current_odds",
@@ -4167,6 +4218,7 @@ def build_dashboard():
     game_view["net_edge"] = (game_view["max_side_score"] - game_view["min_side_score"]).round(1)
     # total_score = game_confidence (v3 final_score is the complete score, no edge additive)
     game_view["total_score"] = pd.to_numeric(game_view["game_confidence"], errors="coerce").fillna(0).round(1)
+    game_view["single_side"] = pd.to_numeric(game_view.get("_side_count", 2), errors="coerce").fillna(2).astype(int) <= 1
 
     # v3.2: Cross-market handled inside scoring_v3.compute_cross_market_sanity()
 
@@ -4268,6 +4320,9 @@ def build_dashboard():
     # Minimum score gap gate — downgrade BET to LEAN when net_edge < 5
     _gap = pd.to_numeric(game_view["net_edge"], errors="coerce").fillna(0)
     game_view.loc[(game_view["game_decision"] == "BET") & (_gap < 5), "game_decision"] = "LEAN"
+    _single_mask = game_view["single_side"].fillna(False) & game_view["game_decision"].isin(["BET", "LEAN"])
+    game_view.loc[_single_mask, "game_decision"] = "NO_BET"
+    game_view.loc[_single_mask, "blocked_by"] = game_view.loc[_single_mask, "blocked_by"].replace("", "single_side_market")
     # Practical market-quality guardrails
     _odds = pd.to_numeric(game_view.get("current_odds", 0), errors="coerce").fillna(0)
     _state = game_view.get("pattern_primary", "").fillna("").astype(str).str.upper()
