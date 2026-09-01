@@ -213,7 +213,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     if key_number:
         context_chips.append(key_number)
     if stale_dk:
-        context_chips.append("Stale DK")
+        context_chips.append("Market Lag")
     if low_bets_high_money:
         context_chips.append("Low Bets / High $")
     if ticket_led:
@@ -623,9 +623,9 @@ def _broader_market_context(latest_row, l2_df, market, move_threshold, hold_thre
     stale = dk_move <= hold_threshold and abs(market_end - market_start) >= move_threshold and market_range >= move_threshold
 
     if market == "MONEYLINE":
-        summary = f"Market price moved {market_start:.1f}% to {market_end:.1f}% while DK held near {dk_current_parsed['display']}"
+        summary = f"Broader market price moved {market_start:.1f}% to {market_end:.1f}% while the observed price held near {dk_current_parsed['display']}"
     else:
-        summary = f"Market moved {market_start:g} to {market_end:g} while DK held near {dk_current:g}"
+        summary = f"Broader market moved {market_start:g} to {market_end:g} while the observed price held near {dk_current:g}"
 
     return {"stale_dk": stale, "summary": summary if stale else ""}
 
@@ -944,7 +944,7 @@ def _rank_reason(reaction, path_label, stale_dk, split_capped, favorite_risk, ho
     if favorite_risk:
         return "Heavy favorite: short-price ticket concentration is downranked for parlay risk."
     if stale_dk:
-        return "Stale DK: broader market moved while the displayed DK price held."
+        return "Market lag: the broader market moved while the observed price held."
     if reaction == "Contrarian":
         base = "Contrarian: low support paired with a move toward the side."
     elif reaction == "Freeze":

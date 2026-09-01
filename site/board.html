@@ -1087,6 +1087,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .td-dec { width: 300px; text-align:left; }
 .td-pick { width: 72px; text-align:center; }
 .mr { border-radius: 999px; padding: 4px 8px; font-size: 9px; letter-spacing: .02em; }
+.signal-chip { cursor:help; }
 .td-total .mr { display:inline-flex; align-items:center; margin:2px 4px 2px 0 !important; padding:3px 6px; font-size:8px; line-height:1.1; }
 .mr-aligned { background:#e7f3f1; color:#176454; border-color:#c7e4de; }
 .mr-freeze { background:#e7f0f6; color:#2f607f; border-color:#c8dce9; }
@@ -1168,21 +1169,21 @@ td:last-child { border-radius: 0 8px 8px 0; }
   <div class="signal-key" aria-label="Signal key">
     <span class="signal-key-label">Signal Key</span>
     <span class="signal-key-note">Evidence, not picks</span>
-    <span class="signal-key-item key-contrarian" title="Low support with line movement toward the side">Contrarian</span>
-    <span class="signal-key-item key-freeze" title="The observed high-split side held. Only sustained, non-key-number Freeze rows receive an opposing public-fade candidate for KPI tracking.">Freeze</span>
-    <span class="signal-key-item key-follow" title="Heavy tickets and money while the line moved with that side">Follow</span>
-    <span class="signal-key-item key-whipsaw" title="Line moved and then reversed">Whipsaw</span>
-    <span class="signal-key-item key-held" title="The observed line and price changed less than the hold threshold from the first snapshot">Held</span>
-    <span class="signal-key-item key-late" title="Meaningful movement arrived late in the observed path">Late</span>
-    <span class="signal-key-item key-oneway" title="Line moved steadily in one direction">One-Way</span>
-    <span class="signal-key-item key-stale" title="Broader market moved while the DraftKings line held">Stale DK</span>
-    <span class="signal-key-item key-ticket" title="Ticket share is elevated, but money share is not strong enough for Freeze or Follow">Ticket-led</span>
-    <span class="signal-key-item key-divergence" title="Low ticket share with a high share of money">Low Bets / High $</span>
-    <span class="signal-key-item key-keynumber" title="The observed path touched or crossed a sport-specific key number">Key number</span>
-    <span class="signal-key-item key-juice" title="The point line held while the odds price moved materially">Juice Move</span>
-    <span class="signal-key-item key-favorite" title="A heavily priced or ticket-heavy moneyline favorite; shown as risk context and excluded from split-only alert ranking">Heavy Fav</span>
-    <span class="signal-key-item key-split" title="A 0% or 100% source split is shown as data risk and excluded from directional alert ranking">Split Cap</span>
-    <span class="signal-key-item key-watch" title="Active market with no qualifying alert at the current snapshot">Watch</span>
+    <span class="signal-key-item key-contrarian" title="Low support on the observed side while its price or line moved toward it.">Contrarian</span>
+    <span class="signal-key-item key-freeze" title="High tickets and money on the observed side while both its line and price held near open.">Freeze</span>
+    <span class="signal-key-item key-follow" title="High tickets and money on the observed side while its price or line moved with it.">Follow</span>
+    <span class="signal-key-item key-whipsaw" title="The observed price or line moved materially, then reversed direction.">Whipsaw</span>
+    <span class="signal-key-item key-held" title="The observed line and price changed less than the hold threshold from the first snapshot.">Held</span>
+    <span class="signal-key-item key-late" title="The meaningful move first appeared in the final third of the observed timeline.">Late</span>
+    <span class="signal-key-item key-oneway" title="The observed path made a meaningful move without reversing.">One-Way</span>
+    <span class="signal-key-item key-stale" title="The broader market moved while the observed price held, indicating a possible market lag.">Market Lag</span>
+    <span class="signal-key-item key-ticket" title="Tickets are concentrated while money is not strong enough for a Freeze or Follow.">Ticket-led</span>
+    <span class="signal-key-item key-divergence" title="Low ticket share with high money share on the observed side.">Low Bets / High $</span>
+    <span class="signal-key-item key-keynumber" title="The observed spread touched or crossed a sport-specific key number.">Key Number</span>
+    <span class="signal-key-item key-juice" title="The point line held while the attached American odds moved materially.">Juice Move</span>
+    <span class="signal-key-item key-favorite" title="A heavily priced or ticket-heavy moneyline favorite. This is risk context, not a directional signal.">Heavy Favorite</span>
+    <span class="signal-key-item key-split" title="The source reported a capped 0% or 100% split, so directional split signals are disabled.">Capped Split</span>
+    <span class="signal-key-item key-watch" title="An active market with no qualifying signal at this snapshot.">Watch</span>
   </div>
 </header>
 
@@ -1689,21 +1690,41 @@ function anomalyParts(r){
     context:ctx
   };
 }
-function anomalyBadge(text, kind){
+const SIGNAL_META={
+  'Contrarian':{cls:'mr-aligned',tip:'Low support on the observed side while its price or line moved toward it.'},
+  'Freeze':{cls:'mr-freeze',tip:'High tickets and money on the observed side while both its line and price held near open.'},
+  'Follow':{cls:'mr-aligned',tip:'High tickets and money on the observed side while its price or line moved with it.'},
+  'Whipsaw':{cls:'mr-reverse',tip:'The observed price or line moved materially, then reversed direction.'},
+  'Held':{cls:'mr-neutral',tip:'The observed line and price changed less than the hold threshold from the first snapshot.'},
+  'Late':{cls:'mr-reverse',tip:'The meaningful move first appeared in the final third of the observed timeline.'},
+  'One-Way':{cls:'mr-neutral',tip:'The observed path made a meaningful move without reversing.'},
+  'Market Lag':{cls:'mr-contra',tip:'The broader market moved while the observed price held, indicating a possible market lag.'},
+  'Stale DK':{label:'Market Lag',cls:'mr-contra',tip:'The broader market moved while the observed price held, indicating a possible market lag.'},
+  'Ticket-led':{cls:'mr-reverse',tip:'Tickets are concentrated while money is not strong enough for a Freeze or Follow.'},
+  'Low Bets / High $':{cls:'mr-aligned',tip:'Low ticket share with high money share on the observed side.'},
+  'K3':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 3.'},
+  'K7':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 7.'},
+  'K10':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 10.'},
+  'K14':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 14.'},
+  'K17':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 17.'},
+  'K21':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 21.'},
+  'Juice Move':{cls:'mr-freeze',tip:'The point line held while the attached American odds moved materially.'},
+  'Heavy Favorite':{cls:'mr-reverse',tip:'A heavily priced or ticket-heavy moneyline favorite. This is risk context, not a directional signal.'},
+  'Split Cap':{label:'Capped Split',cls:'mr-contra',tip:'The source reported a capped 0% or 100% split, so directional split signals are disabled.'},
+  'Watch':{cls:'mr-neutral',tip:'An active market with no qualifying signal at this snapshot.'}
+};
+function anomalyBadge(text){
   const t=String(text||'').trim();
   if(!t) return '';
-  let cls='mr-neutral';
-  if(kind==='reaction'&&(t==='Contrarian'||t==='Follow')) cls='mr-aligned';
-  if(kind==='reaction'&&t==='Freeze') cls='mr-freeze';
-  if(kind==='path'&&t==='Whipsaw') cls='mr-freeze';
-  return `<span class="mr ${cls}" style="margin-right:4px">${t}</span>`;
+  const meta=SIGNAL_META[t]||{cls:'mr-neutral',tip:'Additional market context.'};
+  return `<span class="mr signal-chip ${meta.cls}" title="${meta.tip}" style="margin-right:4px">${meta.label||t}</span>`;
 }
 function dataBadge(v){
   const t=String(v||'').trim().toUpperCase();
-  if(t==='CLEAN') return '<span class="tim tMID">CLEAN</span>';
-  if(t==='THIN') return '<span class="tim tLATE">THIN</span>';
+  if(t==='CLEAN') return '<span class="tim tMID" title="Three or more valid observations are available for this market.">CLEAN</span>';
+  if(t==='THIN') return '<span class="tim tLATE" title="Only two valid observations are available, so treat the pattern cautiously.">THIN</span>';
   if(t==='SPLIT RISK') return '<span class="tim tLIVE" title="A capped 0% or 100% split cannot qualify for an alert">SPLIT RISK</span>';
-  return '<span class="tim tLIVE">FEED RISK</span>';
+  return '<span class="tim tLIVE" title="The market does not have enough complete data for a reliable read.">FEED RISK</span>';
 }
 function hasSplitRead(r){ return String(r?.data_badge||'').trim().toUpperCase()!=='SPLIT RISK'; }
 function splitCell(r){
@@ -1956,7 +1977,7 @@ function openDrill(title, rows) {
   document.getElementById('drill-title').textContent = title + ' | ' + w + 'W ' + l + 'L (' + wr + '%)';
   const tbl = document.getElementById('drill-tbl');
   let h = '<thead><tr>';
-  ['Date','Sport','Game','Market','Side','Line','Confidence','Edge','Bucket','Timing','DK Signal','Decision','Final','Result'].forEach(c => h += '<th>'+c+'</th>');
+  ['Date','Sport','Game','Market','Side','Line','Confidence','Edge','Bucket','Timing','Source Signal','Decision','Final','Result'].forEach(c => h += '<th>'+c+'</th>');
   h += '</tr></thead><tbody>';
   rows.sort((a,b) => new Date(resultTs(b)||0) - new Date(resultTs(a)||0)).forEach((r,i) => {
     const bg = i%2===0 ? '' : 'background:rgba(0,0,0,.02);';
