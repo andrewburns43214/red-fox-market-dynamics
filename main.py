@@ -1874,6 +1874,108 @@ def _infer_market_from_side_line(side: str, current_line: str) -> str:
     return "MONEYLINE"
 
 
+SPORT_DISPLAY_LABELS = {
+    "nfl": "NFL",
+    "nba": "NBA",
+    "mlb": "MLB",
+    "nhl": "NHL",
+    "ncaaf": "CFB",
+    "ncaab": "NCAAB",
+    "ufc": "UFC",
+}
+
+SPORT_KEY_ALIASES = {
+    "cfb": "ncaaf",
+    "college football": "ncaaf",
+    "ncaff": "ncaaf",
+    "ncaaf": "ncaaf",
+    "cbb": "ncaab",
+    "college basketball": "ncaab",
+    "ncaab": "ncaab",
+}
+
+
+def normalize_sport_key(sport: str) -> str:
+    s = str(sport or "").strip().lower()
+    if not s:
+        return ""
+    return SPORT_KEY_ALIASES.get(s, s)
+
+
+def sport_display_label(sport: str) -> str:
+    key = normalize_sport_key(sport)
+    return SPORT_DISPLAY_LABELS.get(key, key.upper())
+
+
+def _load_recent_snapshot_games(hours: int = 72) -> dict[str, set[str]]:
+    recent_by_sport: dict[str, set[str]] = {}
+    try:
+        import csv
+        from datetime import datetime, timedelta, timezone
+
+        if not os.path.exists(SNAPSHOT_CSV):
+            return {}
+
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        with open(SNAPSHOT_CSV, "r", newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                sport = normalize_sport_key(row.get("sport", ""))
+                game = str(row.get("game", "") or "").strip()
+                ts_raw = str(row.get("timestamp", "") or "").strip()
+                if not sport or not game or not ts_raw:
+                    continue
+                try:
+                    ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                except Exception:
+                    continue
+                if ts < cutoff:
+                    continue
+                recent_by_sport.setdefault(sport, set()).add(game)
+    except Exception:
+        return {}
+    return recent_by_sport
+
+
+def validate_snapshot_rows(rows: list[dict], sport: str) -> tuple[list[dict], str]:
+    sport_key = normalize_sport_key(sport)
+    if not rows:
+        return rows, ""
+
+    games = sorted({str(r.get("game", "") or "").strip() for r in rows if str(r.get("game", "") or "").strip()})
+    if not games:
+        return [], f"{sport_key}: no parsed game names"
+
+    if sport_key in ESPN_SCOREBOARD_BASE:
+        try:
+            kickoff_map = get_espn_kickoff_map(sport_key, games)
+        except Exception as e:
+            return [], f"{sport_key}: ESPN validation failed ({type(e).__name__})"
+
+        matched_games = {g for g, iso in (kickoff_map or {}).items() if str(iso or "").strip()}
+        matched_ratio = (len(matched_games) / len(games)) if games else 0.0
+        if not matched_games or matched_ratio < 0.35:
+            return [], f"{sport_key}: rejected snapshot, only {len(matched_games)}/{len(games)} games matched ESPN"
+
+        filtered = [r for r in rows if str(r.get("game", "") or "").strip() in matched_games]
+        return filtered, f"{sport_key}: kept {len(filtered)}/{len(rows)} rows after ESPN validation"
+
+    if sport_key == "ufc":
+        recent = _load_recent_snapshot_games(hours=72)
+        other_games = set()
+        for other_sport, other_set in recent.items():
+            if other_sport != sport_key:
+                other_games |= other_set
+        overlap = len(set(games) & other_games)
+        overlap_ratio = (overlap / len(games)) if games else 0.0
+        non_moneyline = sum(1 for r in rows if infer_market_type(r.get("side", ""), r.get("current_line", "")) != "MONEYLINE")
+        if overlap_ratio >= 0.5:
+            return [], f"ufc: rejected snapshot, {overlap}/{len(games)} games overlap other sports from recent snapshots"
+        if rows and (non_moneyline / len(rows)) > 0.15:
+            return [], f"ufc: rejected snapshot, too many non-moneyline rows ({non_moneyline}/{len(rows)})"
+
+    return rows, ""
+
+
 SPORT_CONFIG = {
     "nfl": {
         "label": "NFL",
@@ -2893,8 +2995,8 @@ def build_dashboard():
         print(f"[dash debug] rows after timestamp parse/dropna: {len(df)}")
 
     # Sport display labels (keep consistent with your existing mapping if present elsewhere)
-    df["sport"] = df["sport"].astype(str).str.lower().str.strip()
-    df["sport_label"] = df["sport"].str.upper()
+    df["sport"] = df["sport"].astype(str).apply(normalize_sport_key)
+    df["sport_label"] = df["sport"].apply(sport_display_label)
 
 
     # Grouping keys must not be NaN
@@ -5640,6 +5742,13 @@ def cmd_snapshot(args):
         r["sport"] = args.sport
     if not rows:
         print(f"[snapshot] no games available for {args.sport}")
+        return
+
+    rows, validation_note = validate_snapshot_rows(rows, args.sport)
+    if validation_note:
+        print(f"[snapshot] {validation_note}")
+    if not rows:
+        print(f"[snapshot] rejected {args.sport} snapshot due to failed sport validation")
         return
 
 
