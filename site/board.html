@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Red Fox - Market Intelligence</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <style>
@@ -48,7 +48,7 @@
   --acc-brd:   #b8d4f8;
   /* Fonts: contemporary product UI with a dedicated data face. */
   --mono:      'IBM Plex Mono', 'Courier New', monospace;
-  --sans:      'Manrope', sans-serif;
+  --sans:      'Sora', sans-serif;
   /* Typography scale */
   --font-kpi:    28px;
   --font-title:  20px;
@@ -1061,7 +1061,7 @@ td:first-child { border-radius: 8px 0 0 8px; }
 td:last-child { border-radius: 0 8px 8px 0; }
 .td-rank { color: #93a0a9; font-size: 10px; padding-top: 13px; }
 .td-game { width: 280px; max-width: 280px; }
-.game-name { font-size: 13px; font-weight: 800; }
+.game-name { font-size: 13px; font-weight: 800; letter-spacing: -.025em; }
 .game-row2 { margin-top: 2px; }
 .sport-chip { border-radius: 999px; }
 .td-mkt { color: var(--accent); font-size: 9px; }
@@ -1074,7 +1074,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .line-rail { display:flex; align-items:center; gap:5px; color:var(--text3); font-family:var(--mono); font-size:10px; }
 .line-arrow { color:var(--accent); font-weight:700; }
 .td-edge { width: 155px; text-align:left; }
-.focus-label { font-size:12px; font-weight:700; color:var(--text); line-height:1.25; white-space:normal; }
+.focus-label { font-size:12px; font-weight:800; letter-spacing:-.02em; color:var(--text); line-height:1.25; white-space:normal; }
 .focus-sub { font-family:var(--mono); font-size:9px; color:var(--text3); margin-top:3px; }
 .market-cue { display:flex; align-items:center; gap:4px; margin-top:5px; font-size:9px; line-height:1.2; color:var(--text2); white-space:normal; }
 .market-cue-icon { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; border-radius:50%; font:800 9px var(--mono); flex:0 0 auto; }
@@ -1888,7 +1888,12 @@ function actionLens(r){
   const eligible=String(r.kpi_eligible||'').toLowerCase()==='true';
   const recorded=Boolean(r.recorded_reaction);
   const observed=`<div class="focus-label"><span class="observed-prefix">Observed</span>${r.flagged_side||'-'}</div><div class="focus-sub">${r.focus_basis||'Observed side'}</div>`;
-  if(!eligible&&!recorded) return observed;
+  if(!eligible&&!recorded){
+    if((r.reaction||'')==='Freeze' && r.action_basis){
+      return observed+`<div class="market-cue" title="${r.action_basis}"><span class="market-cue-icon">i</span><span>Candidate status: ${r.action_basis}</span></div>`;
+    }
+    return observed;
+  }
   const type=eligible?r.action_type:r.recorded_action_type;
   const side=eligible?r.action_side:r.recorded_action_side;
   const fade=String(type||'').toUpperCase()==='FADE CANDIDATE';
