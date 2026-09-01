@@ -176,7 +176,10 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     parlay_risk = market == "MONEYLINE" and current_odds is not None and current_odds <= PARLAY_RISK_ODDS and bets_pct >= 80
     favorite_risk = heavy_favorite or parlay_risk
     split_alert_eligible = not split_capped and not favorite_risk
-    low_support = bets_pct <= 40 and money_pct <= 45
+    # A side can still be meaningfully low-support when tickets are in the low
+    # forties but money is materially lower. Avoid erasing a valid move on a
+    # one-point ticket-share change.
+    low_support = bets_pct <= 45 and money_pct <= 45
     very_low_support = bets_pct <= 35 and money_pct <= 40
     ticket_heavy = bets_pct >= 70
     public_support = ticket_heavy and money_pct >= 55
@@ -671,7 +674,7 @@ def _first_anomaly_seen(points, reaction, path_label, stale_dk, market, latest_r
         capped = _is_split_capped(bets_pct, money_pct)
         if not split_alert_eligible or capped:
             continue
-        if reaction == "Contrarian" and bets_pct <= 40 and money_pct <= 45 and toward_side and meaningful_move:
+        if reaction == "Contrarian" and bets_pct <= 45 and money_pct <= 45 and toward_side and meaningful_move:
             return point["timestamp"].isoformat()
         if reaction == "Freeze" and bets_pct >= 70 and money_pct >= 55 and held:
             return point["timestamp"].isoformat()

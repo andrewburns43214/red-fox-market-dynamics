@@ -1017,10 +1017,11 @@ thead th.th-edge, thead th.th-total, thead th.th-pat, thead th.th-dec { text-ali
 .signal-key-item { padding:3px 6px; border:1px solid transparent; border-radius:999px; font-size:8px; font-weight:700; white-space:nowrap; }
 .key-contrarian { background:#e7f3f1; border-color:#c7e4de; color:#176454; }
 .key-freeze { background:#e7f0f6; border-color:#c8dce9; color:#2f607f; }
-.key-whipsaw { background:#f1f5f7; border-color:#dce5e9; color:#57717f; }
-.key-held { background:#f5f4ef; border-color:#e8e3d4; color:#7b6b45; }
+.key-whipsaw { background:#fffbee; border-color:#f0dc80; color:#8a5a00; }
+.key-held { background:#f0f3f5; border-color:#dce3e7; color:#60707b; }
 .key-follow { background:#edf5ee; border-color:#d3e5d5; color:#46734e; }
-.key-late, .key-oneway { background:#f4f2ee; border-color:#e6dfd3; color:#75654f; }
+.key-late { background:#fffbee; border-color:#f0dc80; color:#8a5a00; }
+.key-oneway { background:#f0f3f5; border-color:#dce3e7; color:#60707b; }
 .key-stale { background:#f8eeee; border-color:#eccfcf; color:#985555; }
 .key-watch { background:#f1f3f5; border-color:#dce2e6; color:#65727c; }
 .key-ticket { background:#f8f3ea; border-color:#eadcc4; color:#826231; }
@@ -1168,7 +1169,6 @@ td:last-child { border-radius: 0 8px 8px 0; }
     </div>
   <div class="signal-key" aria-label="Signal key">
     <span class="signal-key-label">Signal Key</span>
-    <span class="signal-key-note">Evidence, not picks</span>
     <span class="signal-key-item key-contrarian" title="Low support on the observed side while its price or line moved toward it.">Contrarian</span>
     <span class="signal-key-item key-freeze" title="High tickets and money on the observed side while both its line and price held near open.">Freeze</span>
     <span class="signal-key-item key-follow" title="High tickets and money on the observed side while its price or line moved with it.">Follow</span>
@@ -1255,7 +1255,6 @@ td:last-child { border-radius: 0 8px 8px 0; }
         <div class="pane-hdr">
           <div style="display:flex;align-items:center;gap:10px">
             <span class="pane-title" id="board-title">Board</span>
-            <span class="board-use-note">Market evidence, not picks</span>
             <div class="mfilters" id="market-filters">
               <button class="mchip on" type="button" onclick="setMarket('ALL',this)">All</button>
               <button class="mchip" type="button" onclick="setMarket('SPREAD',this)">Spread</button>

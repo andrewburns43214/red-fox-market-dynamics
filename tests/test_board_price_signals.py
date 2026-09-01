@@ -178,3 +178,20 @@ def test_extreme_moneyline_uses_implied_probability_for_whipsaw_detection():
     assert row["path"] == "Held"
     assert row["move_abs"] == 0
     assert row["max_excursion"] < 2.5
+
+
+def test_low_forties_tickets_with_low_money_remain_contrarian_when_price_improves():
+    latest = {
+        "sport": "mlb", "game_id": "g10", "market_display": "MONEYLINE", "side_key": "HOME",
+        "side": "Home", "game": "Away @ Home", "canonical_key": "away @ home|mlb|2026-09-01",
+        "bets_pct": 41, "money_pct": 24, "open_line": "Home @ +100",
+        "current_line": "Home @ -113", "_sort_time": "2026-09-01T20:00:00Z",
+    }
+    history = [
+        {"timestamp": _timestamp(17), "sport": "mlb", "game_id": "g10", "market_display": "MONEYLINE", "side_key": "HOME", "current_line": "Home @ +100", "bets_pct": 40, "money_pct": 24},
+        {"timestamp": _timestamp(18), "sport": "mlb", "game_id": "g10", "market_display": "MONEYLINE", "side_key": "HOME", "current_line": "Home @ -113", "bets_pct": 41, "money_pct": 24},
+    ]
+
+    row = _board(latest, history)
+
+    assert row["reaction"] == "Contrarian"
