@@ -110,7 +110,11 @@ body::before {
   padding-right: 20px;
   border-right: 1px solid var(--border);
   margin-right: 20px;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
 }
+.logo-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
 
 .logo-img {
   height: 36px;
@@ -1144,12 +1148,12 @@ td:last-child { border-radius: 0 8px 8px 0; }
 <!-- â”€â”€â”€ TOPBAR â”€â”€â”€ -->
 <header class="topbar">
   <div class="tl">
-    <div class="logo-wrap">
+    <a class="logo-wrap" href="/" aria-label="Red Fox Market Intelligence home">
       <div class="wordmark">
         <span class="wm-main">Red <span>Fox</span></span>
         <span class="wm-sup">Market Intelligence</span>
       </div>
-    </div>
+    </a>
     <div class="live-badge">
       <div class="live-dot"></div>
       LIVE
