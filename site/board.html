@@ -286,6 +286,38 @@ body::before {
   border-color: var(--border3);
   color: var(--white);
 }
+.mfilters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.mcap {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-right: 2px;
+}
+.mchip {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all .12s;
+}
+.mchip:hover { border-color: var(--accent); color: var(--accent); }
+.mchip.on {
+  background: var(--surface2);
+  border-color: var(--border3);
+  color: var(--white);
+}
 
 /* â”€â”€â”€ METRIC BAR â”€â”€â”€ */
 .metricbar {
@@ -1077,6 +1109,13 @@ thead th.th-play { text-align: left; }
         <div class="pane-hdr">
           <div style="display:flex;align-items:center;gap:10px">
             <span class="pane-title" id="board-title">Upcoming Games</span>
+            <div class="mfilters" id="market-filters">
+              <span class="mcap">Market</span>
+              <button class="mchip on" type="button" onclick="setMarket('ALL',this)">All</button>
+              <button class="mchip" type="button" onclick="setMarket('SPREAD',this)">Spread</button>
+              <button class="mchip" type="button" onclick="setMarket('MONEYLINE',this)">Moneyline</button>
+              <button class="mchip" type="button" onclick="setMarket('TOTAL',this)">Total</button>
+            </div>
             <select id="book-select" class="grp-btn" onchange="switchBook(this.value)" style="font-size:10px;padding:2px 6px;min-width:auto;cursor:pointer"><option value="dk">Odds: DraftKings</option></select>
             <button class="grp-btn" id="grp-toggle" onclick="toggleGroup(this)">Group by Game</button>
             <button class="grp-btn" id="locked-jump" onclick="jumpToLocked()" style="display:none">Live / Locked Games</button>
@@ -1368,7 +1407,7 @@ const MOCK_RESULTS = [
 ];
 
 let allDash=[], allLedger=[], allResults=[], allKPI=[];
-let sport='ALL', filter='today', tabId='board';
+let sport='ALL', market='ALL', filter='today', tabId='board';
 let sortCol='total_score', sortAsc=false;
 let _bookLines=null, _selectedBook='dk';
 
@@ -1505,6 +1544,7 @@ function setTab(el){
   if(tabId==='perf' && typeof Chart!=='undefined') buildKPIs();
 }
 function setSport(s,el){ sport=s; document.querySelectorAll('.sfilters .schip:not(#grp-toggle)').forEach(x=>x.classList.remove('on')); el.classList.add('on'); renderBoard(); }
+function setMarket(m,el){ market=m; document.querySelectorAll('#market-filters .mchip').forEach(x=>x.classList.remove('on')); el.classList.add('on'); renderBoard(); }
 function sortBy(col,th){ if(sortCol===col) sortAsc=!sortAsc; else{sortCol=col;sortAsc=false;} document.querySelectorAll('thead th').forEach(t=>t.classList.remove('sorted','asc')); th.classList.add('sorted'); if(sortAsc) th.classList.add('asc'); renderBoard(); }
 let groupMode=false;
 function toggleGroup(el){ groupMode=!groupMode; el.classList.toggle('grp-on',groupMode); el.textContent=groupMode?'Ungroup':'Group by Game'; renderBoard(); }
@@ -1545,7 +1585,7 @@ function exportCSV(){
 }
 
 function _decRank(d,r){ const k=(d||'').toUpperCase(); if(k==='BET') return 1; if(k==='LEAN') return (r&&isLocked(r))?3:2; return 4; }
-function filtered(){ const now=new Date(); const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d; if(filter==='today') d=allDash.filter(r=>isToday(r._game_time)).filter(r=>sport==='ALL'||sportLabel(r.sport)===sport); else if(filter==='highconf') d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport).filter(r=>!r._game_time||new Date(r._game_time)>now).filter(r=>isBetPlus(r)); else d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport).filter(r=>!r._game_time||new Date(r._game_time)>now||isLocked(r)); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.favored_side||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)); return d.sort((a,b)=>{ const aLocked=isLocked(a)?1:0; const bLocked=isLocked(b)?1:0; if(aLocked!==bLocked) return aLocked-bLocked; let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
+function filtered(){ const now=new Date(); const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d; if(filter==='today') d=allDash.filter(r=>isToday(r._game_time)).filter(r=>sport==='ALL'||sportLabel(r.sport)===sport); else if(filter==='highconf') d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport).filter(r=>!r._game_time||new Date(r._game_time)>now).filter(r=>isBetPlus(r)); else d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport).filter(r=>!r._game_time||new Date(r._game_time)>now||isLocked(r)); if(market!=='ALL') d=d.filter(r=>(r.market_display||'').toUpperCase()===market); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.favored_side||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)); return d.sort((a,b)=>{ const aLocked=isLocked(a)?1:0; const bLocked=isLocked(b)?1:0; if(aLocked!==bLocked) return aLocked-bLocked; let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
 
 window._boardRows=[];
 function renderBoard(){
@@ -1575,7 +1615,8 @@ function renderBoard(){
   const _hasLocked=data.some(r=>isLocked(r));
   document.getElementById('locked-jump').style.display=_hasLocked?'':'none';
   const _nGames=new Set(data.map(r=>r.game_id||r.game||'?')).size;
-  document.getElementById('board-meta').textContent=`${_nGames} games | ${data.length} markets | sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' | grouped':''}`;
+  const _marketLabel=market==='ALL'?'all markets':market.toLowerCase();
+  document.getElementById('board-meta').textContent=`${_nGames} games | ${data.length} markets | ${_marketLabel} | sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' | grouped':''}`;
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
   let _lockedDividerShown=false;
   if(window._lockedOpen===undefined) window._lockedOpen=false;
