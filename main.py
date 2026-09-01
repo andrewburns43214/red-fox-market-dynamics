@@ -461,10 +461,11 @@ def _espn_kickoff_map_date_range(scoreboard_url_base: str, games: list[str], day
 
 
 
-    # Include recent past because DK "n7days" often includes already-played games
-
-    start = datetime.now() - timedelta(days=7)
-    for i in range(days + 1):
+    # Include a small recent-past window plus the current/upcoming window.
+    # `days` here means forward-looking days from today.
+    start = datetime.now() - timedelta(days=2)
+    total_days = days + 2
+    for i in range(total_days + 1):
         d = start + timedelta(days=i)
         ymd = d.strftime("%Y%m%d")
 
