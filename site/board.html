@@ -1075,6 +1075,10 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .td-edge { width: 155px; text-align:left; }
 .focus-label { font-size:12px; font-weight:700; color:var(--text); line-height:1.25; white-space:normal; }
 .focus-sub { font-family:var(--mono); font-size:9px; color:var(--text3); margin-top:3px; }
+.market-cue { display:flex; align-items:center; gap:4px; margin-top:5px; font-size:9px; line-height:1.2; color:var(--text2); white-space:normal; }
+.market-cue-icon { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; border-radius:50%; font:800 9px var(--mono); flex:0 0 auto; }
+.market-cue.fade .market-cue-icon { background:#e7f0f6; color:#2f607f; border:1px solid #c8dce9; }
+.market-cue.contrarian .market-cue-icon { background:#e4f5f2; color:#23796f; border:1px solid #c6e8e2; }
 .td-total { width: 205px; text-align:left; white-space:normal; }
 .td-pat { width: 110px; text-align:left; }
 .td-dec { width: 300px; text-align:left; }
@@ -1274,7 +1278,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
           <th class="th-split" title="Share of tickets and handle on the labeled signal side">Bets / Money</th>
           <th class="th-line" title="First observed line in the available snapshot history" onclick="sortBy('open_line',this)">Open</th>
           <th class="th-line" title="Most recent observed line" onclick="sortBy('current_line',this)">Current</th>
-          <th class="th-edge" title="Actionable candidates show the reportable side. Evidence-only rows remain Observe only; the observed signal side is shown underneath." onclick="sortBy('action_type',this)">Action Lens</th>
+          <th class="th-edge" title="The exact side or total observed by the board. A smaller market cue appears only when the evidence qualifies for KPI tracking." onclick="sortBy('flagged_side',this)">Observed Side</th>
           <th class="th-total" title="Detected reaction between participation and price movement" onclick="sortBy('reaction',this)">Signal</th>
           <th class="th-pat" title="Observation coverage: Clean has 3 or more valid observations; Thin has 2" onclick="sortBy('data_badge',this)">Market State</th>
           <th class="th-dec" title="Plain-language explanation of why this market is surfaced">Read</th>
@@ -1852,9 +1856,13 @@ function renderBoard(){
 
 function actionLens(r){
   const eligible=String(r.kpi_eligible||'').toLowerCase()==='true';
-  if(!eligible) return `<div class="focus-label">Observe only</div><div class="focus-sub">${r.flagged_side||'-'} &middot; ${r.focus_basis||'Observed side'}</div>`;
-  const type=String(r.action_type||'').replace(' CANDIDATE','').replace(/_/g,' ');
-  return `<div class="focus-label">${type}: ${r.action_side||'-'}</div><div class="focus-sub">Observed: ${r.flagged_side||'-'}</div>`;
+  const observed=`<div class="focus-label">${r.flagged_side||'-'}</div><div class="focus-sub">${r.focus_basis||'Observed side'}</div>`;
+  if(!eligible) return observed;
+  const fade=String(r.action_type||'').toUpperCase()==='FADE CANDIDATE';
+  const cue=fade?'Potential public fade':'Contrarian cue';
+  const icon=fade?'F':'C';
+  const kind=fade?'fade':'contrarian';
+  return observed+`<div class="market-cue ${kind}" title="${r.action_basis||''}"><span class="market-cue-icon">${icon}</span><span>${cue}: <b>${r.action_side||'-'}</b></span></div>`;
 }
 
 function kpiRows(items,el){ items.forEach(item=>{ const n=item.w+item.l; const pct=n>0?Math.round(100*item.w/n):null; const cls=pct!==null?wrCol(pct):'r'; const d=document.createElement('div'); d.className='krow'; d.innerHTML=`<div class="krow-head"><span class="kname">${item.label}</span><span class="kpct ${cls}">${pct!==null?pct+'%':'--'} <span class="kn">(${n})</span></span></div><div class="kbar"><div class="kfill" style="width:${pct||0}%;background:${wrClr(pct||0)}"></div></div>`; el.appendChild(d); }); }
@@ -2072,10 +2080,10 @@ function openGameDetail(r){
   html+='<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:3px">'+(r.flagged_side||'--')+'</div>';
   html+='<div style="font-size:11px;color:var(--text3);margin-bottom:8px">'+(r.focus_basis||'Observed side')+'</div>';
   const actionEligible=String(r.kpi_eligible||'').toLowerCase()==='true';
-  html+='<div style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin:10px 0 3px">Action Lens</div>';
-  html+='<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">'+(actionEligible?((r.action_type||'Candidate').replace('_',' ')+': '+(r.action_side||'--')):'Observe only')+'</div>';
+  html+='<div style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin:10px 0 3px">Market Cue</div>';
+  html+='<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">'+(actionEligible?((String(r.action_type||'').toUpperCase()==='FADE CANDIDATE'?'Potential public fade':'Contrarian cue')+': '+(r.action_side||'--')):'No directional cue')+'</div>';
   if(actionEligible) html+='<div style="font-size:11px;color:var(--text2);margin-bottom:3px">Decision line '+(r.action_line||'--')+'</div>';
-  html+='<div style="font-size:11px;color:var(--text3);margin-bottom:8px">'+(r.action_basis||'Evidence only; no reportable action candidate.')+'</div>';
+  html+='<div style="font-size:11px;color:var(--text3);margin-bottom:8px">'+(r.action_basis||'Evidence only; no directional cue.')+'</div>';
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">'+splitSummary(r)+'</div>';
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Open '+(r.open_line||'--')+' -> Current '+(r.current_line||'--')+'</div>';
   if(Number(r.price_move_pct)>0) html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Price movement '+Number(r.price_move_pct).toFixed(1)+' implied points</div>';
