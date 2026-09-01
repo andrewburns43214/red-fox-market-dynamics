@@ -40,18 +40,20 @@ in_season() {
   fi
 }
 
-# NFL: Sep 7 - Feb 25
-if in_season 907 225; then SPORTS="nfl $SPORTS"; fi
-# NCAAF: Aug 24 - Feb 1
-if in_season 824 201; then SPORTS="ncaaf $SPORTS"; fi
-# MLB: Mar 26 - Nov 6
-if in_season 326 1106; then SPORTS="mlb $SPORTS"; fi
-# NBA: Oct 22 - Jul 5
-if in_season 1022 705; then SPORTS="nba $SPORTS"; fi
-# NHL: Oct 10 - Jul 5
-if in_season 1010 705; then SPORTS="nhl $SPORTS"; fi
-# NCAAB: Nov 5 - Apr 10
-if in_season 1105 410; then SPORTS="ncaab $SPORTS"; fi
+# Start each sport a bit before opening day so upcoming slates are already flowing.
+# Offseason runs stay safe because the scraper simply returns no events.
+# NFL: Aug 1 - Feb 25
+if in_season 801 225; then SPORTS="nfl $SPORTS"; fi
+# NCAAF: Aug 1 - Feb 1
+if in_season 801 201; then SPORTS="ncaaf $SPORTS"; fi
+# MLB: Mar 1 - Nov 15
+if in_season 301 1115; then SPORTS="mlb $SPORTS"; fi
+# NBA: Oct 1 - Jul 15
+if in_season 1001 715; then SPORTS="nba $SPORTS"; fi
+# NHL: Sep 20 - Jul 15
+if in_season 920 715; then SPORTS="nhl $SPORTS"; fi
+# NCAAB: Oct 1 - Apr 15
+if in_season 1001 415; then SPORTS="ncaab $SPORTS"; fi
 
 echo "--- active sports: $SPORTS ---" >> "$LOG"
 for SPORT in $SPORTS; do

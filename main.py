@@ -2109,31 +2109,31 @@ def purge_sport_from_live_files(sport: str) -> list[str]:
 SPORT_CONFIG = {
     "nfl": {
         "label": "NFL",
-        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=88808&tb_edate=n7days&tb_emt=0",
+        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=NFL&tb_edate=n30days&tb_emt=0&itm_content=NFL",
     },
     "nba": {
         "label": "NBA",
-        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=42648&tb_edate=n7days&tb_emt=0",
+        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=NBA&tb_edate=n30days&tb_emt=0&itm_content=NBA",
     },
     "mlb": {
         "label": "MLB",
-        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=84240&tb_edate=n7days&tb_emt=0",
+        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=MLB&tb_edate=n30days&tb_emt=0&itm_content=MLB",
     },
     "nhl": {
         "label": "NHL",
-        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=42133&tb_edate=n7days&tb_emt=0",
+        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=NHL&tb_edate=n30days&tb_emt=0&itm_content=NHL",
     },
     "ncaaf": {
         "label": "CFB",
-        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=87637&tb_edate=n7days&tb_emt=0",
+        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=NCAA+Football&tb_edate=n30days&tb_emt=0&itm_content=NCAA+Football",
     },
     "ncaab": {
         "label": "NCAAB",
-        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=92483&tb_edate=n7days&tb_emt=0",
+        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=NCAA+Basketball&tb_edate=n30days&tb_emt=0&itm_content=NCAA+Basketball",
     },
     "ufc": {
         "label": "UFC",
-        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=9034&tb_edate=n7days&tb_emt=0",
+        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=UFC&tb_edate=n30days&tb_emt=0&itm_content=UFC",
     },
 }
 
