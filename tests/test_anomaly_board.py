@@ -200,6 +200,21 @@ class TestAnomalyBoard(unittest.TestCase):
         self.assertIn("Developing Read", row["context_chips"])
         self.assertIn("below the confirmed signal threshold", row["reason"])
 
+    def test_timeline_keeps_one_latest_observation_per_timestamp(self):
+        latest = pd.DataFrame([
+            {"sport": "nfl", "game_id": "g8", "market_display": "TOTAL", "side_key": "Over", "side": "Over 44.5", "game": "A @ B", "bets_pct": 50, "money_pct": 50, "open_line": "Over 44.5 @ -110", "current_line": "Over 45 @ -110", "_sort_time": _ts(22, 0)},
+        ])
+        history = pd.DataFrame([
+            {"timestamp": _ts(18, 0), "sport": "nfl", "game_id": "g8", "market_display": "TOTAL", "side_key": "Over", "current_line": "Over 44.5 @ -110", "bets_pct": 50, "money_pct": 50},
+            {"timestamp": _ts(20, 0), "sport": "nfl", "game_id": "g8", "market_display": "TOTAL", "side_key": "Over", "current_line": "Over 44.5 @ -110", "bets_pct": 50, "money_pct": 50},
+            {"timestamp": _ts(20, 0), "sport": "nfl", "game_id": "g8", "market_display": "TOTAL", "side_key": "Over", "current_line": "Over 45 @ -110", "bets_pct": 50, "money_pct": 50},
+        ])
+
+        _, events = build_anomaly_outputs(latest, history, pd.DataFrame(), as_of=_ts(17, 0))
+
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events.iloc[-1]["line_display"], "O 45 (-110)")
+
 
 if __name__ == "__main__":
     unittest.main()

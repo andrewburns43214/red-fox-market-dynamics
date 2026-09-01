@@ -455,7 +455,13 @@ def _build_history_points(history_rows, market):
     if not points:
         return []
 
-    return points
+    # A scraper retry can append two values with the same source timestamp.
+    # Keep the final capture for that instant so the timeline remains one
+    # coherent state sequence rather than plotting contradictory duplicates.
+    latest_by_timestamp = {}
+    for point in points:
+        latest_by_timestamp[point["timestamp"]] = point
+    return [latest_by_timestamp[timestamp] for timestamp in sorted(latest_by_timestamp)]
 
 
 def _parse_snapshot_value(raw_line, market):
