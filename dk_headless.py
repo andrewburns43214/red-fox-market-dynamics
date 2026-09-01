@@ -305,7 +305,9 @@ def dom_scrape_splits(html, sport):
             progress_div.select_one("div[style*='width']")
             or progress_div.find("div", attrs={"style": True})
         )
-        return pct_from_style(inner) or pct_from_style(progress_div)
+        # A real 0% is valid data. Do not fall through to a parent 100% width.
+        value = pct_from_style(inner)
+        return value if value is not None else pct_from_style(progress_div)
 
     soup = BeautifulSoup(html, "html.parser")
     rows = []

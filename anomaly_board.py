@@ -20,8 +20,13 @@ MEANINGFUL_MOVE_BY_MARKET = {
 HOLD_MOVE_BY_MARKET = {
     "SPREAD": 0.25,
     "TOTAL": 0.5,
-    "MONEYLINE": 10.0,
+    "MONEYLINE": 1.0,
 }
+
+MEANINGFUL_PRICE_MOVE_PCT = 2.5
+HOLD_PRICE_MOVE_PCT = 1.0
+HEAVY_FAVORITE_ODDS = -300
+PARLAY_RISK_ODDS = -200
 
 
 def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
@@ -96,12 +101,12 @@ def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
         return board_df, events_df
 
     board_df = board_df.sort_values(
-        ["anomaly_sort", "severity_sort", "kickoff_sort", "game", "market_display"],
-        ascending=[True, False, True, True, True],
+        ["anomaly_sort", "maturity_sort", "severity_sort", "kickoff_sort", "game", "market_display"],
+        ascending=[True, True, False, True, True, True],
         kind="mergesort",
     ).reset_index(drop=True)
     board_df["board_rank"] = range(1, len(board_df) + 1)
-    board_df = board_df.drop(columns=["severity_sort", "kickoff_sort"], errors="ignore")
+    board_df = board_df.drop(columns=["severity_sort", "maturity_sort", "kickoff_sort"], errors="ignore")
 
     if not events_df.empty:
         events_df = events_df.sort_values(
@@ -124,23 +129,34 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     if observation_count < 2:
         return None
 
-    move_threshold = MEANINGFUL_MOVE_BY_MARKET[market]
-    hold_threshold = HOLD_MOVE_BY_MARKET[market]
+    line_move_threshold = MEANINGFUL_MOVE_BY_MARKET[market]
+    line_hold_threshold = HOLD_MOVE_BY_MARKET[market]
+    move_threshold = MEANINGFUL_PRICE_MOVE_PCT if market == "MONEYLINE" else line_move_threshold
+    hold_threshold = HOLD_PRICE_MOVE_PCT if market == "MONEYLINE" else line_hold_threshold
     open_value = points[0]["value"]
     current_value = points[-1]["value"]
-    move_abs = abs(current_value - open_value)
+    line_move_abs = abs(current_value - open_value)
+    price_move_pct = _price_move_abs(points)
+    move_abs = _movement_abs(points, market)
 
-    dir_changes = _count_direction_changes(points)
-    max_excursion = _max_excursion(points)
-    path_min = min(point["value"] for point in points)
-    path_max = max(point["value"] for point in points)
-    late_move = _is_late_move(points, move_threshold)
+    dir_changes = _count_direction_changes(points, market)
+    max_excursion = _max_excursion(points, market)
+    path_min = min(_motion_value(point, market) for point in points)
+    path_max = max(_motion_value(point, market) for point in points)
+    line_moved = line_move_abs >= line_move_threshold
+    juice_moved = price_move_pct >= MEANINGFUL_PRICE_MOVE_PCT
+    meaningful_move = move_abs >= move_threshold if market == "MONEYLINE" else line_moved or juice_moved
+    late_move = _is_late_move(points, market, move_threshold)
     whipsaw = dir_changes >= 1 and max_excursion >= move_threshold
-    held = move_abs <= hold_threshold
-    one_way = (not whipsaw) and move_abs >= move_threshold
+    held = move_abs <= hold_threshold if market == "MONEYLINE" else (
+        line_move_abs <= line_hold_threshold and price_move_pct <= HOLD_PRICE_MOVE_PCT
+    )
+    one_way = (not whipsaw) and meaningful_move
     path_label = ""
     if whipsaw:
         path_label = "Whipsaw"
+    elif juice_moved and not line_moved:
+        path_label = "Juice Move"
     elif held:
         path_label = "Held"
     elif late_move:
@@ -150,13 +166,18 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
 
     bets_pct = _num(latest_row.get("bets_pct"))
     money_pct = _num(latest_row.get("money_pct"))
+    split_capped = _is_split_capped(bets_pct, money_pct)
+    current_odds = points[-1].get("odds")
+    heavy_favorite = market == "MONEYLINE" and current_odds is not None and current_odds <= HEAVY_FAVORITE_ODDS
+    parlay_risk = market == "MONEYLINE" and current_odds is not None and current_odds <= PARLAY_RISK_ODDS and money_pct >= 80
+    split_alert_eligible = not split_capped and not parlay_risk
     low_support = bets_pct <= 40 and money_pct <= 45
     very_low_support = bets_pct <= 35 and money_pct <= 40
     ticket_heavy = bets_pct >= 70
     public_support = ticket_heavy and money_pct >= 55
-    ticket_led = ticket_heavy and money_pct < 55
-    extreme_public = public_support and bets_pct >= 80
-    low_bets_high_money = bets_pct <= 35 and money_pct >= 60
+    ticket_led = split_alert_eligible and ticket_heavy and money_pct < 55
+    extreme_public = split_alert_eligible and public_support and bets_pct >= 80
+    low_bets_high_money = split_alert_eligible and bets_pct <= 35 and money_pct >= 60
 
     move_toward_side = _move_toward_side(points, market, latest_row)
     key_number = _key_number_chip(sport, market, points)
@@ -164,11 +185,11 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     stale_dk = broader["stale_dk"]
 
     reaction = ""
-    if low_support and move_toward_side and move_abs >= move_threshold:
+    if split_alert_eligible and low_support and move_toward_side and meaningful_move:
         reaction = "Contrarian"
-    elif public_support and held:
+    elif split_alert_eligible and public_support and held:
         reaction = "Freeze"
-    elif public_support and move_toward_side and move_abs >= move_threshold:
+    elif split_alert_eligible and public_support and move_toward_side and meaningful_move:
         reaction = "Follow"
 
     # Every active market has a primary state; secondary path/context signals add detail.
@@ -177,6 +198,10 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
 
     chips = [chip for chip in [reaction, path_label] if chip]
     context_chips = []
+    if split_capped:
+        context_chips.append("Split Cap")
+    if heavy_favorite:
+        context_chips.append("Heavy Favorite")
     if key_number:
         context_chips.append(key_number)
     if stale_dk:
@@ -186,10 +211,13 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     if ticket_led:
         context_chips.append("Ticket-led")
 
-    data_badge = _data_badge(points, latest_row)
+    data_badge = _data_badge(points, latest_row, split_capped)
     path_summary = _path_summary(points)
-    first_seen = _first_anomaly_seen(points, reaction, path_label, stale_dk, market, latest_row, move_threshold, hold_threshold)
-    return_to_open = _return_toward_open(points)
+    first_seen = _first_anomaly_seen(
+        points, reaction, path_label, stale_dk, market, latest_row,
+        move_threshold, hold_threshold, split_alert_eligible,
+    )
+    return_to_open = _return_toward_open(points, market)
     reason = _reason_line(
         reaction=reaction,
         path_label=path_label,
@@ -202,20 +230,28 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         move_threshold=move_threshold,
         held=held,
         broader_summary=broader["summary"],
+        split_capped=split_capped,
+        parlay_risk=parlay_risk,
+        price_move_pct=price_move_pct,
     )
 
     flagged_side = str(latest_row.get("side", "")).strip() or str(latest_row.get("side_key", "")).strip()
     kickoff_ts = _coerce_ts(latest_row.get("_sort_time")) or _coerce_ts(latest_row.get("_game_time")) or _coerce_ts(latest_row.get("dk_start_iso"))
     kickoff_label = _format_kickoff(kickoff_ts)
+    hours_to_kickoff = (kickoff_ts - as_of).total_seconds() / 3600 if kickoff_ts else None
+    maturity_sort = 1 if hours_to_kickoff is not None and hours_to_kickoff > 48 else 0
+    rank_reason = _rank_reason(
+        reaction, path_label, stale_dk, split_capped, parlay_risk, hours_to_kickoff,
+    )
     severity = _severity_score(
         reaction=reaction,
         whipsaw=whipsaw,
         extreme_public=extreme_public,
-        move_abs=move_abs,
-        max_excursion=max_excursion,
+        move_abs=_movement_severity(market, line_move_abs, price_move_pct),
+        max_excursion=_movement_severity(market, _line_max_excursion(points), _price_max_excursion(points)),
         stale_dk=stale_dk,
         low_bets_high_money=low_bets_high_money,
-        very_low_support=very_low_support,
+        very_low_support=very_low_support and split_alert_eligible,
     )
 
     event_rows = []
@@ -232,6 +268,8 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
             "observation_count": observation_count,
             "line_value": point["value"],
             "line_display": point["display"],
+            "price_odds": point.get("odds", ""),
+            "implied_pct": point.get("implied_pct", ""),
             "bets_pct": point["bets_pct"],
             "money_pct": point["money_pct"],
             "is_open": index == 0,
@@ -251,6 +289,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         "canonical_key": str(latest_row.get("canonical_key", "")),
         "kickoff_time": kickoff_label,
         "kickoff_sort": kickoff_ts.isoformat() if kickoff_ts else "",
+        "kickoff_iso": kickoff_ts.isoformat() if kickoff_ts else "",
         "game": str(latest_row.get("game", "")),
         "market_display": market,
         "flagged_side": flagged_side,
@@ -274,11 +313,16 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         "open_line_value": round(open_value, 3),
         "current_line_value": round(current_value, 3),
         "move_abs": round(move_abs, 3),
+        "line_move_abs": round(line_move_abs, 3),
+        "price_move_pct": round(price_move_pct, 3),
+        "movement_unit": "implied probability points" if market == "MONEYLINE" else "line points",
         "line_dir_changes": dir_changes,
         "path_min": round(path_min, 3),
         "path_max": round(path_max, 3),
         "observed_path": json.dumps([point["display"] for point in points]),
-        "anomaly_sort": _sort_rank(reaction, whipsaw, extreme_public, stale_dk),
+        "rank_reason": rank_reason,
+        "anomaly_sort": _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped, parlay_risk),
+        "maturity_sort": maturity_sort,
         "severity_sort": severity,
         "_event_rows": event_rows,
     }
@@ -298,6 +342,9 @@ def _build_history_points(history_rows, market):
             "timestamp": _coerce_ts(row.get("timestamp")),
             "value": parsed["value"],
             "display": parsed["display"],
+            "base_display": parsed.get("base_display", parsed["display"]),
+            "odds": parsed.get("odds"),
+            "implied_pct": parsed.get("implied_pct"),
             "bets_pct": _num(row.get("bets_pct")),
             "money_pct": _num(row.get("money_pct")),
         })
@@ -315,22 +362,43 @@ def _parse_snapshot_value(raw_line, market):
     if not text:
         return {"value": None, "display": ""}
 
+    odds = _extract_last_number(text)
+    implied_pct = _american_to_implied_pct(odds)
+
     if market == "MONEYLINE":
         odds = _extract_last_number(text)
         if odds is None:
             return {"value": None, "display": ""}
-        return {"value": float(odds), "display": _format_odds(odds)}
+        return {
+            "value": float(odds),
+            "display": _format_odds(odds),
+            "base_display": _format_odds(odds),
+            "odds": odds,
+            "implied_pct": implied_pct,
+        }
 
     if market == "TOTAL":
         line_val = _extract_total_value(text)
         if line_val is None:
             return {"value": None, "display": ""}
-        return {"value": float(line_val), "display": _format_total_display(text, line_val)}
+        return {
+            "value": float(line_val),
+            "display": _format_line_with_odds(_format_total_display(text, line_val), odds),
+            "base_display": _format_total_display(text, line_val),
+            "odds": odds,
+            "implied_pct": implied_pct,
+        }
 
     line_val = _extract_spread_value(text)
     if line_val is None:
         return {"value": None, "display": ""}
-    return {"value": float(line_val), "display": _format_spread_display(line_val)}
+    return {
+        "value": float(line_val),
+        "display": _format_line_with_odds(_format_spread_display(line_val), odds),
+        "base_display": _format_spread_display(line_val),
+        "odds": odds,
+        "implied_pct": implied_pct,
+    }
 
 
 def _extract_last_number(text):
@@ -366,12 +434,52 @@ def _extract_spread_value(text):
     return None
 
 
-def _count_direction_changes(points):
+def _motion_value(point, market):
+    if market == "MONEYLINE" and point.get("implied_pct") is not None:
+        return point["implied_pct"]
+    return point["value"]
+
+
+def _movement_abs(points, market):
+    return abs(_motion_value(points[-1], market) - _motion_value(points[0], market))
+
+
+def _line_max_excursion(points):
+    if not points:
+        return 0.0
+    open_value = points[0]["value"]
+    return max(abs(point["value"] - open_value) for point in points)
+
+
+def _price_move_abs(points):
+    if not points or points[0].get("implied_pct") is None or points[-1].get("implied_pct") is None:
+        return 0.0
+    return abs(points[-1]["implied_pct"] - points[0]["implied_pct"])
+
+
+def _price_max_excursion(points):
+    if not points or points[0].get("implied_pct") is None:
+        return 0.0
+    open_price = points[0]["implied_pct"]
+    values = [abs(point["implied_pct"] - open_price) for point in points if point.get("implied_pct") is not None]
+    return max(values, default=0.0)
+
+
+def _movement_severity(market, line_move_abs, price_move_pct):
+    if market == "MONEYLINE":
+        return price_move_pct
+    return max(
+        line_move_abs / MEANINGFUL_MOVE_BY_MARKET[market],
+        price_move_pct / MEANINGFUL_PRICE_MOVE_PCT,
+    )
+
+
+def _count_direction_changes(points, market):
     if len(points) < 3:
         return 0
     deltas = []
     for left, right in zip(points, points[1:]):
-        delta = right["value"] - left["value"]
+        delta = _motion_value(right, market) - _motion_value(left, market)
         if math.isclose(delta, 0.0, abs_tol=1e-9):
             continue
         deltas.append(1 if delta > 0 else -1)
@@ -382,11 +490,11 @@ def _count_direction_changes(points):
     return changes
 
 
-def _max_excursion(points):
+def _max_excursion(points, market):
     if not points:
         return 0.0
-    open_value = points[0]["value"]
-    return max(abs(point["value"] - open_value) for point in points)
+    open_value = _motion_value(points[0], market)
+    return max(abs(_motion_value(point, market) - open_value) for point in points)
 
 
 def _move_toward_side(points, market, latest_row):
@@ -396,7 +504,13 @@ def _move_toward_side(points, market, latest_row):
     current_value = points[-1]["value"]
 
     if market == "MONEYLINE":
-        return current_value < open_value
+        return _motion_value(points[-1], market) > _motion_value(points[0], market)
+
+    if math.isclose(current_value, open_value, abs_tol=1e-9):
+        open_price = points[0].get("implied_pct")
+        current_price = points[-1].get("implied_pct")
+        if open_price is not None and current_price is not None:
+            return current_price > open_price
 
     if market == "TOTAL":
         side_text = str(latest_row.get("side", "")).lower()
@@ -409,13 +523,13 @@ def _move_toward_side(points, market, latest_row):
     return current_value < open_value
 
 
-def _is_late_move(points, move_threshold):
+def _is_late_move(points, market, move_threshold):
     if len(points) < 3:
         return False
-    open_value = points[0]["value"]
+    open_value = _motion_value(points[0], market)
     target_index = None
     for index, point in enumerate(points[1:], start=1):
-        if abs(point["value"] - open_value) >= move_threshold:
+        if abs(_motion_value(point, market) - open_value) >= move_threshold:
             target_index = index
             break
     if target_index is None:
@@ -460,17 +574,23 @@ def _broader_market_context(latest_row, l2_df, market, move_threshold, hold_thre
 
     metric_col = "odds_american" if market == "MONEYLINE" else "line"
     subset[metric_col] = pd.to_numeric(subset[metric_col], errors="coerce")
-    subset = subset.dropna(subset=[metric_col])
+    if market == "MONEYLINE":
+        subset["movement_value"] = subset[metric_col].map(_american_to_implied_pct)
+    else:
+        subset["movement_value"] = subset[metric_col]
+    subset = subset.dropna(subset=["movement_value"])
     if subset.empty:
         return {"stale_dk": False, "summary": ""}
 
-    values = subset[metric_col].tolist()
+    values = subset["movement_value"].tolist()
     market_range = max(values) - min(values)
-    market_start = float(subset.sort_values("timestamp").iloc[0][metric_col])
-    market_end = float(subset.sort_values("timestamp").iloc[-1][metric_col])
+    market_start = float(subset.sort_values("timestamp").iloc[0]["movement_value"])
+    market_end = float(subset.sort_values("timestamp").iloc[-1]["movement_value"])
 
-    dk_open = _parse_snapshot_value(latest_row.get("open_line", ""), market)["value"]
-    dk_current = _parse_snapshot_value(latest_row.get("current_line", ""), market)["value"]
+    dk_open_parsed = _parse_snapshot_value(latest_row.get("open_line", ""), market)
+    dk_current_parsed = _parse_snapshot_value(latest_row.get("current_line", ""), market)
+    dk_open = dk_open_parsed["implied_pct"] if market == "MONEYLINE" else dk_open_parsed["value"]
+    dk_current = dk_current_parsed["implied_pct"] if market == "MONEYLINE" else dk_current_parsed["value"]
     if dk_open is None or dk_current is None:
         return {"stale_dk": False, "summary": ""}
 
@@ -478,7 +598,7 @@ def _broader_market_context(latest_row, l2_df, market, move_threshold, hold_thre
     stale = dk_move <= hold_threshold and abs(market_end - market_start) >= move_threshold and market_range >= move_threshold
 
     if market == "MONEYLINE":
-        summary = f"Market moved {int(round(market_start))} to {int(round(market_end))} while DK held near {int(round(dk_current))}"
+        summary = f"Market price moved {market_start:.1f}% to {market_end:.1f}% while DK held near {dk_current_parsed['display']}"
     else:
         summary = f"Market moved {market_start:g} to {market_end:g} while DK held near {dk_current:g}"
 
@@ -486,7 +606,8 @@ def _broader_market_context(latest_row, l2_df, market, move_threshold, hold_thre
 
 
 def _path_summary(points):
-    displays = [point["display"] for point in points]
+    prices_changed = len({point.get("odds") for point in points if point.get("odds") is not None}) > 1
+    displays = [point["display"] if prices_changed else point.get("base_display", point["display"]) for point in points]
     if len(displays) <= 4:
         chosen = displays
     else:
@@ -498,44 +619,64 @@ def _path_summary(points):
     return " -> ".join(compact[:4])
 
 
-def _first_anomaly_seen(points, reaction, path_label, stale_dk, market, latest_row, move_threshold, hold_threshold):
+def _first_anomaly_seen(points, reaction, path_label, stale_dk, market, latest_row, move_threshold, hold_threshold, split_alert_eligible):
     open_value = points[0]["value"]
+    open_price = points[0].get("implied_pct")
     path_changes = 0
     last_dir = 0
     for index, point in enumerate(points[1:], start=1):
-        delta = point["value"] - points[index - 1]["value"]
+        delta = _motion_value(point, market) - _motion_value(points[index - 1], market)
         if not math.isclose(delta, 0.0, abs_tol=1e-9):
             cur_dir = 1 if delta > 0 else -1
             if last_dir and cur_dir != last_dir:
                 path_changes += 1
             last_dir = cur_dir
-        move_abs = abs(point["value"] - open_value)
+        line_move_abs = abs(point["value"] - open_value)
+        price_move_abs = abs(point.get("implied_pct", open_price) - open_price) if open_price is not None and point.get("implied_pct") is not None else 0.0
+        move_abs = abs(_motion_value(point, market) - _motion_value(points[0], market))
+        meaningful_move = move_abs >= move_threshold if market == "MONEYLINE" else (
+            line_move_abs >= MEANINGFUL_MOVE_BY_MARKET[market] or price_move_abs >= MEANINGFUL_PRICE_MOVE_PCT
+        )
+        held = move_abs <= hold_threshold if market == "MONEYLINE" else (
+            line_move_abs <= HOLD_MOVE_BY_MARKET[market] and price_move_abs <= HOLD_PRICE_MOVE_PCT
+        )
         toward_side = _move_toward_side(points[: index + 1], market, latest_row)
         bets_pct = points[index]["bets_pct"]
         money_pct = points[index]["money_pct"]
-        if reaction == "Contrarian" and bets_pct <= 40 and money_pct <= 45 and toward_side and move_abs >= move_threshold:
+        capped = _is_split_capped(bets_pct, money_pct)
+        if not split_alert_eligible or capped:
+            continue
+        if reaction == "Contrarian" and bets_pct <= 40 and money_pct <= 45 and toward_side and meaningful_move:
             return point["timestamp"].isoformat()
-        if reaction == "Freeze" and bets_pct >= 70 and money_pct >= 55 and move_abs <= hold_threshold:
+        if reaction == "Freeze" and bets_pct >= 70 and money_pct >= 55 and held:
             return point["timestamp"].isoformat()
-        if reaction == "Follow" and bets_pct >= 70 and money_pct >= 55 and toward_side and move_abs >= move_threshold:
+        if reaction == "Follow" and bets_pct >= 70 and money_pct >= 55 and toward_side and meaningful_move:
             return point["timestamp"].isoformat()
         if path_label == "Whipsaw" and path_changes >= 1 and move_abs >= move_threshold:
+            return point["timestamp"].isoformat()
+        if path_label == "Juice Move" and price_move_abs >= MEANINGFUL_PRICE_MOVE_PCT:
             return point["timestamp"].isoformat()
         if stale_dk and move_abs <= hold_threshold:
             return point["timestamp"].isoformat()
     return points[-1]["timestamp"].isoformat()
 
 
-def _return_toward_open(points):
+def _return_toward_open(points, market):
     if len(points) < 3:
         return False
-    open_value = points[0]["value"]
-    current_value = points[-1]["value"]
-    best_excursion = max(abs(point["value"] - open_value) for point in points[:-1])
+    open_value = _motion_value(points[0], market)
+    current_value = _motion_value(points[-1], market)
+    best_excursion = max(abs(_motion_value(point, market) - open_value) for point in points[:-1])
     return abs(current_value - open_value) < best_excursion
 
 
-def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ticket_led, low_bets_high_money, move_abs, move_threshold, held, broader_summary):
+def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ticket_led, low_bets_high_money, move_abs, move_threshold, held, broader_summary, split_capped, parlay_risk, price_move_pct):
+    if split_capped:
+        if price_move_pct >= MEANINGFUL_PRICE_MOVE_PCT:
+            return f"Price moved {price_move_pct:.1f} implied points, but a capped 0%/100% split is excluded from alert ranking"
+        return "A capped 0%/100% split is shown for context but excluded from alert ranking"
+    if parlay_risk:
+        return "Heavy favorite price makes public split alignment prone to parlay bias"
     if reaction == "Contrarian":
         if path_label == "Whipsaw":
             return "Line improved for the weak side, then gave some back"
@@ -551,11 +692,15 @@ def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ti
     if reaction == "Follow":
         if path_label == "Late":
             return "Public side finally got a late move toward it"
+        if path_label == "Juice Move":
+            return "Strong ticket and money support matched a meaningful price move"
         return "Strong ticket and money support matched the move direction"
     if stale_dk and broader_summary:
         return broader_summary
     if path_label == "Whipsaw":
         return "Line reversed direction after a meaningful excursion"
+    if path_label == "Juice Move":
+        return f"Point line held while price moved {price_move_pct:.1f} implied points"
     if ticket_led and held:
         return "High ticket share had weak money support and the line held"
     if ticket_led:
@@ -567,13 +712,15 @@ def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ti
     return "Path shape stood out versus the split support"
 
 
-def _data_badge(points, latest_row):
+def _data_badge(points, latest_row, split_capped=False):
     if len(points) < 2:
         return "Feed Risk"
     open_ok = _parse_snapshot_value(latest_row.get("open_line", ""), str(latest_row.get("market_display", "")).upper())["value"] is not None
     current_ok = _parse_snapshot_value(latest_row.get("current_line", ""), str(latest_row.get("market_display", "")).upper())["value"] is not None
     if not open_ok or not current_ok:
         return "Feed Risk"
+    if split_capped:
+        return "Split Risk"
     if len(points) >= 3:
         return "Clean"
     return "Thin"
@@ -598,7 +745,11 @@ def _severity_score(reaction, whipsaw, extreme_public, move_abs, max_excursion, 
     return round(score, 3)
 
 
-def _sort_rank(reaction, whipsaw, extreme_public, stale_dk):
+def _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped=False, parlay_risk=False):
+    if split_capped and not stale_dk:
+        return 8
+    if parlay_risk and not stale_dk:
+        return 8
     if reaction == "Contrarian" and whipsaw:
         return 0
     if reaction == "Freeze" and extreme_public:
@@ -640,9 +791,54 @@ def _format_total_display(text, value):
     return f"{value:g}"
 
 
+def _format_line_with_odds(line_display, odds):
+    if odds is None:
+        return line_display
+    return f"{line_display} ({_format_odds(odds)})"
+
+
 def _format_odds(value):
     number = int(round(float(value)))
     return f"{number:+d}"
+
+
+def _american_to_implied_pct(odds):
+    if odds is None:
+        return None
+    odds = float(odds)
+    if math.isclose(odds, 0.0, abs_tol=1e-9):
+        return None
+    if odds < 0:
+        return round((-odds / (-odds + 100)) * 100, 4)
+    return round((100 / (odds + 100)) * 100, 4)
+
+
+def _is_split_capped(bets_pct, money_pct):
+    return bets_pct <= 0 or bets_pct >= 100 or money_pct <= 0 or money_pct >= 100
+
+
+def _rank_reason(reaction, path_label, stale_dk, split_capped, parlay_risk, hours_to_kickoff):
+    if split_capped:
+        return "Split cap: a 0% or 100% source value cannot earn an alert rank."
+    if parlay_risk:
+        return "Heavy favorite: public split alignment is downranked for parlay risk."
+    if stale_dk:
+        return "Stale DK: broader market moved while the displayed DK price held."
+    if reaction == "Contrarian":
+        base = "Contrarian: low support paired with a move toward the side."
+    elif reaction == "Freeze":
+        base = "Freeze: strong tickets and money with no meaningful line or price move."
+    elif reaction == "Follow":
+        base = "Follow: strong tickets and money moved with the side."
+    elif path_label == "Whipsaw":
+        base = "Whipsaw: the observed price path materially reversed."
+    elif path_label == "Juice Move":
+        base = "Juice move: the point line held while the price changed materially."
+    else:
+        base = "Watch: active market without a qualifying alert."
+    if hours_to_kickoff is not None and hours_to_kickoff > 48:
+        return f"{base} Early market: ranked after closer games within the same signal class."
+    return base
 
 
 def _format_kickoff(ts):

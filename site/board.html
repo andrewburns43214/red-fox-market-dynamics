@@ -1025,6 +1025,9 @@ thead th.th-edge, thead th.th-total, thead th.th-pat, thead th.th-dec { text-ali
 .key-ticket { background:#f8f3ea; border-color:#eadcc4; color:#826231; }
 .key-divergence { background:#eef5f2; border-color:#d3e6de; color:#426c5d; }
 .key-keynumber { background:#f0f3f8; border-color:#d9e0ec; color:#596b88; }
+.key-juice { background:#eef4fa; border-color:#d3e1ef; color:#496a8a; }
+.key-favorite { background:#f8f2ea; border-color:#eadbc4; color:#80613b; }
+.key-split { background:#f9eeee; border-color:#eccfcf; color:#985555; }
 body { background: radial-gradient(circle at 88% -10%, #dceff0 0, transparent 30%), var(--bg); }
 .topbar { height: 62px; background: rgba(255,255,255,.9); backdrop-filter: blur(14px); padding: 0 28px; box-shadow: none; }
 .logo-wrap { border-right: 0; padding-right: 14px; margin-right: 0; }
@@ -1151,14 +1154,17 @@ td:last-child { border-radius: 0 8px 8px 0; }
     <span class="signal-key-item key-ticket" title="Ticket share is elevated, but money share is not strong enough for Freeze or Follow">Ticket-led</span>
     <span class="signal-key-item key-divergence" title="Low ticket share with a high share of money">Low Bets / High $</span>
     <span class="signal-key-item key-keynumber" title="The observed path touched or crossed a sport-specific key number">Key number</span>
+    <span class="signal-key-item key-juice" title="The point line held while the odds price moved materially">Juice Move</span>
+    <span class="signal-key-item key-favorite" title="A heavily priced moneyline favorite; displayed as risk context, not an alert by itself">Heavy Fav</span>
+    <span class="signal-key-item key-split" title="A 0% or 100% source split is shown as data risk and excluded from directional alert ranking">Split Cap</span>
     <span class="signal-key-item key-watch" title="Active market with no qualifying alert at the current snapshot">Watch</span>
   </div>
 </header>
 
 <!-- â”€â”€â”€ TABS â”€â”€â”€ -->
 <nav class="tabs">
-  <div class="tab active" data-tab="board" data-filter="today" onclick="setTab(this)">Today's Games <span class="tbadge" id="b-today">0</span></div>
-  <div class="tab" data-tab="board" data-filter="all" onclick="setTab(this)">All Games <span class="tbadge" id="b-all">0</span></div>
+  <div class="tab active" data-tab="board" data-filter="all" onclick="setTab(this)">All Games <span class="tbadge" id="b-all">0</span></div>
+  <div class="tab" data-tab="board" data-filter="today" onclick="setTab(this)">Today's Games <span class="tbadge" id="b-today">0</span></div>
   <div class="sfilters">
     <div class="schip on" onclick="setSport('ALL',this)">All</div>
     <div class="schip" onclick="setSport('NBA',this)">NBA</div>
@@ -1245,7 +1251,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
           <table>
             <thead>
               <tr>
-          <th class="th-rank sorted" title="Priority order based on the board's anomaly ranking" onclick="sortBy('board_rank',this)">#</th>
+          <th class="th-rank sorted" title="Priority rank uses verified signal strength, split quality, and market maturity; hover a row rank for its reason" onclick="sortBy('board_rank',this)">#</th>
           <th class="th-game" title="Matchup, sport, and scheduled start time" onclick="sortBy('game',this)">Game</th>
           <th class="th-mkt" title="Market type: moneyline, spread, or total" onclick="sortBy('market_display',this)">Market</th>
           <th class="th-split" title="Share of tickets and handle on the market focus">Bets / Money</th>
@@ -1523,7 +1529,7 @@ const MOCK_RESULTS = [
 ];
 
 let allDash=[], allLedger=[], allEvents=[], allResults=[], allKPI=[];
-let sport='ALL', market='ALL', filter='today', tabId='board';
+let sport='ALL', market='ALL', filter='all', tabId='board';
 let sortCol='board_rank', sortAsc=true;
 let _bookLines=null, _selectedBook='dk';
 
@@ -1666,6 +1672,7 @@ function dataBadge(v){
   const t=String(v||'').trim().toUpperCase();
   if(t==='CLEAN') return '<span class="tim tMID">CLEAN</span>';
   if(t==='THIN') return '<span class="tim tLATE">THIN</span>';
+  if(t==='SPLIT RISK') return '<span class="tim tLIVE" title="A capped 0% or 100% split cannot qualify for an alert">SPLIT RISK</span>';
   return '<span class="tim tLIVE">FEED RISK</span>';
 }
 function splitPctStyle(kind, raw){
@@ -1718,8 +1725,8 @@ function scrollToTop(){
 function exportCSV(){
   const data=filtered();
   if(!data.length) return;
-  const cols=['game','sport','market_display','flagged_side','reaction','path','context_chips','bets_pct','money_pct','open_line','current_line','path_summary','reason','data_badge','kickoff_time'];
-  const headers=['Game','Sport','Market','Flagged Side','Reaction','Path','Context','Bets%','Money%','Open Line','Current Line','Path Summary','Reason','Data','Kickoff'];
+  const cols=['game','sport','market_display','flagged_side','reaction','path','context_chips','bets_pct','money_pct','open_line','current_line','price_move_pct','path_summary','reason','rank_reason','data_badge','kickoff_time','kickoff_iso'];
+  const headers=['Game','Sport','Market','Flagged Side','Reaction','Path','Context','Bets%','Money%','Open Line','Current Line','Price Move (pts)','Path Summary','Reason','Rank Reason','Data','Kickoff','Kickoff ISO'];
   let csv=headers.join(',')+'\n';
   data.forEach(r=>{
     csv+=cols.map(c=>{
@@ -1737,7 +1744,7 @@ function exportCSV(){
 }
 
 function _decRank(d,r){ const k=(d||'').toUpperCase(); if(k==='BET') return 1; if(k==='LEAN') return (r&&isLocked(r))?3:2; return 4; }
-function filtered(){ const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport); if(filter==='highconf') d=d.filter(r=>(r.reaction||'')==='Contrarian'||(r.reaction||'')==='Freeze'); if(market!=='ALL') d=d.filter(r=>(r.market_display||'').toUpperCase()===market); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.flagged_side||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)||(r.reaction||'').toLowerCase().includes(ql)||(r.path||'').toLowerCase().includes(ql)||(r.context_chips||'').toLowerCase().includes(ql)||(r.data_badge||'').toLowerCase().includes(ql)||(r.reason||'').toLowerCase().includes(ql)); return d.sort((a,b)=>{ let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
+function filtered(){ const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport); if(filter==='today') d=d.filter(r=>isToday(r.kickoff_iso)); if(filter==='highconf') d=d.filter(r=>(r.reaction||'')==='Contrarian'||(r.reaction||'')==='Freeze'); if(market!=='ALL') d=d.filter(r=>(r.market_display||'').toUpperCase()===market); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.flagged_side||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)||(r.reaction||'').toLowerCase().includes(ql)||(r.path||'').toLowerCase().includes(ql)||(r.context_chips||'').toLowerCase().includes(ql)||(r.data_badge||'').toLowerCase().includes(ql)||(r.reason||'').toLowerCase().includes(ql)); return d.sort((a,b)=>{ let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
 
 window._boardRows=[];
 function renderBoard(){
@@ -1771,6 +1778,7 @@ function renderBoard(){
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
   data.forEach((r,i)=>{
     const an=anomalyParts(r);
+    const rankReason=String(r.rank_reason||'Board priority reflects verified signal strength and market maturity.').replace(/"/g,'&quot;');
     const signalChips=[
       {value:an.reaction,kind:'reaction'},
       {value:an.path,kind:'path'},
@@ -1783,7 +1791,7 @@ function renderBoard(){
     if(r._grpSub) tr.classList.add('row-grp-sub');
     if(r._grpFirst) tr.classList.add('row-grp-first');
     tr.innerHTML=`
-      <td class="td-rank">${i+1}<br><span class="info-btn" onclick="event.stopPropagation();openGameDetail(window._boardRows[${i}])" title="Game detail">i</span></td>
+      <td class="td-rank" title="${rankReason}">${i+1}<br><span class="info-btn" onclick="event.stopPropagation();openGameDetail(window._boardRows[${i}])" title="Game detail">i</span></td>
       <td class="td-game">
         <div class="game-row1">${spChip(r.sport)}<span class="game-name">${r.game||'-'}</span></div>
         <div class="game-row2"><span class="game-row2-time">${r.kickoff_time||'-'}</span></div>
@@ -1947,9 +1955,15 @@ function closeBkdnLegend() {
   document.getElementById('bkdn-legend-overlay').classList.remove('open');
 }
 
-function movementChart(rows){
+function movementChart(rows, market){
   if(!rows || rows.length < 2) return '';
-  const values=rows.map(r=>Number(r.line_value)).filter(Number.isFinite);
+  const lineValues=rows.map(r=>Number(r.line_value));
+  const priceValues=rows.map(r=>Number(r.implied_pct));
+  const lineMoved=lineValues.every(Number.isFinite) && Math.max(...lineValues)!==Math.min(...lineValues);
+  const priceAvailable=priceValues.every(Number.isFinite);
+  const priceMoved=priceAvailable && Math.max(...priceValues)!==Math.min(...priceValues);
+  const usePrice=String(market||'').toUpperCase()==='MONEYLINE'||(!lineMoved&&priceMoved);
+  const values=(usePrice?priceValues:lineValues).filter(Number.isFinite);
   if(values.length < 2) return '';
   const min=Math.min(...values), max=Math.max(...values), span=max-min || 1;
   const width=640, height=180, pad=22;
@@ -1961,7 +1975,10 @@ function movementChart(rows){
   const line=points.map(p=>p.join(',')).join(' ');
   const area=`${pad},${height-pad} ${line} ${width-pad},${height-pad}`;
   const first=rows[0], last=rows[rows.length-1];
-  return `<div class="movement-chart"><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-bottom:8px"><span>OPEN ${first.line_display||'--'}</span><span>LIVE LINE PATH</span><span>CURRENT ${last.line_display||'--'}</span></div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Line movement chart"><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#5bb6bf" stop-opacity=".32"/><stop offset="1" stop-color="#5bb6bf" stop-opacity=".02"/></linearGradient></defs><path d="M${pad} ${height-pad} H${width-pad}" stroke="#d8e3e6"/><path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${line}" fill="none" stroke="#0f6f7f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#0f6f7f" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#0f6f7f"/></svg></div>`;
+  const label=usePrice?'LIVE IMPLIED PRICE PATH':'LIVE LINE PATH';
+  const openLabel=usePrice&&priceAvailable?Number(first.implied_pct).toFixed(1)+'%':first.line_display||'--';
+  const currentLabel=usePrice&&priceAvailable?Number(last.implied_pct).toFixed(1)+'%':last.line_display||'--';
+  return `<div class="movement-chart"><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-bottom:8px"><span>OPEN ${openLabel}</span><span>${label}</span><span>CURRENT ${currentLabel}</span></div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${usePrice?'Implied price':'Line'} movement chart"><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#5bb6bf" stop-opacity=".32"/><stop offset="1" stop-color="#5bb6bf" stop-opacity=".02"/></linearGradient></defs><path d="M${pad} ${height-pad} H${width-pad}" stroke="#d8e3e6"/><path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${line}" fill="none" stroke="#0f6f7f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#0f6f7f" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#0f6f7f"/></svg></div>`;
 }
 
 function openGameDetail(r){
@@ -1985,13 +2002,15 @@ function openGameDetail(r){
   html+='<span style="font-size:12px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.5px">'+(r.market_display||'--')+'</span>';
   html+='<span>'+dataBadge(r.data_badge)+'</span>';
   html+='</div>';
-  html+=movementChart(evRows);
+  html+=movementChart(evRows,r.market_display);
   html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+anomalyBadge(an.reaction,'reaction')+anomalyBadge(an.path,'path')+an.context.map(c=>'<span class="mr mr-neutral">'+c+'</span>').join('')+'</div>';
   html+='<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px">'+(r.flagged_side||'--')+'</div>';
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px"><span style="'+splitPctStyle('bets',r.bets_pct)+'">'+(Number(r.bets_pct||0).toFixed(0))+'%</span> bets | <span style="'+splitPctStyle('money',r.money_pct)+'">'+(Number(r.money_pct||0).toFixed(0))+'%</span> money</div>';
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Open '+(r.open_line||'--')+' -> Current '+(r.current_line||'--')+'</div>';
+  if(Number(r.price_move_pct)>0) html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Price movement '+Number(r.price_move_pct).toFixed(1)+' implied points</div>';
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Path '+(r.path_summary||'--')+'</div>';
   html+='<div style="font-size:12px;color:var(--text2);line-height:1.6;padding:8px 12px;background:var(--bg2);border-radius:6px;border-left:3px solid var(--accent)">'+(r.reason||'-')+'</div>';
+  if(r.rank_reason) html+='<div style="font-size:10px;color:var(--text3);line-height:1.5;margin-top:8px">Board rank: '+r.rank_reason+'</div>';
   html+='</div>';
 
   // proof layer
@@ -3040,6 +3059,7 @@ async function loadAll(){
       favored_side:r.flagged_side||r.favored_side||'',
       total_score:Number(r.anomaly_sort||0),
       _game_time:r.kickoff_time||'',
+      kickoff_iso:r.kickoff_iso||'',
     };
   });
 
@@ -3049,7 +3069,7 @@ async function loadAll(){
     return String(a.game||'').localeCompare(String(b.game||''));
   });
 
-  const _hash=dashRaw.map(r=>(r.game_id||'')+(r.market_display||'')+(r.flagged_side||'')+(r.reaction||'')+(r.path||'')+(r.current_line||'')).join('|');
+  const _hash=dashRaw.map(r=>(r.game_id||'')+(r.market_display||'')+(r.flagged_side||'')+(r.reaction||'')+(r.path||'')+(r.context_chips||'')+(r.data_badge||'')+(r.rank_reason||'')+(r.current_line||'')).join('|');
   const _changed=_hash!==_lastDashHash;
   _lastDashHash=_hash;
   updateStats();
@@ -3068,14 +3088,15 @@ function updateStats(){
   const sf=allDash.filter(r=>(r.reaction||'')==='Freeze'&&Number(r.anomaly_sort||99)<=3);
   const sports=[...new Set(allDash.map(r=>sportLabel(r.sport)).filter(Boolean))];
   const _ug=rows=>new Set(rows.map(r=>r.game_id||r.game||'?')).size;
+  const todayRows=allDash.filter(r=>isToday(r.kickoff_iso));
   const src=allKPI.length?allKPI:allResults;
   const resolved=gradedRows(src);
   const el=id=>document.getElementById(id);
-  if(el('t-games'))  el('t-games').textContent=_ug(allDash);
+  if(el('t-games'))  el('t-games').textContent=_ug(todayRows);
   if(el('t-active')) el('t-active').textContent=_ug(allDash);
   if(el('t-sb'))     el('t-sb').textContent=allDash.length;
   if(el('t-wr'))     el('t-wr').textContent=sports.length;
-  if(el('m-active')) el('m-active').textContent=_ug(allDash);
+  if(el('m-active')) el('m-active').textContent=_ug(todayRows);
   if(el('m-wr'))     el('m-wr').textContent=sf.length;
   if(el('m-hc'))     el('m-hc').textContent=hc.length;
   if(el('m-avg'))    el('m-avg').textContent=cw.length;
@@ -3086,14 +3107,14 @@ function updateStats(){
     const t=lbl.textContent.toLowerCase();
     if(t.includes('contrarian')) mv.textContent=cw.length;
     if(t.includes('top anomalies')) mv.textContent=hc.length;
-    if(t.includes("today's games")) mv.textContent=_ug(allDash);
+    if(t.includes("today's games")) mv.textContent=_ug(todayRows);
     if(t.includes('strong freeze')) mv.textContent=sf.length;
   });
 
   const el2=id=>document.getElementById(id);
   if(el2('b-all'))   el2('b-all').textContent=_ug(allDash);
   if(el2('b-hc'))    el2('b-hc').textContent=hc.length;
-  if(el2('b-today')) el2('b-today').textContent=_ug(allDash);
+  if(el2('b-today')) el2('b-today').textContent=_ug(todayRows);
 
   const bsig=document.querySelector('.sb-signals');
   if(bsig) bsig.textContent='Flagged Markets '+allDash.length;
@@ -3108,7 +3129,7 @@ function updateStats(){
     } else bsnap.textContent='Snap --';
   }
   const sbS=document.getElementById('sb-s');
-  if(sbS) sbS.textContent=allDash.length;
+  if(sbS) sbS.textContent=_ug(todayRows);
   const sbSp=document.getElementById('sb-sp');
   if(sbSp){ const sp=[...new Set(allDash.map(r=>sportLabel(r.sport)).filter(Boolean))]; sbSp.textContent=sp.length+' ('+sp.join(' ')+')'; }
   const sbSnap=document.getElementById('sb-snap');
