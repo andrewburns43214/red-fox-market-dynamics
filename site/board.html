@@ -1035,7 +1035,8 @@ thead th.th-edge, thead th.th-total, thead th.th-pat, thead th.th-dec { text-ali
 }
 .signal-key { display:flex; align-items:center; gap:5px; }
 .signal-key-label { font-family:var(--mono); font-size:8px; font-weight:700; letter-spacing:.12em; color:var(--text3); text-transform:uppercase; margin-right:2px; }
-.signal-key-item { padding:3px 6px; border:1px solid transparent; border-radius:999px; font-size:8px; font-weight:700; white-space:nowrap; }
+.signal-key-item { padding:3px 6px; border:1px solid transparent; border-radius:999px; font:700 8px var(--sans); white-space:nowrap; cursor:pointer; }
+.signal-key-item:hover,.signal-key-item:focus-visible { filter:brightness(.96); outline:2px solid rgba(15,95,115,.28); outline-offset:1px; }
 .key-contrarian { background:#e7f3f1; border-color:#c7e4de; color:#176454; }
 .key-freeze { background:#e7f0f6; border-color:#c8dce9; color:#2f607f; }
 .key-whipsaw { background:#fffbee; border-color:#f0dc80; color:#8a5a00; }
@@ -1109,7 +1110,22 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .td-dec { width: 300px; text-align:left; }
 .td-pick { width: 72px; text-align:center; }
 .mr { border-radius: 999px; padding: 4px 8px; font-size: 9px; letter-spacing: .02em; }
-.signal-chip { cursor:help; }
+.signal-chip { cursor:pointer; border:1px solid transparent; font-family:var(--sans); }
+.signal-guide-btn { display:none; align-items:center; gap:5px; border:1px solid var(--acc-brd); border-radius:999px; padding:5px 8px; background:var(--acc-bg); color:var(--accent); font:700 10px var(--sans); cursor:pointer; }
+.signal-guide-overlay { display:none; position:fixed; inset:0; z-index:1000; background:rgba(12,26,35,.42); align-items:flex-end; justify-content:center; }
+.signal-guide-overlay.open { display:flex; }
+.signal-guide-sheet { width:min(680px,100%); max-height:min(78vh,760px); overflow:auto; background:#fff; border-radius:16px 16px 0 0; box-shadow:0 -20px 60px rgba(12,26,35,.24); }
+.signal-guide-head { position:sticky; top:0; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px 12px; background:#fff; border-bottom:1px solid var(--border); }
+.signal-guide-title { font-size:15px; font-weight:800; color:var(--text); }
+.signal-guide-close { width:30px; height:30px; border:0; border-radius:50%; background:var(--bg2); color:var(--text2); font-size:20px; cursor:pointer; }
+.signal-guide-body { padding:14px 18px 24px; }
+.signal-guide-intro { margin:0 0 14px; color:var(--text2); font-size:12px; line-height:1.5; }
+.signal-guide-section { margin-top:20px; }
+.signal-guide-section h3 { margin:0 0 8px; color:var(--text3); font:800 9px var(--mono); letter-spacing:.1em; text-transform:uppercase; }
+.signal-guide-item { padding:11px 0; border-top:1px solid var(--border); }
+.signal-guide-item:first-of-type { border-top:0; }
+.signal-guide-item strong { display:block; color:var(--text); font-size:12px; }
+.signal-guide-item p { margin:4px 0 0; color:var(--text2); font-size:12px; line-height:1.48; }
 .td-total .mr { display:inline-flex; align-items:center; margin:2px 4px 2px 0 !important; padding:3px 6px; font-size:8px; line-height:1.1; }
 .mr-aligned { background:#e7f3f1; color:#176454; border-color:#c7e4de; }
 .mr-freeze { background:#e7f0f6; color:#2f607f; border-color:#c8dce9; }
@@ -1144,6 +1160,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
   .pane-title { flex:1 1 100%; }
   .pane-hdr .mfilters { order:2; flex:1 1 100%; }
   .pane-hdr #grp-toggle,.pane-hdr .grp-btn[onclick="exportCSV()"] { order:3; }
+  .signal-guide-btn { display:inline-flex; order:3; }
   .pane-hdr .grp-btn[title="Back to top"] { display:none; }
   .pane-meta,.mcap { display:none; } .tscroll { padding:0 8px 12px; }
   .mfilters { gap:4px; } .mchip { padding:4px 8px; font-size:10px; } .grp-btn { padding:5px; font-size:10px; }
@@ -1196,23 +1213,23 @@ td:last-child { border-radius: 0 8px 8px 0; }
     </div>
   <div class="signal-key" aria-label="Signal key">
     <span class="signal-key-label">Signal Key</span>
-    <span class="signal-key-item key-contrarian" title="Low support on the observed side while its price or line moved toward it.">Contrarian</span>
-    <span class="signal-key-item key-freeze" title="High tickets and money on the observed side while both its line and price held near open.">Freeze</span>
-    <span class="signal-key-item key-follow" title="High tickets and money on the observed side while its price or line moved with it.">Follow</span>
-    <span class="signal-key-item key-whipsaw" title="The observed price or line moved materially, then reversed direction.">Whipsaw</span>
-    <span class="signal-key-item key-held" title="The observed line and price changed less than the hold threshold from the first snapshot.">Held</span>
-    <span class="signal-key-item key-late" title="The meaningful move first appeared in the final third of the observed timeline.">Late</span>
-    <span class="signal-key-item key-oneway" title="The observed path made a meaningful move without reversing.">One-Way</span>
-    <span class="signal-key-item key-stale" title="The broader market moved while the observed price held, indicating a possible market lag.">Market Lag</span>
-    <span class="signal-key-item key-ticket" title="Tickets are concentrated while money is not strong enough for a Freeze or Follow.">Ticket-led</span>
-    <span class="signal-key-item key-ticket" title="High tickets and money are present, but the market is neither held nor meaningfully moving with that side. Context only, not an anomaly.">Public Pressure</span>
-    <span class="signal-key-item key-divergence" title="Low ticket share with high money share on the observed side.">Low Bets / High $</span>
-    <span class="signal-key-item key-keynumber" title="The observed spread touched or crossed a sport-specific key number.">Key Number</span>
-    <span class="signal-key-item key-juice" title="The point line held while the attached American odds moved materially.">Juice Move</span>
-    <span class="signal-key-item key-favorite" title="A high-split Freeze on expensive point-spread or total juice, or an unusually large spread. This is caution context, not a directional signal.">Price Risk</span>
-    <span class="signal-key-item key-favorite" title="A heavily priced or ticket-heavy moneyline favorite. This is risk context, not a directional signal.">Heavy Favorite</span>
-    <span class="signal-key-item key-split" title="The source reported a capped 0% or 100% split, so directional split signals are disabled.">Capped Split</span>
-    <span class="signal-key-item key-watch" title="An active market with no qualifying signal at this snapshot.">Watch</span>
+    <button class="signal-key-item key-contrarian" type="button" onclick="openSignalGuide('Contrarian')">Contrarian</button>
+    <button class="signal-key-item key-freeze" type="button" onclick="openSignalGuide('Freeze')">Freeze</button>
+    <button class="signal-key-item key-follow" type="button" onclick="openSignalGuide('Follow')">Follow</button>
+    <button class="signal-key-item key-whipsaw" type="button" onclick="openSignalGuide('Whipsaw')">Whipsaw</button>
+    <button class="signal-key-item key-held" type="button" onclick="openSignalGuide('Held')">Held</button>
+    <button class="signal-key-item key-late" type="button" onclick="openSignalGuide('Late')">Late</button>
+    <button class="signal-key-item key-oneway" type="button" onclick="openSignalGuide('One-Way')">One-Way</button>
+    <button class="signal-key-item key-stale" type="button" onclick="openSignalGuide('Market Lag')">Market Lag</button>
+    <button class="signal-key-item key-ticket" type="button" onclick="openSignalGuide('Ticket-led')">Ticket-led</button>
+    <button class="signal-key-item key-ticket" type="button" onclick="openSignalGuide('Public Pressure')">Public Pressure</button>
+    <button class="signal-key-item key-divergence" type="button" onclick="openSignalGuide('Low Bets / High $')">Low Bets / High $</button>
+    <button class="signal-key-item key-keynumber" type="button" onclick="openSignalGuide('Key Number')">Key Number</button>
+    <button class="signal-key-item key-juice" type="button" onclick="openSignalGuide('Juice Move')">Juice Move</button>
+    <button class="signal-key-item key-favorite" type="button" onclick="openSignalGuide('Price Risk')">Price Risk</button>
+    <button class="signal-key-item key-favorite" type="button" onclick="openSignalGuide('Heavy Favorite')">Heavy Favorite</button>
+    <button class="signal-key-item key-split" type="button" onclick="openSignalGuide('Split Cap')">Capped Split</button>
+    <button class="signal-key-item key-watch" type="button" onclick="openSignalGuide('Watch')">Watch</button>
   </div>
 </header>
 
@@ -1291,6 +1308,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
               <button class="mchip" type="button" onclick="setMarket('TOTAL',this)">Total</button>
             </div>
             <button class="grp-btn" id="grp-toggle" onclick="toggleGroup(this)" title="Group markets by game"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3h8M2 8h12M2 13h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M11 2v3M13 7v3M11 12v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span>Group</span></button>
+            <button class="signal-guide-btn" type="button" onclick="openSignalGuide()">Signal Guide</button>
             <button class="grp-btn" id="locked-jump" onclick="jumpToLocked()" style="display:none">Live / Locked Games</button>
             <button class="grp-btn" onclick="scrollToTop()" title="Back to top"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4M3 14h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Top</span></button>
             <button class="grp-btn" onclick="exportCSV()" title="Export to CSV">
@@ -1401,6 +1419,15 @@ td:last-child { border-radius: 0 8px 8px 0; }
         <table class="drill-tbl" id="drill-tbl"></table>
       </div>
     </div>
+  </div>
+  <div class="signal-guide-overlay" id="signal-guide-overlay" onclick="if(event.target===this)closeSignalGuide()" role="dialog" aria-modal="true" aria-labelledby="signal-guide-title">
+    <section class="signal-guide-sheet">
+      <div class="signal-guide-head">
+        <div class="signal-guide-title" id="signal-guide-title">Signal Guide</div>
+        <button class="signal-guide-close" type="button" onclick="closeSignalGuide()" aria-label="Close signal guide">&times;</button>
+      </div>
+      <div class="signal-guide-body" id="signal-guide-body"></div>
+    </section>
   </div>
 
   <!-- PATTERN LEGEND MODAL -->
@@ -1732,6 +1759,7 @@ const SIGNAL_META={
   'Public Pressure':{cls:'mr-reverse',tip:'High tickets and money are present, but the market is neither held nor meaningfully moving with that side. Context only, not an anomaly.'},
   'Developing Read':{cls:'mr-neutral',tip:'Split support and direction agree, but the move is below the confirmed signal threshold.'},
   'Low Bets / High $':{cls:'mr-aligned',tip:'Low ticket share with high money share on the observed side.'},
+  'Key Number':{cls:'mr-neutral',tip:'The observed spread touched or crossed a sport-specific key number.'},
   'K3':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 3.'},
   'K7':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 7.'},
   'K10':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 10.'},
@@ -1744,18 +1772,75 @@ const SIGNAL_META={
   'Split Cap':{label:'Capped Split',cls:'mr-contra',tip:'The source reported a capped 0% or 100% split, so directional split signals are disabled.'},
   'Watch':{cls:'mr-neutral',tip:'An active market with no qualifying signal at this snapshot.'}
 };
+const BOARD_FIELD_META = [
+  ['Observed side', 'The team, side, or total the board is describing. It is market evidence, not a wager recommendation.'],
+  ['Bets / Money', 'The share of tickets and handle on the observed side. Higher percentages describe participation, not a prediction.'],
+  ['Open / Current', 'The first and most recent observed number. Moneyline shows American odds; spreads and totals may include attached juice.'],
+  ['Market signal', 'The detected relationship between participation and price movement. Multiple chips provide context for the same market.'],
+  ['Data quality', 'Clean has at least three valid observations. Thin has two. Feed Risk or Split Risk means the source data cannot support a reliable split read.'],
+  ['Signal rationale', 'The plain-language reason the board surfaced the market at its current rank.'],
+  ['Timeline', 'Open the row to review the line and split journey across timestamped snapshots.'],
+];
+
+function escHtml(value){
+  return String(value||'').replace(/[&<>"']/g,function(char){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]; });
+}
+function signalMetaFor(label){
+  const raw=String(label||'').trim();
+  const dataQuality={
+    CLEAN:'Three or more valid observations are available for this market.',
+    THIN:'Only two valid observations are available, so treat the pattern cautiously.',
+    'SPLIT RISK':'A capped 0% or 100% split cannot qualify for a directional alert.',
+    'FEED RISK':'The market does not have enough complete data for a reliable read.',
+  };
+  if(dataQuality[raw.toUpperCase()]) return {label:raw,tip:dataQuality[raw.toUpperCase()]};
+  if(raw==='Capped Split') return SIGNAL_META['Split Cap'];
+  return SIGNAL_META[raw] || {label:raw||'Signal',tip:'Additional market context for this market.'};
+}
+function signalGuideItem(label, tip){
+  return `<div class="signal-guide-item"><strong>${escHtml(label)}</strong><p>${escHtml(tip)}</p></div>`;
+}
+function openSignalGuide(selected){
+  const overlay=document.getElementById('signal-guide-overlay');
+  const title=document.getElementById('signal-guide-title');
+  const body=document.getElementById('signal-guide-body');
+  const requested=String(selected||'').trim();
+  if(requested){
+    const meta=signalMetaFor(requested);
+    title.textContent=(meta.label||requested)+' definition';
+    body.innerHTML='<p class="signal-guide-intro">This label describes market behavior. It does not tell you what to bet.</p>'+
+      '<div class="signal-guide-section">'+signalGuideItem(meta.label||requested,meta.tip)+'</div>'+
+      '<div class="signal-guide-section"><h3>Board context</h3>'+BOARD_FIELD_META.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'</div>';
+  } else {
+    const seen=new Set();
+    const signals=Object.entries(SIGNAL_META).map(function(entry){
+      return {label:entry[1].label||entry[0],tip:entry[1].tip};
+    }).filter(function(item){
+      const key=item.label.toLowerCase();
+      if(seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    title.textContent='Signal guide';
+    body.innerHTML='<p class="signal-guide-intro">Tap any signal chip in a row for its specific definition. These labels describe market behavior and context, not picks.</p>'+
+      '<div class="signal-guide-section"><h3>Market signals</h3>'+signals.map(function(item){return signalGuideItem(item.label,item.tip);}).join('')+'</div>'+
+      '<div class="signal-guide-section"><h3>Board fields</h3>'+BOARD_FIELD_META.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'</div>';
+  }
+  overlay.classList.add('open');
+}
+function closeSignalGuide(){ document.getElementById('signal-guide-overlay').classList.remove('open'); }
 function anomalyBadge(text){
   const t=String(text||'').trim();
   if(!t) return '';
-  const meta=SIGNAL_META[t]||{cls:'mr-neutral',tip:'Additional market context.'};
-  return `<span class="mr signal-chip ${meta.cls}" title="${meta.tip}" style="margin-right:4px">${meta.label||t}</span>`;
+  const meta=signalMetaFor(t);
+  const clickArg=JSON.stringify(t).replace(/"/g,'&quot;');
+  return `<button class="mr signal-chip ${meta.cls||'mr-neutral'}" type="button" onclick="event.stopPropagation();openSignalGuide(${clickArg})" aria-label="Explain ${escHtml(meta.label||t)}" style="margin-right:4px">${escHtml(meta.label||t)}</button>`;
 }
 function dataBadge(v){
   const t=String(v||'').trim().toUpperCase();
-  if(t==='CLEAN') return '<span class="tim tMID" title="Three or more valid observations are available for this market.">CLEAN</span>';
-  if(t==='THIN') return '<span class="tim tLATE" title="Only two valid observations are available, so treat the pattern cautiously.">THIN</span>';
-  if(t==='SPLIT RISK') return '<span class="tim tLIVE" title="A capped 0% or 100% split cannot qualify for an alert">SPLIT RISK</span>';
-  return '<span class="tim tLIVE" title="The market does not have enough complete data for a reliable read.">FEED RISK</span>';
+  const label=t==='CLEAN'?'CLEAN':t==='THIN'?'THIN':t==='SPLIT RISK'?'SPLIT RISK':'FEED RISK';
+  const cls=t==='CLEAN'?'tMID':t==='THIN'?'tLATE':'tLIVE';
+  return `<button class="tim ${cls} signal-chip" type="button" onclick="event.stopPropagation();openSignalGuide('${label}')">${label}</button>`;
 }
 function hasSplitRead(r){ return String(r?.data_badge||'').trim().toUpperCase()!=='SPLIT RISK'; }
 function splitCell(r){
