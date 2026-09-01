@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support import expected_conditions as EC
 import time
 
@@ -42,7 +43,49 @@ def _set_tb_page(url: str, page: int) -> str:
     return urlunparse((p.scheme, p.netloc, p.path, p.params, new_query, p.fragment))
 
 
-def fetch_rendered_html(url: str, timeout: int = 180) -> str:
+def _load_filtered_splits_page(driver, url: str, sport_filter_label: str) -> None:
+    """
+    Drive the live DK form instead of trusting raw query params.
+    This is more reliable on the server, where direct deep links can still
+    render a mixed all-sports slate.
+    """
+    parsed = urlparse(url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    target_page = int(query.get("tb_page") or "1")
+    target_date = query.get("tb_edate") or "n30days"
+    target_market = query.get("tb_emt") or "0"
+    base_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, "", parsed.fragment))
+
+    driver.get(base_url)
+
+    wait = WebDriverWait(driver, 30)
+    sport_select = wait.until(EC.presence_of_element_located((By.NAME, "tb_eg")))
+    Select(sport_select).select_by_visible_text(sport_filter_label)
+
+    try:
+        date_select = driver.find_element(By.NAME, "tb_edate")
+        Select(date_select).select_by_value(target_date)
+    except Exception:
+        pass
+
+    form = driver.find_element(By.CSS_SELECTOR, "form.tb-tform")
+    form.submit()
+    wait.until(lambda d: "tb_eg=" in (d.current_url or ""))
+    time.sleep(2.0)
+
+    filtered_url = driver.current_url
+    if target_market and target_market != "0":
+        market_url = filtered_url
+        market_url = urlunparse(urlparse(market_url)._replace(query=urlencode({**dict(parse_qsl(urlparse(market_url).query, keep_blank_values=True)), "tb_emt": target_market}, doseq=True)))
+        driver.get(market_url)
+        time.sleep(1.0)
+
+    if target_page > 1:
+        driver.get(_set_tb_page(driver.current_url, target_page))
+        time.sleep(1.0)
+
+
+def fetch_rendered_html(url: str, timeout: int = 180, sport_filter_label: Optional[str] = None) -> str:
     """Render a URL using Selenium.
     - Never hang indefinitely
     - Never return None (returns "" on failure)
@@ -83,7 +126,10 @@ def fetch_rendered_html(url: str, timeout: int = 180) -> str:
         except Exception:
             pass
 
-        driver.get(url)
+        if sport_filter_label:
+            _load_filtered_splits_page(driver, url, sport_filter_label)
+        else:
+            driver.get(url)
         html = driver.page_source or ""
         return html
     except Exception as e:
@@ -380,6 +426,15 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
     MAX_PAGES = 20  # safety cap
     all_records = []
     seen_keys = set()
+    sport_filter_label = {
+        "nfl": "NFL",
+        "nba": "NBA",
+        "mlb": "MLB",
+        "nhl": "NHL",
+        "ncaaf": "NCAA Football",
+        "ncaab": "NCAA Basketball",
+        "ufc": "UFC",
+    }.get((sport or "").strip().lower())
 
     def rec_key(r):
         return (r.get("sport"), r.get("game_id"), r.get("market"), r.get("side"))
@@ -396,7 +451,7 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
         last_err = None
         for attempt in (1, 2):
             try:
-                html = fetch_rendered_html(page_url)
+                html = fetch_rendered_html(page_url, sport_filter_label=sport_filter_label)
                 if attempt == 2:
                     logger.info("[dk] fetch_rendered_html succeeded on retry (attempt 2/2) page_url=%s", page_url)
                 last_err = None
