@@ -27,6 +27,13 @@ MEANINGFUL_PRICE_MOVE_PCT = 2.5
 HOLD_PRICE_MOVE_PCT = 1.0
 HEAVY_FAVORITE_ODDS = -300
 PARLAY_RISK_ODDS = -200
+EXPENSIVE_POINT_PRICE_ODDS = -125
+HIGH_SPREAD_BY_SPORT = {
+    "nfl": 10.0,
+    "ncaaf": 21.0,
+    "nba": 12.0,
+    "ncaab": 15.0,
+}
 MIN_CANDIDATE_OBSERVATIONS = 3
 MIN_FREEZE_FADE_OBSERVATIONS = 4
 
@@ -258,6 +265,9 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         context_chips.append(key_number)
     if stale_dk:
         context_chips.append("Market Lag")
+    price_risk_note = _price_risk_note(reaction, market, sport, current_value, current_odds)
+    if price_risk_note:
+        context_chips.append("Price Risk")
     if low_bets_high_money:
         context_chips.append("Low Bets / High $")
     if ticket_led:
@@ -286,6 +296,8 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         favorite_risk=favorite_risk,
         price_move_pct=price_move_pct,
     )
+    if price_risk_note:
+        reason = f"{reason} {price_risk_note}"
 
     flagged_side = str(latest_row.get("side", "")).strip() or str(latest_row.get("side_key", "")).strip()
     action = _action_fields(
@@ -298,6 +310,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         stale_dk=stale_dk,
         split_capped=split_capped,
         favorite_risk=favorite_risk,
+        price_risk_note=price_risk_note,
         bets_pct=bets_pct,
         money_pct=money_pct,
     )
@@ -809,6 +822,7 @@ def _action_fields(
     stale_dk,
     split_capped,
     favorite_risk,
+    price_risk_note,
     bets_pct,
     money_pct,
 ):
@@ -858,11 +872,14 @@ def _action_fields(
     if not action_side or not action_line:
         base["action_basis"] = "The opposing market side is incomplete, so this Freeze remains evidence only."
         return base
+    basis = "Sustained high public pressure held away from a key number; grade the opposing side as a public-fade candidate."
+    if price_risk_note:
+        basis = f"{basis} {price_risk_note}"
     return {
         "action_side": action_side,
         "action_line": action_line,
         "action_type": "FADE CANDIDATE",
-        "action_basis": "Sustained high public pressure held away from a key number; grade the opposing side as a public-fade candidate.",
+        "action_basis": basis,
         "kpi_eligible": True,
     }
 
@@ -875,6 +892,17 @@ def _counterpart_row(pair_df, latest_row):
     if len(candidates) != 1:
         return None
     return candidates.iloc[0]
+
+
+def _price_risk_note(reaction, market, sport, current_value, current_odds):
+    """Return a caution only for high-split Freeze contexts, never a new alert."""
+    if reaction != "Freeze":
+        return ""
+    if market in {"SPREAD", "TOTAL"} and current_odds is not None and current_odds <= EXPENSIVE_POINT_PRICE_ODDS:
+        return f"Price Risk: the attached {int(current_odds):+d} juice is expensive for a held high-split side."
+    if market == "SPREAD" and abs(current_value) >= HIGH_SPREAD_BY_SPORT.get(sport, float("inf")):
+        return f"Price Risk: this {abs(current_value):g}-point spread is large, so the Freeze needs added context."
+    return ""
 
 
 def _data_badge(points, latest_row, split_capped=False):

@@ -86,8 +86,8 @@ class TestAnomalyBoard(unittest.TestCase):
                 "canonical_key": "duke @ unc|ncaab|2026-09-01",
                 "bets_pct": 82,
                 "money_pct": 77,
-                "open_line": "Over 145.5 @ -110",
-                "current_line": "Over 145.5 @ -110",
+                "open_line": "Over 145.5 @ -130",
+                "current_line": "Over 145.5 @ -130",
                 "_sort_time": _ts(22, 0),
             },
             {
@@ -134,8 +134,8 @@ class TestAnomalyBoard(unittest.TestCase):
             },
         ])
         history = pd.DataFrame([
-            {"timestamp": _ts(17, 0), "sport": "ncaab", "game_id": "g2", "market_display": "TOTAL", "side_key": "Over", "current_line": "Over 145.5 @ -110", "bets_pct": 82, "money_pct": 77},
-            {"timestamp": _ts(20, 0), "sport": "ncaab", "game_id": "g2", "market_display": "TOTAL", "side_key": "Over", "current_line": "Over 145.5 @ -110", "bets_pct": 82, "money_pct": 77},
+            {"timestamp": _ts(17, 0), "sport": "ncaab", "game_id": "g2", "market_display": "TOTAL", "side_key": "Over", "current_line": "Over 145.5 @ -130", "bets_pct": 82, "money_pct": 77},
+            {"timestamp": _ts(20, 0), "sport": "ncaab", "game_id": "g2", "market_display": "TOTAL", "side_key": "Over", "current_line": "Over 145.5 @ -130", "bets_pct": 82, "money_pct": 77},
             {"timestamp": _ts(17, 0), "sport": "ncaab", "game_id": "g2", "market_display": "TOTAL", "side_key": "Under", "current_line": "Under 145.5 @ -110", "bets_pct": 18, "money_pct": 23},
             {"timestamp": _ts(20, 0), "sport": "ncaab", "game_id": "g2", "market_display": "TOTAL", "side_key": "Under", "current_line": "Under 145.5 @ -110", "bets_pct": 18, "money_pct": 23},
             {"timestamp": _ts(17, 0), "sport": "nba", "game_id": "g3", "market_display": "MONEYLINE", "side_key": "BOS", "current_line": "BOS Celtics @ -130", "bets_pct": 76, "money_pct": 74},
@@ -148,6 +148,8 @@ class TestAnomalyBoard(unittest.TestCase):
 
         self.assertEqual(board.iloc[0]["reaction"], "Freeze")
         self.assertEqual(board.iloc[0]["flagged_side"], "Over 145.5")
+        self.assertIn("Price Risk", board.iloc[0]["context_chips"])
+        self.assertIn("Price Risk", board.iloc[0]["reason"])
         self.assertEqual(board.iloc[1]["reaction"], "Follow")
 
 

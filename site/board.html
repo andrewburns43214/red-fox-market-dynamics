@@ -1181,6 +1181,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
     <span class="signal-key-item key-divergence" title="Low ticket share with high money share on the observed side.">Low Bets / High $</span>
     <span class="signal-key-item key-keynumber" title="The observed spread touched or crossed a sport-specific key number.">Key Number</span>
     <span class="signal-key-item key-juice" title="The point line held while the attached American odds moved materially.">Juice Move</span>
+    <span class="signal-key-item key-favorite" title="A high-split Freeze on expensive point-spread or total juice, or an unusually large spread. This is caution context, not a directional signal.">Price Risk</span>
     <span class="signal-key-item key-favorite" title="A heavily priced or ticket-heavy moneyline favorite. This is risk context, not a directional signal.">Heavy Favorite</span>
     <span class="signal-key-item key-split" title="The source reported a capped 0% or 100% split, so directional split signals are disabled.">Capped Split</span>
     <span class="signal-key-item key-watch" title="An active market with no qualifying signal at this snapshot.">Watch</span>
@@ -1708,6 +1709,7 @@ const SIGNAL_META={
   'K17':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 17.'},
   'K21':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 21.'},
   'Juice Move':{cls:'mr-freeze',tip:'The point line held while the attached American odds moved materially.'},
+  'Price Risk':{cls:'mr-reverse',tip:'A high-split Freeze on expensive point-spread or total juice, or an unusually large spread. This is caution context, not a directional signal.'},
   'Heavy Favorite':{cls:'mr-reverse',tip:'A heavily priced or ticket-heavy moneyline favorite. This is risk context, not a directional signal.'},
   'Split Cap':{label:'Capped Split',cls:'mr-contra',tip:'The source reported a capped 0% or 100% split, so directional split signals are disabled.'},
   'Watch':{cls:'mr-neutral',tip:'An active market with no qualifying signal at this snapshot.'}
