@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from anomaly_action_ledger import update_action_ledger
+from anomaly_action_ledger import apply_recorded_signals, update_action_ledger
 from anomaly_action_results import rebuild_action_results
 from anomaly_board import build_anomaly_outputs
 
@@ -158,6 +158,26 @@ def test_action_results_grade_locked_fade_side_and_daily_kpi(tmp_path):
 
     assert results["outcome"].tolist() == ["WIN", "WIN"]
     assert (tmp_path / "anomaly_action_kpi_daily.csv").exists()
+
+
+def test_recorded_contrarian_survives_a_later_live_watch_state(tmp_path):
+    ledger = pd.DataFrame([{
+        "action_id": "a3", "captured_at_utc": _timestamp(18), "first_anomaly_seen": _timestamp(18),
+        "sport": "mlb", "game_id": "g11", "market_display": "MONEYLINE", "observed_side": "Home",
+        "reaction": "Contrarian", "action_type": "CONTRARIAN CANDIDATE", "action_side": "Home",
+        "action_line": "Home @ -110",
+    }])
+    board = pd.DataFrame([{
+        "board_rank": 10, "anomaly_sort": 9, "sport": "mlb", "game_id": "g11",
+        "market_display": "MONEYLINE", "flagged_side": "Home", "reaction": "Watch",
+    }])
+    ledger.to_csv(tmp_path / "anomaly_action_ledger.csv", index=False)
+
+    enriched = apply_recorded_signals(board, tmp_path)
+
+    assert len(enriched) == 1
+    assert enriched.iloc[0]["recorded_reaction"] == "Contrarian"
+    assert enriched.iloc[0]["recorded_action_side"] == "Home"
 
 
 def test_extreme_moneyline_uses_implied_probability_for_whipsaw_detection():

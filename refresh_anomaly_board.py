@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from anomaly_action_ledger import update_action_ledger
+from anomaly_action_ledger import apply_recorded_signals, update_action_ledger
 from anomaly_action_results import rebuild_action_results
 from anomaly_board import build_anomaly_outputs
 from main import infer_market_type, normalize_side_key
@@ -37,12 +37,13 @@ def main():
     l2_path = DATA / "l2_consensus.csv"
     l2 = pd.read_csv(l2_path, dtype=str, keep_default_na=False) if l2_path.exists() else pd.DataFrame()
     board, events = build_anomaly_outputs(dashboard, history, l2)
+    action_count = update_action_ledger(board, DATA, newest_snapshot.to_pydatetime())
+    board = apply_recorded_signals(board, DATA)
     # Replace each public file only after its complete export is ready for Nginx.
     for frame, name in ((board, "anomaly_board.csv"), (events, "anomaly_events.csv")):
         temporary = DATA / f".{name}.tmp"
         frame.to_csv(temporary, index=False)
         temporary.replace(DATA / name)
-    action_count = update_action_ledger(board, DATA, newest_snapshot.to_pydatetime())
     resolved_count = rebuild_action_results(DATA)
     print(f"[ok] wrote {len(board)} board rows, {len(events)} timeline events, captured {action_count} KPI candidates, and reconciled {resolved_count} results")
 

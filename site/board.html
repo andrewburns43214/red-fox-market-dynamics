@@ -1684,7 +1684,7 @@ function gameChips(r){
 function anomalyParts(r){
   const ctx=String(r.context_chips||'').split('|').map(s=>s.trim()).filter(Boolean);
   return {
-    reaction:String(r.reaction||'').trim(),
+    reaction:String(r.recorded_reaction||r.reaction||'').trim(),
     path:String(r.path||'').trim(),
     context:ctx
   };
@@ -1881,13 +1881,16 @@ function renderBoard(){
 
 function actionLens(r){
   const eligible=String(r.kpi_eligible||'').toLowerCase()==='true';
+  const recorded=Boolean(r.recorded_reaction);
   const observed=`<div class="focus-label"><span class="observed-prefix">Observed</span>${r.flagged_side||'-'}</div><div class="focus-sub">${r.focus_basis||'Observed side'}</div>`;
-  if(!eligible) return observed;
-  const fade=String(r.action_type||'').toUpperCase()==='FADE CANDIDATE';
-  const cue=fade?'Public fade lens':'Contrarian lens';
+  if(!eligible&&!recorded) return observed;
+  const type=eligible?r.action_type:r.recorded_action_type;
+  const side=eligible?r.action_side:r.recorded_action_side;
+  const fade=String(type||'').toUpperCase()==='FADE CANDIDATE';
+  const cue=(recorded?'Recorded ':'')+(fade?'public fade lens':'contrarian lens');
   const icon=fade?'F':'C';
   const kind=fade?'fade':'contrarian';
-  return observed+`<div class="market-cue ${kind}" title="${r.action_basis||''}"><span class="market-cue-icon">${icon}</span><span>${cue}: <b>${r.action_side||'-'}</b></span></div>`;
+  return observed+`<div class="market-cue ${kind}" title="${recorded?r.recorded_note:(r.action_basis||'')}"><span class="market-cue-icon">${icon}</span><span>${cue}: <b>${side||'-'}</b></span></div>`;
 }
 
 function kpiRows(items,el){ items.forEach(item=>{ const n=item.w+item.l; const pct=n>0?Math.round(100*item.w/n):null; const cls=pct!==null?wrCol(pct):'r'; const d=document.createElement('div'); d.className='krow'; d.innerHTML=`<div class="krow-head"><span class="kname">${item.label}</span><span class="kpct ${cls}">${pct!==null?pct+'%':'--'} <span class="kn">(${n})</span></span></div><div class="kbar"><div class="kfill" style="width:${pct||0}%;background:${wrClr(pct||0)}"></div></div>`; el.appendChild(d); }); }

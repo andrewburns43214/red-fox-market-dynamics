@@ -5585,6 +5585,7 @@ def build_dashboard():
                 "board_rank", "sport", "game_id", "canonical_key", "kickoff_time", "game",
                 "market_display", "flagged_side", "focus_basis", "action_side", "action_line",
                 "action_type", "action_basis", "kpi_eligible", "reaction", "path", "context_chips",
+                "recorded_reaction", "recorded_action_type", "recorded_action_side", "recorded_action_line", "recorded_at", "recorded_note",
                 "anomaly_chips", "bets_pct", "money_pct", "open_line", "current_line",
                 "path_summary", "reason", "data_badge", "observation_count",
                 "first_anomaly_seen", "max_excursion", "return_toward_open",
@@ -5618,13 +5619,14 @@ def build_dashboard():
                         _anomaly_events[_col] = ""
                 _anomaly_events = _anomaly_events[_anomaly_event_cols]
 
-            _anomaly_board.to_csv("data/anomaly_board.csv", index=False)
-            _anomaly_events.to_csv("data/anomaly_events.csv", index=False)
-            from anomaly_action_ledger import update_action_ledger
+            from anomaly_action_ledger import apply_recorded_signals, update_action_ledger
             from anomaly_action_results import rebuild_action_results
             _captured_actions = update_action_ledger(
                 _anomaly_board, Path("data"), datetime.now(timezone.utc),
             )
+            _anomaly_board = apply_recorded_signals(_anomaly_board, Path("data"))
+            _anomaly_board.to_csv("data/anomaly_board.csv", index=False)
+            _anomaly_events.to_csv("data/anomaly_events.csv", index=False)
             _resolved_actions = rebuild_action_results(Path("data"))
             print(f"[ok] wrote anomaly board csv ({len(_anomaly_board)} rows)")
             print(f"[ok] wrote anomaly events csv ({len(_anomaly_events)} rows)")
