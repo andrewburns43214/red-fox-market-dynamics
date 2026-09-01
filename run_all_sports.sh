@@ -76,8 +76,8 @@ f['dk_ts'] = datetime.now(timezone.utc).isoformat()
 json.dump(f, open(fp, 'w'))
 " >> "$LOG" 2>&1
 
-echo "--- $(date) report ---" >> "$LOG"
-"$PY" main.py report >> "$LOG" 2>&1
+echo "--- $(date) report_live ---" >> "$LOG"
+"$PY" main.py report_live >> "$LOG" 2>&1
 
 # publish (nginx serves directly from project dir)
 
