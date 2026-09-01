@@ -2110,32 +2110,48 @@ SPORT_CONFIG = {
     "nfl": {
         "label": "NFL",
         "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=NFL&tb_edate=n30days&tb_emt=0&itm_content=NFL",
+        "dashboard_horizon_days": 21,
     },
     "nba": {
         "label": "NBA",
         "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=NBA&tb_edate=n30days&tb_emt=0&itm_content=NBA",
+        "dashboard_horizon_days": 21,
     },
     "mlb": {
         "label": "MLB",
         "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=MLB&tb_edate=n30days&tb_emt=0&itm_content=MLB",
+        "dashboard_horizon_days": 14,
     },
     "nhl": {
         "label": "NHL",
         "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=NHL&tb_edate=n30days&tb_emt=0&itm_content=NHL",
+        "dashboard_horizon_days": 21,
     },
     "ncaaf": {
         "label": "CFB",
         "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=NCAA+Football&tb_edate=n30days&tb_emt=0&itm_content=NCAA+Football",
+        "dashboard_horizon_days": 21,
     },
     "ncaab": {
         "label": "NCAAB",
         "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=NCAA+Basketball&tb_edate=n30days&tb_emt=0&itm_content=NCAA+Basketball",
+        "dashboard_horizon_days": 21,
     },
     "ufc": {
         "label": "UFC",
         "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=UFC&tb_edate=n30days&tb_emt=0&itm_content=UFC",
+        "dashboard_horizon_days": 14,
     },
 }
+
+
+def dashboard_horizon_days_for_sport(sport: str) -> int:
+    sport_key = normalize_sport_key(sport)
+    cfg = SPORT_CONFIG.get(sport_key, {})
+    try:
+        return max(1, int(cfg.get("dashboard_horizon_days", 14)))
+    except Exception:
+        return 14
 
 
 
@@ -4195,16 +4211,17 @@ def build_dashboard():
         now_utc = datetime.now(timezone.utc)
 
         # Policy:
-        # - Keep upcoming games through horizon_days
+        # - Keep upcoming games through a sport-aware horizon
         # - Drop games fast after kickoff (postgame_grace_hours)
         # v1.1 dashboard rule: show ONLY upcoming games (no old DK n7days clutter)
-        # Keep games from now through horizon_days.
         # If you want a tiny kickoff grace, change to: now_utc - timedelta(minutes=15)
-        horizon_days = 7
 
         today_ny = pd.Timestamp.now(tz="America/New_York").normalize()
         window_start = today_ny.tz_convert("UTC")
-        window_end   = now_utc + timedelta(days=horizon_days)
+        latest["_dashboard_horizon_days"] = latest["sport"].apply(dashboard_horizon_days_for_sport)
+        latest["_window_end"] = latest["_dashboard_horizon_days"].apply(
+            lambda days: now_utc + timedelta(days=int(days))
+        )
 
         before = len(latest)
         kick = latest["_sort_time"]
@@ -4221,15 +4238,18 @@ def build_dashboard():
             _kick_max = None
         try:
             _lt = int((kick < window_start).sum())
-            _in = int(((kick >= window_start) & (kick <= window_end)).sum())
-            _gt = int((kick > window_end).sum())
+            _in = int(((kick >= window_start) & (kick <= latest["_window_end"])).sum())
+            _gt = int((kick > latest["_window_end"]).sum())
         except Exception:
             _lt = _in = _gt = -1
         if DASH_DEBUG:
-                    print(
+            _horizons = sorted(
+                {int(v) for v in latest["_dashboard_horizon_days"].dropna().tolist()}
+            )
+            print(
             f"[dash debug] kickoff dist: na={_kick_na} lt_start={_lt} in_window={_in} gt_end={_gt} "
             f"kick_min={str(_kick_min)} kick_max={str(_kick_max)} "
-            f"window_start={window_start.isoformat()} window_end={window_end.isoformat()}"
+            f"window_start={window_start.isoformat()} horizon_days={_horizons}"
         )
         # --- end kickoff window diagnostics ---
 
@@ -4243,18 +4263,18 @@ def build_dashboard():
 
         # Keep unknown kickoff rows (NaT) OR rows within the window
         latest = latest.loc[
-            (kick.isna()) | ((kick >= window_start) & (kick <= window_end))
+            (kick.isna()) | ((kick >= window_start) & (kick <= latest["_window_end"]))
         ].copy()
         after = len(latest)
 
         # Recompute sort time after filtering (keeps downstream stable)
         latest["_sort_time"] = pd.to_datetime(latest["game_time_iso"], errors="coerce", utc=True)
+        latest = latest.drop(columns=["_dashboard_horizon_days", "_window_end"], errors="ignore")
 
         if DASH_DEBUG:
             print(
-
             f"[dash debug] stale-kickoff filter: window_start={window_start.isoformat()} "
-            f"window_end={window_end.isoformat()} kept={after}/{before} dropped={before-after}"
+            f"kept={after}/{before} dropped={before-after}"
         )
     else:
         latest["_sort_time"] = pd.NaT

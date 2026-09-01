@@ -18,6 +18,45 @@ import logging
 # Pylance/static: ensure this constant exists even if patterns are built later
 _JSON_SCRIPT_PATTERNS = []
 logger = logging.getLogger("dk")
+
+SPORT_FILTER_ALIASES = {
+    "nfl": ["NFL", "NFL Preseason", "National Football League"],
+    "nba": ["NBA", "National Basketball Association"],
+    "mlb": ["MLB", "Major League Baseball"],
+    "nhl": ["NHL", "National Hockey League"],
+    "ncaaf": ["NCAA Football", "College Football", "NCAAF"],
+    "ncaab": ["NCAA Basketball", "College Basketball", "NCAAB"],
+    "ufc": ["UFC"],
+}
+
+
+def _select_sport_option(select_el, requested_labels: list[str]) -> str:
+    """
+    Select the best visible sport option on the live DK form.
+    Supports cases where DK splits preseason/postseason into different labels.
+    Returns the visible text that was selected.
+    """
+    sel = Select(select_el)
+    options = [o.text.strip() for o in sel.options if (o.text or "").strip()]
+    option_map = {opt.lower(): opt for opt in options}
+
+    for label in requested_labels:
+        match = option_map.get(label.strip().lower())
+        if match:
+            sel.select_by_visible_text(match)
+            return match
+
+    for label in requested_labels:
+        needle = label.strip().lower()
+        for opt in options:
+            opt_l = opt.lower()
+            if needle in opt_l or opt_l in needle:
+                sel.select_by_visible_text(opt)
+                return opt
+
+    raise ValueError(f"sport filter not found for labels={requested_labels!r}; options={options!r}")
+
+
 def _with_cache_buster(url: str) -> str:
     epoch_ms = int(time.time() * 1000)
     p = urlparse(url)
@@ -43,7 +82,7 @@ def _set_tb_page(url: str, page: int) -> str:
     return urlunparse((p.scheme, p.netloc, p.path, p.params, new_query, p.fragment))
 
 
-def _load_filtered_splits_page(driver, url: str, sport_filter_label: str) -> None:
+def _load_filtered_splits_page(driver, url: str, sport_filter_labels: list[str]) -> None:
     """
     Drive the live DK form instead of trusting raw query params.
     This is more reliable on the server, where direct deep links can still
@@ -60,7 +99,8 @@ def _load_filtered_splits_page(driver, url: str, sport_filter_label: str) -> Non
 
     wait = WebDriverWait(driver, 30)
     sport_select = wait.until(EC.presence_of_element_located((By.NAME, "tb_eg")))
-    Select(sport_select).select_by_visible_text(sport_filter_label)
+    selected_label = _select_sport_option(sport_select, sport_filter_labels)
+    logger.info("[dk] selected sport filter: %s", selected_label)
 
     try:
         date_select = driver.find_element(By.NAME, "tb_edate")
@@ -85,7 +125,7 @@ def _load_filtered_splits_page(driver, url: str, sport_filter_label: str) -> Non
         time.sleep(1.0)
 
 
-def fetch_rendered_html(url: str, timeout: int = 180, sport_filter_label: Optional[str] = None) -> str:
+def fetch_rendered_html(url: str, timeout: int = 180, sport_filter_labels: Optional[list[str]] = None) -> str:
     """Render a URL using Selenium.
     - Never hang indefinitely
     - Never return None (returns "" on failure)
@@ -126,8 +166,8 @@ def fetch_rendered_html(url: str, timeout: int = 180, sport_filter_label: Option
         except Exception:
             pass
 
-        if sport_filter_label:
-            _load_filtered_splits_page(driver, url, sport_filter_label)
+        if sport_filter_labels:
+            _load_filtered_splits_page(driver, url, sport_filter_labels)
         else:
             driver.get(url)
         html = driver.page_source or ""
@@ -426,15 +466,7 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
     MAX_PAGES = 20  # safety cap
     all_records = []
     seen_keys = set()
-    sport_filter_label = {
-        "nfl": "NFL",
-        "nba": "NBA",
-        "mlb": "MLB",
-        "nhl": "NHL",
-        "ncaaf": "NCAA Football",
-        "ncaab": "NCAA Basketball",
-        "ufc": "UFC",
-    }.get((sport or "").strip().lower())
+    sport_filter_labels = SPORT_FILTER_ALIASES.get((sport or "").strip().lower())
 
     def rec_key(r):
         return (r.get("sport"), r.get("game_id"), r.get("market"), r.get("side"))
@@ -451,7 +483,7 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
         last_err = None
         for attempt in (1, 2):
             try:
-                html = fetch_rendered_html(page_url, sport_filter_label=sport_filter_label)
+                html = fetch_rendered_html(page_url, sport_filter_labels=sport_filter_labels)
                 if attempt == 2:
                     logger.info("[dk] fetch_rendered_html succeeded on retry (attempt 2/2) page_url=%s", page_url)
                 last_err = None
