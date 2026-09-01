@@ -847,13 +847,8 @@ async function handleAuth(e) {
     } else {
       const { data, error } = await _supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      const { data: hasAccess } = await _supabase.rpc('has_active_access');
       closeModal();
-      if (hasAccess) {
-        window.location.href = '/board.html';
-      } else {
-        document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
-      }
+      window.location.href = '/board.html';
     }
   } catch (err) {
     errEl.textContent = err.message || 'Something went wrong. Please try again.';
@@ -917,12 +912,9 @@ async function handleCheckout(plan) {
   if (session) {
     const { data: hasAccess } = await _supabase.rpc('has_active_access');
     const actions = document.querySelector('.nav-actions');
-    if (hasAccess) {
-      actions.innerHTML = '<button class="btn btn-primary" onclick="window.location.href=\'/board.html\'">Go to Board</button>' +
-        '<button class="btn btn-ghost" onclick="handleSignOut()">Sign Out</button>';
-    } else {
-      actions.innerHTML = '<button class="btn btn-ghost" onclick="handleSignOut()">Sign Out</button>';
-    }
+    const boardButton = hasAccess ? 'Go to Board' : 'View Board';
+    actions.innerHTML = '<button class="btn btn-primary" onclick="window.location.href=\'/board.html\'">' + boardButton + '</button>' +
+      '<button class="btn btn-ghost" onclick="handleSignOut()">Sign Out</button>';
   }
   const params = new URLSearchParams(window.location.search);
   if (params.get('auth') === 'required') {
