@@ -199,6 +199,9 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     if not reaction:
         reaction = "Watch"
 
+    focus_basis = _focus_basis(
+        reaction, low_bets_high_money, ticket_led, split_capped, favorite_risk,
+    )
     chips = [chip for chip in [reaction, path_label] if chip]
     context_chips = []
     if split_capped:
@@ -266,6 +269,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
             "game": str(latest_row.get("game", "")),
             "market_display": market,
             "flagged_side": flagged_side,
+            "focus_basis": focus_basis,
             "timestamp": point["timestamp"].isoformat(),
             "step_index": index + 1,
             "observation_count": observation_count,
@@ -296,6 +300,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         "game": str(latest_row.get("game", "")),
         "market_display": market,
         "flagged_side": flagged_side,
+        "focus_basis": focus_basis,
         "reaction": reaction,
         "path": path_label,
         "context_chips": " | ".join(context_chips),
@@ -690,8 +695,8 @@ def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ti
         if stale_dk and broader_summary:
             return broader_summary
         if held:
-            return "Heavy tickets and money drew little or no move from open"
-        return "Strong ticket and money support met a mostly held number"
+            return "The tracked side had heavy tickets and money while its number held near open"
+        return "The tracked side had strong ticket and money support with a mostly held number"
     if reaction == "Follow":
         if path_label == "Late":
             return "Public side finally got a late move toward it"
@@ -713,6 +718,24 @@ def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ti
     if low_support and move_abs >= move_threshold:
         return "Low-support side moved more than expected"
     return "Path shape stood out versus the split support"
+
+
+def _focus_basis(reaction, low_bets_high_money, ticket_led, split_capped, favorite_risk):
+    if split_capped:
+        return "Split unavailable; price tracking only"
+    if favorite_risk:
+        return "Short favorite; context only"
+    if reaction == "Freeze":
+        return "High-split side; market held"
+    if reaction == "Contrarian":
+        return "Low-support side; price moved toward it"
+    if reaction == "Follow":
+        return "High-split side; price moved with it"
+    if low_bets_high_money:
+        return "Low tickets, high money"
+    if ticket_led:
+        return "Ticket-led side"
+    return "Observed side"
 
 
 def _data_badge(points, latest_row, split_capped=False):
@@ -830,7 +853,7 @@ def _rank_reason(reaction, path_label, stale_dk, split_capped, favorite_risk, ho
     if reaction == "Contrarian":
         base = "Contrarian: low support paired with a move toward the side."
     elif reaction == "Freeze":
-        base = "Freeze: strong tickets and money with no meaningful line or price move."
+        base = "Freeze: the high-split side had no meaningful line or price move."
     elif reaction == "Follow":
         base = "Follow: strong tickets and money moved with the side."
     elif path_label == "Whipsaw":

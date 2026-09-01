@@ -1092,6 +1092,16 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .drill-modal { border-radius: 14px; box-shadow: 0 24px 80px rgba(20,45,54,.25); }
 .movement-chart { margin: 12px 0 16px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: linear-gradient(180deg,#fbfdfd,#f3f8f8); }
 .movement-chart svg { display:block; width:100%; height:180px; overflow:visible; }
+.movement-chart-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:8px; }
+.movement-chart-title { font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--text); }
+.movement-chart-note { margin-top:3px; font-size:10px; line-height:1.4; color:var(--text3); }
+.movement-tabs { display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; }
+.movement-tab { border:1px solid var(--border); border-radius:999px; padding:4px 7px; background:#fff; color:var(--text3); font:700 9px var(--sans); cursor:pointer; }
+.movement-tab.on { background:var(--acc-bg); border-color:var(--acc-brd); color:var(--accent); }
+.movement-facts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:8px; }
+.movement-fact { padding:7px 8px; border-radius:6px; background:rgba(255,255,255,.72); }
+.movement-fact span { display:block; font:700 8px var(--mono); letter-spacing:.06em; color:var(--text3); text-transform:uppercase; }
+.movement-fact b { display:block; margin-top:3px; font:700 11px var(--mono); color:var(--text); }
 .movement-kpis { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:12px 0; }
 .movement-kpi { padding:9px 10px; background:#f4f7f8; border-radius:8px; }
 .movement-kpi b { display:block; margin-top:3px; color:var(--text); font-size:12px; }
@@ -1105,6 +1115,8 @@ td:last-child { border-radius: 0 8px 8px 0; }
   .pane-meta,.mcap { display:none; } .tscroll { padding:0 8px 12px; }
   .mfilters { gap:4px; } .mchip { padding:4px 8px; font-size:10px; } .grp-btn { padding:5px; font-size:10px; }
   .board-tools { flex:1 1 100%; } .board-tools input { width:100%; min-width:0; }
+  .movement-chart-head { display:block; } .movement-tabs { justify-content:flex-start; margin-top:8px; }
+  .movement-facts { grid-template-columns:1fr 1fr; } .movement-fact:last-child { grid-column:1 / -1; }
   .td-dec,.td-pat { display:none; } .td-game { width:220px; max-width:220px; }
 }
 </style>
@@ -1149,10 +1161,10 @@ td:last-child { border-radius: 0 8px 8px 0; }
   <div class="signal-key" aria-label="Signal key">
     <span class="signal-key-label">Signal Key</span>
     <span class="signal-key-item key-contrarian" title="Low support with line movement toward the side">Contrarian</span>
-    <span class="signal-key-item key-freeze" title="Heavy tickets and money while the line holds">Freeze</span>
+    <span class="signal-key-item key-freeze" title="The labeled signal side has high tickets and money while its number holds; descriptive, not a recommendation">Freeze</span>
     <span class="signal-key-item key-follow" title="Heavy tickets and money while the line moved with that side">Follow</span>
     <span class="signal-key-item key-whipsaw" title="Line moved and then reversed">Whipsaw</span>
-    <span class="signal-key-item key-held" title="Little or no move from open">Held</span>
+    <span class="signal-key-item key-held" title="The observed line and price changed less than the hold threshold from the first snapshot">Held</span>
     <span class="signal-key-item key-late" title="Meaningful movement arrived late in the observed path">Late</span>
     <span class="signal-key-item key-oneway" title="Line moved steadily in one direction">One-Way</span>
     <span class="signal-key-item key-stale" title="Broader market moved while the DraftKings line held">Stale DK</span>
@@ -1259,10 +1271,10 @@ td:last-child { border-radius: 0 8px 8px 0; }
           <th class="th-rank sorted" title="Priority rank uses verified signal strength, split quality, and market maturity; hover a row rank for its reason" onclick="sortBy('board_rank',this)">#</th>
           <th class="th-game" title="Matchup, sport, and scheduled start time" onclick="sortBy('game',this)">Game</th>
           <th class="th-mkt" title="Market type: moneyline, spread, or total" onclick="sortBy('market_display',this)">Market</th>
-          <th class="th-split" title="Share of tickets and handle on the market focus">Bets / Money</th>
+          <th class="th-split" title="Share of tickets and handle on the labeled signal side">Bets / Money</th>
           <th class="th-line" title="First observed line in the available snapshot history" onclick="sortBy('open_line',this)">Open</th>
           <th class="th-line" title="Most recent observed line" onclick="sortBy('current_line',this)">Current</th>
-          <th class="th-edge" title="The side or total used to evaluate the signal" onclick="sortBy('flagged_side',this)">Market Focus</th>
+          <th class="th-edge" title="The exact side or total evaluated. The note underneath states why that side is tracked." onclick="sortBy('flagged_side',this)">Signal Side</th>
           <th class="th-total" title="Detected reaction between participation and price movement" onclick="sortBy('reaction',this)">Signal</th>
           <th class="th-pat" title="Observation coverage: Clean has 3 or more valid observations; Thin has 2" onclick="sortBy('data_badge',this)">Market State</th>
           <th class="th-dec" title="Plain-language explanation of why this market is surfaced">Read</th>
@@ -1436,6 +1448,10 @@ td:last-child { border-radius: 0 8px 8px 0; }
             <option value="MONEYLINE">Moneyline</option>
             <option value="SPREAD">Spread</option>
             <option value="TOTAL">Total</option>
+          </select>
+          <label id="hist-side-label" style="font-size:11px;color:var(--text2);font-weight:600;display:none">Signal side</label>
+          <select id="hist-side-select" onchange="setHistSide(this.value)" style="font-size:12px;padding:5px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--sans);display:none">
+            <option value="">Select a side...</option>
           </select>
         </div>
         <div id="hist-prompt" style="padding:40px;text-align:center;color:var(--text3);font-size:13px">Select a game to view movement history</div>
@@ -1749,8 +1765,8 @@ function scrollToTop(){
 function exportCSV(){
   const data=filtered();
   if(!data.length) return;
-  const cols=['game','sport','market_display','flagged_side','reaction','path','context_chips','bets_pct','money_pct','open_line','current_line','price_move_pct','path_summary','reason','rank_reason','data_badge','kickoff_time','kickoff_iso'];
-  const headers=['Game','Sport','Market','Flagged Side','Reaction','Path','Context','Bets%','Money%','Open Line','Current Line','Price Move (pts)','Path Summary','Reason','Rank Reason','Data','Kickoff','Kickoff ISO'];
+  const cols=['game','sport','market_display','flagged_side','focus_basis','reaction','path','context_chips','bets_pct','money_pct','open_line','current_line','price_move_pct','path_summary','reason','rank_reason','data_badge','kickoff_time','kickoff_iso'];
+  const headers=['Game','Sport','Market','Signal Side','Signal Basis','Reaction','Path','Context','Bets%','Money%','Open Line','Current Line','Price Move (pts)','Path Summary','Reason','Rank Reason','Data','Kickoff','Kickoff ISO'];
   let csv=headers.join(',')+'\n';
   data.forEach(r=>{
     csv+=cols.map(c=>{
@@ -1824,7 +1840,7 @@ function renderBoard(){
       <td class="td-split">${splitCell(r)}</td>
       <td class="td-line td-open">${r.open_line||'-'}</td>
       <td class="td-line td-current">${r.current_line||'-'}</td>
-      <td class="td-edge"><div class="focus-label">${r.flagged_side||'-'}</div><div class="focus-sub">${r.market_display||'Market'} focus</div></td>
+      <td class="td-edge"><div class="focus-label">${r.flagged_side||'-'}</div><div class="focus-sub">${r.focus_basis||'Observed side'}</div></td>
       <td class="td-total">${signalChips}</td>
       <td class="td-pat">${dataBadge(r.data_badge)}</td>
       <td class="td-dec"><span style="font-size:11px;color:var(--text2);white-space:normal;display:block;line-height:1.35">${r.reason||'-'}</span></td>
@@ -1970,28 +1986,56 @@ function closeBkdnLegend() {
 
 function movementChart(rows, market){
   if(!rows || rows.length < 2) return '';
-  const lineValues=rows.map(r=>Number(r.line_value));
-  const priceValues=rows.map(r=>Number(r.implied_pct));
-  const lineMoved=lineValues.every(Number.isFinite) && Math.max(...lineValues)!==Math.min(...lineValues);
-  const priceAvailable=priceValues.every(Number.isFinite);
-  const priceMoved=priceAvailable && Math.max(...priceValues)!==Math.min(...priceValues);
-  const usePrice=String(market||'').toUpperCase()==='MONEYLINE'||(!lineMoved&&priceMoved);
-  const values=(usePrice?priceValues:lineValues).filter(Number.isFinite);
-  if(values.length < 2) return '';
-  const min=Math.min(...values), max=Math.max(...values), span=max-min || 1;
-  const width=640, height=180, pad=22;
-  const points=values.map((v,i)=>{
-    const x=pad+(i*(width-pad*2)/Math.max(1,values.length-1));
-    const y=height-pad-((v-min)/span)*(height-pad*2);
-    return [x.toFixed(1),y.toFixed(1)];
-  });
-  const line=points.map(p=>p.join(',')).join(' ');
-  const area=`${pad},${height-pad} ${line} ${width-pad},${height-pad}`;
-  const first=rows[0], last=rows[rows.length-1];
-  const label=usePrice?'LIVE IMPLIED PRICE PATH':'LIVE LINE PATH';
-  const openLabel=usePrice&&priceAvailable?Number(first.implied_pct).toFixed(1)+'%':first.line_display||'--';
-  const currentLabel=usePrice&&priceAvailable?Number(last.implied_pct).toFixed(1)+'%':last.line_display||'--';
-  return `<div class="movement-chart"><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-bottom:8px"><span>OPEN ${openLabel}</span><span>${label}</span><span>CURRENT ${currentLabel}</span></div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${usePrice?'Implied price':'Line'} movement chart"><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#5bb6bf" stop-opacity=".32"/><stop offset="1" stop-color="#5bb6bf" stop-opacity=".02"/></linearGradient></defs><path d="M${pad} ${height-pad} H${width-pad}" stroke="#d8e3e6"/><path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${line}" fill="none" stroke="#0f6f7f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#0f6f7f" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#0f6f7f"/></svg></div>`;
+  const marketKey=String(market||'').toUpperCase();
+  const number=value=>{ const parsed=Number(value); return Number.isFinite(parsed)?parsed:null; };
+  const compact=value=>Number.isInteger(value)?String(value):Number(value).toFixed(1).replace(/\.0$/,'');
+  const signed=value=>{ const parsed=number(value); return parsed===null?'--':(parsed>0?'+':'')+Math.round(parsed); };
+  const lineLabel=row=>{
+    const display=String(row.line_display||'').trim();
+    const priceStart=display.indexOf(' (');
+    return priceStart>=0?display.slice(0,priceStart):display||'--';
+  };
+  const totalPrefix=(lineLabel(rows[0]).split(' ')[0]||'').toUpperCase();
+  const makeView=key=>{
+    if(key==='market'){
+      if(marketKey==='MONEYLINE') return {key,label:'Price',title:'Moneyline price',note:'American odds are the moneyline market. More negative means a more expensive price.',values:rows.map(r=>number(r.price_odds)),pointLabel:r=>signed(r.price_odds),axisLabel:signed};
+      const label=marketKey==='TOTAL'?'Total line':'Spread line';
+      const note=marketKey==='TOTAL'?'The over/under number at each snapshot. Use Price to inspect the attached juice.':'The spread number at each snapshot. Use Price to inspect the attached juice.';
+      return {key,label:'Line',title:label,note,values:rows.map(r=>number(r.line_value)),pointLabel:lineLabel,axisLabel:value=>marketKey==='TOTAL'?(totalPrefix+' '+compact(value)):((value>0?'+':'')+compact(value))};
+    }
+    if(key==='price') return {key,label:'Price',title:'Attached price',note:'American odds attached to this spread or total. More negative means a more expensive price.',values:rows.map(r=>number(r.price_odds)),pointLabel:r=>signed(r.price_odds),axisLabel:signed};
+    if(key==='bets') return {key,label:'Bets %',title:'Ticket share',note:'Share of tickets on this exact signal side at each snapshot.',values:rows.map(r=>number(r.bets_pct)),pointLabel:r=>compact(number(r.bets_pct))+'%',axisLabel:value=>compact(value)+'%'};
+    return {key:'money',label:'Money %',title:'Money share',note:'Share of money on this exact signal side at each snapshot.',values:rows.map(r=>number(r.money_pct)),pointLabel:r=>compact(number(r.money_pct))+'%',axisLabel:value=>compact(value)+'%'};
+  };
+  const viewKeys=['market', ...(marketKey==='MONEYLINE'?[]:['price']), 'bets', 'money'];
+  const views=viewKeys.map(makeView).filter(view=>view.values.every(value=>value!==null));
+  if(!views.length) return '';
+  const panel=view=>{
+    const values=view.values;
+    const min=Math.min(...values), max=Math.max(...values), span=max-min||1;
+    const width=640, height=180, padLeft=28, padRight=60, padY=22;
+    const points=values.map((value,index)=>{
+      const x=padLeft+(index*(width-padLeft-padRight)/Math.max(1,values.length-1));
+      const y=height-padY-((value-min)/span)*(height-padY*2);
+      return [x.toFixed(1),y.toFixed(1)];
+    });
+    const polyline=points.map(point=>point.join(',')).join(' ');
+    const area=`${padLeft},${height-padY} ${polyline} ${width-padRight},${height-padY}`;
+    const ticks=[max,(max+min)/2,min].map(value=>{
+      const y=height-padY-((value-min)/span)*(height-padY*2);
+      return `<path d="M${padLeft} ${y.toFixed(1)} H${width-padRight}" stroke="#d8e3e6" stroke-dasharray="3 4"/><text x="${width-padRight+6}" y="${(y+3).toFixed(1)}" fill="#74808a" font-size="9" font-family="var(--mono)">${view.axisLabel(value)}</text>`;
+    }).join('');
+    const first=rows[0], last=rows[rows.length-1];
+    return `<div class="movement-panel" data-movement-view="${view.key}" style="display:${view.key==='market'?'block':'none'}"><div class="movement-chart-note">${view.note}</div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${view.title} trajectory"><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#5bb6bf" stop-opacity=".32"/><stop offset="1" stop-color="#5bb6bf" stop-opacity=".02"/></linearGradient></defs>${ticks}<path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${polyline}" fill="none" stroke="#0f6f7f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#0f6f7f" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#0f6f7f"/></svg><div class="movement-facts"><div class="movement-fact"><span>Start</span><b>${view.pointLabel(first)}</b></div><div class="movement-fact"><span>Current</span><b>${view.pointLabel(last)}</b></div><div class="movement-fact"><span>Observed range</span><b>${view.axisLabel(min)} to ${view.axisLabel(max)}</b></div></div></div>`;
+  };
+  const tabs=views.map(view=>`<button type="button" class="movement-tab ${view.key==='market'?'on':''}" onclick="setMovementView(this,'${view.key}')">${view.label}</button>`).join('');
+  return `<div class="movement-chart" data-movement-chart><div class="movement-chart-head"><div><div class="movement-chart-title">Market trajectory</div><div class="movement-chart-note">${rows.length} timestamped observations for this exact signal side.</div></div><div class="movement-tabs">${tabs}</div></div>${views.map(panel).join('')}</div>`;
+}
+function setMovementView(button, view){
+  const chart=button.closest('[data-movement-chart]');
+  if(!chart) return;
+  chart.querySelectorAll('.movement-tab').forEach(tab=>tab.classList.toggle('on',tab===button));
+  chart.querySelectorAll('[data-movement-view]').forEach(panel=>{ panel.style.display=panel.dataset.movementView===view?'block':'none'; });
 }
 
 function openGameDetail(r){
@@ -2017,7 +2061,9 @@ function openGameDetail(r){
   html+='</div>';
   html+=movementChart(evRows,r.market_display);
   html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+anomalyBadge(an.reaction,'reaction')+anomalyBadge(an.path,'path')+an.context.map(c=>'<span class="mr mr-neutral">'+c+'</span>').join('')+'</div>';
-  html+='<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px">'+(r.flagged_side||'--')+'</div>';
+  html+='<div style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">Signal Side</div>';
+  html+='<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:3px">'+(r.flagged_side||'--')+'</div>';
+  html+='<div style="font-size:11px;color:var(--text3);margin-bottom:8px">'+(r.focus_basis||'Observed side')+'</div>';
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">'+splitSummary(r)+'</div>';
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Open '+(r.open_line||'--')+' -> Current '+(r.current_line||'--')+'</div>';
   if(Number(r.price_move_pct)>0) html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Price movement '+Number(r.price_move_pct).toFixed(1)+' implied points</div>';
@@ -2248,6 +2294,7 @@ function openGameDetail(r){
 let _histData=null;
 let _histGame='';
 let _histMkt='';
+let _histSide='';
 function _utcToET(ts){
   if(!ts) return '--';
   // snapshot_ts is "YYYY-MM-DD HH:MM:SS" in UTC - append Z to parse as UTC
@@ -2429,6 +2476,8 @@ function renderHistory(){
   const gameSelect=document.getElementById('hist-game-select');
   const marketSelect=document.getElementById('hist-mkt-select');
   const marketLabel=document.getElementById('hist-mkt-label');
+  const sideSelect=document.getElementById('hist-side-select');
+  const sideLabel=document.getElementById('hist-side-label');
   const chartEl=document.getElementById('hist-chart');
   const events=allEvents||[];
   if(!events.length){
@@ -2439,7 +2488,7 @@ function renderHistory(){
   events.forEach(row=>{ const id=row.game_id||row.game; if(id&&!gameMap.has(id)) gameMap.set(id,row.game||id); });
   gameSelect.innerHTML='<option value="">Select a game...</option>'+[...gameMap.entries()].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,label])=>'<option value="'+String(id).replace(/"/g,'&quot;')+'"'+(id===_histGame?' selected':'')+'>'+label+'</option>').join('');
   if(!_histGame){
-    marketLabel.style.display='none'; marketSelect.style.display='none'; wrapEl.style.display='none';
+    marketLabel.style.display='none'; marketSelect.style.display='none'; sideLabel.style.display='none'; sideSelect.style.display='none'; wrapEl.style.display='none';
     promptEl.style.display=''; promptEl.textContent='Select a game to inspect its line path and public split.'; metaEl.textContent=events.length+' observations'; return;
   }
   const gameRows=events.filter(r=>String(r.game_id||r.game)===String(_histGame));
@@ -2447,19 +2496,27 @@ function renderHistory(){
   marketLabel.style.display=''; marketSelect.style.display='';
   marketSelect.innerHTML='<option value="">Select a market...</option>'+markets.map(m=>'<option value="'+m+'"'+(m===_histMkt?' selected':'')+'>'+m+'</option>').join('');
   if(!_histMkt){
-    wrapEl.style.display='none'; promptEl.style.display=''; promptEl.textContent='Select a market to view the full movement timeline.'; metaEl.textContent=gameRows.length+' observations'; return;
+    sideLabel.style.display='none'; sideSelect.style.display='none'; wrapEl.style.display='none'; promptEl.style.display=''; promptEl.textContent='Select a market to choose the exact signal side.'; metaEl.textContent=gameRows.length+' observations'; return;
   }
-  const rows=gameRows.filter(r=>(r.market_display||'').toUpperCase()===_histMkt).sort((a,b)=>new Date(a.timestamp||0)-new Date(b.timestamp||0));
+  const marketRows=gameRows.filter(r=>(r.market_display||'').toUpperCase()===_histMkt);
+  const sides=[...new Set(marketRows.map(r=>r.flagged_side||'').filter(Boolean))].sort();
+  sideLabel.style.display=''; sideSelect.style.display='';
+  sideSelect.innerHTML='<option value="">Select a side...</option>'+sides.map(side=>'<option value="'+String(side).replace(/"/g,'&quot;')+'"'+(side===_histSide?' selected':'')+'>'+side+'</option>').join('');
+  if(!_histSide){
+    wrapEl.style.display='none'; promptEl.style.display=''; promptEl.textContent='Select a signal side to view one accurate market trajectory.'; metaEl.textContent=marketRows.length+' observations'; return;
+  }
+  const rows=marketRows.filter(r=>(r.flagged_side||'')===_histSide).sort((a,b)=>new Date(a.timestamp||0)-new Date(b.timestamp||0));
   promptEl.style.display='none'; wrapEl.style.display=''; metaEl.textContent=rows.length+' observations';
-  chartEl.innerHTML=movementChart(rows)+`<div class="movement-kpis"><div class="movement-kpi"><span>Open</span><b>${rows[0]?.line_display||'--'}</b></div><div class="movement-kpi"><span>Current</span><b>${rows[rows.length-1]?.line_display||'--'}</b></div><div class="movement-kpi"><span>Observed range</span><b>${rows.length>1?rows[0]?.line_display+' to '+rows[rows.length-1]?.line_display:'--'}</b></div></div>`;
+  chartEl.innerHTML=movementChart(rows,_histMkt);
   document.getElementById('hist-tbody').innerHTML=[...rows].reverse().map(row=>{
     const state=[row.reaction,row.path].filter(Boolean).join(' / ')||'Observed';
     const note=[row.key_number_note,row.broader_market_comparison].filter(Boolean).join(' - ')||'--';
     return '<tr><td>'+et(row.timestamp)+'</td><td style="font-family:var(--mono);font-weight:700">'+(row.line_display||'--')+'</td><td style="'+splitPctStyle('bets',row.bets_pct)+'">'+Number(row.bets_pct||0).toFixed(0)+'%</td><td style="'+splitPctStyle('money',row.money_pct)+'">'+Number(row.money_pct||0).toFixed(0)+'%</td><td>'+state+'</td><td style="white-space:normal;color:var(--text2)">'+note+'</td></tr>';
   }).join('');
 }
-function setHistGame(gameId){ _histGame=gameId||''; _histMkt=''; renderHistory(); }
-function setHistMkt(marketName){ _histMkt=marketName||''; renderHistory(); }
+function setHistGame(gameId){ _histGame=gameId||''; _histMkt=''; _histSide=''; renderHistory(); }
+function setHistMkt(marketName){ _histMkt=marketName||''; _histSide=''; renderHistory(); }
+function setHistSide(side){ _histSide=side||''; renderHistory(); }
 
 function exportDrillCSV() {
   if (!_drillRows.length) return;

@@ -80,6 +80,25 @@ def test_ticket_heavy_short_favorite_is_context_not_a_freeze():
     assert "parlay risk" in row["rank_reason"].lower()
 
 
+def test_freeze_focus_identifies_the_high_split_side_not_a_recommendation():
+    latest = {
+        "sport": "nfl", "game_id": "g5", "market_display": "SPREAD", "side_key": "HOME",
+        "side": "Home -3.5", "game": "Away @ Home", "canonical_key": "away @ home|nfl|2026-09-13",
+        "bets_pct": 82, "money_pct": 76, "open_line": "Home -3.5 @ -110",
+        "current_line": "Home -3.5 @ -110", "_sort_time": "2026-09-13T20:25:00Z",
+    }
+    history = [
+        {"timestamp": _timestamp(17), "sport": "nfl", "game_id": "g5", "market_display": "SPREAD", "side_key": "HOME", "current_line": "Home -3.5 @ -110", "bets_pct": 82, "money_pct": 76},
+        {"timestamp": _timestamp(18), "sport": "nfl", "game_id": "g5", "market_display": "SPREAD", "side_key": "HOME", "current_line": "Home -3.5 @ -110", "bets_pct": 82, "money_pct": 76},
+    ]
+
+    row = _board(latest, history)
+
+    assert row["reaction"] == "Freeze"
+    assert row["flagged_side"] == "Home -3.5"
+    assert row["focus_basis"] == "High-split side; market held"
+
+
 def test_extreme_moneyline_uses_implied_probability_for_whipsaw_detection():
     latest = {
         "sport": "ncaaf", "game_id": "g3", "market_display": "MONEYLINE", "side_key": "HOME",
