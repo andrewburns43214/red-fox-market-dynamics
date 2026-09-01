@@ -1976,6 +1976,59 @@ def validate_snapshot_rows(rows: list[dict], sport: str) -> tuple[list[dict], st
     return rows, ""
 
 
+def purge_sport_from_live_files(sport: str) -> list[str]:
+    sport_key = normalize_sport_key(sport)
+    if not sport_key:
+        return []
+
+    import csv
+    from datetime import datetime
+    import shutil
+
+    notes: list[str] = []
+    targets = [
+        "data/snapshots.csv",
+        "data/dashboard.csv",
+        "data/decision_freeze_ledger.csv",
+        "data/signal_ledger.csv",
+        "data/row_state.csv",
+        "data/score_history.csv",
+    ]
+
+    stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    for path in targets:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                fieldnames = reader.fieldnames or []
+                if "sport" not in fieldnames:
+                    continue
+                rows = list(reader)
+        except Exception as e:
+            notes.append(f"{path}: read failed ({type(e).__name__})")
+            continue
+
+        kept = [r for r in rows if normalize_sport_key(r.get("sport", "")) != sport_key]
+        removed = len(rows) - len(kept)
+        if removed <= 0:
+            continue
+
+        try:
+            backup_path = f"{path}.bak_{sport_key}_{stamp}"
+            shutil.copy2(path, backup_path)
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(kept)
+            notes.append(f"{path}: removed {removed} {sport_key} rows (backup: {backup_path})")
+        except Exception as e:
+            notes.append(f"{path}: write failed ({type(e).__name__})")
+
+    return notes
+
+
 SPORT_CONFIG = {
     "nfl": {
         "label": "NFL",
@@ -5748,6 +5801,8 @@ def cmd_snapshot(args):
     if validation_note:
         print(f"[snapshot] {validation_note}")
     if not rows:
+        for note in purge_sport_from_live_files(args.sport):
+            print(f"[snapshot] {note}")
         print(f"[snapshot] rejected {args.sport} snapshot due to failed sport validation")
         return
 
