@@ -24,6 +24,12 @@ def main():
     snapshots["side_key"] = snapshots.apply(
         lambda row: normalize_side_key(row.get("sport", ""), row["market_display"], row.get("side", "")), axis=1
     )
+    if dashboard.empty:
+        snapshots["timestamp"] = pd.to_datetime(snapshots["timestamp"], utc=True, errors="coerce")
+        latest_keys = ["sport", "game_id", "market_display", "side_key"]
+        dashboard = snapshots.sort_values("timestamp").groupby(latest_keys, as_index=False).tail(1).copy()
+        dashboard["canonical_key"] = dashboard["sport"] + "|" + dashboard["game_id"]
+        dashboard["_sort_time"] = dashboard.get("dk_start_iso", "")
 
     l2_path = DATA / "l2_consensus.csv"
     l2 = pd.read_csv(l2_path, dtype=str, keep_default_na=False) if l2_path.exists() else pd.DataFrame()
