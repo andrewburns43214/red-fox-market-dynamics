@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from anomaly_action_ledger import update_action_ledger
+from anomaly_action_results import rebuild_action_results
 from anomaly_board import build_anomaly_outputs
 from main import infer_market_type, normalize_side_key
 
@@ -42,7 +43,8 @@ def main():
         frame.to_csv(temporary, index=False)
         temporary.replace(DATA / name)
     action_count = update_action_ledger(board, DATA, newest_snapshot.to_pydatetime())
-    print(f"[ok] wrote {len(board)} board rows, {len(events)} timeline events, and captured {action_count} KPI candidates")
+    resolved_count = rebuild_action_results(DATA)
+    print(f"[ok] wrote {len(board)} board rows, {len(events)} timeline events, captured {action_count} KPI candidates, and reconciled {resolved_count} results")
 
 
 if __name__ == "__main__":

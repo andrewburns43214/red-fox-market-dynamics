@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import pandas as pd
 
 from anomaly_action_ledger import update_action_ledger
+from anomaly_action_results import rebuild_action_results
 from anomaly_board import build_anomaly_outputs
 
 
@@ -138,6 +139,25 @@ def test_action_ledger_preserves_one_candidate_at_its_decision_line(tmp_path):
     assert ledger.iloc[0]["observed_side"] == "Over 145.5"
     assert ledger.iloc[0]["action_side"] == "Under 145.5"
     assert ledger.iloc[0]["action_line"] == "Under 145.5 @ -110"
+
+
+def test_action_results_grade_locked_fade_side_and_daily_kpi(tmp_path):
+    ledger = pd.DataFrame([
+        {"action_id": "a1", "first_anomaly_seen": _timestamp(18), "sport": "ncaab", "game_id": "g8", "game": "Away @ Home", "market_display": "SPREAD", "reaction": "Freeze", "observed_side": "Home -3.5", "action_side": "Away +3.5", "action_line": "Away +3.5 @ -110", "action_type": "FADE CANDIDATE"},
+        {"action_id": "a2", "first_anomaly_seen": _timestamp(18), "sport": "ncaab", "game_id": "g9", "game": "Away @ Home", "market_display": "TOTAL", "reaction": "Freeze", "observed_side": "Over 145.5", "action_side": "Under 145.5", "action_line": "Under 145.5 @ -110", "action_type": "FADE CANDIDATE"},
+    ])
+    scores = pd.DataFrame([
+        {"game_id": "g8", "team1": "away", "team1_score": 70, "team2": "home", "team2_score": 71},
+        {"game_id": "g9", "team1": "away", "team1_score": 70, "team2": "home", "team2_score": 72},
+    ])
+    ledger.to_csv(tmp_path / "anomaly_action_ledger.csv", index=False)
+    scores.to_csv(tmp_path / "final_scores_history.csv", index=False)
+
+    assert rebuild_action_results(tmp_path) == 2
+    results = pd.read_csv(tmp_path / "anomaly_action_results.csv", dtype=str)
+
+    assert results["outcome"].tolist() == ["WIN", "WIN"]
+    assert (tmp_path / "anomaly_action_kpi_daily.csv").exists()
 
 
 def test_extreme_moneyline_uses_implied_probability_for_whipsaw_detection():

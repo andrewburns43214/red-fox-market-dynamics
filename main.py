@@ -5621,12 +5621,15 @@ def build_dashboard():
             _anomaly_board.to_csv("data/anomaly_board.csv", index=False)
             _anomaly_events.to_csv("data/anomaly_events.csv", index=False)
             from anomaly_action_ledger import update_action_ledger
+            from anomaly_action_results import rebuild_action_results
             _captured_actions = update_action_ledger(
                 _anomaly_board, Path("data"), datetime.now(timezone.utc),
             )
+            _resolved_actions = rebuild_action_results(Path("data"))
             print(f"[ok] wrote anomaly board csv ({len(_anomaly_board)} rows)")
             print(f"[ok] wrote anomaly events csv ({len(_anomaly_events)} rows)")
             print(f"[ok] captured anomaly KPI candidates ({_captured_actions})")
+            print(f"[ok] reconciled anomaly action results ({_resolved_actions})")
         except Exception as _anom_e:
             print(f"[anomaly] export skipped: {repr(_anom_e)}")
 
