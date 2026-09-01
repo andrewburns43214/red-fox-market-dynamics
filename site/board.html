@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=1440">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Red Fox - Market Intelligence</title>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <style>
@@ -48,7 +48,7 @@
   --acc-brd:   #b8d4f8;
   /* Fonts â€” system stack + JetBrains Mono */
   --mono:      'JetBrains Mono', 'Courier New', monospace;
-  --sans:      system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  --sans:      'IBM Plex Sans', sans-serif;
   /* Typography scale */
   --font-kpi:    28px;
   --font-title:  20px;
@@ -121,14 +121,14 @@ body::before {
 
 .wordmark { line-height: 1.1; }
 .wm-main {
-  font-family: 'Plus Jakarta Sans', var(--sans);
+  font-family: var(--sans);
   font-size: 16px; font-weight: 800;
   letter-spacing: .5px; color: var(--white2);
   display: block;
 }
 .wm-main span { color: var(--red2); }
 .wm-sup {
-  font-family: 'Plus Jakarta Sans', var(--sans);
+  font-family: var(--sans);
   font-size: 8px; letter-spacing: 2.5px;
   font-weight: 500;
   color: var(--text3); text-transform: uppercase;
@@ -412,9 +412,9 @@ thead th {
   transition: color .1s;
 }
 thead th:hover { color: var(--text2); }
-thead th.sorted { color: #111827; }
-thead th.sorted::after { content: ' v'; color: #2080f0; font-size: 10px; font-weight: 700; margin-left: 2px; }
-thead th.sorted.asc::after { content: ' ^'; }
+thead th.sorted { color: #111827; box-shadow: inset 0 -2px 0 var(--accent); }
+thead th.sorted::after { content: ''; }
+thead th.sorted.asc::after { content: ''; }
 
 tbody tr {
   border-bottom: 1px solid var(--border);
@@ -976,6 +976,7 @@ thead th { text-align: center; vertical-align: middle; }
 thead th.th-game { text-align: left; }
 thead th.th-split { text-align: left; }
 thead th.th-play { text-align: left; }
+thead th.th-edge, thead th.th-total, thead th.th-pat, thead th.th-dec { text-align: left; }
 .td-rank, .td-mkt, .td-edge, .td-conf, .td-total, .td-bkt, .td-pat, .td-tim, .td-dec { text-align: center; vertical-align: middle; }
 .td-line { text-align: center; vertical-align: middle; }
 .td-split { text-align: left; vertical-align: middle; }
@@ -991,6 +992,105 @@ thead th.th-play { text-align: left; }
 
 /* Mobile: desktop layout renders everywhere, scroll horizontally if needed. */
 
+/* Signal-workspace refresh */
+:root {
+  --bg: #f4f6f8;
+  --bg2: #edf1f4;
+  --bg3: #ffffff;
+  --surface: #ffffff;
+  --surface2: #e8edf1;
+  --border: #dce3e8;
+  --border2: #cbd5dc;
+  --text: #17212b;
+  --text2: #53616c;
+  --text3: #75828d;
+  --accent: #0f5f73;
+  --accent2: #16758b;
+  --acc-bg: #e5f4f5;
+  --acc-brd: #b8dfe2;
+  --gold2: #a56b12;
+  --green2: #16705a;
+}
+.signal-key { display:flex; align-items:center; gap:7px; }
+.signal-key-label { font-family:var(--mono); font-size:8px; font-weight:700; letter-spacing:.12em; color:var(--text3); text-transform:uppercase; margin-right:2px; }
+.signal-key-item { padding:4px 7px; border:1px solid transparent; border-radius:999px; font-size:9px; font-weight:700; white-space:nowrap; }
+.key-contrarian { background:#e7f3f1; border-color:#c7e4de; color:#176454; }
+.key-freeze { background:#e7f0f6; border-color:#c8dce9; color:#2f607f; }
+.key-whipsaw { background:#f1f5f7; border-color:#dce5e9; color:#57717f; }
+.key-held { background:#f5f4ef; border-color:#e8e3d4; color:#7b6b45; }
+body { background: radial-gradient(circle at 88% -10%, #dceff0 0, transparent 30%), var(--bg); }
+.topbar { height: 62px; background: rgba(255,255,255,.9); backdrop-filter: blur(14px); padding: 0 28px; box-shadow: none; }
+.logo-wrap { border-right: 0; padding-right: 14px; margin-right: 0; }
+.topbar-kpis { margin-left: 12px; padding-left: 12px; }
+.tkpi { padding: 0 13px; }
+.tabs { background: rgba(255,255,255,.84); padding: 0 28px; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.metricbar { height: 52px; background: rgba(255,255,255,.65); padding-left: 28px; }
+.metricbar { display: none; }
+.mmet { padding: 0 16px; }
+.mmet-v { color: var(--text); }
+.pane-hdr { height: 56px; background: rgba(255,255,255,.72); padding: 0 28px; }
+.pane-title { font-size: 15px; letter-spacing: -.2px; }
+.pane-meta { font-size: 10px; }
+.board-tools { display:flex; align-items:center; gap:14px; min-width:0; }
+.board-tools input { width:170px; padding:6px 10px; border:1px solid var(--border); border-radius:5px; background:#fff; color:var(--text); font:600 10px var(--sans); outline:0; }
+.board-tools input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(15,95,115,.1); }
+.tscroll { padding: 0 20px 20px; }
+table { border-spacing: 0 7px; border-collapse: separate; }
+thead th { background: transparent; border: 0; padding: 9px 10px 5px; color: var(--text3); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+/* Keep the board labels readable while its data scrolls underneath. */
+.lpane > .tscroll > table > thead { position: static; background: var(--bg); }
+.lpane > .tscroll > table > thead th { position: sticky; top: 0; z-index: 6; background: var(--bg); box-shadow: 0 7px 0 var(--bg); }
+tbody tr { background: rgba(255,255,255,.93); border: 0; box-shadow: 0 1px 2px rgba(18,36,45,.035); outline: 1px solid rgba(220,227,232,.85); }
+tbody tr:hover { background: #fff; outline-color: #a8d1d6; box-shadow: 0 5px 18px rgba(18,65,77,.08); transform: translateY(-1px); }
+tbody tr.row-hi { background: linear-gradient(90deg, #f5fbfa 0, #fff 28%); border-left: 0; }
+td { padding: 11px 10px; border: 0; }
+td:first-child { border-radius: 8px 0 0 8px; }
+td:last-child { border-radius: 0 8px 8px 0; }
+.td-rank { color: #93a0a9; font-size: 10px; padding-top: 13px; }
+.td-game { width: 280px; max-width: 280px; }
+.game-name { font-size: 13px; font-weight: 800; }
+.game-row2 { margin-top: 2px; }
+.sport-chip { border-radius: 999px; }
+.td-mkt { color: var(--accent); font-size: 9px; }
+.td-split { width: 132px; }
+.sbar { height: 4px; background: #e5ebee; }
+.sfill.b { background: #657886; }
+.sfill.m { background: #bd831e; }
+.td-line { width: 78px; font-size: 11px; color: var(--text); }
+.line-move { display:flex; flex-direction:column; gap:4px; align-items:center; }
+.line-rail { display:flex; align-items:center; gap:5px; color:var(--text3); font-family:var(--mono); font-size:10px; }
+.line-arrow { color:var(--accent); font-weight:700; }
+.td-edge { width: 155px; text-align:left; }
+.focus-label { font-size:12px; font-weight:700; color:var(--text); line-height:1.25; white-space:normal; }
+.focus-sub { font-family:var(--mono); font-size:9px; color:var(--text3); margin-top:3px; }
+.td-total { width: 135px; text-align:left; }
+.td-pat { width: 110px; text-align:left; }
+.td-dec { width: 300px; text-align:left; }
+.td-pick { width: 72px; text-align:center; }
+.mr { border-radius: 999px; padding: 4px 8px; font-size: 9px; letter-spacing: .02em; }
+.mr-aligned { background:#e7f3f1; color:#176454; border-color:#c7e4de; }
+.mr-freeze { background:#e7f0f6; color:#2f607f; border-color:#c8dce9; }
+.mr-neutral { background:#f0f3f5; color:#60707b; border-color:#dce3e7; }
+.pat { background:transparent; border:0; padding:0; color:var(--text2); font-size:9px; white-space:normal; text-align:left; }
+.info-btn { background: #eef5f6; border-color: #cce2e4; color: var(--accent); font-weight: 700; }
+.grp-btn { display:inline-flex; align-items:center; gap:5px; border:0; border-radius:4px; padding:5px 7px; background:transparent; color:var(--text2); font-weight:700; letter-spacing:.01em; }
+.grp-btn:hover, .grp-btn.grp-on { background:var(--acc-bg); color:var(--accent); border-color:transparent; }
+.grp-btn svg { flex:0 0 auto; }
+.drill-modal { border-radius: 14px; box-shadow: 0 24px 80px rgba(20,45,54,.25); }
+.movement-chart { margin: 12px 0 16px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: linear-gradient(180deg,#fbfdfd,#f3f8f8); }
+.movement-chart svg { display:block; width:100%; height:180px; overflow:visible; }
+.movement-kpis { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:12px 0; }
+.movement-kpi { padding:9px 10px; background:#f4f7f8; border-radius:8px; }
+.movement-kpi b { display:block; margin-top:3px; color:var(--text); font-size:12px; }
+@media (max-width: 900px) {
+  html,body { overflow:auto; }
+  .topbar { padding:0 14px; } .topbar-kpis,.clock-area,.signal-key { display:none; }
+  .tabs { padding:0 10px; } .metricbar { padding-left:10px; overflow-x:auto; } .mmet { min-width:100px; }
+  .pane-hdr { padding:0 12px; } .pane-meta,.mcap { display:none; } .tscroll { padding:0 8px 12px; }
+  .board-tools input { width:140px; }
+  .td-dec,.td-pat { display:none; } .td-game { width:220px; max-width:220px; }
+}
 </style>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -1014,37 +1114,35 @@ thead th.th-play { text-align: left; }
     <div class="topbar-kpis">
       <div class="tkpi">
         <span class="tkpi-v" id="t-games">0</span>
-        <span class="tkpi-l">Games</span>
-      </div>
-      <div class="tkpi">
-        <span class="tkpi-v green" id="t-active">0</span>
         <span class="tkpi-l">Today's Games</span>
       </div>
       <div class="tkpi">
+        <span class="tkpi-v green" id="t-active">0</span>
+        <span class="tkpi-l">All Games</span>
+      </div>
+      <div class="tkpi">
         <span class="tkpi-v gold" id="t-sb">0</span>
-        <span class="tkpi-l">Bets</span>
+        <span class="tkpi-l">Markets</span>
       </div>
       <div class="tkpi">
 <span class="tkpi-v" id="t-wr">--</span>
-        <span class="tkpi-l">Bet Win Rate</span>
+        <span class="tkpi-l">Sports</span>
       </div>
     </div>
     </div>
-  <div class="clock-area">
-    <div class="clock-sub">ET</div>
-    <div class="clock" id="clk">--:--:--</div>
+  <div class="signal-key" aria-label="Signal key">
+    <span class="signal-key-label">Signal Key</span>
+    <span class="signal-key-item key-contrarian" title="Low support with line movement toward the side">Contrarian</span>
+    <span class="signal-key-item key-freeze" title="Heavy public support while the line holds">Freeze</span>
+    <span class="signal-key-item key-whipsaw" title="Line moved and then reversed">Whipsaw</span>
+    <span class="signal-key-item key-held" title="Little or no move from open">Held</span>
   </div>
 </header>
 
 <!-- â”€â”€â”€ TABS â”€â”€â”€ -->
 <nav class="tabs">
   <div class="tab active" data-tab="board" data-filter="today" onclick="setTab(this)">Today's Games <span class="tbadge" id="b-today">0</span></div>
-  <div class="tab" data-tab="board" data-filter="highconf" onclick="setTab(this)">Bets <span class="tbadge" id="b-hc">0</span></div>
   <div class="tab" data-tab="board" data-filter="all" onclick="setTab(this)">All Games <span class="tbadge" id="b-all">0</span></div>
-  <div class="tsep"></div>
-  <div class="tab" data-tab="history" data-filter="" onclick="setTab(this)">Movement</div>
-  <div class="tab" data-tab="perf" data-filter="" onclick="setTab(this)">Performance</div>
-  <div class="tab" data-tab="results" data-filter="" onclick="setTab(this)">Results</div>
   <div class="sfilters">
     <div class="schip on" onclick="setSport('ALL',this)">All</div>
     <div class="schip" onclick="setSport('NBA',this)">NBA</div>
@@ -1068,23 +1166,23 @@ thead th.th-play { text-align: left; }
   <div class="mmet">
     <div class="mmet-body">
       <span class="mmet-v g" id="m-hc">0</span>
-      <span class="mmet-l">Bets</span>
+      <span class="mmet-l">Top Anomalies</span>
     </div>
   </div>
   <div class="mmet">
     <div class="mmet-body">
 <span class="mmet-v gd" id="m-avg">--</span>
-      <span class="mmet-l">Avg Confidence Today</span>
+      <span class="mmet-l">Contrarian + Whipsaw</span>
     </div>
   </div>
   <div class="mmet">
     <div class="mmet-body">
 <span class="mmet-v g" id="m-wr">--</span>
-      <span class="mmet-l">Bet Win Rate</span>
+      <span class="mmet-l">Strong Freeze</span>
     </div>
   </div>
   <div class="mmet-right" style="display:flex;align-items:center;gap:10px">
-    <input type="text" id="board-search" placeholder="Search..." oninput="renderBoard()" style="font-size:11px;padding:3px 8px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--sans);width:140px">
+    <input type="text" id="legacy-board-search" placeholder="Search..." style="font-size:11px;padding:3px 8px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--sans);width:140px">
     <div><span>Refresh</span>
     <div class="rbar"><div class="rfill"></div></div></div>
   </div>
@@ -1108,40 +1206,40 @@ thead th.th-play { text-align: left; }
       <div class="lpane">
         <div class="pane-hdr">
           <div style="display:flex;align-items:center;gap:10px">
-            <span class="pane-title" id="board-title">Upcoming Games</span>
+            <span class="pane-title" id="board-title">Board</span>
             <div class="mfilters" id="market-filters">
-              <span class="mcap">Market</span>
               <button class="mchip on" type="button" onclick="setMarket('ALL',this)">All</button>
               <button class="mchip" type="button" onclick="setMarket('SPREAD',this)">Spread</button>
               <button class="mchip" type="button" onclick="setMarket('MONEYLINE',this)">Moneyline</button>
               <button class="mchip" type="button" onclick="setMarket('TOTAL',this)">Total</button>
             </div>
-            <select id="book-select" class="grp-btn" onchange="switchBook(this.value)" style="font-size:10px;padding:2px 6px;min-width:auto;cursor:pointer"><option value="dk">Odds: DraftKings</option></select>
-            <button class="grp-btn" id="grp-toggle" onclick="toggleGroup(this)">Group by Game</button>
+            <button class="grp-btn" id="grp-toggle" onclick="toggleGroup(this)" title="Group markets by game"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3h8M2 8h12M2 13h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M11 2v3M13 7v3M11 12v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span>Group</span></button>
             <button class="grp-btn" id="locked-jump" onclick="jumpToLocked()" style="display:none">Live / Locked Games</button>
-            <button class="grp-btn" onclick="scrollToTop()">Top</button>
+            <button class="grp-btn" onclick="scrollToTop()" title="Back to top"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4M3 14h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Top</span></button>
             <button class="grp-btn" onclick="exportCSV()" title="Export to CSV">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:-1px;margin-right:3px"><path d="M2 14h12M8 2v9M4 7l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>CSV
             </button>
           </div>
-          <span class="pane-meta" id="board-meta">-</span>
+          <div class="board-tools">
+            <input type="text" id="board-search" placeholder="Search games or signals" oninput="renderBoard()">
+            <span class="pane-meta" id="board-meta">-</span>
+          </div>
         </div>
         <div class="tscroll">
           <table>
             <thead>
               <tr>
-                <th class="th-rank" onclick="sortBy('total_score',this)">#</th>
-                <th class="th-game" onclick="sortBy('game',this)">Game</th>
-                <th class="th-mkt" onclick="sortBy('market_display',this)">Market</th>
-                <th class="th-split">Bets / Money</th>
-                <th class="th-line" onclick="sortBy('open_line',this)">Open</th>
-                <th class="th-line" onclick="sortBy('current_line',this)">Current</th>
-                <th class="th-edge" onclick="sortBy('net_edge',this)">Score Gap</th>
-                <th class="th-total sorted" onclick="sortBy('total_score',this)">Confidence</th>
-                <th class="th-pat" onclick="sortBy('pattern_primary',this)">Pattern <span class="info-btn" style="display:inline-flex;width:14px;height:14px;font-size:10px;margin-top:0;vertical-align:middle" onclick="event.stopPropagation();openPatLegend()" title="Pattern definitions">i</span></th>
-                <th class="th-tim" onclick="sortBy('timing_bucket',this)">Timing</th>
-                <th class="th-dec">Decision</th>
-                <th class="th-play">Play</th>
+          <th class="th-rank sorted" title="Priority order based on the board's anomaly ranking" onclick="sortBy('board_rank',this)">#</th>
+          <th class="th-game" title="Matchup, sport, and scheduled start time" onclick="sortBy('game',this)">Game</th>
+          <th class="th-mkt" title="Market type: moneyline, spread, or total" onclick="sortBy('market_display',this)">Market</th>
+          <th class="th-split" title="Share of tickets and handle on the market focus">Bets / Money</th>
+          <th class="th-line" title="First observed line in the available snapshot history" onclick="sortBy('open_line',this)">Open</th>
+          <th class="th-line" title="Most recent observed line" onclick="sortBy('current_line',this)">Current</th>
+          <th class="th-edge" title="The side or total used to evaluate the signal" onclick="sortBy('flagged_side',this)">Market Focus</th>
+          <th class="th-total" title="Detected reaction between participation and price movement" onclick="sortBy('reaction',this)">Signal</th>
+          <th class="th-pat" title="Observation coverage: Clean has 3 or more valid observations; Thin has 2" onclick="sortBy('data_badge',this)">Market State</th>
+          <th class="th-dec" title="Plain-language explanation of why this market is surfaced">Read</th>
+          <th class="th-play" title="Open the chart, evidence, and observation history">Timeline</th>
               </tr>
             </thead>
             <tbody id="tbody"></tbody>
@@ -1297,7 +1395,7 @@ thead th.th-play { text-align: left; }
     <div class="full-tab">
       <div class="panel">
         <div class="panel-h">
-          <span class="panel-t">Movement (Last 48h)</span>
+          <span class="panel-t">Market Movement</span>
           <span class="panel-m" id="hist-meta">--</span>
         </div>
         <div id="hist-filters" style="padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
@@ -1315,15 +1413,16 @@ thead th.th-play { text-align: left; }
         </div>
         <div id="hist-prompt" style="padding:40px;text-align:center;color:var(--text3);font-size:13px">Select a game to view movement history</div>
         <div id="hist-table-wrap" style="display:none">
+        <div id="hist-chart"></div>
         <div class="tscroll">
           <table class="hist-table">
             <thead><tr>
-              <th style="min-width:80px;text-align:left">Time</th>
-              <th style="min-width:100px;text-align:left">Pick</th>
-              <th style="min-width:100px;text-align:left">Pattern</th>
-              <th style="min-width:50px;text-align:left">Score Gap</th>
-              <th style="min-width:70px;text-align:left">Confidence</th>
-              <th style="min-width:80px;text-align:left">Decision</th>
+              <th style="min-width:120px;text-align:left">Observed</th>
+              <th style="min-width:130px;text-align:left">Line</th>
+              <th style="min-width:100px;text-align:left">Bets</th>
+              <th style="min-width:100px;text-align:left">Money</th>
+              <th style="min-width:120px;text-align:left">State</th>
+              <th style="min-width:140px;text-align:left">Notes</th>
             </tr></thead>
             <tbody id="hist-tbody"></tbody>
           </table>
@@ -1369,8 +1468,9 @@ function toggleRpane() {
 }
 </script>
 <script>
-const DASH_URL    = '/data/dashboard.csv';
-const LEDGER_URL  = '/data/signal_ledger.csv';
+const DASH_URL    = '/data/anomaly_board.csv';
+const EVENTS_URL  = '/data/anomaly_events.csv';
+const LEDGER_URL  = '/data/anomaly_events.csv';
 const RESULTS_URL = '/data/results_resolved.csv';
 const FREEZE_URL  = '/data/decision_freeze_ledger.csv';
 
@@ -1406,9 +1506,9 @@ const MOCK_RESULTS = [
   {date:'2026-02-24',game:'TOR @ MTL',market_display:'MONEYLINE',favored_side:'Montreal',game_confidence:66.8,net_edge:8.9,result:'WIN',timing_bucket:'EARLY',sport:'nhl'},
 ];
 
-let allDash=[], allLedger=[], allResults=[], allKPI=[];
+let allDash=[], allLedger=[], allEvents=[], allResults=[], allKPI=[];
 let sport='ALL', market='ALL', filter='today', tabId='board';
-let sortCol='total_score', sortAsc=false;
+let sortCol='board_rank', sortAsc=true;
 let _bookLines=null, _selectedBook='dk';
 
 const SPORT_ALIASES = {
@@ -1529,6 +1629,39 @@ function gameChips(r){
   r._allChips=all;
   return all.slice(0,4).map(c=>c.html).join(' ');
 }
+function anomalyParts(r){
+  const ctx=String(r.context_chips||'').split('|').map(s=>s.trim()).filter(Boolean);
+  return {
+    reaction:String(r.reaction||'').trim(),
+    path:String(r.path||'').trim(),
+    context:ctx
+  };
+}
+function anomalyBadge(text, kind){
+  const t=String(text||'').trim();
+  if(!t) return '';
+  const cls=kind==='reaction'?'mr-aligned':kind==='path'?'mr-freeze':'mr-neutral';
+  return `<span class="mr ${cls}" style="margin-right:4px">${t}</span>`;
+}
+function dataBadge(v){
+  const t=String(v||'').trim().toUpperCase();
+  if(t==='CLEAN') return '<span class="tim tMID">CLEAN</span>';
+  if(t==='THIN') return '<span class="tim tLATE">THIN</span>';
+  return '<span class="tim tLIVE">FEED RISK</span>';
+}
+function splitPctStyle(kind, raw){
+  const v=Number(raw);
+  if(!Number.isFinite(v)) return 'color:#5a6480';
+  if(kind==='bets'){
+    if(v<=40) return 'color:#d63020;font-weight:800';
+    if(v>=70) return 'color:#00965a;font-weight:800';
+  }
+  if(kind==='money'){
+    if(v<=45) return 'color:#d63020;font-weight:800';
+    if(v>=70) return 'color:#00965a;font-weight:800';
+  }
+  return 'color:#5a6480';
+}
 function wrCol(p){ return p>=65?'g':p>=55?'a':'r'; }
 function wrClr(p){ return p>=65?'var(--green2)':p>=55?'var(--gold2)':'var(--red2)'; }
 
@@ -1547,7 +1680,7 @@ function setSport(s,el){ sport=s; document.querySelectorAll('.sfilters .schip:no
 function setMarket(m,el){ market=m; document.querySelectorAll('#market-filters .mchip').forEach(x=>x.classList.remove('on')); el.classList.add('on'); renderBoard(); }
 function sortBy(col,th){ if(sortCol===col) sortAsc=!sortAsc; else{sortCol=col;sortAsc=false;} document.querySelectorAll('thead th').forEach(t=>t.classList.remove('sorted','asc')); th.classList.add('sorted'); if(sortAsc) th.classList.add('asc'); renderBoard(); }
 let groupMode=false;
-function toggleGroup(el){ groupMode=!groupMode; el.classList.toggle('grp-on',groupMode); el.textContent=groupMode?'Ungroup':'Group by Game'; renderBoard(); }
+function toggleGroup(el){ groupMode=!groupMode; el.classList.toggle('grp-on',groupMode); el.querySelector('span').textContent=groupMode?'Ungroup':'Group'; renderBoard(); }
 function jumpToLocked(){
   const div=document.querySelector('.locked-divider');
   if(!div) return;
@@ -1566,8 +1699,8 @@ function scrollToTop(){
 function exportCSV(){
   const data=filtered();
   if(!data.length) return;
-  const cols=['game','sport','market_display','favored_side','total_score','net_edge','game_decision','timing_bucket','bets_pct','money_pct','open_line','current_line','current_odds','pattern_primary','pattern_secondary','_game_time'];
-  const headers=['Game','Sport','Market','Side','Confidence','Score Gap','Decision','Timing','Bets%','Money%','Open Line','Current Line','Odds','Pattern','Pattern 2','Game Time'];
+  const cols=['game','sport','market_display','flagged_side','reaction','path','context_chips','bets_pct','money_pct','open_line','current_line','path_summary','reason','data_badge','kickoff_time'];
+  const headers=['Game','Sport','Market','Flagged Side','Reaction','Path','Context','Bets%','Money%','Open Line','Current Line','Path Summary','Reason','Data','Kickoff'];
   let csv=headers.join(',')+'\n';
   data.forEach(r=>{
     csv+=cols.map(c=>{
@@ -1585,7 +1718,7 @@ function exportCSV(){
 }
 
 function _decRank(d,r){ const k=(d||'').toUpperCase(); if(k==='BET') return 1; if(k==='LEAN') return (r&&isLocked(r))?3:2; return 4; }
-function filtered(){ const now=new Date(); const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d; if(filter==='today') d=allDash.filter(r=>isToday(r._game_time)).filter(r=>sport==='ALL'||sportLabel(r.sport)===sport); else if(filter==='highconf') d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport).filter(r=>!r._game_time||new Date(r._game_time)>now).filter(r=>isBetPlus(r)); else d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport).filter(r=>!r._game_time||new Date(r._game_time)>now||isLocked(r)); if(market!=='ALL') d=d.filter(r=>(r.market_display||'').toUpperCase()===market); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.favored_side||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)); return d.sort((a,b)=>{ const aLocked=isLocked(a)?1:0; const bLocked=isLocked(b)?1:0; if(aLocked!==bLocked) return aLocked-bLocked; let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
+function filtered(){ const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport); if(filter==='highconf') d=d.filter(r=>(r.reaction||'')==='Contrarian'||(r.reaction||'')==='Freeze'); if(market!=='ALL') d=d.filter(r=>(r.market_display||'').toUpperCase()===market); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.flagged_side||'').toLowerCase().includes(ql)||(r.reaction||'').toLowerCase().includes(ql)||(r.path||'').toLowerCase().includes(ql)||(r.reason||'').toLowerCase().includes(ql)); return d.sort((a,b)=>{ let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
 
 window._boardRows=[];
 function renderBoard(){
@@ -1610,79 +1743,47 @@ function renderBoard(){
     groups.forEach(g=>{ g.rows.forEach((r,j)=>{ r._grpSub=j>0; r._grpFirst=j===0&&g.rows.length>1; data.push(r); }); });
   }
   window._boardRows=data;
-  const titles={all:'Upcoming Games',highconf:'Bets',today:'Upcoming Games'};
-  document.getElementById('board-title').textContent=titles[filter]||'Upcoming Games';
-  const _hasLocked=data.some(r=>isLocked(r));
-  document.getElementById('locked-jump').style.display=_hasLocked?'':'none';
+  const titles={all:'Board',highconf:'Priority Signals',today:'Board'};
+  document.getElementById('board-title').textContent=titles[filter]||'Board';
+  document.getElementById('locked-jump').style.display='none';
   const _nGames=new Set(data.map(r=>r.game_id||r.game||'?')).size;
   const _marketLabel=market==='ALL'?'all markets':market.toLowerCase();
   document.getElementById('board-meta').textContent=`${_nGames} games | ${data.length} markets | ${_marketLabel} | sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' | grouped':''}`;
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
-  let _lockedDividerShown=false;
-  if(window._lockedOpen===undefined) window._lockedOpen=false;
   data.forEach((r,i)=>{
-    const score=Number(r.total_score)||0, edge=Math.round(Number(r.net_edge)||0);
-    const[dt,dc]=decInfo(r.game_decision); const bk=confBkt(score);
-    const lc=r.current_line&&r.open_line&&String(r.current_line).trim()!==String(r.open_line).trim();
-    // Insert collapsible divider before first LOCKED row
-    if(!_lockedDividerShown && isLocked(r)){
-      _lockedDividerShown=true;
-      const _nLocked=data.filter(x=>isLocked(x)).length;
-      const divtr=document.createElement('tr');
-      divtr.className='locked-divider';
-      divtr.innerHTML='<td colspan="99" style="padding:12px 16px;background:#f0f1f5;border-top:2px solid #d0d3de;border-bottom:1px solid #d0d3de;font-size:11px;font-weight:700;color:#7a7f96;letter-spacing:.5px;text-transform:uppercase;cursor:pointer;user-select:none" onclick="window._lockedOpen=!window._lockedOpen;this.querySelector(\'.lk-arrow\').textContent=window._lockedOpen?\'v\':\'>\';this.closest(\'tbody\').querySelectorAll(\'.row-locked\').forEach(r=>r.style.display=window._lockedOpen?\'\':\'none\')"><span class="lk-arrow">'+(window._lockedOpen?'v':'>')+'</span> Live / Locked Games | '+_nLocked+' markets</td>';
-      tbody.appendChild(divtr);
-    }
+    const an=anomalyParts(r);
     const tr=document.createElement('tr');
-    if(isLocked(r)){ tr.classList.add('row-locked'); if(!window._lockedOpen) tr.style.display='none'; } else if(score>=70) tr.classList.add('row-hi'); else if(score>=60) tr.classList.add('row-mid');
+    tr.title='Open timeline and evidence';
+    tr.onclick=()=>openGameDetail(window._boardRows[i]);
+    if((r.reaction||'')==='Contrarian'||(r.reaction||'')==='Freeze') tr.classList.add('row-hi');
     if(r._grpSub) tr.classList.add('row-grp-sub');
     if(r._grpFirst) tr.classList.add('row-grp-first');
     tr.innerHTML=`
       <td class="td-rank">${i+1}<br><span class="info-btn" onclick="event.stopPropagation();openGameDetail(window._boardRows[${i}])" title="Game detail">i</span></td>
       <td class="td-game">
         <div class="game-row1">${spChip(r.sport)}<span class="game-name">${r.game||'-'}</span></div>
-        <div class="game-row2"><span class="game-row2-time">${etT(r._game_time)}</span>${gameChips(r)}</div>
+        <div class="game-row2"><span class="game-row2-time">${r.kickoff_time||'-'}</span>${an.context.map(c=>'<span class="gchip gc-sp">'+c+'</span>').join(' ')}</div>
       </td>
       <td class="td-mkt">${r.market_display||'-'}</td>
       <td class="td-split">
         <div class="srow">
           <span class="slbl">Bets</span>
           <div class="sbar"><div class="sfill b" style="width:${Math.min(r.bets_pct||0,100)}%"></div></div>
-          <span class="spct" style="${(r.bets_pct||0)>=60?'color:#1a6fd4;font-weight:800':'color:#5a6480'}">${r.bets_pct?Number(r.bets_pct).toFixed(0)+'%':'-'}</span>
+          <span class="spct" style="${splitPctStyle('bets',r.bets_pct)}">${r.bets_pct?Number(r.bets_pct).toFixed(0)+'%':'-'}</span>
         </div>
         <div class="srow">
           <span class="slbl">$$$</span>
           <div class="sbar"><div class="sfill m" style="width:${Math.min(r.money_pct||0,100)}%"></div></div>
-          <span class="spct" style="${(r.money_pct||0)>=60?'color:#f59e0b;font-weight:800':'color:#5a6480'}">${r.money_pct?Number(r.money_pct).toFixed(0)+'%':'-'}</span>
+          <span class="spct" style="${splitPctStyle('money',r.money_pct)}">${r.money_pct?Number(r.money_pct).toFixed(0)+'%':'-'}</span>
         </div>
       </td>
-      <td class="td-line">${(()=>{const bl=getBookLines(r);return bl.open||'-';})()}</td>
-      <td class="td-line">${(()=>{
-        const bl=getBookLines(r);
-        const openL=bl.open, curL=bl.current;
-        if(!curL||!openL||curL===openL) return curL||'-';
-        const mkt=(r.market_display||'').toUpperCase();
-        const getKey=s=>{
-          const t=(s||'').trim();
-          if(mkt==='MONEYLINE') return t;
-          return t.split(' ')[0].replace(/[()]/g,'');
-        };
-        const openKey=getKey(openL);
-        const curKey=getKey(curL);
-        if(openKey===curKey) return '<span style="color:#8892aa">'+curL+'</span>';
-        const openNum=parseFloat(openKey), curNum=parseFloat(curKey);
-        const moved=!isNaN(openNum)&&!isNaN(curNum)&&openNum!==curNum;
-        if(!moved) return '<span style="color:#8892aa">'+curL+'</span>';
-        const up=curNum>openNum;
-        const color=up?'#1a6fd4':'#e05c2a';
-        return '<span style="color:'+color+';font-weight:700">'+curL+'</span>';
-      })()}</td>
-      <td class="td-edge"><span class="ev ${eC(edge)}">${edge}</span></td>
-      <td class="td-total">${Math.round(Number(r.total_score)||0)}</td>
-      <td class="td-pat">${patBadge(r.pattern_primary)}${(()=>{const s=(r.pattern_secondary||'').trim();return s&&s!=='NEUTRAL'?'<br><span style="font-size:8px;opacity:.55">+ '+s.replace(/_/g,' ')+'</span>':'';})()}</td>
-      <td class="td-tim">${timBadge(r.timing_bucket)}</td>
-      <td class="td-dec"><span class="dec ${dc}">${dt}</span>${isLocked(r)?'<span style="font-size:9px;opacity:.7;margin-left:4px;color:#7a7f96" title="Game started">Locked</span>':''}</td>
-      <td class="td-pick">${r.favored_side||'-'}</td>
+      <td class="td-line td-open">${r.open_line||'-'}</td>
+      <td class="td-line td-current">${r.current_line||'-'}</td>
+      <td class="td-edge"><div class="focus-label">${r.flagged_side||'-'}</div><div class="focus-sub">${r.market_display||'Market'} focus</div></td>
+      <td class="td-total">${anomalyBadge(an.reaction,'reaction')}${anomalyBadge(an.path,'path')}</td>
+      <td class="td-pat"><span class="pat">${an.context.join(' / ')||r.data_badge||'Clean feed'}</span></td>
+      <td class="td-dec"><span style="font-size:11px;color:var(--text2);white-space:normal;display:block;line-height:1.35">${r.reason||'-'}</span></td>
+      <td class="td-pick"><button class="mr mr-neutral" onclick="event.stopPropagation();openGameDetail(window._boardRows[${i}])">View</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -1822,37 +1923,90 @@ function closeBkdnLegend() {
   document.getElementById('bkdn-legend-overlay').classList.remove('open');
 }
 
+function movementChart(rows){
+  if(!rows || rows.length < 2) return '';
+  const values=rows.map(r=>Number(r.line_value)).filter(Number.isFinite);
+  if(values.length < 2) return '';
+  const min=Math.min(...values), max=Math.max(...values), span=max-min || 1;
+  const width=640, height=180, pad=22;
+  const points=values.map((v,i)=>{
+    const x=pad+(i*(width-pad*2)/Math.max(1,values.length-1));
+    const y=height-pad-((v-min)/span)*(height-pad*2);
+    return [x.toFixed(1),y.toFixed(1)];
+  });
+  const line=points.map(p=>p.join(',')).join(' ');
+  const area=`${pad},${height-pad} ${line} ${width-pad},${height-pad}`;
+  const first=rows[0], last=rows[rows.length-1];
+  return `<div class="movement-chart"><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-bottom:8px"><span>OPEN ${first.line_display||'--'}</span><span>LIVE LINE PATH</span><span>CURRENT ${last.line_display||'--'}</span></div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Line movement chart"><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#5bb6bf" stop-opacity=".32"/><stop offset="1" stop-color="#5bb6bf" stop-opacity=".02"/></linearGradient></defs><path d="M${pad} ${height-pad} H${width-pad}" stroke="#d8e3e6"/><path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${line}" fill="none" stroke="#0f6f7f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#0f6f7f" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#0f6f7f"/></svg></div>`;
+}
+
 function openGameDetail(r){
-  const v=s=>(s!==undefined&&s!==null&&String(s).trim()!==''&&String(s)!=='nan')?String(s):null;
+  const gid=r.game_id||r.game||'';
   const n=s=>{ const x=Number(s); return isNaN(x)?null:x; };
+  const mkts=(window._boardRows||[]).filter(x=>(x.game_id||x.game||'')===gid);
+  const evRows=(allEvents||[])
+    .filter(x=>(x.game_id||x.game||'')===gid && (x.flagged_side||'')===r.flagged_side && (x.market_display||'')===r.market_display)
+    .sort((a,b)=>new Date(a.timestamp||0)-new Date(b.timestamp||0));
+
+  let html='<div style="padding:16px 20px">';
+  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--border)">';
+  html+=spChip(r.sport);
+  html+='<div><div style="font-size:16px;font-weight:800;color:var(--text);">'+(r.game||'--')+'</div>';
+  html+='<div style="font-size:11px;color:var(--text3);margin-top:2px">'+(r.kickoff_time||'--')+'</div></div></div>';
+
+  // anomaly summary
+  const an=anomalyParts(r);
+  html+='<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  html+='<span style="font-size:12px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.5px">'+(r.market_display||'--')+'</span>';
+  html+='<span>'+dataBadge(r.data_badge)+'</span>';
+  html+='</div>';
+  html+=movementChart(evRows);
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+anomalyBadge(an.reaction,'reaction')+anomalyBadge(an.path,'path')+an.context.map(c=>'<span class="mr mr-neutral">'+c+'</span>').join('')+'</div>';
+  html+='<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px">'+(r.flagged_side||'--')+'</div>';
+  html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px"><span style="'+splitPctStyle('bets',r.bets_pct)+'">'+(Number(r.bets_pct||0).toFixed(0))+'%</span> bets | <span style="'+splitPctStyle('money',r.money_pct)+'">'+(Number(r.money_pct||0).toFixed(0))+'%</span> money</div>';
+  html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Open '+(r.open_line||'--')+' -> Current '+(r.current_line||'--')+'</div>';
+  html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Path '+(r.path_summary||'--')+'</div>';
+  html+='<div style="font-size:12px;color:var(--text2);line-height:1.6;padding:8px 12px;background:var(--bg2);border-radius:6px;border-left:3px solid var(--accent)">'+(r.reason||'-')+'</div>';
+  html+='</div>';
+
+  // proof layer
+  html+='<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px">';
+  html+='<div style="font-size:12px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Proof Layer</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px">';
+  html+='<div style="padding:8px 10px;background:var(--bg2);border-radius:6px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase">First Seen</div><div style="font-size:12px;font-weight:700">'+(r.first_anomaly_seen?et(r.first_anomaly_seen):'--')+'</div></div>';
+  html+='<div style="padding:8px 10px;background:var(--bg2);border-radius:6px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Max Excursion</div><div style="font-size:12px;font-weight:700">'+(r.max_excursion||'--')+'</div></div>';
+  html+='<div style="padding:8px 10px;background:var(--bg2);border-radius:6px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Return Toward Open</div><div style="font-size:12px;font-weight:700">'+(String(r.return_toward_open).toLowerCase()==='true'?'Yes':'No')+'</div></div>';
+  html+='<div style="padding:8px 10px;background:var(--bg2);border-radius:6px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Observations</div><div style="font-size:12px;font-weight:700">'+(r.observation_count||'--')+'</div></div>';
+  html+='</div>';
+  if(r.broader_market_comparison||r.key_number_note){
+    html+='<div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:8px">';
+    if(r.broader_market_comparison) html+='<div>Broader market: '+r.broader_market_comparison+'</div>';
+    if(r.key_number_note) html+='<div>Key number: '+r.key_number_note+'</div>';
+    html+='</div>';
+  }
+  if(evRows.length){
+    html+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px">';
+    html+='<thead><tr style="background:var(--bg4)"><th style="padding:5px 8px;text-align:left">Time</th><th style="padding:5px 8px;text-align:left">Line</th><th style="padding:5px 8px;text-align:left">Bets</th><th style="padding:5px 8px;text-align:left">Money</th></tr></thead><tbody>';
+    evRows.forEach(h=>{
+      html+='<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px">'+et(h.timestamp)+'</td><td style="padding:4px 8px">'+(h.line_display||'--')+'</td><td style="padding:4px 8px;'+splitPctStyle('bets',h.bets_pct)+'">'+Number(h.bets_pct||0).toFixed(0)+'%</td><td style="padding:4px 8px;'+splitPctStyle('money',h.money_pct)+'">'+Number(h.money_pct||0).toFixed(0)+'%</td></tr>';
+    });
+    html+='</tbody></table></div>';
+  } else {
+    html+='<div style="color:var(--text3);font-size:12px;text-align:center;padding:10px">No event history yet</div>';
+  }
+  html+='</div>';
+
+  /* Legacy game-details and score-history drilldown intentionally hidden.
+     The summary, proof layer, chart, and live anomaly observations above are the detail view.
+  const v=s=>(s!==undefined&&s!==null&&String(s).trim()!==''&&String(s)!=='nan')?String(s):null;
   const _row=(label,val)=>{
     if(!val) return '';
     return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bg4)"><span style="font-size:11px;color:var(--text3)">'+label+'</span><span style="font-size:11px;font-weight:600;color:var(--text)">'+val+'</span></div>';
   };
-
-  // Find ALL markets for this game
-  const gid=r.game_id||r.game||'';
-  const allMkts=(window._boardRows||[]).filter(x=>(x.game_id||x.game||'')=== gid);
-  const mktOrder={MONEYLINE:0,SPREAD:1,TOTAL:2};
-  allMkts.sort((a,b)=>(mktOrder[(a.market_display||'').toUpperCase()]||9)-(mktOrder[(b.market_display||'').toUpperCase()]||9));
-  const seen=new Set(); const mkts=[];
-  allMkts.forEach(x=>{ const k=(x.market_display||'').toUpperCase(); if(!seen.has(k)){seen.add(k);mkts.push(x);} });
-
-  let html='<div style="padding:16px 20px">';
-
-  // â”€â”€ GAME HEADER â”€â”€
-  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--border)">';
-  html+=spChip(r.sport);
-  html+='<div><div style="font-size:16px;font-weight:800;color:var(--text);">'+(r.game||'--')+'</div>';
-  html+='<div style="font-size:11px;color:var(--text3);margin-top:2px">'+et(r._game_time)+'</div></div></div>';
-
-  // â”€â”€ MARKET CARDS â”€â”€
   mkts.forEach(m=>{
     const mkt=(m.market_display||'').toUpperCase();
-    const [dt,dc]=decInfo(m.game_decision);
-    const edge=n(m.net_edge)||0;
-    const total=n(m.total_score)||0;
-    const pick=m.favored_side||'--';
+    const pick=m.flagged_side||m.favored_side||'--';
     const openL=v(m.open_line)||'--';
     const curL=v(m.current_line)||'--';
     const bets=n(m.bets_pct);
@@ -1864,14 +2018,13 @@ function openGameDetail(r){
     // Market title + decision badge
     html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
     html+='<span style="font-size:12px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.5px">'+mkt+'</span>';
-    html+='<span class="dec '+dc+'" style="font-size:11px;padding:3px 10px">'+dt+'</span>';
+    html+='<span>'+anomalyBadge(m.reaction,'reaction')+anomalyBadge(m.path,'path')+'</span>';
     html+='</div>';
 
     // Pick + scores row
     html+='<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:8px;flex-wrap:wrap">';
     html+='<span style="font-size:14px;font-weight:700;color:var(--text)">'+pick+'</span>';
-    html+='<span style="font-size:11px;color:var(--text3)">Confidence <b style="color:var(--text)">'+total.toFixed(1)+'</b></span>';
-    html+='<span style="font-size:11px;color:var(--text3)">Score Gap <b style="color:var(--text)">'+edge.toFixed(0)+'</b></span>';
+    html+='<span style="font-size:11px;color:var(--text3)">Data <b style="color:var(--text)">'+(m.data_badge||'--')+'</b></span>';
     html+='</div>';
 
     // Line info
@@ -2027,6 +2180,7 @@ function openGameDetail(r){
 
   html+='</div></details>';
   html+='</div>';
+  */
 
   document.getElementById('drill-title').textContent=(r.game||'Game Detail');
   document.getElementById('drill-tbl').innerHTML='<tr><td style="padding:0">'+html+'</td></tr>';
@@ -2209,6 +2363,47 @@ function setHistMkt(m){
   _histMkt=m||'';
   renderHistory();
 }
+
+// The movement workspace uses the same anomaly-event stream as the board.
+// This avoids an empty legacy score-history file masking current line activity.
+function renderHistory(){
+  const promptEl=document.getElementById('hist-prompt');
+  const wrapEl=document.getElementById('hist-table-wrap');
+  const metaEl=document.getElementById('hist-meta');
+  const gameSelect=document.getElementById('hist-game-select');
+  const marketSelect=document.getElementById('hist-mkt-select');
+  const marketLabel=document.getElementById('hist-mkt-label');
+  const chartEl=document.getElementById('hist-chart');
+  const events=allEvents||[];
+  if(!events.length){
+    promptEl.style.display=''; promptEl.textContent='No anomaly snapshots yet - history appears after the next engine run.';
+    wrapEl.style.display='none'; metaEl.textContent='--'; return;
+  }
+  const gameMap=new Map();
+  events.forEach(row=>{ const id=row.game_id||row.game; if(id&&!gameMap.has(id)) gameMap.set(id,row.game||id); });
+  gameSelect.innerHTML='<option value="">Select a game...</option>'+[...gameMap.entries()].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,label])=>'<option value="'+String(id).replace(/"/g,'&quot;')+'"'+(id===_histGame?' selected':'')+'>'+label+'</option>').join('');
+  if(!_histGame){
+    marketLabel.style.display='none'; marketSelect.style.display='none'; wrapEl.style.display='none';
+    promptEl.style.display=''; promptEl.textContent='Select a game to inspect its line path and public split.'; metaEl.textContent=events.length+' observations'; return;
+  }
+  const gameRows=events.filter(r=>String(r.game_id||r.game)===String(_histGame));
+  const markets=[...new Set(gameRows.map(r=>(r.market_display||'').toUpperCase()).filter(Boolean))].sort();
+  marketLabel.style.display=''; marketSelect.style.display='';
+  marketSelect.innerHTML='<option value="">Select a market...</option>'+markets.map(m=>'<option value="'+m+'"'+(m===_histMkt?' selected':'')+'>'+m+'</option>').join('');
+  if(!_histMkt){
+    wrapEl.style.display='none'; promptEl.style.display=''; promptEl.textContent='Select a market to view the full movement timeline.'; metaEl.textContent=gameRows.length+' observations'; return;
+  }
+  const rows=gameRows.filter(r=>(r.market_display||'').toUpperCase()===_histMkt).sort((a,b)=>new Date(a.timestamp||0)-new Date(b.timestamp||0));
+  promptEl.style.display='none'; wrapEl.style.display=''; metaEl.textContent=rows.length+' observations';
+  chartEl.innerHTML=movementChart(rows)+`<div class="movement-kpis"><div class="movement-kpi"><span>Open</span><b>${rows[0]?.line_display||'--'}</b></div><div class="movement-kpi"><span>Current</span><b>${rows[rows.length-1]?.line_display||'--'}</b></div><div class="movement-kpi"><span>Observed range</span><b>${rows.length>1?rows[0]?.line_display+' to '+rows[rows.length-1]?.line_display:'--'}</b></div></div>`;
+  document.getElementById('hist-tbody').innerHTML=[...rows].reverse().map(row=>{
+    const state=[row.reaction,row.path].filter(Boolean).join(' / ')||'Observed';
+    const note=[row.key_number_note,row.broader_market_comparison].filter(Boolean).join(' - ')||'--';
+    return '<tr><td>'+et(row.timestamp)+'</td><td style="font-family:var(--mono);font-weight:700">'+(row.line_display||'--')+'</td><td style="'+splitPctStyle('bets',row.bets_pct)+'">'+Number(row.bets_pct||0).toFixed(0)+'%</td><td style="'+splitPctStyle('money',row.money_pct)+'">'+Number(row.money_pct||0).toFixed(0)+'%</td><td>'+state+'</td><td style="white-space:normal;color:var(--text2)">'+note+'</td></tr>';
+  }).join('');
+}
+function setHistGame(gameId){ _histGame=gameId||''; _histMkt=''; renderHistory(); }
+function setHistMkt(marketName){ _histMkt=marketName||''; renderHistory(); }
 
 function exportDrillCSV() {
   if (!_drillRows.length) return;
@@ -2795,191 +2990,106 @@ let _lastDashHash='';
 async function loadAll(){
   let freshJson=null;
   try{ const r=await fetch('/data/freshness.json?_='+Date.now()); if(r.ok) freshJson=await r.json(); } catch(e){}
-  // Phase 1: load dashboard + lightweight data (fast render)
-  const[dash,ledger,results,kpi,freeze]=await Promise.all([
+  const[dash,ledger,events,results,kpi]=await Promise.all([
     loadCSV(DASH_URL),
     loadCSV(LEDGER_URL),
+    loadCSV(EVENTS_URL),
     loadCSV(RESULTS_URL),
     loadCSV('/data/kpi_master_dataset.csv'),
-    loadCSV(FREEZE_URL),
   ]);
   updateFreshness(freshJson);
-  const dashRaw=dash||MOCK_DASH;
-  allLedger=ledger||MOCK_LEDGER;
+  const dashRaw=(dash&&dash.length)?dash:[];
+  allLedger=(ledger&&ledger.length)?ledger:[];
+  allEvents=(events&&events.length)?events:[];
   allResults=results||MOCK_RESULTS;
   allKPI=kpi||[];
-  // Build freeze ledger lookup: (game_id|market_display) â†’ highest frozen decision
-  const _freezeMap={};
-  const _decRankMap={"NO_BET":0,"NO BET":0,"LOCKED":0,"LEAN":1,"BET":2};
-  if(freeze&&freeze.length){
-    freeze.forEach(r=>{
-      // Only use favored side's freeze entry â€” non-favored side keeps its own decision
-      const s=(r.side||'').replace(/\s*[+-]?\d+\.?\d*\s*$/,'').trim();
-      const f=(r.favored_side||'').replace(/\s*[+-]?\d+\.?\d*\s*$/,'').trim();
-      if(s&&f&&s!==f) return;
-      const k=(r.game_id||'')+'|'+(r.market_display||'');
-      const rank=_decRankMap[(r.game_decision||'').toUpperCase()]||0;
-      const prev=_freezeMap[k];
-      const prevRank=prev?(_decRankMap[((prev.game_decision)||'').toUpperCase()]||0):0;
-      if(!prev||rank>prevRank){
-        _freezeMap[k]=r;
-      }
-    });
-  }
-
-  // Dashboard CSV already has bets_pct, money_pct, open_line, current_line from engine
-  allDash=dashRaw.map(r=>{
-    const mkt=r.market_display;
-    // Overlay frozen decision if it exists and is higher rank
-    const fk=(r.game_id||'')+'|'+(r.market_display||'');
-    const frozenRow=_freezeMap[fk]||null;
-    const frozenDec=frozenRow?(frozenRow.game_decision||''):'';
-    const curDec=(r.game_decision||'').toUpperCase();
-    const frozenRank=_decRankMap[frozenDec.toUpperCase()]||0;
-    const curRank=_decRankMap[curDec]||0;
-    const useFrozen=frozenDec&&frozenRank>curRank;
-    const mergedOpen=useFrozen?(frozenRow.open_line||r.open_line):r.open_line;
-    const mergedCurrent=useFrozen?(frozenRow.decision_line||r.current_line):r.current_line;
+  allDash=dashRaw.filter(r=>{
+    const sportKey=normSportKey(r.sport);
+    // UFC feed is intentionally limited to its supported moneyline market.
+    return sportKey!=='ufc' || String(r.market_display||'').toUpperCase()==='MONEYLINE';
+  }).map(r=>{
     return {...r,
       bets_pct:Number(r.bets_pct)||null,
       money_pct:Number(r.money_pct)||null,
-      open_line:mergedOpen?parseLine(mergedOpen,mkt):null,
-      current_line:mergedCurrent?parseLine(mergedCurrent,mkt):null,
-      current_odds:useFrozen?(frozenRow.decision_odds||r.current_odds):r.current_odds,
-      favored_side:useFrozen?(frozenRow.favored_side||frozenRow.side||r.favored_side):r.favored_side,
-      game_decision:useFrozen?frozenDec:r.game_decision,
-      game_confidence:useFrozen?(frozenRow.game_confidence||r.game_confidence):r.game_confidence,
-      net_edge:useFrozen?(frozenRow.net_edge||r.net_edge):r.net_edge,
-      total_score:useFrozen?(frozenRow.total_score||r.total_score):r.total_score,
-      _frozen_decision:useFrozen,
+      open_line:r.open_line||null,
+      current_line:r.current_line||null,
+      favored_side:r.flagged_side||r.favored_side||'',
+      total_score:Number(r.anomaly_sort||0),
+      _game_time:r.kickoff_time||'',
     };
   });
 
   allDash.sort((a,b)=>{
-    const rank=r=>{const d=(r.game_decision||'').toUpperCase();return d==='BET'?1:d==='LEAN'?2:3;};
-    const ra=rank(a),rb=rank(b);
+    const ra=Number(a.board_rank||999999), rb=Number(b.board_rank||999999);
     if(ra!==rb) return ra-rb;
-    const ta=Number(a.total_score||0), tb=Number(b.total_score||0);
-    if(ta!==tb) return tb-ta;
-    return Number(b.game_confidence||0)-Number(a.game_confidence||0);
+    return String(a.game||'').localeCompare(String(b.game||''));
   });
 
-  // Skip re-render if data unchanged (prevents mobile flicker)
-  const _hash=dashRaw.map(r=>(r.game_id||'')+(r.market_display||'')+(r.total_score||'')+(r.game_decision||'')+(r.current_line||'')).join('|');
+  const _hash=dashRaw.map(r=>(r.game_id||'')+(r.market_display||'')+(r.flagged_side||'')+(r.reaction||'')+(r.path||'')+(r.current_line||'')).join('|');
   const _changed=_hash!==_lastDashHash;
   _lastDashHash=_hash;
   updateStats();
   renderResults();
   if(tabId==='history') renderHistory();
-  if(_changed){ renderBoard(); if(typeof Chart!=='undefined') buildKPIs(); }
-
-  // Phase 2: load book lines + score history in background (non-blocking)
-  Promise.all([
-    fetch('/data/book_lines.json?_='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null),
-    loadCSV('/data/score_history.csv'),
-  ]).then(([bookLines,hist])=>{
-    _histData=hist||null;
-    _bookLines=bookLines;
-    const bSel=document.getElementById('book-select');
-    if(bSel&&_bookLines&&_bookLines.books){
-      const cur=_selectedBook;
-      bSel.innerHTML='<option value="dk">Odds: DraftKings</option>';
-      _bookLines.books.forEach(b=>{
-        if(b==='draftkings') return;
-        const label=(_bookLines.labels&&_bookLines.labels[b])||b;
-        bSel.innerHTML+='<option value="'+b+'">Odds: '+label+'</option>';
-      });
-      bSel.value=cur;
-    }
-    if(tabId==='history') renderHistory();
-  });
+  if(_changed){ renderBoard(); }
 }
 
-setInterval(()=>{ document.getElementById('clk').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'America/New_York'}); },1000);
+setInterval(()=>{ const clock=document.getElementById('clk'); if(clock) clock.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'America/New_York'}); },1000);
 // Build KPIs once Chart.js loads (deferred)
 document.addEventListener('DOMContentLoaded',()=>{ const _checkChart=setInterval(()=>{ if(typeof Chart!=='undefined'&&allDash.length){ clearInterval(_checkChart); buildKPIs(); } },200); });
 
 function updateStats(){
-  const now=new Date();
-  const todayStr=now.toLocaleDateString('en-US',{timeZone:'America/New_York'});
-  const upcoming=allDash.filter(r=>!r._game_time||new Date(r._game_time)>now);
-  const sigs=upcoming.filter(r=>Number(r.game_confidence||0)>=65);
-  const hc=upcoming.filter(r=>isBetPlus(r));
-  const today=allDash.filter(r=>{
-    if(!r._game_time) return false;
-    return new Date(r._game_time).toLocaleDateString('en-US',{timeZone:'America/New_York'})===todayStr;
-  });
+  const hc=allDash.filter(r=>(r.reaction||'')==='Contrarian'||(r.reaction||'')==='Freeze');
+  const cw=allDash.filter(r=>(r.reaction||'')==='Contrarian'&&(r.path||'')==='Whipsaw');
+  const sf=allDash.filter(r=>(r.reaction||'')==='Freeze'&&Number(r.anomaly_sort||99)<=3);
+  const sports=[...new Set(allDash.map(r=>sportLabel(r.sport)).filter(Boolean))];
+  const _ug=rows=>new Set(rows.map(r=>r.game_id||r.game||'?')).size;
   const src=allKPI.length?allKPI:allResults;
   const resolved=gradedRows(src);
-  const totalW=resolved.filter(r=>(r.result||'').toUpperCase()==='WIN').length;
-  const pAll=resolved.length?Math.round(100*totalW/resolved.length):null;
-  const todayScored=today.filter(r=>Number(r.total_score||0)>0);
-  const avgTotal=todayScored.length?
-    (todayScored.reduce((s,r)=>s+Number(r.total_score||0),0)/todayScored.length).toFixed(1):null;
-
-  // Count unique games (not market rows)
-  const _ug=rows=>new Set(rows.map(r=>r.game_id||r.game||'?')).size;
   const el=id=>document.getElementById(id);
-  if(el('t-games'))  el('t-games').textContent=_ug(upcoming);
-  if(el('t-active')) el('t-active').textContent=_ug(today);
-  if(el('t-sb'))     el('t-sb').textContent=hc.length;
-  const bpResolved=resolved.filter(isBetPlus);
-  const bpWtop=bpResolved.filter(r=>(r.result||'').toUpperCase()==='WIN').length;
-  const pBPtop=bpResolved.length?Math.round(100*bpWtop/bpResolved.length):null;
-  if(el('t-wr'))     el('t-wr').textContent=pBPtop!==null?pBPtop+'%':'--';
-  if(el('m-active')) el('m-active').textContent=_ug(today);
-  if(el('m-wr'))     el('m-wr').textContent=pBPtop!==null?pBPtop+'%':'--';
+  if(el('t-games'))  el('t-games').textContent=_ug(allDash);
+  if(el('t-active')) el('t-active').textContent=_ug(allDash);
+  if(el('t-sb'))     el('t-sb').textContent=allDash.length;
+  if(el('t-wr'))     el('t-wr').textContent=sports.length;
+  if(el('m-active')) el('m-active').textContent=_ug(allDash);
+  if(el('m-wr'))     el('m-wr').textContent=sf.length;
+  if(el('m-hc'))     el('m-hc').textContent=hc.length;
+  if(el('m-avg'))    el('m-avg').textContent=cw.length;
 
-  // Avg confidence metric
   document.querySelectorAll('.mmet-v').forEach(mv=>{
     const lbl=mv.nextElementSibling;
     if(!lbl) return;
     const t=lbl.textContent.toLowerCase();
-    if(t.includes('avg confidence')||t.includes('avg total')) mv.textContent=avgTotal!==null?avgTotal:'--';
-    if(t.includes('strong')) mv.textContent=hc.length;
-    if(t.includes("today's games")) mv.textContent=_ug(today);
+    if(t.includes('contrarian')) mv.textContent=cw.length;
+    if(t.includes('top anomalies')) mv.textContent=hc.length;
+    if(t.includes("today's games")) mv.textContent=_ug(allDash);
+    if(t.includes('strong freeze')) mv.textContent=sf.length;
   });
 
-  // Tab badges
   const el2=id=>document.getElementById(id);
-  if(el2('b-all'))   el2('b-all').textContent=_ug(upcoming);
+  if(el2('b-all'))   el2('b-all').textContent=_ug(allDash);
   if(el2('b-hc'))    el2('b-hc').textContent=hc.length;
-  if(el2('b-today')) el2('b-today').textContent=_ug(today);
+  if(el2('b-today')) el2('b-today').textContent=_ug(allDash);
 
-  // Bottom status bar
-  const sports=[...new Set(allDash.map(r=>sportLabel(r.sport)).filter(Boolean))];
   const bsig=document.querySelector('.sb-signals');
-  if(bsig) bsig.textContent="Today's Games "+_ug(today);
+  if(bsig) bsig.textContent='Flagged Markets '+allDash.length;
   const bsport=document.querySelector('.sb-sport');
   if(bsport) bsport.textContent='Sports '+sports.length+' ('+sports.join(' ')+')';
   const bsnap=document.querySelector('.sb-snap');
   if(bsnap){
-    const times=allDash.filter(r=>r._snap_ts).map(r=>new Date(r._snap_ts));
-    const latest=times.length?new Date(Math.max(...times)):null;
-    if(!latest&&allLedger.length){
-      const lt=allLedger.map(r=>new Date(r.ts||0));
-      const llatest=new Date(Math.max(...lt));
-      bsnap.textContent='Snap '+llatest.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'});
-    } else if(latest){
-      bsnap.textContent='Snap '+latest.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'});
-    } else {
-      // Use most recent signal ledger entry
-      if(allLedger.length){
-        const sorted=[...allLedger].sort((a,b)=>new Date(b.ts||0)-new Date(a.ts||0));
-        const lt=new Date(sorted[0].ts||0);
-        bsnap.textContent='Snap '+lt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'});
-      } else bsnap.textContent='Snap --';
-    }
+    if(allLedger.length){
+      const sorted=[...allLedger].sort((a,b)=>new Date(b.timestamp||0)-new Date(a.timestamp||0));
+      const lt=new Date(sorted[0].timestamp||0);
+      bsnap.textContent='Snap '+lt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'});
+    } else bsnap.textContent='Snap --';
   }
-
-
   const sbS=document.getElementById('sb-s');
-  if(sbS) sbS.textContent=_ug(today);
+  if(sbS) sbS.textContent=allDash.length;
   const sbSp=document.getElementById('sb-sp');
   if(sbSp){ const sp=[...new Set(allDash.map(r=>sportLabel(r.sport)).filter(Boolean))]; sbSp.textContent=sp.length+' ('+sp.join(' ')+')'; }
   const sbSnap=document.getElementById('sb-snap');
-  if(sbSnap&&allLedger.length){ const sorted=[...allLedger].sort((a,b)=>new Date(b.ts||0)-new Date(a.ts||0)); sbSnap.textContent=new Date(sorted[0].ts).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
-  if(el('clock')) el('clock').textContent=now.toLocaleTimeString('en-US',
+  if(sbSnap&&allLedger.length){ const sorted=[...allLedger].sort((a,b)=>new Date(b.timestamp||0)-new Date(a.timestamp||0)); sbSnap.textContent=new Date(sorted[0].timestamp).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
+  if(el('clock')) el('clock').textContent=new Date().toLocaleTimeString('en-US',
     {hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'America/New_York'});
 }
 
@@ -3076,25 +3186,9 @@ async function loadCSV(url){
   }catch(e){return null;}
 }
 
-// â”€â”€ ACCESS GATE â”€â”€
-(async function() {
-  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) { window.location.href = '/?auth=required'; return; }
-  const { data: hasAccess } = await sb.rpc('has_active_access');
-  if (!hasAccess) { window.location.href = '/?payment=required'; return; }
-  // Access granted â€” start dashboard
-  loadAll();
-  setInterval(updateStats, 1000);
-  setInterval(loadAll, 60000);
-  // Add logout button
-  const logoutBtn = document.createElement('button');
-  logoutBtn.textContent = 'Logout';
-  logoutBtn.className = 'logout-btn';
-  logoutBtn.onclick = async () => { await sb.auth.signOut(); window.location.href = '/'; };
-  const clockArea = document.querySelector('.clock-area');
-  if (clockArea) clockArea.appendChild(logoutBtn);
-})();
+loadAll();
+setInterval(updateStats, 1000);
+setInterval(loadAll, 60000);
 
 </script>
 </body>

@@ -1,0 +1,659 @@
+import json
+import math
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+import pandas as pd
+
+
+KEY_NUMBERS_BY_SPORT = {
+    "nfl": [3, 7, 10, 14, 17],
+    "ncaaf": [3, 7, 10, 14, 17, 21],
+}
+
+MEANINGFUL_MOVE_BY_MARKET = {
+    "SPREAD": 0.5,
+    "TOTAL": 1.0,
+    "MONEYLINE": 15.0,
+}
+
+HOLD_MOVE_BY_MARKET = {
+    "SPREAD": 0.25,
+    "TOTAL": 0.5,
+    "MONEYLINE": 10.0,
+}
+
+
+def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
+    latest_side_df = (latest_side_df if latest_side_df is not None else pd.DataFrame()).copy()
+    history_df = (history_df if history_df is not None else pd.DataFrame()).copy()
+    l2_df = (l2_df if l2_df is not None else pd.DataFrame()).copy()
+
+    if latest_side_df.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    as_of = _coerce_ts(as_of) or datetime.now(timezone.utc)
+
+    latest_side_df["market_display"] = latest_side_df.get("market_display", "").fillna("").astype(str).str.upper()
+    latest_side_df["sport"] = latest_side_df.get("sport", "").fillna("").astype(str).str.lower()
+    latest_side_df["game_id"] = latest_side_df.get("game_id", "").fillna("").astype(str)
+    latest_side_df["side_key"] = latest_side_df.get("side_key", latest_side_df.get("side", "")).fillna("").astype(str)
+
+    if not history_df.empty:
+        history_df["timestamp"] = pd.to_datetime(history_df.get("timestamp"), errors="coerce", utc=True, format="mixed")
+        history_df = history_df.dropna(subset=["timestamp"]).copy()
+        history_df["market_display"] = history_df.get("market_display", "").fillna("").astype(str).str.upper()
+        history_df["sport"] = history_df.get("sport", "").fillna("").astype(str).str.lower()
+        history_df["game_id"] = history_df.get("game_id", "").fillna("").astype(str)
+        history_df["side_key"] = history_df.get("side_key", history_df.get("side", "")).fillna("").astype(str)
+
+    if not l2_df.empty:
+        l2_df["timestamp"] = pd.to_datetime(l2_df.get("timestamp"), errors="coerce", utc=True, format="mixed")
+        l2_df = l2_df.dropna(subset=["timestamp"]).copy()
+        l2_df["sport"] = l2_df.get("sport", "").fillna("").astype(str).str.lower()
+        l2_df["market"] = l2_df.get("market", "").fillna("").astype(str).str.upper()
+        l2_df["side_norm"] = l2_df.get("side", "").fillna("").astype(str).map(_normalize_side_label)
+
+    history_groups = {}
+    if not history_df.empty:
+        for group_key, group in history_df.groupby(["sport", "game_id", "market_display", "side_key"], dropna=False):
+            history_groups[group_key] = group.sort_values("timestamp", kind="mergesort").copy()
+
+    board_rows = []
+    event_rows = []
+    pair_cols = ["sport", "game_id", "market_display"]
+
+    for pair_key, pair_df in latest_side_df.groupby(pair_cols, dropna=False):
+        pair_rows = []
+        for _, side_row in pair_df.iterrows():
+            latest_key = (
+                str(side_row.get("sport", "")).lower(),
+                str(side_row.get("game_id", "")),
+                str(side_row.get("market_display", "")).upper(),
+                str(side_row.get("side_key", "")),
+            )
+            hist = history_groups.get(latest_key, pd.DataFrame()).copy()
+            evaluation = _evaluate_side(side_row, hist, pair_df, l2_df, as_of)
+            if evaluation is None:
+                continue
+            pair_rows.append(evaluation)
+            event_rows.extend(evaluation.pop("_event_rows"))
+        board_rows.extend(pair_rows)
+
+    board_df = pd.DataFrame(board_rows)
+    events_df = pd.DataFrame(event_rows)
+
+    if board_df.empty:
+        return board_df, events_df
+
+    board_df = board_df.sort_values(
+        ["anomaly_sort", "severity_sort", "kickoff_sort", "game", "market_display"],
+        ascending=[True, False, True, True, True],
+        kind="mergesort",
+    ).reset_index(drop=True)
+    board_df["board_rank"] = range(1, len(board_df) + 1)
+    board_df = board_df.drop(columns=["severity_sort", "kickoff_sort"], errors="ignore")
+
+    if not events_df.empty:
+        events_df = events_df.sort_values(
+            ["sport", "game_id", "market_display", "flagged_side", "timestamp"],
+            ascending=[True, True, True, True, True],
+            kind="mergesort",
+        ).reset_index(drop=True)
+
+    return board_df, events_df
+
+
+def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
+    market = str(latest_row.get("market_display", "")).upper()
+    sport = str(latest_row.get("sport", "")).lower()
+    if market not in MEANINGFUL_MOVE_BY_MARKET:
+        return None
+
+    points = _build_history_points(history_rows, market)
+    observation_count = len(points)
+    if observation_count < 2:
+        return None
+
+    move_threshold = MEANINGFUL_MOVE_BY_MARKET[market]
+    hold_threshold = HOLD_MOVE_BY_MARKET[market]
+    open_value = points[0]["value"]
+    current_value = points[-1]["value"]
+    move_abs = abs(current_value - open_value)
+
+    dir_changes = _count_direction_changes(points)
+    max_excursion = _max_excursion(points)
+    path_min = min(point["value"] for point in points)
+    path_max = max(point["value"] for point in points)
+    late_move = _is_late_move(points, move_threshold)
+    whipsaw = dir_changes >= 1 and max_excursion >= move_threshold
+    held = move_abs <= hold_threshold
+    one_way = (not whipsaw) and move_abs >= move_threshold
+    path_label = ""
+    if whipsaw:
+        path_label = "Whipsaw"
+    elif held:
+        path_label = "Held"
+    elif late_move:
+        path_label = "Late"
+    elif one_way:
+        path_label = "One-Way"
+
+    bets_pct = _num(latest_row.get("bets_pct"))
+    money_pct = _num(latest_row.get("money_pct"))
+    low_support = bets_pct <= 40 and money_pct <= 45
+    very_low_support = bets_pct <= 35 and money_pct <= 40
+    heavy_public = bets_pct >= 70
+    extreme_public = bets_pct >= 80
+    low_bets_high_money = bets_pct <= 35 and money_pct >= 60
+
+    move_toward_side = _move_toward_side(points, market, latest_row)
+    key_number = _key_number_chip(sport, market, points)
+    broader = _broader_market_context(latest_row, l2_df, market, move_threshold, hold_threshold)
+    stale_dk = broader["stale_dk"]
+
+    reaction = ""
+    if low_support and move_toward_side and move_abs >= move_threshold:
+        reaction = "Contrarian"
+    elif heavy_public and held:
+        reaction = "Freeze"
+    elif heavy_public and move_toward_side and move_abs >= move_threshold:
+        reaction = "Follow"
+
+    if not reaction and not stale_dk and not whipsaw:
+        return None
+
+    chips = [chip for chip in [reaction, path_label] if chip]
+    context_chips = []
+    if key_number:
+        context_chips.append(key_number)
+    if stale_dk:
+        context_chips.append("Stale DK")
+    if low_bets_high_money:
+        context_chips.append("Low Bets / High $")
+
+    data_badge = _data_badge(points, latest_row)
+    path_summary = _path_summary(points)
+    first_seen = _first_anomaly_seen(points, reaction, path_label, stale_dk, market, latest_row, move_threshold, hold_threshold)
+    return_to_open = _return_toward_open(points)
+    reason = _reason_line(
+        reaction=reaction,
+        path_label=path_label,
+        stale_dk=stale_dk,
+        low_support=low_support,
+        heavy_public=heavy_public,
+        low_bets_high_money=low_bets_high_money,
+        move_abs=move_abs,
+        move_threshold=move_threshold,
+        held=held,
+        broader_summary=broader["summary"],
+    )
+
+    flagged_side = str(latest_row.get("side", "")).strip() or str(latest_row.get("side_key", "")).strip()
+    kickoff_ts = _coerce_ts(latest_row.get("_sort_time")) or _coerce_ts(latest_row.get("_game_time")) or _coerce_ts(latest_row.get("dk_start_iso"))
+    kickoff_label = _format_kickoff(kickoff_ts)
+    severity = _severity_score(
+        reaction=reaction,
+        whipsaw=whipsaw,
+        extreme_public=extreme_public,
+        move_abs=move_abs,
+        max_excursion=max_excursion,
+        stale_dk=stale_dk,
+        low_bets_high_money=low_bets_high_money,
+        very_low_support=very_low_support,
+    )
+
+    event_rows = []
+    for index, point in enumerate(points):
+        event_rows.append({
+            "sport": sport,
+            "game_id": str(latest_row.get("game_id", "")),
+            "canonical_key": str(latest_row.get("canonical_key", "")),
+            "game": str(latest_row.get("game", "")),
+            "market_display": market,
+            "flagged_side": flagged_side,
+            "timestamp": point["timestamp"].isoformat(),
+            "step_index": index + 1,
+            "observation_count": observation_count,
+            "line_value": point["value"],
+            "line_display": point["display"],
+            "bets_pct": point["bets_pct"],
+            "money_pct": point["money_pct"],
+            "is_open": index == 0,
+            "is_current": index == (observation_count - 1),
+            "reaction": reaction,
+            "path": path_label,
+            "first_anomaly_seen": first_seen,
+            "max_excursion": round(max_excursion, 3),
+            "return_toward_open": return_to_open,
+            "broader_market_comparison": broader["summary"],
+            "key_number_note": key_number,
+        })
+
+    return {
+        "sport": sport,
+        "game_id": str(latest_row.get("game_id", "")),
+        "canonical_key": str(latest_row.get("canonical_key", "")),
+        "kickoff_time": kickoff_label,
+        "kickoff_sort": kickoff_ts.isoformat() if kickoff_ts else "",
+        "game": str(latest_row.get("game", "")),
+        "market_display": market,
+        "flagged_side": flagged_side,
+        "reaction": reaction,
+        "path": path_label,
+        "context_chips": " | ".join(context_chips),
+        "anomaly_chips": " | ".join(chips + context_chips),
+        "bets_pct": round(bets_pct, 1),
+        "money_pct": round(money_pct, 1),
+        "open_line": points[0]["display"],
+        "current_line": points[-1]["display"],
+        "path_summary": path_summary,
+        "reason": reason,
+        "data_badge": data_badge,
+        "observation_count": observation_count,
+        "first_anomaly_seen": first_seen,
+        "max_excursion": round(max_excursion, 3),
+        "return_toward_open": return_to_open,
+        "broader_market_comparison": broader["summary"],
+        "key_number_note": key_number,
+        "open_line_value": round(open_value, 3),
+        "current_line_value": round(current_value, 3),
+        "move_abs": round(move_abs, 3),
+        "line_dir_changes": dir_changes,
+        "path_min": round(path_min, 3),
+        "path_max": round(path_max, 3),
+        "observed_path": json.dumps([point["display"] for point in points]),
+        "anomaly_sort": _sort_rank(reaction, whipsaw, extreme_public, stale_dk),
+        "severity_sort": severity,
+        "_event_rows": event_rows,
+    }
+
+
+def _build_history_points(history_rows, market):
+    if history_rows is None or history_rows.empty:
+        return []
+
+    points = []
+    for _, row in history_rows.iterrows():
+        raw_line = row.get("current_line", "")
+        parsed = _parse_snapshot_value(raw_line, market)
+        if parsed["value"] is None:
+            continue
+        points.append({
+            "timestamp": _coerce_ts(row.get("timestamp")),
+            "value": parsed["value"],
+            "display": parsed["display"],
+            "bets_pct": _num(row.get("bets_pct")),
+            "money_pct": _num(row.get("money_pct")),
+        })
+
+    points = [point for point in points if point["timestamp"] is not None]
+    points.sort(key=lambda point: point["timestamp"])
+    if not points:
+        return []
+
+    return points
+
+
+def _parse_snapshot_value(raw_line, market):
+    text = str(raw_line or "").strip()
+    if not text:
+        return {"value": None, "display": ""}
+
+    if market == "MONEYLINE":
+        odds = _extract_last_number(text)
+        if odds is None:
+            return {"value": None, "display": ""}
+        return {"value": float(odds), "display": _format_odds(odds)}
+
+    if market == "TOTAL":
+        line_val = _extract_total_value(text)
+        if line_val is None:
+            return {"value": None, "display": ""}
+        return {"value": float(line_val), "display": _format_total_display(text, line_val)}
+
+    line_val = _extract_spread_value(text)
+    if line_val is None:
+        return {"value": None, "display": ""}
+    return {"value": float(line_val), "display": _format_spread_display(line_val)}
+
+
+def _extract_last_number(text):
+    import re
+
+    match = re.search(r"@\s*([+-]?\d+)\s*$", text)
+    if match:
+        return int(match.group(1))
+    match = re.search(r"([+-]?\d+)\s*$", text)
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def _extract_total_value(text):
+    import re
+
+    match = re.search(r"(\d+(?:\.\d+)?)", text)
+    if match:
+        return float(match.group(1))
+    return None
+
+
+def _extract_spread_value(text):
+    import re
+
+    match = re.search(r"([+-]\d+(?:\.\d+)?)\s*@\s*[+-]?\d+\s*$", text)
+    if match:
+        return float(match.group(1))
+    match = re.search(r"([+-]\d+(?:\.\d+)?)", text)
+    if match:
+        return float(match.group(1))
+    return None
+
+
+def _count_direction_changes(points):
+    if len(points) < 3:
+        return 0
+    deltas = []
+    for left, right in zip(points, points[1:]):
+        delta = right["value"] - left["value"]
+        if math.isclose(delta, 0.0, abs_tol=1e-9):
+            continue
+        deltas.append(1 if delta > 0 else -1)
+    changes = 0
+    for left, right in zip(deltas, deltas[1:]):
+        if left != right:
+            changes += 1
+    return changes
+
+
+def _max_excursion(points):
+    if not points:
+        return 0.0
+    open_value = points[0]["value"]
+    return max(abs(point["value"] - open_value) for point in points)
+
+
+def _move_toward_side(points, market, latest_row):
+    if len(points) < 2:
+        return False
+    open_value = points[0]["value"]
+    current_value = points[-1]["value"]
+
+    if market == "MONEYLINE":
+        return current_value < open_value
+
+    if market == "TOTAL":
+        side_text = str(latest_row.get("side", "")).lower()
+        if "over" in side_text:
+            return current_value > open_value
+        if "under" in side_text:
+            return current_value < open_value
+        return False
+
+    return current_value < open_value
+
+
+def _is_late_move(points, move_threshold):
+    if len(points) < 3:
+        return False
+    open_value = points[0]["value"]
+    target_index = None
+    for index, point in enumerate(points[1:], start=1):
+        if abs(point["value"] - open_value) >= move_threshold:
+            target_index = index
+            break
+    if target_index is None:
+        return False
+    return (target_index / max(1, len(points) - 1)) >= 0.67
+
+
+def _key_number_chip(sport, market, points):
+    if market != "SPREAD":
+        return ""
+    keys = KEY_NUMBERS_BY_SPORT.get(sport, [])
+    if not keys:
+        return ""
+    values = [abs(point["value"]) for point in points]
+    for key in keys:
+        for left, right in zip(values, values[1:]):
+            lo, hi = sorted([left, right])
+            if math.isclose(left, key, abs_tol=1e-9) or math.isclose(right, key, abs_tol=1e-9):
+                return f"K{int(key)}"
+            if lo < key < hi:
+                return f"K{int(key)}"
+    return ""
+
+
+def _broader_market_context(latest_row, l2_df, market, move_threshold, hold_threshold):
+    if l2_df is None or l2_df.empty:
+        return {"stale_dk": False, "summary": ""}
+
+    canonical_key = str(latest_row.get("canonical_key", "")).strip()
+    side_norm = _normalize_side_label(latest_row.get("side_key", latest_row.get("side", "")))
+    if not canonical_key or not side_norm:
+        return {"stale_dk": False, "summary": ""}
+
+    subset = l2_df[
+        (l2_df["canonical_key"].fillna("").astype(str) == canonical_key) &
+        (l2_df["market"].fillna("").astype(str).str.upper() == market) &
+        (l2_df["side_norm"] == side_norm)
+    ].copy()
+
+    if subset.empty:
+        return {"stale_dk": False, "summary": ""}
+
+    metric_col = "odds_american" if market == "MONEYLINE" else "line"
+    subset[metric_col] = pd.to_numeric(subset[metric_col], errors="coerce")
+    subset = subset.dropna(subset=[metric_col])
+    if subset.empty:
+        return {"stale_dk": False, "summary": ""}
+
+    values = subset[metric_col].tolist()
+    market_range = max(values) - min(values)
+    market_start = float(subset.sort_values("timestamp").iloc[0][metric_col])
+    market_end = float(subset.sort_values("timestamp").iloc[-1][metric_col])
+
+    dk_open = _parse_snapshot_value(latest_row.get("open_line", ""), market)["value"]
+    dk_current = _parse_snapshot_value(latest_row.get("current_line", ""), market)["value"]
+    if dk_open is None or dk_current is None:
+        return {"stale_dk": False, "summary": ""}
+
+    dk_move = abs(dk_current - dk_open)
+    stale = dk_move <= hold_threshold and abs(market_end - market_start) >= move_threshold and market_range >= move_threshold
+
+    if market == "MONEYLINE":
+        summary = f"Market moved {int(round(market_start))} to {int(round(market_end))} while DK held near {int(round(dk_current))}"
+    else:
+        summary = f"Market moved {market_start:g} to {market_end:g} while DK held near {dk_current:g}"
+
+    return {"stale_dk": stale, "summary": summary if stale else ""}
+
+
+def _path_summary(points):
+    displays = [point["display"] for point in points]
+    if len(displays) <= 4:
+        chosen = displays
+    else:
+        chosen = [displays[0], displays[1], displays[-2], displays[-1]]
+    compact = []
+    for display in chosen:
+        if not compact or compact[-1] != display:
+            compact.append(display)
+    return " -> ".join(compact[:4])
+
+
+def _first_anomaly_seen(points, reaction, path_label, stale_dk, market, latest_row, move_threshold, hold_threshold):
+    open_value = points[0]["value"]
+    path_changes = 0
+    last_dir = 0
+    for index, point in enumerate(points[1:], start=1):
+        delta = point["value"] - points[index - 1]["value"]
+        if not math.isclose(delta, 0.0, abs_tol=1e-9):
+            cur_dir = 1 if delta > 0 else -1
+            if last_dir and cur_dir != last_dir:
+                path_changes += 1
+            last_dir = cur_dir
+        move_abs = abs(point["value"] - open_value)
+        toward_side = _move_toward_side(points[: index + 1], market, latest_row)
+        bets_pct = points[index]["bets_pct"]
+        money_pct = points[index]["money_pct"]
+        if reaction == "Contrarian" and bets_pct <= 40 and money_pct <= 45 and toward_side and move_abs >= move_threshold:
+            return point["timestamp"].isoformat()
+        if reaction == "Freeze" and bets_pct >= 70 and move_abs <= hold_threshold:
+            return point["timestamp"].isoformat()
+        if reaction == "Follow" and bets_pct >= 70 and toward_side and move_abs >= move_threshold:
+            return point["timestamp"].isoformat()
+        if path_label == "Whipsaw" and path_changes >= 1 and move_abs >= move_threshold:
+            return point["timestamp"].isoformat()
+        if stale_dk and move_abs <= hold_threshold:
+            return point["timestamp"].isoformat()
+    return points[-1]["timestamp"].isoformat()
+
+
+def _return_toward_open(points):
+    if len(points) < 3:
+        return False
+    open_value = points[0]["value"]
+    current_value = points[-1]["value"]
+    best_excursion = max(abs(point["value"] - open_value) for point in points[:-1])
+    return abs(current_value - open_value) < best_excursion
+
+
+def _reason_line(reaction, path_label, stale_dk, low_support, heavy_public, low_bets_high_money, move_abs, move_threshold, held, broader_summary):
+    if reaction == "Contrarian":
+        if path_label == "Whipsaw":
+            return "Line improved for the weak side, then gave some back"
+        if low_bets_high_money:
+            return "Weak ticket support still drew a meaningful move with sharp-money shape"
+        return "Low-support side still drew a meaningful move toward it"
+    if reaction == "Freeze":
+        if stale_dk and broader_summary:
+            return broader_summary
+        if held:
+            return "Heavy public side drew little or no move from open"
+        return "Public side kept pressure on but DK mostly held its number"
+    if reaction == "Follow":
+        if path_label == "Late":
+            return "Public side finally got a late move toward it"
+        return "Public pressure matched the move direction"
+    if stale_dk and broader_summary:
+        return broader_summary
+    if path_label == "Whipsaw":
+        return "Line reversed direction after a meaningful excursion"
+    if heavy_public:
+        return "Public action was loud but the path stayed mixed"
+    if low_support and move_abs >= move_threshold:
+        return "Low-support side moved more than expected"
+    return "Path shape stood out versus the split support"
+
+
+def _data_badge(points, latest_row):
+    if len(points) < 2:
+        return "Feed Risk"
+    open_ok = _parse_snapshot_value(latest_row.get("open_line", ""), str(latest_row.get("market_display", "")).upper())["value"] is not None
+    current_ok = _parse_snapshot_value(latest_row.get("current_line", ""), str(latest_row.get("market_display", "")).upper())["value"] is not None
+    if not open_ok or not current_ok:
+        return "Feed Risk"
+    if len(points) >= 3:
+        return "Clean"
+    return "Thin"
+
+
+def _severity_score(reaction, whipsaw, extreme_public, move_abs, max_excursion, stale_dk, low_bets_high_money, very_low_support):
+    score = move_abs + max_excursion
+    if reaction == "Contrarian":
+        score += 5
+    if reaction == "Freeze":
+        score += 4
+    if whipsaw:
+        score += 4
+    if stale_dk:
+        score += 3
+    if extreme_public:
+        score += 2
+    if low_bets_high_money:
+        score += 2
+    if very_low_support:
+        score += 1
+    return round(score, 3)
+
+
+def _sort_rank(reaction, whipsaw, extreme_public, stale_dk):
+    if reaction == "Contrarian" and whipsaw:
+        return 0
+    if reaction == "Freeze" and extreme_public:
+        return 1
+    if reaction == "Contrarian":
+        return 2
+    if reaction == "Freeze":
+        return 3
+    if stale_dk:
+        return 4
+    if whipsaw:
+        return 5
+    if reaction == "Follow":
+        return 6
+    return 7
+
+
+def _normalize_side_label(text):
+    value = str(text or "").strip().lower()
+    for token in ["team:", "over ", "under "]:
+        if value.startswith(token):
+            value = value[len(token):]
+    value = value.replace("st.", "st")
+    value = value.replace("@", " ")
+    value = " ".join(value.split())
+    return value
+
+
+def _format_spread_display(value):
+    return f"{value:+g}"
+
+
+def _format_total_display(text, value):
+    upper = str(text or "").strip().lower()
+    if upper.startswith("over"):
+        return f"O {value:g}"
+    if upper.startswith("under"):
+        return f"U {value:g}"
+    return f"{value:g}"
+
+
+def _format_odds(value):
+    number = int(round(float(value)))
+    return f"{number:+d}"
+
+
+def _format_kickoff(ts):
+    if ts is None:
+        return ""
+    return ts.astimezone(ZoneInfo("America/New_York")).strftime("%b %d %I:%M %p")
+
+
+def _coerce_ts(value):
+    if value is None or value == "":
+        return None
+    if isinstance(value, pd.Timestamp):
+        if pd.isna(value):
+            return None
+        return value.to_pydatetime()
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    try:
+        ts = pd.to_datetime(value, errors="coerce", utc=True)
+    except Exception:
+        return None
+    if pd.isna(ts):
+        return None
+    return ts.to_pydatetime()
+
+
+def _num(value):
+    try:
+        if value is None or value == "":
+            return 0.0
+        return float(value)
+    except Exception:
+        return 0.0

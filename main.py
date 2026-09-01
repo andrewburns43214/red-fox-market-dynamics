@@ -74,6 +74,7 @@ from typing import Dict, List, Optional, Tuple
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
+from anomaly_board import build_anomaly_outputs
 from dk_headless import get_splits
 from logging_utils import setup_logger
 import logging
@@ -4205,6 +4206,7 @@ def build_dashboard():
             return "STALE"
 
         latest["time_bucket"] = latest["_sort_time"].apply(_time_bucket)
+        latest_for_anomaly = latest.copy()
 
     
         # --- HARD FILTER: drop stale games quickly (clean dashboard) ---
@@ -4278,6 +4280,7 @@ def build_dashboard():
         )
     else:
         latest["_sort_time"] = pd.NaT
+        latest_for_anomaly = latest.copy()
     # Final display sort time (ET)
     if "_sort_time" in latest.columns:
         try:
@@ -5561,6 +5564,60 @@ def build_dashboard():
             game_view["side_position"] = game_view.apply(_compute_side_position, axis=1)
 
         game_view.to_csv("data/dashboard.csv", index=False)
+
+        # Anomaly-first board outputs for the DK reaction board.
+        try:
+            _l2_path = Path("data") / "l2_consensus.csv"
+            _l2_df = pd.read_csv(_l2_path, dtype=str, keep_default_na=False) if _l2_path.exists() else pd.DataFrame()
+            _anomaly_source = latest_for_anomaly.copy() if "latest_for_anomaly" in locals() else latest.copy()
+            _anomaly_board, _anomaly_events = build_anomaly_outputs(
+                latest_side_df=_anomaly_source,
+                history_df=df.copy(),
+                l2_df=_l2_df,
+                as_of=datetime.now(timezone.utc),
+            )
+
+            _anomaly_board_cols = [
+                "board_rank", "sport", "game_id", "canonical_key", "kickoff_time", "game",
+                "market_display", "flagged_side", "reaction", "path", "context_chips",
+                "anomaly_chips", "bets_pct", "money_pct", "open_line", "current_line",
+                "path_summary", "reason", "data_badge", "observation_count",
+                "first_anomaly_seen", "max_excursion", "return_toward_open",
+                "broader_market_comparison", "key_number_note", "open_line_value",
+                "current_line_value", "move_abs", "line_dir_changes", "path_min",
+                "path_max", "observed_path", "anomaly_sort",
+            ]
+            _anomaly_event_cols = [
+                "sport", "game_id", "canonical_key", "game", "market_display",
+                "flagged_side", "timestamp", "step_index", "observation_count",
+                "line_value", "line_display", "bets_pct", "money_pct", "is_open",
+                "is_current", "reaction", "path", "first_anomaly_seen",
+                "max_excursion", "return_toward_open", "broader_market_comparison",
+                "key_number_note",
+            ]
+
+            if _anomaly_board.empty:
+                _anomaly_board = pd.DataFrame(columns=_anomaly_board_cols)
+            else:
+                for _col in _anomaly_board_cols:
+                    if _col not in _anomaly_board.columns:
+                        _anomaly_board[_col] = ""
+                _anomaly_board = _anomaly_board[_anomaly_board_cols]
+
+            if _anomaly_events.empty:
+                _anomaly_events = pd.DataFrame(columns=_anomaly_event_cols)
+            else:
+                for _col in _anomaly_event_cols:
+                    if _col not in _anomaly_events.columns:
+                        _anomaly_events[_col] = ""
+                _anomaly_events = _anomaly_events[_anomaly_event_cols]
+
+            _anomaly_board.to_csv("data/anomaly_board.csv", index=False)
+            _anomaly_events.to_csv("data/anomaly_events.csv", index=False)
+            print(f"[ok] wrote anomaly board csv ({len(_anomaly_board)} rows)")
+            print(f"[ok] wrote anomaly events csv ({len(_anomaly_events)} rows)")
+        except Exception as _anom_e:
+            print(f"[anomaly] export skipped: {repr(_anom_e)}")
 
         # ── Generate book_lines.json for sportsbook selector ──
         try:
