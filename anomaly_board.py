@@ -60,6 +60,8 @@ def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
         l2_df["sport"] = l2_df.get("sport", "").fillna("").astype(str).str.lower()
         l2_df["market"] = l2_df.get("market", "").fillna("").astype(str).str.upper()
         l2_df["side_norm"] = l2_df.get("side", "").fillna("").astype(str).map(_normalize_side_label)
+        active_keys = set(latest_side_df.get("canonical_key", pd.Series(dtype=str)).fillna("").astype(str))
+        l2_df = l2_df[l2_df.get("canonical_key", "").fillna("").astype(str).isin(active_keys)].copy()
 
     history_groups = {}
     if not history_df.empty:
