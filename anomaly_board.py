@@ -47,6 +47,13 @@ def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
         history_df["game_id"] = history_df.get("game_id", "").fillna("").astype(str)
         history_df["side_key"] = history_df.get("side_key", history_df.get("side", "")).fillna("").astype(str)
 
+        # Timeline history is only needed for markets represented in the current board.
+        # Filtering before the group-by prevents old, unrelated snapshots from delaying
+        # the live report without shortening any displayed market's timeline.
+        history_key_cols = ["sport", "game_id", "market_display", "side_key"]
+        candidate_keys = latest_side_df[history_key_cols].drop_duplicates()
+        history_df = history_df.merge(candidate_keys, on=history_key_cols, how="inner")
+
     if not l2_df.empty:
         l2_df["timestamp"] = pd.to_datetime(l2_df.get("timestamp"), errors="coerce", utc=True, format="mixed")
         l2_df = l2_df.dropna(subset=["timestamp"]).copy()
