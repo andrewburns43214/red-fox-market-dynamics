@@ -1120,13 +1120,19 @@ td:last-child { border-radius: 0 8px 8px 0; }
   .tabs { padding:0 10px; } .metricbar { padding-left:10px; overflow-x:auto; } .mmet { min-width:100px; }
   .pane-hdr { height:auto; min-height:56px; padding:7px 12px; gap:6px; flex-wrap:wrap; align-content:center; }
   .pane-hdr > div:first-child { flex:1 1 100%; flex-wrap:wrap; gap:5px !important; }
+  .pane-title { flex:1 1 100%; }
+  .pane-hdr .mfilters { order:2; flex:1 1 100%; }
+  .pane-hdr #grp-toggle,.pane-hdr .grp-btn[onclick="exportCSV()"] { order:3; }
   .pane-hdr .grp-btn[title="Back to top"] { display:none; }
   .pane-meta,.mcap { display:none; } .tscroll { padding:0 8px 12px; }
   .mfilters { gap:4px; } .mchip { padding:4px 8px; font-size:10px; } .grp-btn { padding:5px; font-size:10px; }
   .board-tools { flex:1 1 100%; } .board-tools input { width:100%; min-width:0; }
   .movement-chart-head { display:block; } .movement-tabs { justify-content:flex-start; margin-top:8px; }
   .movement-facts { grid-template-columns:1fr 1fr; } .movement-fact:last-child { grid-column:1 / -1; }
-  .td-dec,.td-pat { display:none; } .td-game { width:220px; max-width:220px; }
+  .lpane { min-width:0; }
+  .lpane > .tscroll > table { min-width:1360px; }
+  .td-game { width:220px; max-width:220px; }
+  .statusbar { display:none; }
 }
 </style>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
