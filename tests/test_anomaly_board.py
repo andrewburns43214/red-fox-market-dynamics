@@ -24,6 +24,16 @@ class TestAnomalyBoard(unittest.TestCase):
         self.assertEqual(leaders.iloc[0]["flagged_side"], "SEA +3")
         self.assertEqual(leaders.iloc[0]["board_rank"], 1)
 
+    def test_board_rank_keeps_more_severe_like_signals_ahead_of_alphabetical_order(self):
+        board = pd.DataFrame([
+            {"sport": "nfl", "game_id": "g5", "market_display": "SPREAD", "flagged_side": "Alpha +3", "reaction": "Freeze", "anomaly_sort": 3, "severity_sort": 10, "game": "Alpha @ Beta"},
+            {"sport": "nfl", "game_id": "g6", "market_display": "SPREAD", "flagged_side": "Zulu +3", "reaction": "Freeze", "anomaly_sort": 3, "severity_sort": 50, "game": "Zulu @ Yankee"},
+        ])
+
+        leaders = select_market_leaders(board)
+
+        self.assertEqual(leaders.iloc[0]["flagged_side"], "Zulu +3")
+
     def test_contrarian_whipsaw_with_low_bets_high_money(self):
         latest = pd.DataFrame([
             {
@@ -151,6 +161,25 @@ class TestAnomalyBoard(unittest.TestCase):
         self.assertIn("Price Risk", board.iloc[0]["context_chips"])
         self.assertIn("Price Risk", board.iloc[0]["reason"])
         self.assertEqual(board.iloc[1]["reaction"], "Follow")
+
+    def test_high_public_watch_explains_the_missing_market_response(self):
+        latest = pd.DataFrame([
+            {"sport": "nfl", "game_id": "g4", "market_display": "TOTAL", "side_key": "Over", "side": "Over 44.5", "game": "A @ B", "bets_pct": 82, "money_pct": 76, "open_line": "Over 44.5 @ -110", "current_line": "Over 45 @ -105", "_sort_time": _ts(22, 0)},
+            {"sport": "nfl", "game_id": "g4", "market_display": "TOTAL", "side_key": "Under", "side": "Under 44.5", "game": "A @ B", "bets_pct": 18, "money_pct": 24, "open_line": "Under 44.5 @ -110", "current_line": "Under 44 @ -115", "_sort_time": _ts(22, 0)},
+        ])
+        history = pd.DataFrame([
+            {"timestamp": _ts(18, 0), "sport": "nfl", "game_id": "g4", "market_display": "TOTAL", "side_key": "Over", "current_line": "Over 44.5 @ -110", "bets_pct": 82, "money_pct": 76},
+            {"timestamp": _ts(20, 0), "sport": "nfl", "game_id": "g4", "market_display": "TOTAL", "side_key": "Over", "current_line": "Over 45 @ -105", "bets_pct": 82, "money_pct": 76},
+            {"timestamp": _ts(18, 0), "sport": "nfl", "game_id": "g4", "market_display": "TOTAL", "side_key": "Under", "current_line": "Under 44.5 @ -110", "bets_pct": 18, "money_pct": 24},
+            {"timestamp": _ts(20, 0), "sport": "nfl", "game_id": "g4", "market_display": "TOTAL", "side_key": "Under", "current_line": "Under 44 @ -115", "bets_pct": 18, "money_pct": 24},
+        ])
+
+        board, _ = build_anomaly_outputs(latest, history, pd.DataFrame(), as_of=_ts(17, 0))
+
+        row = board.loc[board["flagged_side"] == "Over 44.5"].iloc[0]
+        self.assertEqual(row["reaction"], "Watch")
+        self.assertIn("Public Pressure", row["context_chips"])
+        self.assertIn("neither held nor meaningfully aligned", row["reason"])
 
 
 if __name__ == "__main__":

@@ -115,7 +115,9 @@ def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
         kind="mergesort",
     ).reset_index(drop=True)
     board_df["board_rank"] = range(1, len(board_df) + 1)
-    board_df = board_df.drop(columns=["severity_sort", "maturity_sort", "kickoff_sort"], errors="ignore")
+    # Keep severity until the one-side-per-market publisher selects a leader.
+    # The public exporter removes this internal field after ranking is final.
+    board_df = board_df.drop(columns=["maturity_sort", "kickoff_sort"], errors="ignore")
 
     if not events_df.empty:
         events_df = events_df.sort_values(
@@ -265,6 +267,8 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         context_chips.append(key_number)
     if stale_dk:
         context_chips.append("Market Lag")
+    if reaction == "Watch" and public_support and not split_capped and not favorite_risk:
+        context_chips.append("Public Pressure")
     price_risk_note = _price_risk_note(reaction, market, sport, current_value, current_odds)
     if price_risk_note:
         context_chips.append("Price Risk")
@@ -788,7 +792,7 @@ def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ti
     if ticket_led:
         return "High ticket share had weak money support"
     if public_support:
-        return "Strong ticket and money support had a mixed path"
+        return "High tickets and money are present, but the market was neither held nor meaningfully aligned"
     if low_support and move_abs >= move_threshold:
         return "Low-support side moved more than expected"
     return "Path shape stood out versus the split support"
