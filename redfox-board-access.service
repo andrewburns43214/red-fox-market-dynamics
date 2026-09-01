@@ -1,0 +1,15 @@
+[Unit]
+Description=Red Fox board subscription access check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/red-fox-market-dynamics
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python /opt/red-fox-market-dynamics/board_access.py
+Restart=always
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target

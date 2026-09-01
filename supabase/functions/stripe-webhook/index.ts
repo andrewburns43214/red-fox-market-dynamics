@@ -44,16 +44,32 @@ serve(async (req) => {
       }
 
       if (plan === 'day_pass') {
-        // Compute midnight ET tonight
+        // Expire at the next midnight in New York, including daylight-saving changes.
         const now = new Date();
         const etFormatter = new Intl.DateTimeFormat('en-US', {
           timeZone: 'America/New_York',
           year: 'numeric', month: '2-digit', day: '2-digit',
         });
-        const etDate = etFormatter.format(now);
-        const [month, day, year] = etDate.split('/');
-        // Midnight ET = next day 00:00 ET
-        const midnightET = new Date(`${year}-${month}-${String(Number(day) + 1).padStart(2, '0')}T00:00:00-05:00`);
+        const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        const dateParts = Object.fromEntries(
+          etFormatter.formatToParts(tomorrow)
+            .filter((part) => part.type !== 'literal')
+            .map((part) => [part.type, part.value])
+        );
+        const midnightUtc = Date.UTC(
+          Number(dateParts.year),
+          Number(dateParts.month) - 1,
+          Number(dateParts.day),
+        );
+        const offsetPart = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/New_York',
+          timeZoneName: 'longOffset',
+        }).formatToParts(new Date(midnightUtc)).find((part) => part.type === 'timeZoneName')?.value;
+        const offsetMatch = offsetPart?.match(/^GMT([+-])(\d{2}):(\d{2})$/);
+        if (!offsetMatch) throw new Error('Unable to calculate New York expiration time');
+        const offsetMinutes = (Number(offsetMatch[2]) * 60 + Number(offsetMatch[3]))
+          * (offsetMatch[1] === '+' ? 1 : -1);
+        const midnightET = new Date(midnightUtc - offsetMinutes * 60 * 1000);
 
         await supabase.from('subscriptions').insert({
           user_id: userId,
@@ -63,13 +79,13 @@ serve(async (req) => {
           current_period_start: now.toISOString(),
           current_period_end: midnightET.toISOString(),
         });
-      } else if (plan === 'professional') {
+      } else if (plan === 'professional' || plan === 'annual') {
         const subscription = await stripe.subscriptions.retrieve(
           session.subscription as string
         );
         await supabase.from('subscriptions').insert({
           user_id: userId,
-          plan: 'professional',
+          plan,
           status: 'active',
           stripe_subscription_id: subscription.id,
           stripe_checkout_session_id: session.id,

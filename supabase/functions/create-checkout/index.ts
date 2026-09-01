@@ -19,7 +19,7 @@ serve(async (req) => {
 
   try {
     const { plan } = await req.json();
-    if (!plan || !['day_pass', 'professional'].includes(plan)) {
+    if (!plan || !['day_pass', 'professional', 'annual'].includes(plan)) {
       return new Response(JSON.stringify({ error: 'Invalid plan' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -65,9 +65,11 @@ serve(async (req) => {
     }
 
     // Create Checkout Session
-    const priceId = plan === 'professional'
-      ? Deno.env.get('STRIPE_PRICE_PROFESSIONAL')!
-      : Deno.env.get('STRIPE_PRICE_DAY_PASS')!;
+    const priceId = plan === 'day_pass'
+      ? Deno.env.get('STRIPE_PRICE_DAY_PASS')!
+      : plan === 'annual'
+        ? Deno.env.get('STRIPE_PRICE_ANNUAL')!
+        : Deno.env.get('STRIPE_PRICE_PROFESSIONAL')!;
 
     const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       customer: customerId,
@@ -75,7 +77,7 @@ serve(async (req) => {
       success_url: Deno.env.get('SITE_URL')! + '/board.html?payment=success',
       cancel_url: Deno.env.get('SITE_URL')! + '/#pricing',
       line_items: [{ price: priceId, quantity: 1 }],
-      mode: plan === 'professional' ? 'subscription' : 'payment',
+      mode: plan === 'day_pass' ? 'payment' : 'subscription',
     };
 
     const session = await stripe.checkout.sessions.create(sessionConfig);

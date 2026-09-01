@@ -163,6 +163,14 @@ section { padding: 100px 40px; }
   margin: 0 auto 48px;
   line-height: 1.7;
 }
+.hero-positioning {
+  margin: -24px auto 34px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text3);
+  letter-spacing: .4px;
+}
 .hero-ctas {
   display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
 }
@@ -336,7 +344,7 @@ section { padding: 100px 40px; }
 }
 .preview-overlay {
   position: absolute; inset: 0;
-  background: linear-gradient(180deg, transparent 0%, transparent 40%, rgba(30,33,40,.5) 65%, rgba(30,33,40,.92) 100%);
+  background: linear-gradient(180deg, transparent 0%, transparent 58%, rgba(30,33,40,.2) 72%, rgba(30,33,40,.76) 100%);
   display: flex; flex-direction: column;
   align-items: center; justify-content: flex-end;
   padding-bottom: 40px;
@@ -374,9 +382,9 @@ section { padding: 100px 40px; }
 }
 .pricing-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 24px;
-  max-width: 700px;
+  max-width: 1020px;
   margin: 0 auto;
 }
 .price-card {
@@ -589,6 +597,40 @@ section { padding: 100px 40px; }
 .btn-submit:disabled {
   opacity: .5; cursor: not-allowed;
 }
+.oauth-actions {
+  display: grid;
+  gap: 12px;
+}
+.oauth-button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  gap: 12px;
+  justify-content: center;
+  min-height: 48px;
+  padding: 10px 14px;
+}
+.oauth-button:hover { background: var(--bg2); border-color: var(--text3); }
+.oauth-mark {
+  align-items: center;
+  display: inline-flex;
+  font-family: Arial, sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  height: 20px;
+  justify-content: center;
+  width: 20px;
+}
+.oauth-google { color: #4285f4; }
+.oauth-microsoft { color: #0078d4; }
+.oauth-note { color: var(--text3); font-size: 12px; line-height: 1.5; margin: 20px 0 0; text-align: center; }
 
 /* ─── RESPONSIVE ─── */
 @media (max-width: 768px) {
@@ -649,12 +691,13 @@ section { padding: 100px 40px; }
 <!-- ─── HERO ─── -->
 <section class="hero">
   <div class="container">
-    <div class="hero-badge">Structured Decision Engine</div>
-    <h1>Exploiting <em>timing-dependent</em> market inefficiencies through asymmetric pressure detection.</h1>
-    <p class="hero-sub">A structured decision engine that classifies betting markets by pressure, regime, and price behavior &mdash; not picks, not opinions, not narratives.</p>
+    <div class="hero-badge">Market Intelligence for Sports Bettors</div>
+    <h1>Make More Informed <em>Wagering Decisions.</em></h1>
+    <p class="hero-sub">Red Fox Market Intelligence gives sports bettors the data and market signals they need to make more informed wagering decisions. Instead of blindly following picks, see what the betting market is telling you and decide for yourself.</p>
+    <p class="hero-positioning">Bloomberg-style market intelligence for sports bettors.</p>
     <div class="hero-ctas">
-      <button class="btn btn-primary btn-lg" onclick="openModal('signup')">Unlock Today ($3)</button>
-      <button class="btn btn-dark btn-lg" onclick="openModal('signup')">Go Unlimited ($24/month)</button>
+      <button class="btn btn-primary btn-lg" onclick="openModal('signup')">Unlock Today - $3.99</button>
+      <button class="btn btn-dark btn-lg" onclick="openModal('signup')">Go Unlimited - $29.99/mo</button>
     </div>
   </div>
 </section>
@@ -665,18 +708,18 @@ section { padding: 100px 40px; }
     <div class="features-grid">
       <div class="feat-card">
         <div class="feat-icon feat-icon-pressure">&#9670;</div>
-        <h3>Pressure Classification</h3>
-        <p>Identifies when money distribution and line behavior diverge in meaningful ways. Not all divergence matters. The engine distinguishes signal from noise.</p>
+        <h3>Follow the Market Journey</h3>
+        <p>See where a line started, how price and splits changed along the way, and where the market stands now. Replay the journey whenever you need more context.</p>
       </div>
       <div class="feat-card">
         <div class="feat-icon feat-icon-regime">&#9632;</div>
-        <h3>Regime Detection</h3>
-        <p>Determines whether books are shading against lopsided money, fading public action, confirming low-visibility pressure, or aligning with structural movement.</p>
+        <h3>See the Signal in Context</h3>
+        <p>Track money, tickets, open lines, current prices, and meaningful market behavior across moneylines, spreads, and totals in one structured board.</p>
       </div>
       <div class="feat-card">
         <div class="feat-icon feat-icon-scoring">&#9650;</div>
-        <h3>Asymmetric Edge Scoring</h3>
-        <p>Quantifies structural edge using price-sensitive weighting and persistence logic. Model scores adjust for instrument credibility, timing bucket, and contradiction behavior.</p>
+        <h3>Make Your Own Call</h3>
+        <p>Red Fox organizes the market evidence and explains why it surfaced. You get the context to evaluate the board yourself, not someone else&apos;s picks.</p>
       </div>
     </div>
   </div>
@@ -685,7 +728,8 @@ section { padding: 100px 40px; }
 <!-- ─── WHAT RED FOX IS NOT ─── -->
 <section class="not-section">
   <div class="container">
-    <h2>Here's what Red Fox is not.</h2>
+    <h2>Not another picks service.</h2>
+    <p class="pricing-sub">Red Fox organizes market information, identifies meaningful pressure and price behavior, and gives you a structured way to evaluate the board yourself.</p>
     <div class="not-grid">
       <div class="not-item negative"><span class="not-icon">&times;</span> Not a picks service</div>
       <div class="not-item positive"><span class="not-icon">&#10003;</span> Structured</div>
@@ -702,15 +746,14 @@ section { padding: 100px 40px; }
 <!-- ─── DASHBOARD PREVIEW ─── -->
 <section class="preview">
   <div class="container">
-    <h2>Full Confidence + Regime View</h2>
-    <p class="preview-sub">Real-time pressure classification, regime detection, and edge scoring across all active markets.</p>
+    <h2>See the Market Story Unfold</h2>
+    <p class="preview-sub">Follow the real-time journey from open to current price, then look back through the exact path, split changes, and timestamped market evidence.</p>
     <div class="preview-wrap">
       <img src="preview.png" alt="Red Fox Dashboard" class="preview-screenshot">
       <div class="preview-overlay">
         <div class="preview-lock">&#128274;</div>
-        <div class="preview-overlay-text">Full Board Available After Login</div>
-        <div class="preview-overlay-sub">Confidence scores, regime classifications, and real-time edge calculations.</div>
-        <button class="btn btn-primary btn-lg" onclick="openModal('signup')">Unlock Full Board ($3)</button>
+        <div class="preview-overlay-text">The Full Market Journey, In One Board</div>
+        <button class="btn btn-primary btn-lg" onclick="openModal('signup')">Unlock Full Board - $3.99</button>
       </div>
     </div>
   </div>
@@ -719,32 +762,43 @@ section { padding: 100px 40px; }
 <!-- ─── PRICING ─── -->
 <section class="pricing" id="pricing">
   <div class="container">
-    <h2>Simple, professional pricing.</h2>
-    <p class="pricing-sub">No contracts. No commitment. Pay for what you use.</p>
+    <h2>Simple access to the full market picture.</h2>
+    <p class="pricing-sub">Choose a day of market intelligence or keep the full board open all season.</p>
     <div class="pricing-grid">
       <div class="price-card">
         <div class="price-label">Day Access</div>
-        <div class="price-amount">$3</div>
+        <div class="price-amount">$3.99</div>
         <div class="price-period">one-time &middot; access until midnight ET</div>
         <ul class="price-features">
           <li>Full board access</li>
           <li>All active markets</li>
-          <li>Confidence + regime view</li>
+          <li>Market journey and timeline</li>
           <li>Real-time updates</li>
         </ul>
         <button class="btn btn-primary btn-lg" onclick="handleCheckout('day_pass')">Unlock Today</button>
       </div>
       <div class="price-card featured">
-        <div class="price-label">Professional</div>
-        <div class="price-amount">$24<span>/mo</span></div>
+        <div class="price-label">Monthly Unlimited</div>
+        <div class="price-amount">$29.99<span>/mo</span></div>
         <div class="price-period">recurring &middot; cancel anytime</div>
         <ul class="price-features">
           <li>Unlimited daily access</li>
-          <li>All markets &amp; all regimes</li>
-          <li>Signal log + performance view</li>
-          <li>Priority support</li>
+          <li>All markets and timeline history</li>
+          <li>Live signal context</li>
+          <li>Cancel anytime to stop renewal</li>
         </ul>
         <button class="btn btn-accent btn-lg" onclick="handleCheckout('professional')">Go Unlimited</button>
+      </div>
+      <div class="price-card">
+        <div class="price-label">Annual <span style="color:var(--green)">Best Value</span></div>
+        <div class="price-amount">$249.99<span>/yr</span></div>
+        <div class="price-period">save over 30% &middot; billed annually</div>
+        <ul class="price-features">
+          <li>Everything in Monthly Unlimited</li>
+          <li>Full season of market journeys</li>
+          <li>Cancel anytime to stop renewal</li>
+        </ul>
+        <button class="btn btn-primary btn-lg" onclick="handleCheckout('annual')">Choose Annual</button>
       </div>
     </div>
   </div>
@@ -774,7 +828,7 @@ section { padding: 100px 40px; }
       </div>
       <div class="form-group">
         <label class="form-label" for="auth-password">Password</label>
-        <input class="form-input" id="auth-password" type="password" placeholder="Password" required minlength="6">
+        <input class="form-input" id="auth-password" type="password" placeholder="Password" required minlength="12">
       </div>
       <button class="btn btn-primary btn-submit" type="submit" id="auth-submit">Sign In</button>
     </form>
@@ -790,10 +844,24 @@ section { padding: 100px 40px; }
 <script>
 // ── Supabase client ──
 const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const ACCESS_COOKIE = 'redfox_access_token';
 
-let _authMode = 'signin';
+function syncAccessCookie(session) {
+  if (session && session.access_token) {
+    document.cookie = ACCESS_COOKIE + '=' + encodeURIComponent(session.access_token) +
+      '; Path=/; Secure; SameSite=Lax; Max-Age=3600';
+  } else {
+    document.cookie = ACCESS_COOKIE + '=; Path=/; Secure; SameSite=Lax; Max-Age=0';
+  }
+}
+
+_supabase.auth.onAuthStateChange(function (_event, session) {
+  syncAccessCookie(session);
+});
 
 // ── Modal controls ──
+let _authMode = 'signin';
+
 function openModal(mode) {
   _authMode = mode || 'signin';
   switchTab(_authMode);
@@ -815,75 +883,97 @@ function switchTab(mode) {
   document.getElementById('tab-signin').classList.toggle('active', mode === 'signin');
   document.getElementById('tab-signup').classList.toggle('active', mode === 'signup');
   document.getElementById('modal-title').textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
-  document.getElementById('modal-subtitle').textContent = mode === 'signin' ? 'Access the full board.' : 'Start with a free account, then unlock.';
+  document.getElementById('modal-subtitle').textContent = mode === 'signin'
+    ? 'Access the full board.'
+    : 'Create your account, then choose your access.';
   document.getElementById('auth-submit').textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
   document.getElementById('forgot-link').style.display = mode === 'signin' ? '' : 'none';
-  document.getElementById('form-error').className = 'form-error';
-  document.getElementById('form-success').className = 'form-success';
 }
 
-// ── Auth handlers ──
-async function handleAuth(e) {
-  e.preventDefault();
+async function handleAuth(event) {
+  event.preventDefault();
   const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
   const errEl = document.getElementById('form-error');
   const successEl = document.getElementById('form-success');
   const btn = document.getElementById('auth-submit');
-
   errEl.className = 'form-error';
   successEl.className = 'form-success';
   btn.disabled = true;
-  btn.textContent = _authMode === 'signin' ? 'Signing in...' : 'Creating account...';
 
   try {
     if (_authMode === 'signup') {
       const { data, error } = await _supabase.auth.signUp({ email, password });
       if (error) throw error;
-      successEl.textContent = 'Account created! Check your email to confirm, then sign in.';
+      if (data.session) {
+        syncAccessCookie(data.session);
+        closeModal();
+        document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+      successEl.textContent = 'Account created. Sign in to choose your access.';
       successEl.className = 'form-success show';
-      btn.textContent = 'Create Account';
-      btn.disabled = false;
     } else {
-      const { data, error } = await _supabase.auth.signInWithPassword({ email, password });
+      const { error } = await _supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
+      const { data: { session } } = await _supabase.auth.getSession();
+      syncAccessCookie(session);
+      const { data: hasAccess } = await _supabase.rpc('has_active_access');
       closeModal();
-      window.location.href = '/board.html';
+      if (hasAccess) {
+        window.location.href = '/board.html';
+      } else {
+        document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
+      }
     }
   } catch (err) {
     errEl.textContent = err.message || 'Something went wrong. Please try again.';
     errEl.className = 'form-error show';
-    btn.textContent = _authMode === 'signin' ? 'Sign In' : 'Create Account';
+  } finally {
     btn.disabled = false;
+    btn.textContent = _authMode === 'signin' ? 'Sign In' : 'Create Account';
   }
 }
 
 async function handleForgotPassword() {
   const email = document.getElementById('auth-email').value.trim();
   const errEl = document.getElementById('form-error');
-  const successEl = document.getElementById('form-success');
   if (!email) {
     errEl.textContent = 'Enter your email address first.';
     errEl.className = 'form-error show';
     return;
   }
   const { error } = await _supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin + '/board.html'
+    redirectTo: window.location.origin + '/index.html',
   });
   if (error) {
     errEl.textContent = error.message;
     errEl.className = 'form-error show';
-  } else {
-    successEl.textContent = 'Password reset email sent. Check your inbox.';
-    successEl.className = 'form-success show';
   }
 }
 
+// ── Auth handlers ──
 // ── Stripe Checkout ──
+async function signInWithProvider(provider) {
+  const errEl = document.getElementById('form-error');
+  errEl.className = 'form-error';
+  try {
+    const { error } = await _supabase.auth.signInWithOAuth({
+      provider: provider,
+      options: { redirectTo: window.location.origin + '/index.html' },
+    });
+    if (error) throw error;
+  } catch (err) {
+    errEl.textContent = err.message || 'Something went wrong. Please try again.';
+    errEl.className = 'form-error show';
+  }
+}
+
 async function handleCheckout(plan) {
   const { data: { session } } = await _supabase.auth.getSession();
+  syncAccessCookie(session);
   if (!session) {
-    openModal('signup');
+    openModal();
     return;
   }
   try {
@@ -912,24 +1002,28 @@ async function handleCheckout(plan) {
   if (session) {
     const { data: hasAccess } = await _supabase.rpc('has_active_access');
     const actions = document.querySelector('.nav-actions');
-    const boardButton = hasAccess ? 'Go to Board' : 'View Board';
-    actions.innerHTML = '<button class="btn btn-primary" onclick="window.location.href=\'/board.html\'">' + boardButton + '</button>' +
+    const boardButton = hasAccess ? 'Go to Board' : 'Choose Access';
+    const boardAction = hasAccess
+      ? "window.location.href='/board.html'"
+      : "document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' })";
+    actions.innerHTML = '<button class="btn btn-primary" onclick="' + boardAction + '">' + boardButton + '</button>' +
       '<button class="btn btn-ghost" onclick="handleSignOut()">Sign Out</button>';
   }
   const params = new URLSearchParams(window.location.search);
   if (params.get('auth') === 'required') {
-    openModal('signin');
+    openModal();
   } else if (params.get('payment') === 'required') {
     if (session) {
       document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
     } else {
-      openModal('signin');
+      openModal();
     }
   }
 })();
 
 async function handleSignOut() {
   await _supabase.auth.signOut();
+  syncAccessCookie(null);
   window.location.href = '/';
 }
 

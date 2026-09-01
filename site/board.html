@@ -7,6 +7,23 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
+<script>
+// Keep the server-side access cookie aligned with the signed-in Supabase session.
+(function () {
+  const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const cookieName = 'redfox_access_token';
+  function syncAccessCookie(session) {
+    if (session && session.access_token) {
+      document.cookie = cookieName + '=' + encodeURIComponent(session.access_token) +
+        '; Path=/; Secure; SameSite=Lax; Max-Age=3600';
+    } else {
+      document.cookie = cookieName + '=; Path=/; Secure; SameSite=Lax; Max-Age=0';
+    }
+  }
+  client.auth.getSession().then(function (result) { syncAccessCookie(result.data.session); });
+  client.auth.onAuthStateChange(function (_event, session) { syncAccessCookie(session); });
+})();
+</script>
 <style>
 :root {
   /* Colors â€” light cards, clean backgrounds */

@@ -1,0 +1,3 @@
+[functions.stripe-webhook]
+# Stripe authenticates this endpoint with its signed payload, not a Supabase JWT.
+verify_jwt = false
