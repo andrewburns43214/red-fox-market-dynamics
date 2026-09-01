@@ -845,6 +845,19 @@ section { padding: 100px 40px; }
 // ── Supabase client ──
 const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const ACCESS_COOKIE = 'redfox_access_token';
+const COMPLIMENTARY_ACCESS_EMAILS = new Set([
+  'andrewburns43214@gmail.com',
+  'andrewburns43214+redfoxguests@gmail.com',
+]);
+
+async function hasBoardAccess(session) {
+  const email = session && session.user && session.user.email
+    ? session.user.email.toLowerCase()
+    : '';
+  if (COMPLIMENTARY_ACCESS_EMAILS.has(email)) return true;
+  const { data, error } = await _supabase.rpc('has_active_access');
+  return !error && data === true;
+}
 
 function syncAccessCookie(session) {
   if (session && session.access_token) {
@@ -918,7 +931,7 @@ async function handleAuth(event) {
       if (error) throw error;
       const { data: { session } } = await _supabase.auth.getSession();
       syncAccessCookie(session);
-      const { data: hasAccess } = await _supabase.rpc('has_active_access');
+      const hasAccess = await hasBoardAccess(session);
       closeModal();
       if (hasAccess) {
         window.location.href = '/board.html';
@@ -1000,7 +1013,7 @@ async function handleCheckout(plan) {
 (async function() {
   const { data: { session } } = await _supabase.auth.getSession();
   if (session) {
-    const { data: hasAccess } = await _supabase.rpc('has_active_access');
+    const hasAccess = await hasBoardAccess(session);
     const actions = document.querySelector('.nav-actions');
     const boardButton = hasAccess ? 'Go to Board' : 'Choose Access';
     const boardAction = hasAccess
