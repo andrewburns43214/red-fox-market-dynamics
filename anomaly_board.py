@@ -120,6 +120,45 @@ def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
     return board_df, events_df
 
 
+def select_market_leaders(board_df):
+    """Publish one evidence-leading side for each game and market.
+
+    The board is an at-a-glance market list; the timeline remains the place to
+    compare both sides.  A previously recorded signal takes precedence so a
+    valid signal is not hidden by a later, less notable live update.
+    """
+    if board_df is None or board_df.empty:
+        return pd.DataFrame() if board_df is None else board_df.copy()
+
+    keys = ["sport", "game_id", "market_display"]
+    work = board_df.copy()
+    for column in keys:
+        if column not in work.columns:
+            work[column] = ""
+    recorded_reaction = work.get("recorded_reaction", pd.Series("", index=work.index))
+    work["_has_recorded_signal"] = recorded_reaction.fillna("").astype(str).str.strip().ne("")
+    current_reaction = work.get("reaction", pd.Series("Watch", index=work.index))
+    effective_reaction = recorded_reaction.where(work["_has_recorded_signal"], current_reaction).fillna("Watch")
+    signal_rank = {"Contrarian": 0, "Freeze": 1, "Follow": 2, "Watch": 3}
+    work["_signal_rank"] = effective_reaction.map(signal_rank).fillna(4)
+    work["_anomaly_sort"] = pd.to_numeric(work.get("anomaly_sort", 99), errors="coerce").fillna(99)
+    work["_severity_sort"] = pd.to_numeric(work.get("severity_sort", 0), errors="coerce").fillna(0)
+
+    work = work.sort_values(
+        ["_has_recorded_signal", "_signal_rank", "_anomaly_sort", "_severity_sort", "flagged_side"],
+        ascending=[False, True, True, False, True],
+        kind="mergesort",
+    )
+    leaders = work.drop_duplicates(keys, keep="first").copy()
+    leaders = leaders.sort_values(
+        ["_has_recorded_signal", "_signal_rank", "_anomaly_sort", "_severity_sort", "game", "market_display"],
+        ascending=[False, True, True, False, True, True],
+        kind="mergesort",
+    ).reset_index(drop=True)
+    leaders["board_rank"] = range(1, len(leaders) + 1)
+    return leaders.drop(columns=["_has_recorded_signal", "_signal_rank", "_anomaly_sort", "_severity_sort"], errors="ignore")
+
+
 def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     market = str(latest_row.get("market_display", "")).upper()
     sport = str(latest_row.get("sport", "")).lower()

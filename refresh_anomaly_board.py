@@ -6,7 +6,7 @@ import pandas as pd
 
 from anomaly_action_ledger import apply_recorded_signals, update_action_ledger
 from anomaly_action_results import rebuild_action_results
-from anomaly_board import build_anomaly_outputs
+from anomaly_board import build_anomaly_outputs, select_market_leaders
 from main import infer_market_type, normalize_side_key
 
 
@@ -39,6 +39,7 @@ def main():
     board, events = build_anomaly_outputs(dashboard, history, l2)
     action_count = update_action_ledger(board, DATA, newest_snapshot.to_pydatetime())
     board = apply_recorded_signals(board, DATA)
+    board = select_market_leaders(board)
     # Replace each public file only after its complete export is ready for Nginx.
     for frame, name in ((board, "anomaly_board.csv"), (events, "anomaly_events.csv")):
         temporary = DATA / f".{name}.tmp"

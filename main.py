@@ -74,7 +74,7 @@ from typing import Dict, List, Optional, Tuple
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
-from anomaly_board import build_anomaly_outputs
+from anomaly_board import build_anomaly_outputs, select_market_leaders
 from dk_headless import get_splits
 from logging_utils import setup_logger
 import logging
@@ -5625,6 +5625,7 @@ def build_dashboard():
                 _anomaly_board, Path("data"), datetime.now(timezone.utc),
             )
             _anomaly_board = apply_recorded_signals(_anomaly_board, Path("data"))
+            _anomaly_board = select_market_leaders(_anomaly_board)
             _anomaly_board.to_csv("data/anomaly_board.csv", index=False)
             _anomaly_events.to_csv("data/anomaly_events.csv", index=False)
             _resolved_actions = rebuild_action_results(Path("data"))
