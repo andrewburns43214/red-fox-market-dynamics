@@ -476,6 +476,7 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .sfill.b { background: #8892aa; }
 .sfill.m { background: var(--gold2); }
 .spct { font-family: var(--mono); font-size: 8px; color: var(--text2); width: 24px; text-align: right; }
+.split-unavailable { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .04em; color: var(--text3); text-transform: uppercase; white-space: nowrap; }
 
 /* LINES */
 .td-line { font-family: var(--mono); font-size: 11px; text-align: center; width: 70px; color: var(--text2); padding: 6px 6px; }
@@ -1155,7 +1156,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
     <span class="signal-key-item key-divergence" title="Low ticket share with a high share of money">Low Bets / High $</span>
     <span class="signal-key-item key-keynumber" title="The observed path touched or crossed a sport-specific key number">Key number</span>
     <span class="signal-key-item key-juice" title="The point line held while the odds price moved materially">Juice Move</span>
-    <span class="signal-key-item key-favorite" title="A heavily priced moneyline favorite; displayed as risk context, not an alert by itself">Heavy Fav</span>
+    <span class="signal-key-item key-favorite" title="A heavily priced or ticket-heavy moneyline favorite; shown as risk context and excluded from split-only alert ranking">Heavy Fav</span>
     <span class="signal-key-item key-split" title="A 0% or 100% source split is shown as data risk and excluded from directional alert ranking">Split Cap</span>
     <span class="signal-key-item key-watch" title="Active market with no qualifying alert at the current snapshot">Watch</span>
   </div>
@@ -1675,6 +1676,25 @@ function dataBadge(v){
   if(t==='SPLIT RISK') return '<span class="tim tLIVE" title="A capped 0% or 100% split cannot qualify for an alert">SPLIT RISK</span>';
   return '<span class="tim tLIVE">FEED RISK</span>';
 }
+function hasSplitRead(r){ return String(r?.data_badge||'').trim().toUpperCase()!=='SPLIT RISK'; }
+function splitCell(r){
+  if(!hasSplitRead(r)) return '<div class="split-unavailable" title="The source returned a capped 0% or 100% split, so no usable split read is shown">No split read</div>';
+  return `
+    <div class="srow">
+      <span class="slbl">Bets</span>
+      <div class="sbar"><div class="sfill b" style="width:${Math.min(r.bets_pct||0,100)}%"></div></div>
+      <span class="spct" style="${splitPctStyle('bets',r.bets_pct)}">${r.bets_pct?Number(r.bets_pct).toFixed(0)+'%':'-'}</span>
+    </div>
+    <div class="srow">
+      <span class="slbl">$$$</span>
+      <div class="sbar"><div class="sfill m" style="width:${Math.min(r.money_pct||0,100)}%"></div></div>
+      <span class="spct" style="${splitPctStyle('money',r.money_pct)}">${r.money_pct?Number(r.money_pct).toFixed(0)+'%':'-'}</span>
+    </div>`;
+}
+function splitSummary(r){
+  if(!hasSplitRead(r)) return '<span style="color:var(--text3)">Split data unavailable</span>';
+  return '<span style="'+splitPctStyle('bets',r.bets_pct)+'">'+Number(r.bets_pct||0).toFixed(0)+'%</span> bets | <span style="'+splitPctStyle('money',r.money_pct)+'">'+Number(r.money_pct||0).toFixed(0)+'%</span> money';
+}
 function splitPctStyle(kind, raw){
   const v=Number(raw);
   if(!Number.isFinite(v)) return 'color:#5a6480';
@@ -1797,18 +1817,7 @@ function renderBoard(){
         <div class="game-row2"><span class="game-row2-time">${r.kickoff_time||'-'}</span></div>
       </td>
       <td class="td-mkt">${r.market_display||'-'}</td>
-      <td class="td-split">
-        <div class="srow">
-          <span class="slbl">Bets</span>
-          <div class="sbar"><div class="sfill b" style="width:${Math.min(r.bets_pct||0,100)}%"></div></div>
-          <span class="spct" style="${splitPctStyle('bets',r.bets_pct)}">${r.bets_pct?Number(r.bets_pct).toFixed(0)+'%':'-'}</span>
-        </div>
-        <div class="srow">
-          <span class="slbl">$$$</span>
-          <div class="sbar"><div class="sfill m" style="width:${Math.min(r.money_pct||0,100)}%"></div></div>
-          <span class="spct" style="${splitPctStyle('money',r.money_pct)}">${r.money_pct?Number(r.money_pct).toFixed(0)+'%':'-'}</span>
-        </div>
-      </td>
+      <td class="td-split">${splitCell(r)}</td>
       <td class="td-line td-open">${r.open_line||'-'}</td>
       <td class="td-line td-current">${r.current_line||'-'}</td>
       <td class="td-edge"><div class="focus-label">${r.flagged_side||'-'}</div><div class="focus-sub">${r.market_display||'Market'} focus</div></td>
@@ -2005,7 +2014,7 @@ function openGameDetail(r){
   html+=movementChart(evRows,r.market_display);
   html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+anomalyBadge(an.reaction,'reaction')+anomalyBadge(an.path,'path')+an.context.map(c=>'<span class="mr mr-neutral">'+c+'</span>').join('')+'</div>';
   html+='<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px">'+(r.flagged_side||'--')+'</div>';
-  html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px"><span style="'+splitPctStyle('bets',r.bets_pct)+'">'+(Number(r.bets_pct||0).toFixed(0))+'%</span> bets | <span style="'+splitPctStyle('money',r.money_pct)+'">'+(Number(r.money_pct||0).toFixed(0))+'%</span> money</div>';
+  html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">'+splitSummary(r)+'</div>';
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Open '+(r.open_line||'--')+' -> Current '+(r.current_line||'--')+'</div>';
   if(Number(r.price_move_pct)>0) html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Price movement '+Number(r.price_move_pct).toFixed(1)+' implied points</div>';
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Path '+(r.path_summary||'--')+'</div>';

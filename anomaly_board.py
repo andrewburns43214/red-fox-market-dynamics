@@ -169,8 +169,11 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     split_capped = _is_split_capped(bets_pct, money_pct)
     current_odds = points[-1].get("odds")
     heavy_favorite = market == "MONEYLINE" and current_odds is not None and current_odds <= HEAVY_FAVORITE_ODDS
-    parlay_risk = market == "MONEYLINE" and current_odds is not None and current_odds <= PARLAY_RISK_ODDS and money_pct >= 80
-    split_alert_eligible = not split_capped and not parlay_risk
+    # Ticket concentration on a short favorite is commonly parlay-driven. It is
+    # useful board context, but should not promote a split-only alert by itself.
+    parlay_risk = market == "MONEYLINE" and current_odds is not None and current_odds <= PARLAY_RISK_ODDS and bets_pct >= 80
+    favorite_risk = heavy_favorite or parlay_risk
+    split_alert_eligible = not split_capped and not favorite_risk
     low_support = bets_pct <= 40 and money_pct <= 45
     very_low_support = bets_pct <= 35 and money_pct <= 40
     ticket_heavy = bets_pct >= 70
@@ -200,7 +203,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     context_chips = []
     if split_capped:
         context_chips.append("Split Cap")
-    if heavy_favorite:
+    if favorite_risk:
         context_chips.append("Heavy Favorite")
     if key_number:
         context_chips.append(key_number)
@@ -231,7 +234,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         held=held,
         broader_summary=broader["summary"],
         split_capped=split_capped,
-        parlay_risk=parlay_risk,
+        favorite_risk=favorite_risk,
         price_move_pct=price_move_pct,
     )
 
@@ -241,7 +244,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     hours_to_kickoff = (kickoff_ts - as_of).total_seconds() / 3600 if kickoff_ts else None
     maturity_sort = 1 if hours_to_kickoff is not None and hours_to_kickoff > 48 else 0
     rank_reason = _rank_reason(
-        reaction, path_label, stale_dk, split_capped, parlay_risk, hours_to_kickoff,
+        reaction, path_label, stale_dk, split_capped, favorite_risk, hours_to_kickoff,
     )
     severity = _severity_score(
         reaction=reaction,
@@ -321,7 +324,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         "path_max": round(path_max, 3),
         "observed_path": json.dumps([point["display"] for point in points]),
         "rank_reason": rank_reason,
-        "anomaly_sort": _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped, parlay_risk),
+        "anomaly_sort": _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped, favorite_risk),
         "maturity_sort": maturity_sort,
         "severity_sort": severity,
         "_event_rows": event_rows,
@@ -670,13 +673,13 @@ def _return_toward_open(points, market):
     return abs(current_value - open_value) < best_excursion
 
 
-def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ticket_led, low_bets_high_money, move_abs, move_threshold, held, broader_summary, split_capped, parlay_risk, price_move_pct):
+def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ticket_led, low_bets_high_money, move_abs, move_threshold, held, broader_summary, split_capped, favorite_risk, price_move_pct):
     if split_capped:
         if price_move_pct >= MEANINGFUL_PRICE_MOVE_PCT:
             return f"Price moved {price_move_pct:.1f} implied points, but a capped 0%/100% split is excluded from alert ranking"
         return "A capped 0%/100% split is shown for context but excluded from alert ranking"
-    if parlay_risk:
-        return "Heavy favorite price makes public split alignment prone to parlay bias"
+    if favorite_risk:
+        return "Short moneyline favorite is shown as context; ticket concentration may be parlay-biased"
     if reaction == "Contrarian":
         if path_label == "Whipsaw":
             return "Line improved for the weak side, then gave some back"
@@ -745,10 +748,10 @@ def _severity_score(reaction, whipsaw, extreme_public, move_abs, max_excursion, 
     return round(score, 3)
 
 
-def _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped=False, parlay_risk=False):
+def _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped=False, favorite_risk=False):
     if split_capped and not stale_dk:
         return 8
-    if parlay_risk and not stale_dk:
+    if favorite_risk and not stale_dk:
         return 8
     if reaction == "Contrarian" and whipsaw:
         return 0
@@ -817,11 +820,11 @@ def _is_split_capped(bets_pct, money_pct):
     return bets_pct <= 0 or bets_pct >= 100 or money_pct <= 0 or money_pct >= 100
 
 
-def _rank_reason(reaction, path_label, stale_dk, split_capped, parlay_risk, hours_to_kickoff):
+def _rank_reason(reaction, path_label, stale_dk, split_capped, favorite_risk, hours_to_kickoff):
     if split_capped:
         return "Split cap: a 0% or 100% source value cannot earn an alert rank."
-    if parlay_risk:
-        return "Heavy favorite: public split alignment is downranked for parlay risk."
+    if favorite_risk:
+        return "Heavy favorite: short-price ticket concentration is downranked for parlay risk."
     if stale_dk:
         return "Stale DK: broader market moved while the displayed DK price held."
     if reaction == "Contrarian":

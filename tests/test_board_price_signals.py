@@ -61,6 +61,25 @@ def test_capped_split_cannot_create_a_freeze():
     assert row["data_badge"] == "Split Risk"
 
 
+def test_ticket_heavy_short_favorite_is_context_not_a_freeze():
+    latest = {
+        "sport": "nfl", "game_id": "g4", "market_display": "MONEYLINE", "side_key": "HOME",
+        "side": "Home", "game": "Away @ Home", "canonical_key": "away @ home|nfl|2026-09-13",
+        "bets_pct": 90, "money_pct": 71, "open_line": "Home @ -575",
+        "current_line": "Home @ -550", "_sort_time": "2026-09-13T20:25:00Z",
+    }
+    history = [
+        {"timestamp": _timestamp(17), "sport": "nfl", "game_id": "g4", "market_display": "MONEYLINE", "side_key": "HOME", "current_line": "Home @ -575", "bets_pct": 90, "money_pct": 71},
+        {"timestamp": _timestamp(18), "sport": "nfl", "game_id": "g4", "market_display": "MONEYLINE", "side_key": "HOME", "current_line": "Home @ -550", "bets_pct": 90, "money_pct": 71},
+    ]
+
+    row = _board(latest, history)
+
+    assert row["reaction"] == "Watch"
+    assert "Heavy Favorite" in row["context_chips"]
+    assert "parlay risk" in row["rank_reason"].lower()
+
+
 def test_extreme_moneyline_uses_implied_probability_for_whipsaw_detection():
     latest = {
         "sport": "ncaaf", "game_id": "g3", "market_display": "MONEYLINE", "side_key": "HOME",
