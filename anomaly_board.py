@@ -170,7 +170,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         reaction = "Follow"
 
     if not reaction and not stale_dk and not whipsaw:
-        return None
+        reaction = "Watch"
 
     chips = [chip for chip in [reaction, path_label] if chip]
     context_chips = []
