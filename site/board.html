@@ -1161,7 +1161,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
   <div class="signal-key" aria-label="Signal key">
     <span class="signal-key-label">Signal Key</span>
     <span class="signal-key-item key-contrarian" title="Low support with line movement toward the side">Contrarian</span>
-    <span class="signal-key-item key-freeze" title="The labeled signal side has high tickets and money while its number holds; descriptive, not a recommendation">Freeze</span>
+    <span class="signal-key-item key-freeze" title="The observed high-split side held. Only sustained, non-key-number Freeze rows receive an opposing public-fade candidate for KPI tracking.">Freeze</span>
     <span class="signal-key-item key-follow" title="Heavy tickets and money while the line moved with that side">Follow</span>
     <span class="signal-key-item key-whipsaw" title="Line moved and then reversed">Whipsaw</span>
     <span class="signal-key-item key-held" title="The observed line and price changed less than the hold threshold from the first snapshot">Held</span>
@@ -1274,7 +1274,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
           <th class="th-split" title="Share of tickets and handle on the labeled signal side">Bets / Money</th>
           <th class="th-line" title="First observed line in the available snapshot history" onclick="sortBy('open_line',this)">Open</th>
           <th class="th-line" title="Most recent observed line" onclick="sortBy('current_line',this)">Current</th>
-          <th class="th-edge" title="The exact side or total evaluated. The note underneath states why that side is tracked." onclick="sortBy('flagged_side',this)">Signal Side</th>
+          <th class="th-edge" title="Actionable candidates show the reportable side. Evidence-only rows remain Observe only; the observed signal side is shown underneath." onclick="sortBy('action_type',this)">Action Lens</th>
           <th class="th-total" title="Detected reaction between participation and price movement" onclick="sortBy('reaction',this)">Signal</th>
           <th class="th-pat" title="Observation coverage: Clean has 3 or more valid observations; Thin has 2" onclick="sortBy('data_badge',this)">Market State</th>
           <th class="th-dec" title="Plain-language explanation of why this market is surfaced">Read</th>
@@ -1765,8 +1765,8 @@ function scrollToTop(){
 function exportCSV(){
   const data=filtered();
   if(!data.length) return;
-  const cols=['game','sport','market_display','flagged_side','focus_basis','reaction','path','context_chips','bets_pct','money_pct','open_line','current_line','price_move_pct','path_summary','reason','rank_reason','data_badge','kickoff_time','kickoff_iso'];
-  const headers=['Game','Sport','Market','Signal Side','Signal Basis','Reaction','Path','Context','Bets%','Money%','Open Line','Current Line','Price Move (pts)','Path Summary','Reason','Rank Reason','Data','Kickoff','Kickoff ISO'];
+  const cols=['game','sport','market_display','flagged_side','focus_basis','action_side','action_line','action_type','action_basis','kpi_eligible','reaction','path','context_chips','bets_pct','money_pct','open_line','current_line','price_move_pct','path_summary','reason','rank_reason','data_badge','kickoff_time','kickoff_iso'];
+  const headers=['Game','Sport','Market','Observed Signal Side','Signal Basis','Action Side','Action Line','Action Type','Action Basis','KPI Eligible','Reaction','Path','Context','Bets%','Money%','Open Line','Current Line','Price Move (pts)','Path Summary','Reason','Rank Reason','Data','Kickoff','Kickoff ISO'];
   let csv=headers.join(',')+'\n';
   data.forEach(r=>{
     csv+=cols.map(c=>{
@@ -1784,7 +1784,7 @@ function exportCSV(){
 }
 
 function _decRank(d,r){ const k=(d||'').toUpperCase(); if(k==='BET') return 1; if(k==='LEAN') return (r&&isLocked(r))?3:2; return 4; }
-function filtered(){ const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport); if(filter==='today') d=d.filter(r=>isToday(r.kickoff_iso)); if(filter==='highconf') d=d.filter(r=>(r.reaction||'')==='Contrarian'||(r.reaction||'')==='Freeze'); if(market!=='ALL') d=d.filter(r=>(r.market_display||'').toUpperCase()===market); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.flagged_side||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)||(r.reaction||'').toLowerCase().includes(ql)||(r.path||'').toLowerCase().includes(ql)||(r.context_chips||'').toLowerCase().includes(ql)||(r.data_badge||'').toLowerCase().includes(ql)||(r.reason||'').toLowerCase().includes(ql)); return d.sort((a,b)=>{ let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
+function filtered(){ const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport); if(filter==='today') d=d.filter(r=>isToday(r.kickoff_iso)); if(filter==='highconf') d=d.filter(r=>(r.reaction||'')==='Contrarian'||(r.reaction||'')==='Freeze'); if(market!=='ALL') d=d.filter(r=>(r.market_display||'').toUpperCase()===market); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.flagged_side||'').toLowerCase().includes(ql)||(r.action_side||'').toLowerCase().includes(ql)||(r.action_type||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)||(r.reaction||'').toLowerCase().includes(ql)||(r.path||'').toLowerCase().includes(ql)||(r.context_chips||'').toLowerCase().includes(ql)||(r.data_badge||'').toLowerCase().includes(ql)||(r.reason||'').toLowerCase().includes(ql)); return d.sort((a,b)=>{ let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
 
 window._boardRows=[];
 function renderBoard(){
@@ -1840,7 +1840,7 @@ function renderBoard(){
       <td class="td-split">${splitCell(r)}</td>
       <td class="td-line td-open">${r.open_line||'-'}</td>
       <td class="td-line td-current">${r.current_line||'-'}</td>
-      <td class="td-edge"><div class="focus-label">${r.flagged_side||'-'}</div><div class="focus-sub">${r.focus_basis||'Observed side'}</div></td>
+      <td class="td-edge">${actionLens(r)}</td>
       <td class="td-total">${signalChips}</td>
       <td class="td-pat">${dataBadge(r.data_badge)}</td>
       <td class="td-dec"><span style="font-size:11px;color:var(--text2);white-space:normal;display:block;line-height:1.35">${r.reason||'-'}</span></td>
@@ -1848,6 +1848,13 @@ function renderBoard(){
     `;
     tbody.appendChild(tr);
   });
+}
+
+function actionLens(r){
+  const eligible=String(r.kpi_eligible||'').toLowerCase()==='true';
+  if(!eligible) return `<div class="focus-label">Observe only</div><div class="focus-sub">${r.flagged_side||'-'} &middot; ${r.focus_basis||'Observed side'}</div>`;
+  const type=String(r.action_type||'').replace(' CANDIDATE','').replace(/_/g,' ');
+  return `<div class="focus-label">${type}: ${r.action_side||'-'}</div><div class="focus-sub">Observed: ${r.flagged_side||'-'}</div>`;
 }
 
 function kpiRows(items,el){ items.forEach(item=>{ const n=item.w+item.l; const pct=n>0?Math.round(100*item.w/n):null; const cls=pct!==null?wrCol(pct):'r'; const d=document.createElement('div'); d.className='krow'; d.innerHTML=`<div class="krow-head"><span class="kname">${item.label}</span><span class="kpct ${cls}">${pct!==null?pct+'%':'--'} <span class="kn">(${n})</span></span></div><div class="kbar"><div class="kfill" style="width:${pct||0}%;background:${wrClr(pct||0)}"></div></div>`; el.appendChild(d); }); }
@@ -2064,6 +2071,11 @@ function openGameDetail(r){
   html+='<div style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">Signal Side</div>';
   html+='<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:3px">'+(r.flagged_side||'--')+'</div>';
   html+='<div style="font-size:11px;color:var(--text3);margin-bottom:8px">'+(r.focus_basis||'Observed side')+'</div>';
+  const actionEligible=String(r.kpi_eligible||'').toLowerCase()==='true';
+  html+='<div style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin:10px 0 3px">Action Lens</div>';
+  html+='<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">'+(actionEligible?((r.action_type||'Candidate').replace('_',' ')+': '+(r.action_side||'--')):'Observe only')+'</div>';
+  if(actionEligible) html+='<div style="font-size:11px;color:var(--text2);margin-bottom:3px">Decision line '+(r.action_line||'--')+'</div>';
+  html+='<div style="font-size:11px;color:var(--text3);margin-bottom:8px">'+(r.action_basis||'Evidence only; no reportable action candidate.')+'</div>';
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">'+splitSummary(r)+'</div>';
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Open '+(r.open_line||'--')+' -> Current '+(r.current_line||'--')+'</div>';
   if(Number(r.price_move_pct)>0) html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Price movement '+Number(r.price_move_pct).toFixed(1)+' implied points</div>';

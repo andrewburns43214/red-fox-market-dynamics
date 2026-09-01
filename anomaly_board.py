@@ -27,6 +27,8 @@ MEANINGFUL_PRICE_MOVE_PCT = 2.5
 HOLD_PRICE_MOVE_PCT = 1.0
 HEAVY_FAVORITE_ODDS = -300
 PARLAY_RISK_ODDS = -200
+MIN_CANDIDATE_OBSERVATIONS = 3
+MIN_FREEZE_FADE_OBSERVATIONS = 4
 
 
 def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
@@ -242,6 +244,19 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     )
 
     flagged_side = str(latest_row.get("side", "")).strip() or str(latest_row.get("side_key", "")).strip()
+    action = _action_fields(
+        reaction=reaction,
+        flagged_side=flagged_side,
+        latest_row=latest_row,
+        pair_df=pair_df,
+        observation_count=observation_count,
+        key_number=key_number,
+        stale_dk=stale_dk,
+        split_capped=split_capped,
+        favorite_risk=favorite_risk,
+        bets_pct=bets_pct,
+        money_pct=money_pct,
+    )
     kickoff_ts = _coerce_ts(latest_row.get("_sort_time")) or _coerce_ts(latest_row.get("_game_time")) or _coerce_ts(latest_row.get("dk_start_iso"))
     kickoff_label = _format_kickoff(kickoff_ts)
     hours_to_kickoff = (kickoff_ts - as_of).total_seconds() / 3600 if kickoff_ts else None
@@ -270,6 +285,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
             "market_display": market,
             "flagged_side": flagged_side,
             "focus_basis": focus_basis,
+            **action,
             "timestamp": point["timestamp"].isoformat(),
             "step_index": index + 1,
             "observation_count": observation_count,
@@ -301,6 +317,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         "market_display": market,
         "flagged_side": flagged_side,
         "focus_basis": focus_basis,
+        **action,
         "reaction": reaction,
         "path": path_label,
         "context_chips": " | ".join(context_chips),
@@ -736,6 +753,84 @@ def _focus_basis(reaction, low_bets_high_money, ticket_led, split_capped, favori
     if ticket_led:
         return "Ticket-led side"
     return "Observed side"
+
+
+def _action_fields(
+    reaction,
+    flagged_side,
+    latest_row,
+    pair_df,
+    observation_count,
+    key_number,
+    stale_dk,
+    split_capped,
+    favorite_risk,
+    bets_pct,
+    money_pct,
+):
+    """Keep observed evidence distinct from KPI-eligible action candidates."""
+    observed_line = str(latest_row.get("current_line", "")).strip()
+    base = {
+        "action_side": "",
+        "action_line": "",
+        "action_type": "OBSERVE ONLY",
+        "action_basis": "Evidence only; no reportable action candidate.",
+        "kpi_eligible": False,
+    }
+    if split_capped or favorite_risk:
+        return base
+
+    if reaction == "Contrarian" and observation_count >= MIN_CANDIDATE_OBSERVATIONS:
+        return {
+            "action_side": flagged_side,
+            "action_line": observed_line,
+            "action_type": "CONTRARIAN CANDIDATE",
+            "action_basis": "Low-support side received a sustained move toward it.",
+            "kpi_eligible": True,
+        }
+
+    if reaction != "Freeze":
+        return base
+
+    if observation_count < MIN_FREEZE_FADE_OBSERVATIONS:
+        base["action_basis"] = "Freeze needs four timestamped observations before it can be tracked as a fade candidate."
+        return base
+    if key_number:
+        base["action_basis"] = "Freeze is pinned at a key number; treat it as evidence only."
+        return base
+    if stale_dk:
+        base["action_basis"] = "DraftKings appears stale versus the broader market; do not grade this as a public fade."
+        return base
+    if bets_pct < 80 or money_pct < 60:
+        base["action_basis"] = "Freeze pressure is not strong enough for a reportable public-fade candidate."
+        return base
+
+    counterpart = _counterpart_row(pair_df, latest_row)
+    if counterpart is None:
+        base["action_basis"] = "No verified opposing market side is available to grade."
+        return base
+    action_side = str(counterpart.get("side", "")).strip() or str(counterpart.get("side_key", "")).strip()
+    action_line = str(counterpart.get("current_line", "")).strip()
+    if not action_side or not action_line:
+        base["action_basis"] = "The opposing market side is incomplete, so this Freeze remains evidence only."
+        return base
+    return {
+        "action_side": action_side,
+        "action_line": action_line,
+        "action_type": "FADE CANDIDATE",
+        "action_basis": "Sustained high public pressure held away from a key number; grade the opposing side as a public-fade candidate.",
+        "kpi_eligible": True,
+    }
+
+
+def _counterpart_row(pair_df, latest_row):
+    if pair_df is None or pair_df.empty:
+        return None
+    side_key = str(latest_row.get("side_key", "")).strip()
+    candidates = pair_df[pair_df.get("side_key", pd.Series(dtype=str)).fillna("").astype(str).str.strip() != side_key]
+    if len(candidates) != 1:
+        return None
+    return candidates.iloc[0]
 
 
 def _data_badge(points, latest_row, split_capped=False):

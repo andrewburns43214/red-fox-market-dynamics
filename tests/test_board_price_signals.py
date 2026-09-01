@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
+from anomaly_action_ledger import update_action_ledger
 from anomaly_board import build_anomaly_outputs
 
 
@@ -97,6 +98,46 @@ def test_freeze_focus_identifies_the_high_split_side_not_a_recommendation():
     assert row["reaction"] == "Freeze"
     assert row["flagged_side"] == "Home -3.5"
     assert row["focus_basis"] == "High-split side; market held"
+    assert row["action_type"] == "OBSERVE ONLY"
+    assert not row["kpi_eligible"]
+
+
+def test_sustained_non_key_freeze_emits_the_opposing_fade_candidate():
+    latest = pd.DataFrame([
+        {"sport": "ncaab", "game_id": "g6", "market_display": "TOTAL", "side_key": "OVER", "side": "Over 145.5", "game": "Away @ Home", "canonical_key": "away @ home|ncaab|2026-09-13", "bets_pct": 84, "money_pct": 72, "open_line": "Over 145.5 @ -110", "current_line": "Over 145.5 @ -110", "_sort_time": "2026-09-13T20:25:00Z"},
+        {"sport": "ncaab", "game_id": "g6", "market_display": "TOTAL", "side_key": "UNDER", "side": "Under 145.5", "game": "Away @ Home", "canonical_key": "away @ home|ncaab|2026-09-13", "bets_pct": 16, "money_pct": 28, "open_line": "Under 145.5 @ -110", "current_line": "Under 145.5 @ -110", "_sort_time": "2026-09-13T20:25:00Z"},
+    ])
+    history = []
+    for hour in range(17, 21):
+        history.extend([
+            {"timestamp": _timestamp(hour), "sport": "ncaab", "game_id": "g6", "market_display": "TOTAL", "side_key": "OVER", "current_line": "Over 145.5 @ -110", "bets_pct": 84, "money_pct": 72},
+            {"timestamp": _timestamp(hour), "sport": "ncaab", "game_id": "g6", "market_display": "TOTAL", "side_key": "UNDER", "current_line": "Under 145.5 @ -110", "bets_pct": 16, "money_pct": 28},
+        ])
+
+    board, _ = build_anomaly_outputs(latest, pd.DataFrame(history), pd.DataFrame(), as_of=_timestamp(16))
+    row = board.loc[board["flagged_side"] == "Over 145.5"].iloc[0]
+
+    assert row["action_type"] == "FADE CANDIDATE"
+    assert row["action_side"] == "Under 145.5"
+    assert row["action_line"] == "Under 145.5 @ -110"
+    assert row["kpi_eligible"]
+
+
+def test_action_ledger_preserves_one_candidate_at_its_decision_line(tmp_path):
+    board = pd.DataFrame([{
+        "sport": "ncaab", "game_id": "g7", "market_display": "TOTAL", "action_type": "FADE CANDIDATE",
+        "action_side": "Under 145.5", "action_line": "Under 145.5 @ -110", "flagged_side": "Over 145.5",
+        "current_line": "Over 145.5 @ -110", "first_anomaly_seen": _timestamp(18), "kpi_eligible": True,
+    }])
+
+    assert update_action_ledger(board, tmp_path, datetime.now(timezone.utc)) == 1
+    assert update_action_ledger(board, tmp_path, datetime.now(timezone.utc)) == 0
+    ledger = pd.read_csv(tmp_path / "anomaly_action_ledger.csv", dtype=str)
+
+    assert len(ledger) == 1
+    assert ledger.iloc[0]["observed_side"] == "Over 145.5"
+    assert ledger.iloc[0]["action_side"] == "Under 145.5"
+    assert ledger.iloc[0]["action_line"] == "Under 145.5 @ -110"
 
 
 def test_extreme_moneyline_uses_implied_probability_for_whipsaw_detection():

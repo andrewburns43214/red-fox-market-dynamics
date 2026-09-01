@@ -5583,18 +5583,20 @@ def build_dashboard():
 
             _anomaly_board_cols = [
                 "board_rank", "sport", "game_id", "canonical_key", "kickoff_time", "game",
-                "market_display", "flagged_side", "reaction", "path", "context_chips",
+                "market_display", "flagged_side", "focus_basis", "action_side", "action_line",
+                "action_type", "action_basis", "kpi_eligible", "reaction", "path", "context_chips",
                 "anomaly_chips", "bets_pct", "money_pct", "open_line", "current_line",
                 "path_summary", "reason", "data_badge", "observation_count",
                 "first_anomaly_seen", "max_excursion", "return_toward_open",
                 "broader_market_comparison", "key_number_note", "open_line_value",
-                "current_line_value", "move_abs", "line_dir_changes", "path_min",
-                "path_max", "observed_path", "anomaly_sort",
+                "current_line_value", "move_abs", "price_move_pct", "line_dir_changes", "path_min",
+                "path_max", "observed_path", "rank_reason", "anomaly_sort",
             ]
             _anomaly_event_cols = [
                 "sport", "game_id", "canonical_key", "game", "market_display",
-                "flagged_side", "timestamp", "step_index", "observation_count",
-                "line_value", "line_display", "bets_pct", "money_pct", "is_open",
+                "flagged_side", "focus_basis", "action_side", "action_line", "action_type",
+                "action_basis", "kpi_eligible", "timestamp", "step_index", "observation_count",
+                "line_value", "line_display", "price_odds", "implied_pct", "bets_pct", "money_pct", "is_open",
                 "is_current", "reaction", "path", "first_anomaly_seen",
                 "max_excursion", "return_toward_open", "broader_market_comparison",
                 "key_number_note",
@@ -5618,8 +5620,13 @@ def build_dashboard():
 
             _anomaly_board.to_csv("data/anomaly_board.csv", index=False)
             _anomaly_events.to_csv("data/anomaly_events.csv", index=False)
+            from anomaly_action_ledger import update_action_ledger
+            _captured_actions = update_action_ledger(
+                _anomaly_board, Path("data"), datetime.now(timezone.utc),
+            )
             print(f"[ok] wrote anomaly board csv ({len(_anomaly_board)} rows)")
             print(f"[ok] wrote anomaly events csv ({len(_anomaly_events)} rows)")
+            print(f"[ok] captured anomaly KPI candidates ({_captured_actions})")
         except Exception as _anom_e:
             print(f"[anomaly] export skipped: {repr(_anom_e)}")
 
