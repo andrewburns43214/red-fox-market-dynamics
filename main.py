@@ -2045,7 +2045,11 @@ def validate_snapshot_rows(rows: list[dict], sport: str) -> tuple[list[dict], st
                 other_games |= other_set
         overlap = len(set(games) & other_games)
         overlap_ratio = (overlap / len(games)) if games else 0.0
-        non_moneyline = sum(1 for r in rows if infer_market_type(r.get("side", ""), r.get("current_line", "")) != "MONEYLINE")
+        non_moneyline = sum(
+            1
+            for r in rows
+            if infer_market_type(r.get("side", ""), r.get("current_line") or r.get("current", "")) != "MONEYLINE"
+        )
         if overlap_ratio >= 0.5:
             return [], f"ufc: rejected snapshot, {overlap}/{len(games)} games overlap other sports from recent snapshots"
         if rows and (non_moneyline / len(rows)) > 0.15:
