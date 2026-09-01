@@ -648,8 +648,8 @@ def get_espn_kickoff_map(sport: str, games: list[str]) -> dict[str, str]:
         return {}
 
     try:
-        # DK "n7days" spans past week; also want ~2-3 weeks ahead
-        km = _espn_kickoff_map_date_range(base, games, days=5)
+        # DK pages can surface upcoming slates well beyond one week, especially NFL.
+        km = _espn_kickoff_map_date_range(base, games, days=21)
         return km if isinstance(km, dict) else {}
 
     except Exception as e:
