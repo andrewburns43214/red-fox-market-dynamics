@@ -141,8 +141,10 @@ def select_market_leaders(board_df):
     effective_reaction = recorded_reaction.where(work["_has_recorded_signal"], current_reaction).fillna("Watch")
     signal_rank = {"Contrarian": 0, "Freeze": 1, "Follow": 2, "Watch": 3}
     work["_signal_rank"] = effective_reaction.map(signal_rank).fillna(4)
-    work["_anomaly_sort"] = pd.to_numeric(work.get("anomaly_sort", 99), errors="coerce").fillna(99)
-    work["_severity_sort"] = pd.to_numeric(work.get("severity_sort", 0), errors="coerce").fillna(0)
+    anomaly_sort = work.get("anomaly_sort", pd.Series(99, index=work.index))
+    severity_sort = work.get("severity_sort", pd.Series(0, index=work.index))
+    work["_anomaly_sort"] = pd.to_numeric(anomaly_sort, errors="coerce").fillna(99)
+    work["_severity_sort"] = pd.to_numeric(severity_sort, errors="coerce").fillna(0)
 
     work = work.sort_values(
         ["_has_recorded_signal", "_signal_rank", "_anomaly_sort", "_severity_sort", "flagged_side"],
