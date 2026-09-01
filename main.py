@@ -378,6 +378,45 @@ ESPN_SCOREBOARD_BASE = {
     # ufc intentionally omitted (event-based, not scoreboard-based)
 }
 
+
+def _espn_scoreboard_extra_params(scoreboard_url_base: str) -> str:
+    """Return sport-specific scoreboard params that keep ESPN responses complete."""
+    if "mens-college-basketball" in scoreboard_url_base:
+        return "&groups=50&limit=500"
+    if "football/college-football" in scoreboard_url_base:
+        return "&groups=80&limit=500"
+    return "&limit=500"
+
+
+def _fetch_espn_scoreboard_json(url: str) -> dict:
+    """
+    Fetch ESPN scoreboard JSON using a request profile that works on the server.
+    ESPN currently rejects some browser-like headers from production, so prefer
+    a minimal request first and retry with a curl-style User-Agent.
+    """
+    errors: list[str] = []
+    header_attempts = [
+        {},
+        {"Accept": "application/json"},
+        {"User-Agent": "curl/8.0.1", "Accept": "application/json"},
+    ]
+
+    for headers in header_attempts:
+        try:
+            resp = requests.get(url, headers=headers, timeout=20)
+            status = resp.status_code
+            ctype = resp.headers.get("Content-Type") or ""
+            print(f"[espn] GET {url} status={status} content_type={ctype} len={len(resp.content)}")
+            resp.raise_for_status()
+            data = resp.json()
+            if isinstance(data, dict):
+                return data
+            errors.append(f"non-dict json ({type(data).__name__})")
+        except Exception as e:
+            errors.append(f"{type(e).__name__}: {e}")
+
+    raise RuntimeError(" ; ".join(errors[-3:]))
+
 def _norm_game_key(s: str) -> str:
     """Normalize game strings for fuzzy matching (DK vs ESPN)."""
     if s is None:
@@ -469,58 +508,8 @@ def _espn_kickoff_map_date_range(scoreboard_url_base: str, games: list[str], day
         d = start + timedelta(days=i)
         ymd = d.strftime("%Y%m%d")
 
-        # Sport-specific params (CBB + CFB need groups + bigger limits)
-        extra = ""
-        if "mens-college-basketball" in scoreboard_url_base:
-            extra = "&groups=50&limit=500"
-        elif "football/college-football" in scoreboard_url_base:
-            extra = "&groups=80&limit=500"
-        else:
-            # avoid silent truncation on some scoreboards
-            extra = "&limit=500"
-
-        url = f"{scoreboard_url_base}?dates={ymd}{extra}"
-
-                # --- ESPN fetch (instrumented; do not swallow errors) ---
-        req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                              "AppleWebKit/537.36 (KHTML, like Gecko) "
-                              "Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "application/json,text/plain,*/*",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Cache-Control": "no-cache",
-                "Pragma": "no-cache",
-            },
-        )
-
-        print(f"[espn] GET {url}")
-
-        try:
-            resp = urllib.request.urlopen(req, timeout=20)
-            status = getattr(resp, "status", None) or resp.getcode()
-            raw = resp.read()
-            enc = (resp.headers.get("Content-Encoding") or "").lower()
-            ctype = resp.headers.get("Content-Type") or ""
-
-            if "gzip" in enc:
-                raw = gzip.decompress(raw)
-
-            print(f"[espn] status={status} content_type={ctype} body_len={len(raw)} enc={enc}")
-
-            text = raw.decode("utf-8", errors="replace")
-            data = json.loads(text)
-
-            if isinstance(data, dict):
-                print(f"[espn] top_keys={list(data.keys())[:20]}")
-            else:
-                print(f"[espn] top_type={type(data)}")
-
-        except (HTTPError, URLError, json.JSONDecodeError, UnicodeDecodeError) as e:
-            print(f"[espn] ERROR {type(e).__name__}: {e}")
-            raise
-        # --- end ESPN fetch ---
+        url = f"{scoreboard_url_base}?dates={ymd}{_espn_scoreboard_extra_params(scoreboard_url_base)}"
+        data = _fetch_espn_scoreboard_json(url)
 
 
         for ev in data.get("events", []):
@@ -733,11 +722,7 @@ def _espn_finals_map_date_range(scoreboard_url_base: str, games: list[str], days
 
     # ---- Sport-specific params to avoid truncation ----
     def _extra_params(base: str) -> str:
-        if "mens-college-basketball" in base:
-            return "&groups=50&limit=500"
-        if "football/college-football" in base:
-            return "&groups=80&limit=500"
-        return "&limit=500"
+        return _espn_scoreboard_extra_params(base)
 
     espn_by_abbrev: dict[str, tuple[int, int]] = {}
     espn_by_name: dict[str, tuple[int, int]] = {}
@@ -746,15 +731,7 @@ def _espn_finals_map_date_range(scoreboard_url_base: str, games: list[str], days
         sep = "&" if "?" in scoreboard_url_base else "?"
         url = f"{scoreboard_url_base}{sep}dates={ymd}{_extra_params(scoreboard_url_base)}"
         try:
-            req = urllib.request.Request(
-                url,
-                headers={
-                    "User-Agent": "Mozilla/5.0",
-                    "Accept": "application/json,text/plain,*/*",
-                },
-            )
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+            data = _fetch_espn_scoreboard_json(url)
         except Exception:
             continue
 
@@ -1937,6 +1914,88 @@ def _load_recent_snapshot_games(hours: int = 72) -> dict[str, set[str]]:
     return recent_by_sport
 
 
+def _looks_like_iso_datetime(value: str) -> bool:
+    s = str(value or "").strip()
+    if not s:
+        return False
+    try:
+        datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return True
+    except Exception:
+        return False
+
+
+def _team_sport_validation_summary(rows: list[dict]) -> dict[str, float]:
+    summary = {
+        "row_count": float(len(rows)),
+        "game_count": 0.0,
+        "game_id_ratio": 0.0,
+        "current_line_ratio": 0.0,
+        "kickoff_ratio": 0.0,
+        "team_market_ratio": 0.0,
+    }
+    if not rows:
+        return summary
+
+    games = {
+        str(r.get("game", "") or "").strip()
+        for r in rows
+        if str(r.get("game", "") or "").strip()
+    }
+    summary["game_count"] = float(len(games))
+    summary["game_id_ratio"] = sum(
+        1 for r in rows if str(r.get("game_id", "") or "").strip()
+    ) / len(rows)
+    summary["current_line_ratio"] = sum(
+        1 for r in rows if str(r.get("current", "") or r.get("current_line", "") or "").strip()
+    ) / len(rows)
+    summary["kickoff_ratio"] = sum(
+        1
+        for r in rows
+        if _looks_like_iso_datetime(
+            r.get("dk_start_iso")
+            or r.get("start_time_iso")
+            or r.get("game_time_iso")
+            or ""
+        )
+    ) / len(rows)
+    summary["team_market_ratio"] = sum(
+        1 for r in rows if _infer_market_from_side_line(r.get("side", ""), r.get("current", ""))
+        in {"MONEYLINE", "SPREAD", "TOTAL"}
+    ) / len(rows)
+    return summary
+
+
+def _accept_team_sport_without_espn(rows: list[dict], sport_key: str) -> tuple[bool, str]:
+    """
+    Safety valve for core team sports when ESPN is unavailable or incomplete.
+    We only accept rows that still look like real DK split markets.
+    """
+    summary = _team_sport_validation_summary(rows)
+    game_count = int(summary["game_count"])
+    row_count = int(summary["row_count"])
+    if row_count == 0 or game_count == 0:
+        return False, f"{sport_key}: fallback validation failed (no parsed rows/games)"
+
+    if summary["game_id_ratio"] < 0.90:
+        return False, f"{sport_key}: fallback validation failed (game_id coverage {summary['game_id_ratio']:.0%})"
+    if summary["current_line_ratio"] < 0.95:
+        return False, f"{sport_key}: fallback validation failed (line coverage {summary['current_line_ratio']:.0%})"
+    if summary["team_market_ratio"] < 0.95:
+        return False, f"{sport_key}: fallback validation failed (market coverage {summary['team_market_ratio']:.0%})"
+    if summary["kickoff_ratio"] < 0.60:
+        return False, f"{sport_key}: fallback validation failed (kickoff coverage {summary['kickoff_ratio']:.0%})"
+
+    per_game = row_count / max(game_count, 1)
+    if per_game < 2.0:
+        return False, f"{sport_key}: fallback validation failed (only {per_game:.1f} rows/game)"
+
+    return True, (
+        f"{sport_key}: accepted {row_count} DK rows across {game_count} games "
+        f"using fallback validation"
+    )
+
+
 def validate_snapshot_rows(rows: list[dict], sport: str) -> tuple[list[dict], str]:
     sport_key = normalize_sport_key(sport)
     if not rows:
@@ -1950,12 +2009,29 @@ def validate_snapshot_rows(rows: list[dict], sport: str) -> tuple[list[dict], st
         try:
             kickoff_map = get_espn_kickoff_map(sport_key, games)
         except Exception as e:
-            return [], f"{sport_key}: ESPN validation failed ({type(e).__name__})"
+            accepted, fallback_note = _accept_team_sport_without_espn(rows, sport_key)
+            if accepted:
+                return rows, f"{sport_key}: ESPN validation failed ({type(e).__name__}); {fallback_note}"
+            return [], f"{sport_key}: ESPN validation failed ({type(e).__name__}); {fallback_note}"
 
         matched_games = {g for g, iso in (kickoff_map or {}).items() if str(iso or "").strip()}
         matched_ratio = (len(matched_games) / len(games)) if games else 0.0
         if not matched_games or matched_ratio < 0.35:
-            return [], f"{sport_key}: rejected snapshot, only {len(matched_games)}/{len(games)} games matched ESPN"
+            accepted, fallback_note = _accept_team_sport_without_espn(rows, sport_key)
+            if accepted:
+                return rows, (
+                    f"{sport_key}: ESPN matched {len(matched_games)}/{len(games)} games; "
+                    f"{fallback_note}"
+                )
+            return [], f"{sport_key}: rejected snapshot, only {len(matched_games)}/{len(games)} games matched ESPN; {fallback_note}"
+
+        if matched_ratio < 0.85:
+            accepted, fallback_note = _accept_team_sport_without_espn(rows, sport_key)
+            if accepted:
+                return rows, (
+                    f"{sport_key}: ESPN matched {len(matched_games)}/{len(games)} games, "
+                    f"keeping full DK slate; {fallback_note}"
+                )
 
         filtered = [r for r in rows if str(r.get("game", "") or "").strip() in matched_games]
         return filtered, f"{sport_key}: kept {len(filtered)}/{len(rows)} rows after ESPN validation"
