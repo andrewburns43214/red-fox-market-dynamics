@@ -16,7 +16,6 @@ def market_for(row):
 
 
 def main():
-    dashboard = pd.read_csv(DATA / "dashboard.csv", dtype=str, keep_default_na=False)
     snapshots = pd.read_csv(DATA / "snapshots.csv", dtype=str, keep_default_na=False)
 
     snapshots["market_display"] = snapshots.apply(market_for, axis=1)
@@ -36,8 +35,11 @@ def main():
     l2_path = DATA / "l2_consensus.csv"
     l2 = pd.read_csv(l2_path, dtype=str, keep_default_na=False) if l2_path.exists() else pd.DataFrame()
     board, events = build_anomaly_outputs(dashboard, history, l2)
-    board.to_csv(DATA / "anomaly_board.csv", index=False)
-    events.to_csv(DATA / "anomaly_events.csv", index=False)
+    # Replace each public file only after its complete export is ready for Nginx.
+    for frame, name in ((board, "anomaly_board.csv"), (events, "anomaly_events.csv")):
+        temporary = DATA / f".{name}.tmp"
+        frame.to_csv(temporary, index=False)
+        temporary.replace(DATA / name)
     print(f"[ok] wrote {len(board)} board rows and {len(events)} timeline events")
 
 

@@ -152,8 +152,10 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     money_pct = _num(latest_row.get("money_pct"))
     low_support = bets_pct <= 40 and money_pct <= 45
     very_low_support = bets_pct <= 35 and money_pct <= 40
-    heavy_public = bets_pct >= 70
-    extreme_public = bets_pct >= 80
+    ticket_heavy = bets_pct >= 70
+    public_support = ticket_heavy and money_pct >= 55
+    ticket_led = ticket_heavy and money_pct < 55
+    extreme_public = public_support and bets_pct >= 80
     low_bets_high_money = bets_pct <= 35 and money_pct >= 60
 
     move_toward_side = _move_toward_side(points, market, latest_row)
@@ -164,12 +166,13 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     reaction = ""
     if low_support and move_toward_side and move_abs >= move_threshold:
         reaction = "Contrarian"
-    elif heavy_public and held:
+    elif public_support and held:
         reaction = "Freeze"
-    elif heavy_public and move_toward_side and move_abs >= move_threshold:
+    elif public_support and move_toward_side and move_abs >= move_threshold:
         reaction = "Follow"
 
-    if not reaction and not stale_dk and not whipsaw:
+    # Every active market has a primary state; secondary path/context signals add detail.
+    if not reaction:
         reaction = "Watch"
 
     chips = [chip for chip in [reaction, path_label] if chip]
@@ -180,6 +183,8 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         context_chips.append("Stale DK")
     if low_bets_high_money:
         context_chips.append("Low Bets / High $")
+    if ticket_led:
+        context_chips.append("Ticket-led")
 
     data_badge = _data_badge(points, latest_row)
     path_summary = _path_summary(points)
@@ -190,7 +195,8 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         path_label=path_label,
         stale_dk=stale_dk,
         low_support=low_support,
-        heavy_public=heavy_public,
+        public_support=public_support,
+        ticket_led=ticket_led,
         low_bets_high_money=low_bets_high_money,
         move_abs=move_abs,
         move_threshold=move_threshold,
@@ -509,9 +515,9 @@ def _first_anomaly_seen(points, reaction, path_label, stale_dk, market, latest_r
         money_pct = points[index]["money_pct"]
         if reaction == "Contrarian" and bets_pct <= 40 and money_pct <= 45 and toward_side and move_abs >= move_threshold:
             return point["timestamp"].isoformat()
-        if reaction == "Freeze" and bets_pct >= 70 and move_abs <= hold_threshold:
+        if reaction == "Freeze" and bets_pct >= 70 and money_pct >= 55 and move_abs <= hold_threshold:
             return point["timestamp"].isoformat()
-        if reaction == "Follow" and bets_pct >= 70 and toward_side and move_abs >= move_threshold:
+        if reaction == "Follow" and bets_pct >= 70 and money_pct >= 55 and toward_side and move_abs >= move_threshold:
             return point["timestamp"].isoformat()
         if path_label == "Whipsaw" and path_changes >= 1 and move_abs >= move_threshold:
             return point["timestamp"].isoformat()
@@ -529,7 +535,7 @@ def _return_toward_open(points):
     return abs(current_value - open_value) < best_excursion
 
 
-def _reason_line(reaction, path_label, stale_dk, low_support, heavy_public, low_bets_high_money, move_abs, move_threshold, held, broader_summary):
+def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ticket_led, low_bets_high_money, move_abs, move_threshold, held, broader_summary):
     if reaction == "Contrarian":
         if path_label == "Whipsaw":
             return "Line improved for the weak side, then gave some back"
@@ -540,18 +546,22 @@ def _reason_line(reaction, path_label, stale_dk, low_support, heavy_public, low_
         if stale_dk and broader_summary:
             return broader_summary
         if held:
-            return "Heavy public side drew little or no move from open"
-        return "Public side kept pressure on but DK mostly held its number"
+            return "Heavy tickets and money drew little or no move from open"
+        return "Strong ticket and money support met a mostly held number"
     if reaction == "Follow":
         if path_label == "Late":
             return "Public side finally got a late move toward it"
-        return "Public pressure matched the move direction"
+        return "Strong ticket and money support matched the move direction"
     if stale_dk and broader_summary:
         return broader_summary
     if path_label == "Whipsaw":
         return "Line reversed direction after a meaningful excursion"
-    if heavy_public:
-        return "Public action was loud but the path stayed mixed"
+    if ticket_led and held:
+        return "High ticket share had weak money support and the line held"
+    if ticket_led:
+        return "High ticket share had weak money support"
+    if public_support:
+        return "Strong ticket and money support had a mixed path"
     if low_support and move_abs >= move_threshold:
         return "Low-support side moved more than expected"
     return "Path shape stood out versus the split support"
