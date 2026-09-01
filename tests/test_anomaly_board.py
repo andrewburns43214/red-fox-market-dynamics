@@ -179,7 +179,26 @@ class TestAnomalyBoard(unittest.TestCase):
         row = board.loc[board["flagged_side"] == "Over 44.5"].iloc[0]
         self.assertEqual(row["reaction"], "Watch")
         self.assertIn("Public Pressure", row["context_chips"])
-        self.assertIn("neither held nor meaningfully aligned", row["reason"])
+        self.assertIn("below the confirmed signal threshold", row["reason"])
+
+    def test_smaller_directional_move_is_visible_as_a_developing_read(self):
+        latest = pd.DataFrame([
+            {"sport": "nfl", "game_id": "g7", "market_display": "TOTAL", "side_key": "Over", "side": "Over 44.5", "game": "A @ B", "bets_pct": 31, "money_pct": 27, "open_line": "Over 44.5 @ -110", "current_line": "Over 45 @ -110", "_sort_time": _ts(22, 0)},
+            {"sport": "nfl", "game_id": "g7", "market_display": "TOTAL", "side_key": "Under", "side": "Under 44.5", "game": "A @ B", "bets_pct": 69, "money_pct": 73, "open_line": "Under 44.5 @ -110", "current_line": "Under 44 @ -110", "_sort_time": _ts(22, 0)},
+        ])
+        history = pd.DataFrame([
+            {"timestamp": _ts(18, 0), "sport": "nfl", "game_id": "g7", "market_display": "TOTAL", "side_key": "Over", "current_line": "Over 44.5 @ -110", "bets_pct": 31, "money_pct": 27},
+            {"timestamp": _ts(20, 0), "sport": "nfl", "game_id": "g7", "market_display": "TOTAL", "side_key": "Over", "current_line": "Over 45 @ -110", "bets_pct": 31, "money_pct": 27},
+            {"timestamp": _ts(18, 0), "sport": "nfl", "game_id": "g7", "market_display": "TOTAL", "side_key": "Under", "current_line": "Under 44.5 @ -110", "bets_pct": 69, "money_pct": 73},
+            {"timestamp": _ts(20, 0), "sport": "nfl", "game_id": "g7", "market_display": "TOTAL", "side_key": "Under", "current_line": "Under 44 @ -110", "bets_pct": 69, "money_pct": 73},
+        ])
+
+        board, _ = build_anomaly_outputs(latest, history, pd.DataFrame(), as_of=_ts(17, 0))
+
+        row = board.loc[board["flagged_side"] == "Over 44.5"].iloc[0]
+        self.assertEqual(row["reaction"], "Watch")
+        self.assertIn("Developing Read", row["context_chips"])
+        self.assertIn("below the confirmed signal threshold", row["reason"])
 
 
 if __name__ == "__main__":

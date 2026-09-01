@@ -198,6 +198,11 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     line_moved = line_move_abs >= line_move_threshold
     juice_moved = price_move_pct >= MEANINGFUL_PRICE_MOVE_PCT
     meaningful_move = move_abs >= move_threshold if market == "MONEYLINE" else line_moved or juice_moved
+    developing_move = (
+        move_abs >= move_threshold / 2
+        if market == "MONEYLINE"
+        else line_move_abs >= line_move_threshold / 2 or price_move_pct >= MEANINGFUL_PRICE_MOVE_PCT / 2
+    )
     late_move = _is_late_move(points, market, move_threshold)
     whipsaw = dir_changes >= 1 and max_excursion >= move_threshold
     held = move_abs <= hold_threshold if market == "MONEYLINE" else (
@@ -253,6 +258,13 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     # Every active market has a primary state; secondary path/context signals add detail.
     if not reaction:
         reaction = "Watch"
+    developing_read = (
+        reaction == "Watch"
+        and split_alert_eligible
+        and (low_support or public_support)
+        and move_toward_side
+        and developing_move
+    )
 
     focus_basis = _focus_basis(
         reaction, low_bets_high_money, ticket_led, split_capped, favorite_risk,
@@ -269,6 +281,8 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         context_chips.append("Market Lag")
     if reaction == "Watch" and public_support and not split_capped and not favorite_risk:
         context_chips.append("Public Pressure")
+    if developing_read:
+        context_chips.append("Developing Read")
     price_risk_note = _price_risk_note(reaction, market, sport, current_value, current_odds)
     if price_risk_note:
         context_chips.append("Price Risk")
@@ -299,6 +313,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         split_capped=split_capped,
         favorite_risk=favorite_risk,
         price_move_pct=price_move_pct,
+        developing_read=developing_read,
     )
     if price_risk_note:
         reason = f"{reason} {price_risk_note}"
@@ -407,7 +422,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         "path_max": round(path_max, 3),
         "observed_path": json.dumps([point["display"] for point in points]),
         "rank_reason": rank_reason,
-        "anomaly_sort": _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped, favorite_risk),
+        "anomaly_sort": _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped, favorite_risk, developing_read),
         "maturity_sort": maturity_sort,
         "severity_sort": severity,
         "_event_rows": event_rows,
@@ -756,7 +771,7 @@ def _return_toward_open(points, market):
     return abs(current_value - open_value) < best_excursion
 
 
-def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ticket_led, low_bets_high_money, move_abs, move_threshold, held, broader_summary, split_capped, favorite_risk, price_move_pct):
+def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ticket_led, low_bets_high_money, move_abs, move_threshold, held, broader_summary, split_capped, favorite_risk, price_move_pct, developing_read=False):
     if split_capped:
         if price_move_pct >= MEANINGFUL_PRICE_MOVE_PCT:
             return f"Price moved {price_move_pct:.1f} implied points, but a capped 0%/100% split is excluded from alert ranking"
@@ -783,6 +798,8 @@ def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ti
         return "Strong ticket and money support matched the move direction"
     if stale_dk and broader_summary:
         return broader_summary
+    if developing_read:
+        return "Split support and direction agree, but the move is below the confirmed signal threshold"
     if path_label == "Whipsaw":
         return "Line reversed direction after a meaningful excursion"
     if path_label == "Juice Move":
@@ -942,7 +959,7 @@ def _severity_score(reaction, whipsaw, extreme_public, move_abs, max_excursion, 
     return round(score, 3)
 
 
-def _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped=False, favorite_risk=False):
+def _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped=False, favorite_risk=False, developing_read=False):
     if split_capped and not stale_dk:
         return 8
     if favorite_risk and not stale_dk:
@@ -961,6 +978,8 @@ def _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped=False, 
         return 5
     if reaction == "Follow":
         return 6
+    if developing_read:
+        return 6.5
     return 7
 
 

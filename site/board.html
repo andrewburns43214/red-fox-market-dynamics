@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Red Fox - Market Intelligence</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <style>
@@ -46,9 +46,9 @@
   --accent2:   #2080f0;
   --acc-bg:    #eef5ff;
   --acc-brd:   #b8d4f8;
-  /* Fonts â€” system stack + JetBrains Mono */
-  --mono:      'JetBrains Mono', 'Courier New', monospace;
-  --sans:      'IBM Plex Sans', sans-serif;
+  /* Fonts: contemporary product UI with a dedicated data face. */
+  --mono:      'IBM Plex Mono', 'Courier New', monospace;
+  --sans:      'Manrope', sans-serif;
   /* Typography scale */
   --font-kpi:    28px;
   --font-title:  20px;
@@ -1288,7 +1288,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
           <th class="th-edge" title="The exact side or total observed by the board. It is market evidence, not a wager recommendation. A smaller market lens appears only when the evidence qualifies for KPI tracking." onclick="sortBy('flagged_side',this)">Market Evidence</th>
           <th class="th-total" title="Detected reaction between participation and price movement" onclick="sortBy('reaction',this)">Market Signal</th>
           <th class="th-pat" title="Data quality: Clean has 3 or more valid observations; Thin has 2" onclick="sortBy('data_badge',this)">Data Quality</th>
-          <th class="th-dec" title="Plain-language explanation of why this market is surfaced">Why Surfaced</th>
+          <th class="th-dec" title="Plain-language evidence for the displayed signal state">Signal Rationale</th>
           <th class="th-play" title="Open the chart, evidence, and observation history">Timeline</th>
               </tr>
             </thead>
@@ -1703,6 +1703,7 @@ const SIGNAL_META={
   'Stale DK':{label:'Market Lag',cls:'mr-contra',tip:'The broader market moved while the observed price held, indicating a possible market lag.'},
   'Ticket-led':{cls:'mr-reverse',tip:'Tickets are concentrated while money is not strong enough for a Freeze or Follow.'},
   'Public Pressure':{cls:'mr-reverse',tip:'High tickets and money are present, but the market is neither held nor meaningfully moving with that side. Context only, not an anomaly.'},
+  'Developing Read':{cls:'mr-neutral',tip:'Split support and direction agree, but the move is below the confirmed signal threshold.'},
   'Low Bets / High $':{cls:'mr-aligned',tip:'Low ticket share with high money share on the observed side.'},
   'K3':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 3.'},
   'K7':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 7.'},
