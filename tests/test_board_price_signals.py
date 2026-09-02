@@ -82,6 +82,45 @@ def test_ticket_heavy_short_favorite_is_context_not_a_freeze():
     assert "parlay risk" in row["rank_reason"].lower()
 
 
+def test_extreme_moneyline_prices_are_always_marked_as_price_risk_context():
+    for odds in (-350, 325):
+        latest = {
+            "sport": "nfl", "game_id": f"price-{odds}", "market_display": "MONEYLINE", "side_key": "HOME",
+            "side": "Home", "game": "Away @ Home", "canonical_key": f"away @ home|nfl|{odds}",
+            "bets_pct": 55, "money_pct": 54, "open_line": f"Home @ {odds:+d}",
+            "current_line": f"Home @ {odds:+d}", "_sort_time": "2026-09-13T20:25:00Z",
+        }
+        history = [
+            {"timestamp": _timestamp(17), "sport": "nfl", "game_id": f"price-{odds}", "market_display": "MONEYLINE", "side_key": "HOME", "current_line": f"Home @ {odds:+d}", "bets_pct": 55, "money_pct": 54},
+            {"timestamp": _timestamp(18), "sport": "nfl", "game_id": f"price-{odds}", "market_display": "MONEYLINE", "side_key": "HOME", "current_line": f"Home @ {odds:+d}", "bets_pct": 55, "money_pct": 54},
+        ]
+
+        row = _board(latest, history)
+
+        assert "Price Risk" in row["context_chips"]
+        assert f"{odds:+d} moneyline" in row["reason"]
+
+
+def test_market_move_surfaces_without_a_split_based_reaction():
+    latest = {
+        "sport": "ncaaf", "game_id": "market-move", "market_display": "SPREAD", "side_key": "AWAY",
+        "side": "Away +18.5", "game": "Away @ Home", "canonical_key": "away @ home|ncaaf|2026-09-03",
+        "bets_pct": 32, "money_pct": 82, "open_line": "Away +24.5 @ -112",
+        "current_line": "Away +18.5 @ -108", "_sort_time": "2026-09-03T23:00:00Z",
+    }
+    history = [
+        {"timestamp": _timestamp(17), "sport": "ncaaf", "game_id": "market-move", "market_display": "SPREAD", "side_key": "AWAY", "current_line": "Away +24.5 @ -112", "bets_pct": 32, "money_pct": 82},
+        {"timestamp": _timestamp(18), "sport": "ncaaf", "game_id": "market-move", "market_display": "SPREAD", "side_key": "AWAY", "current_line": "Away +18.5 @ -108", "bets_pct": 32, "money_pct": 82},
+    ]
+
+    row = _board(latest, history)
+
+    assert row["reaction"] == "Watch"
+    assert "Market Move" in row["context_chips"]
+    assert row["anomaly_sort"] == 6.75
+    assert row["reason"].startswith("Market moved meaningfully")
+
+
 def test_freeze_focus_identifies_the_high_split_side_not_a_recommendation():
     latest = {
         "sport": "nfl", "game_id": "g5", "market_display": "SPREAD", "side_key": "HOME",

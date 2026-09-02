@@ -26,6 +26,7 @@ HOLD_MOVE_BY_MARKET = {
 MEANINGFUL_PRICE_MOVE_PCT = 2.5
 HOLD_PRICE_MOVE_PCT = 1.0
 HEAVY_FAVORITE_ODDS = -300
+EXTREME_UNDERDOG_ODDS = 300
 PARLAY_RISK_ODDS = -200
 EXPENSIVE_POINT_PRICE_ODDS = -125
 HIGH_SPREAD_BY_SPORT = {
@@ -223,6 +224,9 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         line_move_abs <= line_hold_threshold and price_move_pct <= HOLD_PRICE_MOVE_PCT
     )
     one_way = (not whipsaw) and meaningful_move
+    # Surface large market movement even when the current splits do not support
+    # one of the directional split-based signals.
+    market_move = meaningful_move
     path_label = ""
     if whipsaw:
         path_label = "Whipsaw"
@@ -297,6 +301,8 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         context_chips.append("Public Pressure")
     if developing_read:
         context_chips.append("Developing Read")
+    if market_move:
+        context_chips.append("Market Move")
     price_risk_note = _price_risk_note(reaction, market, sport, current_value, current_odds)
     if price_risk_note:
         context_chips.append("Price Risk")
@@ -328,9 +334,10 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         favorite_risk=favorite_risk,
         price_move_pct=price_move_pct,
         developing_read=developing_read,
+        market_move=market_move,
     )
     if price_risk_note:
-        reason = f"{reason} {price_risk_note}"
+        reason = _append_sentence(reason, price_risk_note)
 
     flagged_side = str(latest_row.get("side", "")).strip() or str(latest_row.get("side_key", "")).strip()
     action = _action_fields(
@@ -350,7 +357,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     kickoff_label = _format_kickoff(kickoff_ts)
     maturity_sort = 1 if hours_to_kickoff is not None and hours_to_kickoff > 48 else 0
     rank_reason = _rank_reason(
-        reaction, path_label, stale_dk, split_capped, favorite_risk, hours_to_kickoff,
+        reaction, path_label, stale_dk, split_capped, favorite_risk, hours_to_kickoff, market_move,
     )
     severity = _severity_score(
         reaction=reaction,
@@ -434,7 +441,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         "path_max": round(path_max, 3),
         "observed_path": json.dumps([point["display"] for point in points]),
         "rank_reason": rank_reason,
-        "anomaly_sort": _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped, favorite_risk, developing_read),
+        "anomaly_sort": _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped, favorite_risk, developing_read, market_move),
         "maturity_sort": maturity_sort,
         "severity_sort": severity,
         "_event_rows": event_rows,
@@ -792,7 +799,7 @@ def _return_toward_open(points, market):
     return abs(current_value - open_value) < best_excursion
 
 
-def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ticket_led, low_bets_high_money, move_abs, move_threshold, held, broader_summary, split_capped, favorite_risk, price_move_pct, developing_read=False):
+def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ticket_led, low_bets_high_money, move_abs, move_threshold, held, broader_summary, split_capped, favorite_risk, price_move_pct, developing_read=False, market_move=False):
     if split_capped:
         if price_move_pct >= MEANINGFUL_PRICE_MOVE_PCT:
             return f"Price moved {price_move_pct:.1f} implied points, but a capped 0%/100% split is excluded from alert ranking"
@@ -819,6 +826,8 @@ def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ti
         return "Strong ticket and money support matched the move direction"
     if stale_dk and broader_summary:
         return broader_summary
+    if market_move:
+        return "Market moved meaningfully from its opening number, regardless of the current split"
     if developing_read:
         return "Split support and direction agree, but the move is below the confirmed signal threshold"
     if path_label == "Whipsaw":
@@ -834,6 +843,15 @@ def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ti
     if low_support and move_abs >= move_threshold:
         return "Low-support side moved more than expected"
     return "Path shape stood out versus the split support"
+
+
+def _append_sentence(base, detail):
+    """Combine independent rationale notes without run-on punctuation."""
+    base = str(base or "").strip().rstrip(".")
+    detail = str(detail or "").strip()
+    if not detail:
+        return base
+    return f"{base}. {detail}"
 
 
 def _focus_basis(reaction, low_bets_high_money, ticket_led, split_capped, favorite_risk):
@@ -938,6 +956,10 @@ def _counterpart_row(pair_df, latest_row):
 
 def _price_risk_note(reaction, market, sport, current_value, current_odds):
     """Add pricing or large-spread context without manufacturing an alert."""
+    if market == "MONEYLINE" and current_odds is not None and (
+        current_odds <= HEAVY_FAVORITE_ODDS or current_odds >= EXTREME_UNDERDOG_ODDS
+    ):
+        return f"Price Risk: the current {int(current_odds):+d} moneyline is an extreme price; any movement is context, not a standalone signal."
     if market == "SPREAD" and abs(current_value) >= HIGH_SPREAD_BY_SPORT.get(sport, float("inf")):
         return f"Price Risk: this {abs(current_value):g}-point spread needs a full-point move before it can qualify on line movement alone."
     if reaction != "Freeze":
@@ -980,7 +1002,7 @@ def _severity_score(reaction, whipsaw, extreme_public, move_abs, max_excursion, 
     return round(score, 3)
 
 
-def _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped=False, favorite_risk=False, developing_read=False):
+def _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped=False, favorite_risk=False, developing_read=False, market_move=False):
     if split_capped and not stale_dk:
         return 8
     if favorite_risk and not stale_dk:
@@ -1001,6 +1023,8 @@ def _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped=False, 
         return 6
     if developing_read:
         return 6.5
+    if market_move:
+        return 6.75
     return 7
 
 
@@ -1054,7 +1078,7 @@ def _is_split_capped(bets_pct, money_pct):
     return bets_pct <= 0 or bets_pct >= 100 or money_pct <= 0 or money_pct >= 100
 
 
-def _rank_reason(reaction, path_label, stale_dk, split_capped, favorite_risk, hours_to_kickoff):
+def _rank_reason(reaction, path_label, stale_dk, split_capped, favorite_risk, hours_to_kickoff, market_move=False):
     if split_capped:
         return "Split cap: a 0% or 100% source value cannot earn an alert rank."
     if favorite_risk:
@@ -1071,6 +1095,8 @@ def _rank_reason(reaction, path_label, stale_dk, split_capped, favorite_risk, ho
         base = "Whipsaw: the observed price path materially reversed."
     elif path_label == "Juice Move":
         base = "Juice move: the point line held while the price changed materially."
+    elif market_move:
+        base = "Market move: the number changed meaningfully, independent of the current split."
     else:
         base = "Watch: active market without a qualifying alert."
     if hours_to_kickoff is not None and hours_to_kickoff > 48:

@@ -1289,6 +1289,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
     <button class="signal-key-item key-held" type="button" onclick="openSignalGuide('Held')">Held</button>
     <button class="signal-key-item key-late" type="button" onclick="openSignalGuide('Late')">Late</button>
     <button class="signal-key-item key-oneway" type="button" onclick="openSignalGuide('One-Way')">One-Way</button>
+    <button class="signal-key-item key-oneway" type="button" onclick="openSignalGuide('Market Move')">Market Move</button>
     <button class="signal-key-item key-stale" type="button" onclick="openSignalGuide('Market Lag')">Market Lag</button>
     <button class="signal-key-item key-ticket" type="button" onclick="openSignalGuide('Ticket-led')">Ticket-led</button>
     <button class="signal-key-item key-ticket" type="button" onclick="openSignalGuide('Public Pressure')">Public Pressure</button>
@@ -1826,8 +1827,9 @@ const SIGNAL_META={
   'Follow':{cls:'mr-aligned',tip:'High tickets and money on the observed side while its price or line moved with it.'},
   'Whipsaw':{cls:'mr-reverse',tip:'The observed price or line moved materially, then reversed direction.'},
   'Held':{cls:'mr-neutral',tip:'The observed line and price changed less than the hold threshold from the first snapshot.'},
-  'Late':{cls:'mr-reverse',tip:'The meaningful move first appeared in the final third of the observed timeline.'},
+  'Late':{cls:'mr-reverse',tip:'A meaningful move first appeared in the closing window before the game starts.'},
   'One-Way':{cls:'mr-neutral',tip:'The observed path made a meaningful move without reversing.'},
+  'Market Move':{cls:'mr-neutral',tip:'The market moved meaningfully from open in either direction, regardless of the current split. This is evidence, not a directional signal.'},
   'Market Lag':{cls:'mr-contra',tip:'The broader market moved while the observed price held, indicating a possible market lag.'},
   'Stale DK':{label:'Market Lag',cls:'mr-contra',tip:'The broader market moved while the observed price held, indicating a possible market lag.'},
   'Ticket-led':{cls:'mr-reverse',tip:'Tickets are concentrated while money is not strong enough for a Freeze or Follow.'},
@@ -1842,7 +1844,7 @@ const SIGNAL_META={
   'K17':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 17.'},
   'K21':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 21.'},
   'Juice Move':{cls:'mr-freeze',tip:'The point line held while the attached American odds moved materially.'},
-  'Price Risk':{cls:'mr-reverse',tip:'A high-split Freeze on expensive point-spread or total juice, or an unusually large spread. This is caution context, not a directional signal.'},
+  'Price Risk':{cls:'mr-reverse',tip:'An extreme moneyline price, expensive attached juice, or unusually large spread. This is caution context, not a directional signal.'},
   'Heavy Favorite':{cls:'mr-reverse',tip:'A heavily priced or ticket-heavy moneyline favorite. This is risk context, not a directional signal.'},
   'Split Cap':{label:'Capped Split',cls:'mr-contra',tip:'The source reported a capped 0% or 100% split, so directional split signals are disabled.'},
   'Watch':{cls:'mr-neutral',tip:'An active market with no qualifying signal at this snapshot.'}
@@ -1871,6 +1873,14 @@ function signalMetaFor(label){
   if(dataQuality[raw.toUpperCase()]) return {label:raw,tip:dataQuality[raw.toUpperCase()]};
   if(raw==='Capped Split') return SIGNAL_META['Split Cap'];
   return SIGNAL_META[raw] || {label:raw||'Signal',tip:'Additional market context for this market.'};
+}
+function applySignalTooltips(){
+  document.querySelectorAll('.signal-key-item').forEach(button=>{
+    const label=button.dataset.signal||button.textContent.trim();
+    const meta=signalMetaFor(label);
+    button.title=meta.tip;
+    button.setAttribute('aria-label',(meta.label||label)+': '+meta.tip);
+  });
 }
 function signalGuideItem(label, tip){
   return `<div class="signal-guide-item"><strong>${escHtml(label)}</strong><p>${escHtml(tip)}</p></div>`;
@@ -1909,13 +1919,14 @@ function anomalyBadge(text){
   if(!t) return '';
   const meta=signalMetaFor(t);
   const clickArg=JSON.stringify(t).replace(/"/g,'&quot;');
-  return `<button class="mr signal-chip ${meta.cls||'mr-neutral'}" type="button" onclick="event.stopPropagation();openSignalGuide(${clickArg})" aria-label="Explain ${escHtml(meta.label||t)}" style="margin-right:4px">${escHtml(meta.label||t)}</button>`;
+  return `<button class="mr signal-chip ${meta.cls||'mr-neutral'}" type="button" onclick="event.stopPropagation();openSignalGuide(${clickArg})" aria-label="Explain ${escHtml(meta.label||t)}" title="${escHtml(meta.tip)}" style="margin-right:4px">${escHtml(meta.label||t)}</button>`;
 }
 function dataBadge(v){
   const t=String(v||'').trim().toUpperCase();
   const label=t==='CLEAN'?'CLEAN':t==='THIN'?'THIN':t==='SPLIT RISK'?'SPLIT RISK':'FEED RISK';
   const cls=t==='CLEAN'?'tMID':t==='THIN'?'tLATE':'tLIVE';
-  return `<button class="tim ${cls} signal-chip" type="button" onclick="event.stopPropagation();openSignalGuide('${label}')">${label}</button>`;
+  const meta=signalMetaFor(label);
+  return `<button class="tim ${cls} signal-chip" type="button" onclick="event.stopPropagation();openSignalGuide('${label}')" aria-label="Explain ${escHtml(label)}" title="${escHtml(meta.tip)}">${label}</button>`;
 }
 function hasSplitRead(r){ return String(r?.data_badge||'').trim().toUpperCase()!=='SPLIT RISK'; }
 function splitCell(r){
@@ -2020,6 +2031,18 @@ async function loadLiveRecent(){
     const status=first.score_status||'Live score updating';
     return `<article class="live-game-card"><div class="live-game-top"><div><div>${spChip(first.sport)}</div><div class="live-game-name">${first.game||'--'}</div><div class="live-status">${status==='Live score unavailable'?'Score pending':status}</div></div><div class="live-score">${score}</div></div><div class="live-freeze">Frozen pregame record</div>${markets.map(row=>{const canDrill=Boolean(row.first_anomaly_seen||row.observation_count);return `<div class="live-market"><span class="live-market-type">${row.market_display||'Market'}</span><div class="live-market-side">${row.flagged_side||'--'}${canDrill?` <button type="button" onclick="openGameDetail(allLiveRecent[${allLiveRecent.indexOf(row)}])">Details</button>`:''}</div><span class="live-market-meta">${row.open_line||'--'} to ${row.current_line||'--'} | ${row.bets_pct||'--'}% bets / ${row.money_pct||'--'}% money</span></div>`}).join('')}</article>`;
   }).join('');
+}
+
+async function refreshLiveRecentCount(){
+  try{
+    const rows=await loadCSV(LIVE_RECENT_URL+'?_='+Date.now())||[];
+    allLiveRecent=rows;
+    const games=new Set(rows.map(row=>[row.sport,row.game_id,row.game].join('|')));
+    const badge=document.getElementById('b-live');
+    if(badge) badge.textContent=games.size;
+  }catch(error){
+    // Leave the initial zero when the optional Live & Recent feed is unavailable.
+  }
 }
 
 function _decRank(d,r){ const k=(d||'').toUpperCase(); if(k==='BET') return 1; if(k==='LEAN') return (r&&isLocked(r))?3:2; return 4; }
@@ -2327,7 +2350,17 @@ async function openGameDetail(r){
   if(!allEvents.length) await ensureEvents();
   const gid=r.game_id||r.game||'';
   const n=s=>{ const x=Number(s); return isNaN(x)?null:x; };
-  const mkts=(window._boardRows||[]).filter(x=>(x.game_id||x.game||'')===gid);
+  const gameRows=[...(window._boardRows||[]), ...(allLiveRecent||[])].filter(x=>(x.game_id||x.game||'')===gid);
+  const mkts=[];
+  const seenMarkets=new Set();
+  gameRows.forEach(row=>{
+    const key=String(row.market_display||'').toUpperCase();
+    if(key&&!seenMarkets.has(key)){
+      seenMarkets.add(key);
+      mkts.push(row);
+    }
+  });
+  window._gameDetailRows=mkts;
   const evRows=(allEvents||[])
     .filter(x=>(x.game_id||x.game||'')===gid && (x.flagged_side||'')===r.flagged_side && (x.market_display||'')===r.market_display)
     .sort((a,b)=>new Date(a.timestamp||0)-new Date(b.timestamp||0));
@@ -2337,6 +2370,13 @@ async function openGameDetail(r){
   html+=spChip(r.sport);
   html+='<div><div style="font-size:16px;font-weight:800;color:var(--text);">'+(r.game||'--')+'</div>';
   html+='<div style="font-size:11px;color:var(--text3);margin-top:2px">'+(r.kickoff_time||'--')+'</div></div></div>';
+  if(mkts.length>1){
+    const marketTabs=mkts.map((row,index)=>{
+      const active=(String(row.market_display||'').toUpperCase()===String(r.market_display||'').toUpperCase());
+      return '<button type="button" class="movement-tab '+(active?'on':'')+'" title="Open '+escHtml(row.market_display||'market')+' timeline" onclick="openGameDetail(window._gameDetailRows['+index+'])">'+escHtml(row.market_display||'Market')+'</button>';
+    }).join('');
+    html+='<div class="detail-market-switcher" aria-label="Other markets for this game"><span>Market</span><div class="movement-tabs">'+marketTabs+'</div></div>';
+  }
 
   // anomaly summary
   const an=anomalyParts(r);
@@ -2346,7 +2386,7 @@ async function openGameDetail(r){
   html+='<span>'+dataBadge(r.data_badge)+'</span>';
   html+='</div>';
   html+=movementChart(evRows,r.market_display);
-  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+anomalyBadge(an.reaction,'reaction')+anomalyBadge(an.path,'path')+an.context.map(c=>'<span class="mr mr-neutral">'+c+'</span>').join('')+'</div>';
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+anomalyBadge(an.reaction,'reaction')+anomalyBadge(an.path,'path')+an.context.map(c=>anomalyBadge(c)).join('')+'</div>';
   html+='<div style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">Observed Market Side</div>';
   html+='<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:3px">'+(r.flagged_side||'--')+'</div>';
   html+='<div style="font-size:11px;color:var(--text3);margin-bottom:8px">'+(r.focus_basis||'Observed side')+'</div>';
@@ -3470,7 +3510,7 @@ async function refreshBoardNow(){
 
 setInterval(()=>{ const clock=document.getElementById('clk'); if(clock) clock.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'America/New_York'}); },1000);
 // Build KPIs once Chart.js loads (deferred)
-document.addEventListener('DOMContentLoaded',()=>{ const _checkChart=setInterval(()=>{ if(typeof Chart!=='undefined'&&allDash.length){ clearInterval(_checkChart); buildKPIs(); } },200); });
+document.addEventListener('DOMContentLoaded',()=>{ applySignalTooltips(); refreshLiveRecentCount(); const _checkChart=setInterval(()=>{ if(typeof Chart!=='undefined'&&allDash.length){ clearInterval(_checkChart); buildKPIs(); } },200); });
 
 function updateStats(){
   const hc=allDash.filter(r=>(r.reaction||'')==='Contrarian'||(r.reaction||'')==='Freeze');
