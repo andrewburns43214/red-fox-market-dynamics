@@ -35,6 +35,10 @@ SCOREBOARD_TEAM_ALIASES = {
     "ny mets": "new york mets",
     "ny yankees": "new york yankees",
 }
+COMPOUND_NICKNAMES = (
+    "blue jackets", "blue jays", "golden knights", "maple leafs",
+    "red sox", "red wings", "trail blazers", "white sox",
+)
 
 
 def game_key(value: object, sport: str) -> str:
@@ -48,6 +52,25 @@ def game_key(value: object, sport: str) -> str:
         away_key = SCOREBOARD_TEAM_ALIASES.get(away_key, away_key)
         home_key = SCOREBOARD_TEAM_ALIASES.get(home_key, home_key)
     return "@".join((away_key, home_key))
+
+
+def team_signature(value: object, sport: str) -> str:
+    """Return a narrow nickname signature for a paired-match fallback only."""
+    normalized = normalize_team_name(str(value or ""), sport)
+    if sport.lower() == "mlb":
+        normalized = SCOREBOARD_TEAM_ALIASES.get(normalized, normalized)
+    for nickname in COMPOUND_NICKNAMES:
+        if normalized.endswith(nickname):
+            return nickname
+    return normalized.rsplit(" ", 1)[-1]
+
+
+def signature_game_key(value: object, sport: str) -> str:
+    value = str(value or "").replace(" vs. ", " @ ").replace(" vs ", " @ ")
+    if " @ " not in value:
+        return ""
+    away, home = value.split(" @ ", 1)
+    return "@".join((team_signature(away, sport), team_signature(home, sport)))
 
 
 def scoreboard(sport: str, now: datetime) -> dict[str, list[dict[str, str]]]:
@@ -81,7 +104,12 @@ def scoreboard(sport: str, now: datetime) -> dict[str, list[dict[str, str]]]:
                 "score_state": str(status_type.get("state", "in")),
                 "event_time": str(event.get("date", "")),
             }
-            games.setdefault(game_key(f"{away_name} @ {home_name}", sport), []).append(item)
+            matchup = f"{away_name} @ {home_name}"
+            # Exact canonical names are primary. The paired nickname key is a
+            # fallback for harmless city/abbreviation differences only.
+            for key in {game_key(matchup, sport), signature_game_key(matchup, sport)}:
+                if key:
+                    games.setdefault(key, []).append(item)
     return games
 
 
@@ -165,7 +193,11 @@ def main(scores_only: bool = False) -> None:
         for sport, indices in live.groupby("sport").groups.items():
             scores = scoreboard(str(sport).lower(), now)
             for index in indices:
-                candidates = scores.get(game_key(live.at[index, "game"], str(sport).lower()), [])
+                sport_key = str(sport).lower()
+                matchup = live.at[index, "game"]
+                candidates = scores.get(game_key(matchup, sport_key), [])
+                if not candidates:
+                    candidates = scores.get(signature_game_key(matchup, sport_key), [])
                 kickoff = pd.to_datetime(live.at[index, "kickoff_iso"], errors="coerce", utc=True)
                 score = min(candidates, key=lambda item: abs(pd.to_datetime(item["event_time"], errors="coerce", utc=True) - kickoff)) if candidates and pd.notna(kickoff) else None
                 if score:
