@@ -1023,7 +1023,7 @@ def _price_risk_note(reaction, market, sport, current_value, current_odds):
     ):
         return f"Price Risk: the current {int(current_odds):+d} moneyline is an extreme price; any movement is context, not a standalone signal."
     if market == "SPREAD" and abs(current_value) >= HIGH_SPREAD_BY_SPORT.get(sport, float("inf")):
-        return f"Price Risk: this {abs(current_value):g}-point spread needs a full-point move before it can qualify on line movement alone."
+        return f"Price Risk: at this {abs(current_value):g}-point spread, small line changes are less reliable; require at least a full-point move to confirm a split-based directional read."
     if reaction != "Freeze":
         return ""
     if market in {"SPREAD", "TOTAL"} and current_odds is not None and current_odds <= EXPENSIVE_POINT_PRICE_ODDS:
@@ -1162,7 +1162,7 @@ def _rank_reason(reaction, path_label, stale_dk, split_capped, favorite_risk, ho
     else:
         base = "Watch: active market without a qualifying alert."
     if price_risk and market_move:
-        base = f"{base} Price risk: priority is reduced because the current price is extreme."
+        base = f"{base} Price risk: the caution condition reduces priority."
     if hours_to_kickoff is not None and hours_to_kickoff > 48:
         return f"{base} Early market: ranked after closer games within the same signal class."
     return base
