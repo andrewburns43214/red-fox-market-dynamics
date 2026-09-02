@@ -9,6 +9,7 @@ import re
 
 import pandas as pd
 import requests
+from team_aliases import normalize_team_name
 
 
 DATA = Path("data")
@@ -25,9 +26,12 @@ SCOREBOARD_URLS = {
 }
 
 
-def norm(value: object) -> str:
-    value = str(value or "").lower().replace(" vs. ", " @ ").replace(" vs ", " @ ")
-    return re.sub(r"[^a-z0-9]+", "", value)
+def game_key(value: object, sport: str) -> str:
+    value = str(value or "").replace(" vs. ", " @ ").replace(" vs ", " @ ")
+    if " @ " not in value:
+        return re.sub(r"[^a-z0-9]+", "", value.lower())
+    away, home = value.split(" @ ", 1)
+    return "@".join((normalize_team_name(away, sport), normalize_team_name(home, sport)))
 
 
 def scoreboard(sport: str, now: datetime) -> dict[str, dict[str, str]]:
@@ -60,7 +64,7 @@ def scoreboard(sport: str, now: datetime) -> dict[str, dict[str, str]]:
                 "score_status": detail,
                 "score_state": str(status_type.get("state", "in")),
             }
-            games[norm(f"{away_name} @ {home_name}")] = item
+            games[game_key(f"{away_name} @ {home_name}", sport)] = item
     return games
 
 
@@ -104,7 +108,7 @@ def main(scores_only: bool = False) -> None:
         for sport, indices in live.groupby("sport").groups.items():
             scores = scoreboard(str(sport).lower(), now)
             for index in indices:
-                score = scores.get(norm(live.at[index, "game"]))
+                score = scores.get(game_key(live.at[index, "game"], str(sport).lower()))
                 if score:
                     for column, value in score.items():
                         live.at[index, column] = value
