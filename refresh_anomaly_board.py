@@ -7,6 +7,7 @@ import pandas as pd
 from anomaly_action_ledger import apply_recorded_signals, update_action_ledger
 from anomaly_action_results import rebuild_action_results
 from anomaly_board import build_anomaly_outputs, select_market_leaders
+from build_live_recent import main as build_live_recent
 from main import infer_market_type, normalize_side_key
 
 
@@ -18,6 +19,9 @@ def market_for(row):
 
 
 def main():
+    # Capture any just-started games from the prior pregame export before this
+    # run replaces it. The separate file is the only source for Live & Recent.
+    build_live_recent()
     snapshots = pd.read_csv(DATA / "snapshots.csv", dtype=str, keep_default_na=False)
 
     snapshots["market_display"] = snapshots.apply(market_for, axis=1)
