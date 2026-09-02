@@ -129,12 +129,15 @@ def main(scores_only: bool = False) -> None:
             return
         rows.append(recovered)
     live = pd.concat(rows, ignore_index=True, sort=False)
-    live["_kickoff"] = pd.to_datetime(live.get("kickoff_iso", ""), errors="coerce", utc=True)
+    # Compare in one timezone-free representation; CSVs can contain a mix of
+    # offset-aware and legacy naive kickoff values.
+    live["_kickoff"] = pd.to_datetime(live.get("kickoff_iso", ""), errors="coerce", utc=True).dt.tz_localize(None)
     # Keep this as a short look-in, not a results archive. Final games stay
     # available for the rest of the day; an unresolved live status gets a small safety window.
     state = live.get("score_state", pd.Series("", index=live.index)).astype(str).str.lower()
-    cutoff_final = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=10)
-    cutoff_unresolved = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=8)
+    now_naive = pd.Timestamp(now).tz_localize(None)
+    cutoff_final = now_naive - pd.Timedelta(hours=10)
+    cutoff_unresolved = now_naive - pd.Timedelta(hours=8)
     final = state.eq("post")
     live = live[live["_kickoff"].notna() & (((final) & (live["_kickoff"] >= cutoff_final)) | ((~final) & (live["_kickoff"] >= cutoff_unresolved)))].copy()
     key_columns = [column for column in ("sport", "game_id", "market_display", "flagged_side") if column in live]
