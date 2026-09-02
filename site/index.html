@@ -1084,13 +1084,15 @@ async function handleCheckout(plan) {
       },
       body: JSON.stringify({ plan })
     });
-    const data = await resp.json();
+    const data = await resp.json().catch(() => ({}));
     if (data.url) {
       window.location.href = data.url;
     } else {
-      alert('Error creating checkout session. Please try again.');
+      console.error('Stripe checkout setup failed for ' + plan + ':', data.error || resp.status);
+      alert('Checkout for this plan is not available yet. Please try again shortly or contact Support.');
     }
   } catch (err) {
+    console.error('Stripe checkout request failed for ' + plan + ':', err);
     alert('Error creating checkout session. Please try again.');
   }
 }
