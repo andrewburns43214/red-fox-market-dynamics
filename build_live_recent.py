@@ -14,6 +14,7 @@ import requests
 DATA = Path("data")
 OUT = DATA / "live_recent.csv"
 BOARD = DATA / "anomaly_board.csv"
+EMPTY_COLUMNS = ["sport", "game_id", "game", "kickoff_iso", "market_display", "flagged_side", "reaction", "path", "score_away", "score_home", "score_status", "score_state", "frozen_at_utc"]
 SCOREBOARD_URLS = {
     "nfl": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
     "nba": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard",
@@ -63,10 +64,17 @@ def scoreboard(sport: str, now: datetime) -> dict[str, dict[str, str]]:
     return games
 
 
+def read_csv_or_empty(path: Path) -> pd.DataFrame:
+    try:
+        return pd.read_csv(path, dtype=str, keep_default_na=False) if path.exists() and path.stat().st_size else pd.DataFrame()
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
+
+
 def main(scores_only: bool = False) -> None:
     now = datetime.now(timezone.utc)
-    existing = pd.read_csv(OUT, dtype=str, keep_default_na=False) if OUT.exists() else pd.DataFrame()
-    previous = pd.DataFrame() if scores_only else (pd.read_csv(BOARD, dtype=str, keep_default_na=False) if BOARD.exists() else pd.DataFrame())
+    existing = read_csv_or_empty(OUT)
+    previous = pd.DataFrame() if scores_only else read_csv_or_empty(BOARD)
     rows = []
     if not existing.empty:
         rows.append(existing)
@@ -78,7 +86,7 @@ def main(scores_only: bool = False) -> None:
             started["frozen_at_utc"] = now.isoformat()
             rows.append(started.drop(columns=["_kickoff"]))
     if not rows:
-        pd.DataFrame().to_csv(OUT, index=False)
+        pd.DataFrame(columns=EMPTY_COLUMNS).to_csv(OUT, index=False)
         return
     live = pd.concat(rows, ignore_index=True, sort=False)
     live["_kickoff"] = pd.to_datetime(live.get("kickoff_iso", ""), errors="coerce", utc=True)
