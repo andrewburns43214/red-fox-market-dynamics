@@ -78,6 +78,11 @@ serve(async (req) => {
       cancel_url: Deno.env.get('SITE_URL')! + '/#pricing',
       line_items: [{ price: priceId, quantity: 1 }],
       mode: plan === 'day_pass' ? 'payment' : 'subscription',
+      custom_text: {
+        submit: {
+          message: 'Secure payment processed by Stripe. Red Fox never receives or stores your card details.',
+        },
+      },
     };
 
     const session = await stripe.checkout.sessions.create(sessionConfig);
