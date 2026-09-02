@@ -30,6 +30,10 @@ SCOREBOARD_URLS = {
 # letter abbreviation. Keep these score-feed-only aliases explicit.
 SCOREBOARD_TEAM_ALIASES = {
     "chi white sox": "chicago white sox",
+    "chi cubs": "chicago cubs",
+    "la angels": "los angeles angels",
+    "ny mets": "new york mets",
+    "ny yankees": "new york yankees",
 }
 
 
