@@ -82,11 +82,11 @@ def main(scores_only: bool = False) -> None:
         return
     live = pd.concat(rows, ignore_index=True, sort=False)
     live["_kickoff"] = pd.to_datetime(live.get("kickoff_iso", ""), errors="coerce", utc=True)
-    # Keep this as a short look-in, not a results archive. Final games fall off
-    # four hours after start; an unresolved live status gets a small safety window.
+    # Keep this as a short look-in, not a results archive. Final games stay
+    # available for the rest of the day; an unresolved live status gets a small safety window.
     state = live.get("score_state", pd.Series("", index=live.index)).astype(str).str.lower()
     final = state.eq("post")
-    live = live[live["_kickoff"].notna() & (((final) & (live["_kickoff"] >= now - timedelta(hours=4))) | ((~final) & (live["_kickoff"] >= now - timedelta(hours=8))))].copy()
+    live = live[live["_kickoff"].notna() & (((final) & (live["_kickoff"] >= now - timedelta(hours=10))) | ((~final) & (live["_kickoff"] >= now - timedelta(hours=8))))].copy()
     key_columns = [column for column in ("sport", "game_id", "market_display", "flagged_side") if column in live]
     if key_columns:
         live = live.sort_values("frozen_at_utc", na_position="last").drop_duplicates(key_columns, keep="first")
