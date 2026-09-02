@@ -1821,6 +1821,26 @@ function anomalyParts(r){
     context:ctx
   };
 }
+function orderedSignalValues(an){
+  const context=[...(an.context||[])];
+  const moveIndex=context.indexOf('Market Move');
+  const ordered=[an.reaction];
+  if(moveIndex>=0) ordered.push(context.splice(moveIndex,1)[0]);
+  if(an.path) ordered.push(an.path);
+  return [...ordered,...context].filter(Boolean);
+}
+function displayRationale(r){
+  const recorded=String(r.recorded_note||'').trim();
+  const current=String(r.reason||'').trim();
+  if(!recorded) return current||'-';
+  const extras=[];
+  for(const label of ['Market Move','Price Risk']){
+    if(!String(r.context_chips||'').includes(label) || recorded.includes(label)) continue;
+    const match=current.match(new RegExp(label+':[^.]+(?:\\.|$)'));
+    if(match) extras.push(match[0].trim());
+  }
+  return [recorded,...extras].join(' ')||'-';
+}
 const SIGNAL_META={
   'Contrarian':{cls:'mr-aligned',tip:'Low support on the observed side while its price or line moved toward it.'},
   'Freeze':{cls:'mr-freeze',tip:'High tickets and money on the observed side while both its line and price held near open.'},
@@ -2091,11 +2111,7 @@ function renderBoard(resetPage=true){
   visibleData.forEach((r,i)=>{
     const an=anomalyParts(r);
     const rankReason=String(r.rank_reason||'Board priority reflects verified signal strength and market maturity.').replace(/"/g,'&quot;');
-    const signalChips=[
-      {value:an.reaction,kind:'reaction'},
-      {value:an.path,kind:'path'},
-      ...an.context.map(value=>({value,kind:'context'}))
-    ].map(({value,kind})=>anomalyBadge(value,kind)).join('');
+    const signalChips=orderedSignalValues(an).map(value=>anomalyBadge(value)).join('');
     const tr=document.createElement('tr');
     tr.title='Open timeline and evidence';
     tr.onclick=()=>openGameDetail(window._boardRows[i]);
@@ -2115,7 +2131,7 @@ function renderBoard(resetPage=true){
       <td class="td-edge">${actionLens(r)}</td>
       <td class="td-total">${signalChips}</td>
       <td class="td-pat">${dataBadge(r.data_badge)}</td>
-      <td class="td-dec"><span style="font-size:11px;color:var(--text2);white-space:normal;display:block;line-height:1.35">${r.recorded_note||r.reason||'-'}</span></td>
+      <td class="td-dec"><span style="font-size:11px;color:var(--text2);white-space:normal;display:block;line-height:1.35">${displayRationale(r)}</span></td>
       <td class="td-pick"><button class="mr mr-neutral" onclick="event.stopPropagation();openGameDetail(window._boardRows[${i}])">View</button></td>
     `;
     tbody.appendChild(tr);
@@ -2386,7 +2402,7 @@ async function openGameDetail(r){
   html+='<span>'+dataBadge(r.data_badge)+'</span>';
   html+='</div>';
   html+=movementChart(evRows,r.market_display);
-  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+anomalyBadge(an.reaction,'reaction')+anomalyBadge(an.path,'path')+an.context.map(c=>anomalyBadge(c)).join('')+'</div>';
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+orderedSignalValues(an).map(value=>anomalyBadge(value)).join('')+'</div>';
   html+='<div style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">Observed Market Side</div>';
   html+='<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:3px">'+(r.flagged_side||'--')+'</div>';
   html+='<div style="font-size:11px;color:var(--text3);margin-bottom:8px">'+(r.focus_basis||'Observed side')+'</div>';
@@ -2399,7 +2415,7 @@ async function openGameDetail(r){
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Open '+(r.open_line||'--')+' -> Current '+(r.current_line||'--')+'</div>';
   if(Number(r.price_move_pct)>0) html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Price movement '+Number(r.price_move_pct).toFixed(1)+' implied points</div>';
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Path '+(r.path_summary||'--')+'</div>';
-  html+='<div class="detail-rationale" style="font-size:12px;color:var(--text2);line-height:1.6;padding:8px 12px;background:var(--bg2);border-radius:6px;border-left:3px solid var(--accent)">'+(r.recorded_note||r.reason||'-')+'</div>';
+  html+='<div class="detail-rationale" style="font-size:12px;color:var(--text2);line-height:1.6;padding:8px 12px;background:var(--bg2);border-radius:6px;border-left:3px solid var(--accent)">'+displayRationale(r)+'</div>';
   if(r.rank_reason) html+='<div class="detail-rank-note" style="font-size:10px;color:var(--text3);line-height:1.5;margin-top:8px">Board rank: '+r.rank_reason+'</div>';
   html+='</div>';
 

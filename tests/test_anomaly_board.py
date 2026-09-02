@@ -34,6 +34,17 @@ class TestAnomalyBoard(unittest.TestCase):
 
         self.assertEqual(leaders.iloc[0]["flagged_side"], "Zulu +3")
 
+    def test_current_market_move_ranks_above_freeze_but_below_contrarian(self):
+        board = pd.DataFrame([
+            {"sport": "nfl", "game_id": "g1", "market_display": "SPREAD", "flagged_side": "Move +3", "reaction": "Watch", "context_chips": "Market Move", "anomaly_sort": 6.75, "severity_sort": 10, "game": "Move @ Home"},
+            {"sport": "nfl", "game_id": "g2", "market_display": "SPREAD", "flagged_side": "Freeze -3", "reaction": "Freeze", "context_chips": "", "anomaly_sort": 3, "severity_sort": 50, "game": "Freeze @ Home"},
+            {"sport": "nfl", "game_id": "g3", "market_display": "SPREAD", "flagged_side": "Contra +3", "reaction": "Contrarian", "context_chips": "Market Move", "anomaly_sort": 2, "severity_sort": 5, "game": "Contra @ Home"},
+        ])
+
+        leaders = select_market_leaders(board)
+
+        self.assertEqual(leaders["flagged_side"].tolist(), ["Contra +3", "Move +3", "Freeze -3"])
+
     def test_contrarian_whipsaw_with_low_bets_high_money(self):
         latest = pd.DataFrame([
             {

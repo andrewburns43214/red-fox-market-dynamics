@@ -25,6 +25,18 @@ HOLD_MOVE_BY_MARKET = {
 
 MEANINGFUL_PRICE_MOVE_PCT = 2.5
 HOLD_PRICE_MOVE_PCT = 1.0
+MARKET_MOVE_PRICE_PCT = 3.0
+MARKET_MOVE_LINE_BY_SPORT = {
+    "nfl": {"SPREAD": 1.0, "TOTAL": 1.5},
+    "ncaaf": {"SPREAD": 1.5, "TOTAL": 1.5},
+    "cfb": {"SPREAD": 1.5, "TOTAL": 1.5},
+    "nba": {"SPREAD": 1.5, "TOTAL": 2.0},
+    "ncaab": {"SPREAD": 1.5, "TOTAL": 2.0},
+    "cbb": {"SPREAD": 1.5, "TOTAL": 2.0},
+    "mlb": {"SPREAD": 1.0, "TOTAL": 1.0},
+    "nhl": {"SPREAD": 0.5, "TOTAL": 0.5},
+    "ufc": {"SPREAD": 1.5, "TOTAL": 1.5},
+}
 HEAVY_FAVORITE_ODDS = -300
 EXTREME_UNDERDOG_ODDS = 300
 PARLAY_RISK_ODDS = -200
@@ -152,8 +164,13 @@ def select_market_leaders(board_df):
     work["_has_recorded_signal"] = recorded_reaction.fillna("").astype(str).str.strip().ne("")
     current_reaction = work.get("reaction", pd.Series("Watch", index=work.index))
     effective_reaction = recorded_reaction.where(work["_has_recorded_signal"], current_reaction).fillna("Watch")
-    signal_rank = {"Contrarian": 0, "Freeze": 1, "Follow": 2, "Watch": 3}
-    work["_signal_rank"] = effective_reaction.map(signal_rank).fillna(4)
+    context = work.get("context_chips", pd.Series("", index=work.index)).fillna("").astype(str)
+    market_move = context.str.contains(r"(?:^|\|)\s*Market Move\s*(?:\||$)", regex=True)
+    unreliable_move = context.str.contains(r"Split Cap|Heavy Favorite", regex=True)
+    # Current independently material movement ranks above a held public split.
+    # Capped split and heavy-favorite markets remain downranked as context only.
+    work["_signal_rank"] = effective_reaction.map({"Contrarian": 0, "Freeze": 3, "Follow": 4, "Watch": 5}).fillna(6)
+    work.loc[market_move & ~unreliable_move & (effective_reaction != "Contrarian"), "_signal_rank"] = 2
     anomaly_sort = work.get("anomaly_sort", pd.Series(99, index=work.index))
     severity_sort = work.get("severity_sort", pd.Series(0, index=work.index))
     maturity_sort = work.get("maturity_sort", pd.Series(0, index=work.index))
@@ -224,9 +241,11 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         line_move_abs <= line_hold_threshold and price_move_pct <= HOLD_PRICE_MOVE_PCT
     )
     one_way = (not whipsaw) and meaningful_move
-    # Surface large market movement even when the current splits do not support
-    # one of the directional split-based signals.
-    market_move = meaningful_move
+    # Market Move is deliberately stricter than a split-backed signal. It only
+    # describes a material change still present from the opening observation.
+    market_move = _is_current_market_move(
+        sport, market, line_move_abs, price_move_pct,
+    )
     path_label = ""
     if whipsaw:
         path_label = "Whipsaw"
@@ -336,6 +355,9 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         developing_read=developing_read,
         market_move=market_move,
     )
+    market_move_note = _market_move_note(sport, market, line_move_abs, price_move_pct) if market_move else ""
+    if market_move_note:
+        reason = market_move_note if reaction == "Watch" else _append_sentence(reason, market_move_note)
     if price_risk_note:
         reason = _append_sentence(reason, price_risk_note)
 
@@ -600,6 +622,29 @@ def _movement_severity(market, line_move_abs, price_move_pct):
     )
 
 
+def _market_move_line_threshold(sport, market):
+    return MARKET_MOVE_LINE_BY_SPORT.get(sport, {}).get(
+        market, MEANINGFUL_MOVE_BY_MARKET[market]
+    )
+
+
+def _is_current_market_move(sport, market, line_move_abs, price_move_pct):
+    if market == "MONEYLINE":
+        return price_move_pct >= MARKET_MOVE_PRICE_PCT
+    return (
+        line_move_abs >= _market_move_line_threshold(sport, market)
+        or price_move_pct >= MARKET_MOVE_PRICE_PCT
+    )
+
+
+def _market_move_note(sport, market, line_move_abs, price_move_pct):
+    if market == "MONEYLINE":
+        return f"Market Move: moneyline price changed {price_move_pct:.1f} implied points from open to current"
+    if line_move_abs >= _market_move_line_threshold(sport, market):
+        return f"Market Move: line changed {line_move_abs:g} points from open to current"
+    return f"Market Move: attached price changed {price_move_pct:.1f} implied points while the line held"
+
+
 def _count_direction_changes(points, market):
     if len(points) < 3:
         return 0
@@ -826,8 +871,6 @@ def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ti
         return "Strong ticket and money support matched the move direction"
     if stale_dk and broader_summary:
         return broader_summary
-    if market_move:
-        return "Market moved meaningfully from its opening number, regardless of the current split"
     if developing_read:
         return "Split support and direction agree, but the move is below the confirmed signal threshold"
     if path_label == "Whipsaw":

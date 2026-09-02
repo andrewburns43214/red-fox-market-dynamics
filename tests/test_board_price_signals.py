@@ -118,7 +118,25 @@ def test_market_move_surfaces_without_a_split_based_reaction():
     assert row["reaction"] == "Watch"
     assert "Market Move" in row["context_chips"]
     assert row["anomaly_sort"] == 6.75
-    assert row["reason"].startswith("Market moved meaningfully")
+    assert row["reason"].startswith("Market Move: line changed 6 points")
+
+
+def test_one_point_college_total_needs_material_price_support_for_market_move():
+    latest = {
+        "sport": "ncaaf", "game_id": "total-move", "market_display": "TOTAL", "side_key": "OVER",
+        "side": "Over 48.5", "game": "Away @ Home", "canonical_key": "away @ home|ncaaf|2026-09-03",
+        "bets_pct": 50, "money_pct": 50, "open_line": "Over 47.5 @ -110",
+        "current_line": "Over 48.5 @ -110", "_sort_time": "2026-09-03T23:00:00Z",
+    }
+    history = [
+        {"timestamp": _timestamp(17), "sport": "ncaaf", "game_id": "total-move", "market_display": "TOTAL", "side_key": "OVER", "current_line": "Over 47.5 @ -110", "bets_pct": 50, "money_pct": 50},
+        {"timestamp": _timestamp(18), "sport": "ncaaf", "game_id": "total-move", "market_display": "TOTAL", "side_key": "OVER", "current_line": "Over 48.5 @ -110", "bets_pct": 50, "money_pct": 50},
+    ]
+
+    row = _board(latest, history)
+
+    assert row["path"] == "One-Way"
+    assert "Market Move" not in row["context_chips"]
 
 
 def test_freeze_focus_identifies_the_high_split_side_not_a_recommendation():
