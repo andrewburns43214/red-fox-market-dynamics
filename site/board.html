@@ -1075,6 +1075,10 @@ body { background: radial-gradient(circle at 88% -10%, #dceff0 0, transparent 30
 .board-tools { display:flex; align-items:center; gap:14px; min-width:0; }
 .board-tools input { width:170px; padding:6px 10px; border:1px solid var(--border); border-radius:5px; background:#fff; color:var(--text); font:600 10px var(--sans); outline:0; }
 .board-tools input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(15,95,115,.1); }
+.board-more { display:flex; justify-content:center; padding:4px 0 18px; }
+.board-more button { border:1px solid var(--acc-brd); border-radius:999px; padding:8px 14px; background:#fff; color:var(--accent); font:700 11px var(--sans); cursor:pointer; }
+.board-more button:hover { background:var(--acc-bg); }
+.board-update-note { color:var(--text3); font:700 9px var(--mono); letter-spacing:.03em; }
 .tscroll { padding: 0 20px 20px; }
 table { border-spacing: 0 7px; border-collapse: separate; }
 thead th { background: transparent; border: 0; padding: 9px 10px 5px; color: var(--text3); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
@@ -1171,6 +1175,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
   .pane-hdr #grp-toggle,.pane-hdr .grp-btn[onclick="exportCSV()"] { order:3; }
   .signal-guide-btn { display:inline-flex; order:3; }
   .pane-hdr .grp-btn[title="Back to top"] { display:none; }
+  .board-update-note { display:none; }
   .pane-meta,.mcap { display:none; } .tscroll { padding:0 8px 12px; }
   .mfilters { gap:4px; } .mchip { padding:4px 8px; font-size:10px; } .grp-btn { padding:5px; font-size:10px; }
   .board-tools { flex:1 1 100%; } .board-tools input { width:100%; min-width:0; }
@@ -1340,13 +1345,14 @@ td:last-child { border-radius: 0 8px 8px 0; }
             <button class="signal-guide-btn" type="button" onclick="openSignalGuide()">Signal Guide</button>
             <button class="grp-btn" id="locked-jump" onclick="jumpToLocked()" style="display:none">Live / Locked Games</button>
             <button class="grp-btn" onclick="scrollToTop()" title="Back to top"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4M3 14h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Top</span></button>
+            <button class="grp-btn" type="button" onclick="refreshBoardNow()" title="Check for the latest board data without reloading the page">Refresh</button>
             <button class="grp-btn" onclick="exportCSV()" title="Export to CSV">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:-1px;margin-right:3px"><path d="M2 14h12M8 2v9M4 7l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>CSV
             </button>
           </div>
           <div class="board-tools">
             <input type="text" id="board-search" placeholder="Search games or signals" oninput="renderBoard()">
-            <span class="pane-meta" id="board-meta">-</span>
+            <span class="pane-meta" id="board-meta">-</span><span class="board-update-note" id="board-update-note"></span>
           </div>
         </div>
         <div class="tscroll">
@@ -1369,6 +1375,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
             <tbody id="tbody"></tbody>
           </table>
         </div>
+        <div class="board-more" id="board-more" hidden><button type="button" onclick="showMoreBoardRows()">Show more markets</button></div>
       </div>
 
 
@@ -1962,7 +1969,14 @@ function _decRank(d,r){ const k=(d||'').toUpperCase(); if(k==='BET') return 1; i
 function filtered(){ const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport); if(filter==='today') d=d.filter(r=>isToday(r.kickoff_iso)); if(filter==='highconf') d=d.filter(r=>['Contrarian','Freeze'].includes(r.recorded_reaction||r.reaction||'')); if(market!=='ALL') d=d.filter(r=>(r.market_display||'').toUpperCase()===market); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.flagged_side||'').toLowerCase().includes(ql)||(r.action_side||'').toLowerCase().includes(ql)||(r.action_type||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)||(r.reaction||'').toLowerCase().includes(ql)||(r.recorded_reaction||'').toLowerCase().includes(ql)||(r.path||'').toLowerCase().includes(ql)||(r.context_chips||'').toLowerCase().includes(ql)||(r.data_badge||'').toLowerCase().includes(ql)||(r.reason||'').toLowerCase().includes(ql)||(r.recorded_note||'').toLowerCase().includes(ql)); return d.sort((a,b)=>{ let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
 
 window._boardRows=[];
-function renderBoard(){
+let _visibleBoardRows=0;
+let _boardHasRendered=false;
+function boardPageSize(){ return window.matchMedia('(max-width: 900px)').matches ? 24 : 80; }
+function showMoreBoardRows(){
+  _visibleBoardRows=Math.min(window._boardRows.length,_visibleBoardRows+boardPageSize());
+  renderBoard(false);
+}
+function renderBoard(resetPage=true){
   let data=filtered();
   data.forEach(r=>{ r._grpSub=false; r._grpFirst=false; });
   // Group mode: group by game_id, sort groups by best total_score
@@ -1984,14 +1998,17 @@ function renderBoard(){
     groups.forEach(g=>{ g.rows.forEach((r,j)=>{ r._grpSub=j>0; r._grpFirst=j===0&&g.rows.length>1; data.push(r); }); });
   }
   window._boardRows=data;
+  if(resetPage || !_visibleBoardRows) _visibleBoardRows=Math.min(data.length,boardPageSize());
+  _visibleBoardRows=Math.min(_visibleBoardRows,data.length);
+  const visibleData=data.slice(0,_visibleBoardRows);
   const titles={all:'Board',highconf:'Priority Signals',today:'Board'};
   document.getElementById('board-title').textContent=titles[filter]||'Board';
   document.getElementById('locked-jump').style.display='none';
   const _nGames=new Set(data.map(r=>r.game_id||r.game||'?')).size;
   const _marketLabel=market==='ALL'?'all markets':market.toLowerCase();
-  document.getElementById('board-meta').textContent=`${_nGames} games | ${data.length} markets | ${_marketLabel} | sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' | grouped':''}`;
+  document.getElementById('board-meta').textContent=`${_nGames} games | showing ${visibleData.length} of ${data.length} markets | ${_marketLabel} | sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' | grouped':''}`;
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
-  data.forEach((r,i)=>{
+  visibleData.forEach((r,i)=>{
     const an=anomalyParts(r);
     const rankReason=String(r.rank_reason||'Board priority reflects verified signal strength and market maturity.').replace(/"/g,'&quot;');
     const signalChips=[
@@ -2023,6 +2040,13 @@ function renderBoard(){
     `;
     tbody.appendChild(tr);
   });
+  const more=document.getElementById('board-more');
+  if(more){
+    const button=more.querySelector('button');
+    more.hidden=_visibleBoardRows>=data.length;
+    if(button) button.textContent=`Show ${Math.min(boardPageSize(),data.length-_visibleBoardRows)} more markets`;
+  }
+  _boardHasRendered=true;
 }
 
 function actionLens(r){
@@ -2236,7 +2260,8 @@ function setMovementView(button, view){
   chart.querySelectorAll('[data-movement-view]').forEach(panel=>{ panel.style.display=panel.dataset.movementView===view?'block':'none'; });
 }
 
-function openGameDetail(r){
+async function openGameDetail(r){
+  if(!allEvents.length) await ensureEvents();
   const gid=r.game_id||r.game||'';
   const n=s=>{ const x=Number(s); return isNaN(x)?null:x; };
   const mkts=(window._boardRows||[]).filter(x=>(x.game_id||x.game||'')===gid);
@@ -3305,20 +3330,28 @@ function parseLine(raw,mkt){
 }
 
 let _lastDashHash='';
-async function loadAll(){
+let _eventsLoadPromise=null;
+async function ensureEvents(){
+  if(allEvents.length) return allEvents;
+  if(_eventsLoadPromise) return _eventsLoadPromise;
+  _eventsLoadPromise=loadCSV(EVENTS_URL).then(events=>{
+    allEvents=(events&&events.length)?events:[];
+    allLedger=allEvents;
+    updateStats();
+    return allEvents;
+  }).finally(()=>{ _eventsLoadPromise=null; });
+  return _eventsLoadPromise;
+}
+async function loadAll({forceRender=false}={}){
   let freshJson=null;
   try{ const r=await fetch('/data/freshness.json?_='+Date.now()); if(r.ok) freshJson=await r.json(); } catch(e){}
-  const[dash,ledger,events,results,kpi]=await Promise.all([
+  const[dash,results,kpi]=await Promise.all([
     loadCSV(DASH_URL),
-    loadCSV(LEDGER_URL),
-    loadCSV(EVENTS_URL),
     loadCSV(RESULTS_URL),
     loadCSV('/data/kpi_master_dataset.csv'),
   ]);
   updateFreshness(freshJson);
   const dashRaw=(dash&&dash.length)?dash:[];
-  allLedger=(ledger&&ledger.length)?ledger:[];
-  allEvents=(events&&events.length)?events:[];
   allResults=results||MOCK_RESULTS;
   allKPI=kpi||[];
   allDash=dashRaw.filter(r=>{
@@ -3350,7 +3383,26 @@ async function loadAll(){
   updateStats();
   renderResults();
   if(tabId==='history') renderHistory();
-  if(_changed){ renderBoard(); }
+  if(_changed){
+    const updateNote=document.getElementById('board-update-note');
+    if(forceRender || !_boardHasRendered){
+      renderBoard();
+      if(updateNote) updateNote.textContent='';
+    } else if(updateNote){
+      updateNote.textContent='Live update ready';
+    }
+  } else if(forceRender){
+    const updateNote=document.getElementById('board-update-note');
+    if(updateNote) updateNote.textContent='Up to date';
+  }
+}
+
+async function refreshBoardNow(){
+  const updateNote=document.getElementById('board-update-note');
+  const scrollY=window.scrollY;
+  if(updateNote) updateNote.textContent='Checking live data...';
+  await loadAll({forceRender:true});
+  window.requestAnimationFrame(()=>window.scrollTo(0,scrollY));
 }
 
 setInterval(()=>{ const clock=document.getElementById('clk'); if(clock) clock.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'America/New_York'}); },1000);
@@ -3495,18 +3547,30 @@ function renderLedger(){
     <tbody>${trs}</tbody></table></div>`;
 }
 
+const _csvRequests=new Map();
 async function loadCSV(url){
-  try{
-    const r=await fetch(url);
-    if(!r.ok) return null;
-    const text=await r.text();
-    return new Promise(resolve=>{
-      Papa.parse(text,{header:true,skipEmptyLines:true,complete:res=>resolve(res.data)});
-    });
-  }catch(e){return null;}
+  if(_csvRequests.has(url)) return _csvRequests.get(url);
+  const request=(async()=>{
+    try{
+      const r=await fetch(url,{cache:'no-store'});
+      if(!r.ok) return null;
+      const text=await r.text();
+      return new Promise(resolve=>{
+        Papa.parse(text,{header:true,skipEmptyLines:true,complete:res=>resolve(res.data.map(row=>{
+          const normalized={};
+          Object.keys(row).forEach(key=>{ normalized[key.replace(/\ufeff|\r|\n/g,'').trim()]=row[key]; });
+          return normalized;
+        }))});
+      });
+    }catch(e){return null;}
+  })();
+  _csvRequests.set(url,request);
+  try{return await request;}finally{_csvRequests.delete(url);}
 }
 
 loadAll();
+if(window.requestIdleCallback) window.requestIdleCallback(()=>ensureEvents(),{timeout:2500});
+else window.setTimeout(()=>ensureEvents(),1500);
 setInterval(updateStats, 1000);
 setInterval(loadAll, 60000);
 
