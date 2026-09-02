@@ -1157,7 +1157,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .movement-tabs { display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; }
 .movement-tab { border:1px solid var(--border); border-radius:999px; padding:4px 7px; background:#fff; color:var(--text3); font:700 9px var(--sans); cursor:pointer; }
 .movement-tab.on { background:var(--acc-bg); border-color:var(--acc-brd); color:var(--accent); }
-.movement-facts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:8px; }
+.movement-facts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:8px; }
 .movement-fact { padding:7px 8px; border-radius:6px; background:rgba(255,255,255,.72); }
 .movement-fact span { display:block; font:700 8px var(--mono); letter-spacing:.06em; color:var(--text3); text-transform:uppercase; }
 .movement-fact b { display:block; margin-top:3px; font:700 11px var(--mono); color:var(--text); }
@@ -1180,7 +1180,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
   .mfilters { gap:4px; } .mchip { padding:4px 8px; font-size:10px; } .grp-btn { padding:5px; font-size:10px; }
   .board-tools { flex:1 1 100%; } .board-tools input { width:100%; min-width:0; }
   .movement-chart-head { display:block; } .movement-tabs { justify-content:flex-start; margin-top:8px; }
-  .movement-facts { grid-template-columns:1fr 1fr; } .movement-fact:last-child { grid-column:1 / -1; }
+  .movement-facts { grid-template-columns:1fr 1fr; }
   /* A selected game is an analysis screen on phones, not a small desktop dialog. */
   body.game-detail-open { overflow:hidden; }
   #drill-overlay:has(.game-detail-modal) { align-items:stretch; justify-content:stretch; background:#fff; backdrop-filter:none; }
@@ -2229,6 +2229,11 @@ function movementChart(rows, market){
     const priceStart=display.indexOf(' (');
     return priceStart>=0?display.slice(0,priceStart):display||'--';
   };
+  const timeLabel=row=>{
+    const parsed=new Date(row.timestamp||row.observed_at||'');
+    if(Number.isNaN(parsed.getTime())) return '--';
+    return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(parsed);
+  };
   const totalPrefix=(lineLabel(rows[0]).split(' ')[0]||'').toUpperCase();
   const makeView=key=>{
     if(key==='market'){
@@ -2260,7 +2265,8 @@ function movementChart(rows, market){
       return `<path d="M${padLeft} ${y.toFixed(1)} H${width-padRight}" stroke="#d8e3e6" stroke-dasharray="3 4"/><text x="${width-padRight+6}" y="${(y+3).toFixed(1)}" fill="#74808a" font-size="9" font-family="var(--mono)">${view.axisLabel(value)}</text>`;
     }).join('');
     const first=rows[0], last=rows[rows.length-1];
-    return `<div class="movement-panel" data-movement-view="${view.key}" style="display:${view.key==='market'?'block':'none'}"><div class="movement-chart-note">${view.note}</div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${view.title} trajectory"><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#5bb6bf" stop-opacity=".32"/><stop offset="1" stop-color="#5bb6bf" stop-opacity=".02"/></linearGradient></defs>${ticks}<path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${polyline}" fill="none" stroke="#0f6f7f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#0f6f7f" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#0f6f7f"/></svg><div class="movement-facts"><div class="movement-fact"><span>Start</span><b>${view.pointLabel(first)}</b></div><div class="movement-fact"><span>Current</span><b>${view.pointLabel(last)}</b></div><div class="movement-fact"><span>Observed range</span><b>${view.axisLabel(min)} to ${view.axisLabel(max)}</b></div></div></div>`;
+    const xLabels=`<text x="${padLeft}" y="${height-3}" fill="#74808a" font-size="8" font-family="var(--mono)">${timeLabel(first)}</text><text x="${width-padRight}" y="${height-3}" text-anchor="end" fill="#74808a" font-size="8" font-family="var(--mono)">${timeLabel(last)}</text>`;
+    return `<div class="movement-panel" data-movement-view="${view.key}" style="display:${view.key==='market'?'block':'none'}"><div class="movement-chart-note">${view.note}</div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${view.title} trajectory"><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#5bb6bf" stop-opacity=".32"/><stop offset="1" stop-color="#5bb6bf" stop-opacity=".02"/></linearGradient></defs>${ticks}<path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${polyline}" fill="none" stroke="#0f6f7f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#0f6f7f" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#0f6f7f"/>${xLabels}</svg><div class="movement-facts"><div class="movement-fact"><span>Start</span><b>${view.pointLabel(first)}</b></div><div class="movement-fact"><span>Current</span><b>${view.pointLabel(last)}</b></div><div class="movement-fact"><span>High</span><b>${view.axisLabel(max)}</b></div><div class="movement-fact"><span>Low</span><b>${view.axisLabel(min)}</b></div></div></div>`;
   };
   const tabs=views.map(view=>`<button type="button" class="movement-tab ${view.key==='market'?'on':''}" onclick="setMovementView(this,'${view.key}')">${view.label}</button>`).join('');
   return `<div class="movement-chart" data-movement-chart><div class="movement-chart-head"><div><div class="movement-chart-title">Market trajectory</div><div class="movement-chart-note">${rows.length} timestamped observations for this exact signal side.</div></div><div class="movement-tabs">${tabs}</div></div>${views.map(panel).join('')}</div>`;
