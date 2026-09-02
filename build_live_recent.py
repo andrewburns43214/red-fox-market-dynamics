@@ -15,6 +15,7 @@ from team_aliases import normalize_team_name
 DATA = Path("data")
 OUT = DATA / "live_recent.csv"
 BOARD = DATA / "anomaly_board.csv"
+SNAPSHOTS = DATA / "snapshots.csv"
 EMPTY_COLUMNS = ["sport", "game_id", "game", "kickoff_iso", "market_display", "flagged_side", "reaction", "path", "score_away", "score_home", "score_status", "score_state", "frozen_at_utc"]
 SCOREBOARD_URLS = {
     "nfl": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
@@ -75,6 +76,36 @@ def read_csv_or_empty(path: Path) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def market_type(side: object) -> str:
+    value = str(side or "").strip().lower()
+    if value.startswith(("over ", "under ")):
+        return "TOTAL"
+    return "SPREAD" if re.search(r"\s[+-]\d+(?:\.\d+)?(?:\s|$)", value) else "MONEYLINE"
+
+
+def bootstrap_started_records(now: datetime) -> pd.DataFrame:
+    """Recover the active window if an earlier pregame handoff was interrupted."""
+    snapshots = read_csv_or_empty(SNAPSHOTS)
+    if snapshots.empty:
+        return pd.DataFrame()
+    snapshots["_kickoff"] = pd.to_datetime(snapshots.get("dk_start_iso", ""), errors="coerce", utc=True)
+    snapshots["_seen"] = pd.to_datetime(snapshots.get("timestamp", ""), errors="coerce", utc=True)
+    window = snapshots[snapshots["_kickoff"].notna() & (snapshots["_kickoff"] <= now) & (snapshots["_kickoff"] >= now - timedelta(hours=10))].copy()
+    window = window[window["_seen"] <= window["_kickoff"]].copy()
+    if window.empty:
+        return pd.DataFrame()
+    window["market_display"] = window["side"].map(market_type)
+    latest = window.sort_values("_seen").groupby(["sport", "game_id", "market_display", "side"], as_index=False).tail(1).copy()
+    latest["_split_gap"] = (pd.to_numeric(latest["money_pct"], errors="coerce") - pd.to_numeric(latest["bets_pct"], errors="coerce")).abs()
+    latest = latest.sort_values("_split_gap", ascending=False).drop_duplicates(["sport", "game_id", "market_display"], keep="first")
+    latest = latest.rename(columns={"side": "flagged_side"})
+    latest["reaction"] = "Observed"
+    latest["path"] = "Pregame snapshot"
+    latest["reason"] = "Frozen from the final available pregame snapshot."
+    latest["frozen_at_utc"] = now.isoformat()
+    return latest
+
+
 def main(scores_only: bool = False) -> None:
     now = datetime.now(timezone.utc)
     existing = read_csv_or_empty(OUT)
@@ -92,8 +123,11 @@ def main(scores_only: bool = False) -> None:
             started["frozen_at_utc"] = now.isoformat()
             rows.append(started.drop(columns=["_kickoff"]))
     if not rows:
-        pd.DataFrame(columns=EMPTY_COLUMNS).to_csv(OUT, index=False)
-        return
+        recovered = bootstrap_started_records(now)
+        if recovered.empty:
+            pd.DataFrame(columns=EMPTY_COLUMNS).to_csv(OUT, index=False)
+            return
+        rows.append(recovered)
     live = pd.concat(rows, ignore_index=True, sort=False)
     live["_kickoff"] = pd.to_datetime(live.get("kickoff_iso", ""), errors="coerce", utc=True)
     # Keep this as a short look-in, not a results archive. Final games stay
