@@ -78,16 +78,22 @@ f['dk_ts'] = datetime.now(timezone.utc).isoformat()
 json.dump(f, open(fp, 'w'))
 " >> "$LOG" 2>&1
 
-echo "--- $(date) report_live ---" >> "$LOG"
-if timeout 300 "$PY" main.py report_live >> "$LOG" 2>&1;
-then
-  echo "--- $(date) report_live DONE ---" >> "$LOG"
-else
-  echo "--- $(date) report_live ERROR (continuing) ---" >> "$LOG"
-fi
-
 echo "--- $(date) refresh anomaly board ---" >> "$LOG"
-"$PY" refresh_anomaly_board.py >> "$LOG" 2>&1
+if timeout 120 "$PY" refresh_anomaly_board.py >> "$LOG" 2>&1; then
+  # The public board consumes anomaly_board.csv directly. Only mark the engine
+  # fresh after its complete live export is atomically available to Nginx.
+  "$PY" -c "
+import json, os
+from datetime import datetime, timezone
+fp = 'data/freshness.json'
+f = json.load(open(fp)) if os.path.exists(fp) else {}
+f['engine_ts'] = datetime.now(timezone.utc).isoformat()
+json.dump(f, open(fp, 'w'))
+" >> "$LOG" 2>&1
+  echo "--- $(date) refresh anomaly board DONE ---" >> "$LOG"
+else
+  echo "--- $(date) refresh anomaly board ERROR ---" >> "$LOG"
+fi
 
 # publish (nginx serves directly from project dir)
 
