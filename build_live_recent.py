@@ -98,7 +98,7 @@ def bootstrap_started_records(now: datetime) -> pd.DataFrame:
     latest = window.sort_values("_seen").groupby(["sport", "game_id", "market_display", "side"], as_index=False).tail(1).copy()
     latest["_split_gap"] = (pd.to_numeric(latest["money_pct"], errors="coerce") - pd.to_numeric(latest["bets_pct"], errors="coerce")).abs()
     latest = latest.sort_values("_split_gap", ascending=False).drop_duplicates(["sport", "game_id", "market_display"], keep="first")
-    latest = latest.rename(columns={"side": "flagged_side"})
+    latest = latest.rename(columns={"side": "flagged_side", "dk_start_iso": "kickoff_iso"})
     latest["reaction"] = "Observed"
     latest["path"] = "Pregame snapshot"
     latest["reason"] = "Frozen from the final available pregame snapshot."
