@@ -171,6 +171,9 @@ def select_market_leaders(board_df):
     # Current independently material movement ranks above a held public split.
     # Capped split and heavy-favorite markets remain downranked as context only.
     work["_signal_rank"] = effective_reaction.map({"Contrarian": 0, "Freeze": 3, "Follow": 4, "Watch": 5}).fillna(6).astype(float)
+    # Keep a high-spread or extreme-price Contrarian visible, but let an
+    # otherwise comparable clean Contrarian lead the board.
+    work.loc[price_risk & (effective_reaction == "Contrarian"), "_signal_rank"] = 0.5
     work.loc[market_move & ~unreliable_move & (effective_reaction != "Contrarian"), "_signal_rank"] = 2
     # An extreme price is useful movement context, but a clean market move is
     # more comparable across the board. Keep confirmed Contrarian evidence in
