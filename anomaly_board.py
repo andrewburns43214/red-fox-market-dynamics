@@ -166,11 +166,16 @@ def select_market_leaders(board_df):
     effective_reaction = recorded_reaction.where(work["_has_recorded_signal"], current_reaction).fillna("Watch")
     context = work.get("context_chips", pd.Series("", index=work.index)).fillna("").astype(str)
     market_move = context.str.contains(r"(?:^|\|)\s*Market Move\s*(?:\||$)", regex=True)
+    price_risk = context.str.contains(r"(?:^|\|)\s*Price Risk\s*(?:\||$)", regex=True)
     unreliable_move = context.str.contains(r"Split Cap|Heavy Favorite", regex=True)
     # Current independently material movement ranks above a held public split.
     # Capped split and heavy-favorite markets remain downranked as context only.
-    work["_signal_rank"] = effective_reaction.map({"Contrarian": 0, "Freeze": 3, "Follow": 4, "Watch": 5}).fillna(6)
+    work["_signal_rank"] = effective_reaction.map({"Contrarian": 0, "Freeze": 3, "Follow": 4, "Watch": 5}).fillna(6).astype(float)
     work.loc[market_move & ~unreliable_move & (effective_reaction != "Contrarian"), "_signal_rank"] = 2
+    # An extreme price is useful movement context, but a clean market move is
+    # more comparable across the board. Keep confirmed Contrarian evidence in
+    # its own class rather than erasing it because of the attached price risk.
+    work.loc[market_move & price_risk & ~unreliable_move & (effective_reaction == "Watch"), "_signal_rank"] = 2.5
     anomaly_sort = work.get("anomaly_sort", pd.Series(99, index=work.index))
     severity_sort = work.get("severity_sort", pd.Series(0, index=work.index))
     maturity_sort = work.get("maturity_sort", pd.Series(0, index=work.index))
@@ -362,6 +367,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         reason = market_move_note if reaction == "Watch" else _append_sentence(reason, market_move_note)
     if price_risk_note:
         reason = _append_sentence(reason, price_risk_note)
+    reason = _finish_sentence(reason)
 
     flagged_side = str(latest_row.get("side", "")).strip() or str(latest_row.get("side_key", "")).strip()
     action = _action_fields(
@@ -382,6 +388,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     maturity_sort = 1 if hours_to_kickoff is not None and hours_to_kickoff > 48 else 0
     rank_reason = _rank_reason(
         reaction, path_label, stale_dk, split_capped, favorite_risk, hours_to_kickoff, market_move,
+        price_risk=bool(price_risk_note),
     )
     severity = _severity_score(
         reaction=reaction,
@@ -465,7 +472,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         "path_max": round(path_max, 3),
         "observed_path": json.dumps([point["display"] for point in points]),
         "rank_reason": rank_reason,
-        "anomaly_sort": _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped, favorite_risk, developing_read, market_move),
+        "anomaly_sort": _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped, favorite_risk, developing_read, market_move, bool(price_risk_note)),
         "maturity_sort": maturity_sort,
         "severity_sort": severity,
         "_event_rows": event_rows,
@@ -901,6 +908,14 @@ def _append_sentence(base, detail):
     return f"{base}. {detail}"
 
 
+def _finish_sentence(value):
+    """Keep board rationale copy readable even when there is only one clause."""
+    text = str(value or "").strip()
+    if not text or text.endswith((".", "!", "?")):
+        return text
+    return f"{text}."
+
+
 def _focus_basis(reaction, low_bets_high_money, ticket_led, split_capped, favorite_risk):
     if split_capped:
         return "Split unavailable; price tracking only"
@@ -1049,7 +1064,7 @@ def _severity_score(reaction, whipsaw, extreme_public, move_abs, max_excursion, 
     return round(score, 3)
 
 
-def _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped=False, favorite_risk=False, developing_read=False, market_move=False):
+def _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped=False, favorite_risk=False, developing_read=False, market_move=False, price_risk=False):
     if split_capped and not stale_dk:
         return 8
     if favorite_risk and not stale_dk:
@@ -1071,7 +1086,7 @@ def _sort_rank(reaction, whipsaw, extreme_public, stale_dk, split_capped=False, 
     if developing_read:
         return 6.5
     if market_move:
-        return 6.75
+        return 6.9 if price_risk else 6.75
     return 7
 
 
@@ -1125,7 +1140,7 @@ def _is_split_capped(bets_pct, money_pct):
     return bets_pct <= 0 or bets_pct >= 100 or money_pct <= 0 or money_pct >= 100
 
 
-def _rank_reason(reaction, path_label, stale_dk, split_capped, favorite_risk, hours_to_kickoff, market_move=False):
+def _rank_reason(reaction, path_label, stale_dk, split_capped, favorite_risk, hours_to_kickoff, market_move=False, price_risk=False):
     if split_capped:
         return "Split cap: a 0% or 100% source value cannot earn an alert rank."
     if favorite_risk:
@@ -1146,6 +1161,8 @@ def _rank_reason(reaction, path_label, stale_dk, split_capped, favorite_risk, ho
         base = "Market move: the number changed meaningfully, independent of the current split."
     else:
         base = "Watch: active market without a qualifying alert."
+    if price_risk and market_move:
+        base = f"{base} Price risk: priority is reduced because the current price is extreme."
     if hours_to_kickoff is not None and hours_to_kickoff > 48:
         return f"{base} Early market: ranked after closer games within the same signal class."
     return base
