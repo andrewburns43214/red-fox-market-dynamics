@@ -35,12 +35,12 @@ def game_key(value: object, sport: str) -> str:
     return "@".join((normalize_team_name(away, sport), normalize_team_name(home, sport)))
 
 
-def scoreboard(sport: str, now: datetime) -> dict[str, dict[str, str]]:
+def scoreboard(sport: str, now: datetime) -> dict[str, list[dict[str, str]]]:
     base = SCOREBOARD_URLS.get(sport)
     if not base:
         return {}
     extra = "&groups=80&limit=500" if sport == "ncaaf" else "&groups=50&limit=500" if sport == "ncaab" else "&limit=500"
-    games: dict[str, dict[str, str]] = {}
+    games: dict[str, list[dict[str, str]]] = {}
     for day in (now - timedelta(days=1), now):
         try:
             response = requests.get(f"{base}?dates={day:%Y%m%d}{extra}", timeout=12)
@@ -64,8 +64,9 @@ def scoreboard(sport: str, now: datetime) -> dict[str, dict[str, str]]:
                 "score_home": str(home.get("score", "-")),
                 "score_status": detail,
                 "score_state": str(status_type.get("state", "in")),
+                "event_time": str(event.get("date", "")),
             }
-            games[game_key(f"{away_name} @ {home_name}", sport)] = item
+            games.setdefault(game_key(f"{away_name} @ {home_name}", sport), []).append(item)
     return games
 
 
@@ -149,7 +150,9 @@ def main(scores_only: bool = False) -> None:
         for sport, indices in live.groupby("sport").groups.items():
             scores = scoreboard(str(sport).lower(), now)
             for index in indices:
-                score = scores.get(game_key(live.at[index, "game"], str(sport).lower()))
+                candidates = scores.get(game_key(live.at[index, "game"], str(sport).lower()), [])
+                kickoff = pd.to_datetime(live.at[index, "kickoff_iso"], errors="coerce", utc=True)
+                score = min(candidates, key=lambda item: abs(pd.to_datetime(item["event_time"], errors="coerce", utc=True) - kickoff)) if candidates and pd.notna(kickoff) else None
                 if score:
                     for column, value in score.items():
                         live.at[index, column] = value
