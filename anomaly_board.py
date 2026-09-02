@@ -1160,7 +1160,7 @@ def _rank_reason(reaction, path_label, stale_dk, split_capped, favorite_risk, ho
     elif market_move:
         base = "Market move: the number changed meaningfully, independent of the current split."
     else:
-        base = "Watch: active market without a qualifying alert."
+        base = "Watch: surfaced for a notable split, path, or price change, but it is not a directional candidate."
     if price_risk and market_move:
         base = f"{base} Price risk: the caution condition reduces priority."
     if hours_to_kickoff is not None and hours_to_kickoff > 48:
