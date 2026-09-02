@@ -1024,8 +1024,9 @@ async function handleAuth(event) {
       if (error) throw error;
       if (data.session) {
         syncAccessCookie(data.session);
+        renderSignedInNav(false);
         closeModal();
-        window.location.href = '/board.html?trial=started';
+        document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
         return;
       }
       successEl.textContent = 'Account created. Sign in to choose your access.';
@@ -1193,7 +1194,16 @@ async function startFreeTrial() {
     window.location.href = '/board.html';
     return;
   }
-  alert('The free day is available once for new accounts. Choose a plan to continue access.');
+  const { data, error } = await _supabase.rpc('claim_free_day');
+  if (error) {
+    alert('Unable to start the free day right now. Please try again.');
+    return;
+  }
+  if (data === true) {
+    window.location.href = '/board.html?trial=started';
+    return;
+  }
+  alert('Your free day has already been used. Choose a plan to continue access.');
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
