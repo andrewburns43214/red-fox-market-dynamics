@@ -74,7 +74,9 @@ def read_csv_or_empty(path: Path) -> pd.DataFrame:
 def main(scores_only: bool = False) -> None:
     now = datetime.now(timezone.utc)
     existing = read_csv_or_empty(OUT)
-    previous = pd.DataFrame() if scores_only else read_csv_or_empty(BOARD)
+    # The one-minute worker also reads the already-published pregame board so
+    # a record is frozen at kickoff instead of waiting for the next snapshot run.
+    previous = read_csv_or_empty(BOARD)
     rows = []
     if not existing.empty:
         rows.append(existing)
