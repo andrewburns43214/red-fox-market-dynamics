@@ -6,14 +6,21 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, {
   httpClient: Stripe.createFetchHttpClient(),
 });
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+const allowedOrigins = new Set(['https://redfoxmi.com', 'https://www.redfoxmi.com']);
+
+function corsHeaders(req: Request) {
+  const origin = req.headers.get('Origin') || '';
+  return {
+    // Checkout requires a valid Supabase JWT; permit both canonical site hosts.
+    'Access-Control-Allow-Origin': allowedOrigins.has(origin) ? origin : 'https://www.redfoxmi.com',
+    'Vary': 'Origin',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+  };
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders(req) });
   }
 
   try {
@@ -21,7 +28,7 @@ Deno.serve(async (req) => {
     if (!plan || !['day_pass', 'professional', 'annual'].includes(plan)) {
       return new Response(JSON.stringify({ error: 'Invalid plan' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
       });
     }
 
@@ -35,7 +42,7 @@ Deno.serve(async (req) => {
     if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
       });
     }
 
@@ -50,7 +57,21 @@ Deno.serve(async (req) => {
       .eq('id', user.id)
       .single();
 
-    let customerId = profile?.stripe_customer_id;
+    let customerId: string | null = profile?.stripe_customer_id || null;
+    // A customer ID created under an older Stripe account is not valid after a
+    // key/account change. Verify it before using it, then replace it safely.
+    if (customerId) {
+      try {
+        const customer = await stripe.customers.retrieve(customerId);
+        if ('deleted' in customer && customer.deleted) customerId = null;
+      } catch (err) {
+        if ((err as { code?: string }).code === 'resource_missing') {
+          customerId = null;
+        } else {
+          throw err;
+        }
+      }
+    }
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,
@@ -70,6 +91,8 @@ Deno.serve(async (req) => {
         ? Deno.env.get('STRIPE_PRICE_ANNUAL')!
         : Deno.env.get('STRIPE_PRICE_PROFESSIONAL')!;
 
+    if (!priceId) throw new Error(`Stripe price is not configured for ${plan}`);
+
     const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       customer: customerId,
       metadata: { supabase_uid: user.id, plan },
@@ -77,9 +100,10 @@ Deno.serve(async (req) => {
       cancel_url: Deno.env.get('SITE_URL')! + '/#pricing',
       line_items: [{ price: priceId, quantity: 1 }],
       mode: plan === 'day_pass' ? 'payment' : 'subscription',
+      client_reference_id: user.id,
       custom_text: {
         submit: {
-          message: 'Secure payment processed by Stripe. Red Fox never receives or stores your card details.',
+          message: 'You are purchasing Red Fox Market Intelligence access through secure Stripe Checkout. Stripe processes your payment; Red Fox never receives or stores your card details.',
         },
       },
     };
@@ -87,12 +111,17 @@ Deno.serve(async (req) => {
     const session = await stripe.checkout.sessions.create(sessionConfig);
 
     return new Response(JSON.stringify({ url: session.url }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
+    const message = err instanceof Error ? err.message : 'Unknown checkout error';
+    // Do not include secrets, but retain the provider error in function logs so
+    // payment configuration problems can be fixed without exposing details to
+    // customers.
+    console.error('Checkout session creation failed:', message);
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
     });
   }
 });

@@ -874,7 +874,7 @@ section { padding: 100px 40px; }
         <button class="btn btn-primary btn-lg" onclick="handleCheckout('annual')">Choose Annual</button>
       </div>
     </div>
-    <label class="consent"><input id="purchase-consent" type="checkbox"><span>I am at least 21, understand this is market information rather than betting advice, and agree to the <a href="/terms.html" target="_blank">Terms</a>, <a href="/privacy.html" target="_blank">Privacy Policy</a>, and <a href="/refund-policy.html" target="_blank">Refund and Cancellation Policy</a>.</span></label>
+    <label class="consent"><input id="purchase-consent" type="checkbox"><span>I am at least 21, understand this is market information rather than betting advice, and agree to the <a href="/terms.html" target="_blank">Terms</a>, <a href="/privacy.html" target="_blank">Privacy Policy</a>, and <a href="/refund-policy.html" target="_blank">Refund and Cancellation Policy</a>. Checkout is securely hosted by Stripe; Red Fox never receives or stores card details.</span></label>
   </div>
 </section>
 
@@ -947,7 +947,30 @@ function syncAccessCookie(session) {
 
 _supabase.auth.onAuthStateChange(function (_event, session) {
   syncAccessCookie(session);
+  // Change the navigation immediately when authentication changes. Access
+  // verification can finish in the background; it should never leave a
+  // signed-in person looking at Sign In/Create Account controls.
+  if (session) {
+    renderSignedInNav(false);
+    void refreshSignedInNav(session);
+  }
 });
+
+function renderSignedInNav(hasAccess) {
+  const actions = document.querySelector('.nav-actions');
+  if (!actions) return;
+  const boardButton = hasAccess ? 'Go to Board' : 'Choose Access';
+  const boardAction = hasAccess
+    ? "window.location.href='/board.html'"
+    : "document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' })";
+  actions.innerHTML = '<button class="btn btn-primary" onclick="' + boardAction + '">' + boardButton + '</button>' +
+    '<button class="btn btn-ghost" onclick="openBillingPortal()">Billing</button>' +
+    '<button class="btn btn-ghost" onclick="handleSignOut()">Sign Out</button>';
+}
+
+async function refreshSignedInNav(session) {
+  if (await hasBoardAccess(session)) renderSignedInNav(true);
+}
 
 // ── Modal controls ──
 let _authMode = 'signin';
@@ -1012,8 +1035,9 @@ async function handleAuth(event) {
       if (error) throw error;
       const { data: { session } } = await _supabase.auth.getSession();
       syncAccessCookie(session);
-      const hasAccess = await hasBoardAccess(session);
+      renderSignedInNav(false);
       closeModal();
+      const hasAccess = await hasBoardAccess(session);
       if (hasAccess) {
         window.location.href = '/board.html';
       } else {
@@ -1101,19 +1125,19 @@ async function handleCheckout(plan) {
 (async function() {
   const { data: { session } } = await _supabase.auth.getSession();
   if (session) {
-    const hasAccess = await hasBoardAccess(session);
-    const actions = document.querySelector('.nav-actions');
-    const boardButton = hasAccess ? 'Go to Board' : 'Choose Access';
-    const boardAction = hasAccess
-      ? "window.location.href='/board.html'"
-      : "document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' })";
-    actions.innerHTML = '<button class="btn btn-primary" onclick="' + boardAction + '">' + boardButton + '</button>' +
-      '<button class="btn btn-ghost" onclick="openBillingPortal()">Billing</button>' +
-      '<button class="btn btn-ghost" onclick="handleSignOut()">Sign Out</button>';
+    renderSignedInNav(false);
+    void refreshSignedInNav(session);
   }
   const params = new URLSearchParams(window.location.search);
   if (params.get('auth') === 'required') {
-    openModal();
+    // A signed-in visitor without access reaches this state when the protected
+    // board is requested. Keep their session and take them to checkout rather
+    // than showing a redundant sign-in prompt.
+    if (session) {
+      document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
+    } else {
+      openModal();
+    }
   } else if (params.get('payment') === 'required') {
     if (session) {
       document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
