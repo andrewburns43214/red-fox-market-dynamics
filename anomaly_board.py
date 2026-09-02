@@ -34,6 +34,10 @@ HIGH_SPREAD_BY_SPORT = {
     "nba": 12.0,
     "ncaab": 15.0,
 }
+LATE_WINDOW_HOURS_BY_SPORT = {
+    "nfl": 6.0,
+    "ncaaf": 6.0,
+}
 MIN_CANDIDATE_OBSERVATIONS = 3
 MIN_FREEZE_FADE_OBSERVATIONS = 4
 
@@ -152,22 +156,26 @@ def select_market_leaders(board_df):
     work["_signal_rank"] = effective_reaction.map(signal_rank).fillna(4)
     anomaly_sort = work.get("anomaly_sort", pd.Series(99, index=work.index))
     severity_sort = work.get("severity_sort", pd.Series(0, index=work.index))
+    maturity_sort = work.get("maturity_sort", pd.Series(0, index=work.index))
+    kickoff_sort = work.get("kickoff_sort", pd.Series("", index=work.index))
     work["_anomaly_sort"] = pd.to_numeric(anomaly_sort, errors="coerce").fillna(99)
     work["_severity_sort"] = pd.to_numeric(severity_sort, errors="coerce").fillna(0)
+    work["_maturity_sort"] = pd.to_numeric(maturity_sort, errors="coerce").fillna(0)
+    work["_kickoff_sort"] = kickoff_sort.fillna("").astype(str)
 
     work = work.sort_values(
-        ["_has_recorded_signal", "_signal_rank", "_anomaly_sort", "_severity_sort", "flagged_side"],
-        ascending=[False, True, True, False, True],
+        ["_has_recorded_signal", "_signal_rank", "_anomaly_sort", "_maturity_sort", "_severity_sort", "_kickoff_sort", "flagged_side"],
+        ascending=[False, True, True, True, False, True, True],
         kind="mergesort",
     )
     leaders = work.drop_duplicates(keys, keep="first").copy()
     leaders = leaders.sort_values(
-        ["_has_recorded_signal", "_signal_rank", "_anomaly_sort", "_severity_sort", "game", "market_display"],
-        ascending=[False, True, True, False, True, True],
+        ["_has_recorded_signal", "_signal_rank", "_anomaly_sort", "_maturity_sort", "_severity_sort", "_kickoff_sort", "game", "market_display"],
+        ascending=[False, True, True, True, False, True, True, True],
         kind="mergesort",
     ).reset_index(drop=True)
     leaders["board_rank"] = range(1, len(leaders) + 1)
-    return leaders.drop(columns=["_has_recorded_signal", "_signal_rank", "_anomaly_sort", "_severity_sort"], errors="ignore")
+    return leaders.drop(columns=["_has_recorded_signal", "_signal_rank", "_anomaly_sort", "_maturity_sort", "_severity_sort", "_kickoff_sort"], errors="ignore")
 
 
 def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
@@ -187,6 +195,11 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     hold_threshold = HOLD_PRICE_MOVE_PCT if market == "MONEYLINE" else line_hold_threshold
     open_value = points[0]["value"]
     current_value = points[-1]["value"]
+    high_spread = market == "SPREAD" and abs(current_value) >= HIGH_SPREAD_BY_SPORT.get(sport, float("inf"))
+    if high_spread:
+        # A half-point around a 25-plus-point college spread is common noise;
+        # require a full point before it can qualify through line movement.
+        line_move_threshold = max(line_move_threshold, 1.0)
     line_move_abs = abs(current_value - open_value)
     price_move_pct = _price_move_abs(points)
     move_abs = _movement_abs(points, market)
@@ -203,7 +216,9 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         if market == "MONEYLINE"
         else line_move_abs >= line_move_threshold / 2 or price_move_pct >= MEANINGFUL_PRICE_MOVE_PCT / 2
     )
-    late_move = _is_late_move(points, market, move_threshold)
+    kickoff_ts = _coerce_ts(latest_row.get("_sort_time")) or _coerce_ts(latest_row.get("_game_time")) or _coerce_ts(latest_row.get("dk_start_iso"))
+    hours_to_kickoff = (kickoff_ts - as_of).total_seconds() / 3600 if kickoff_ts else None
+    late_move = _is_late_move(points, market, move_threshold, hours_to_kickoff, sport)
     whipsaw = dir_changes >= 1 and max_excursion >= move_threshold
     held = move_abs <= hold_threshold if market == "MONEYLINE" else (
         line_move_abs <= line_hold_threshold and price_move_pct <= HOLD_PRICE_MOVE_PCT
@@ -295,7 +310,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     path_summary = _path_summary(points)
     first_seen = _first_anomaly_seen(
         points, reaction, path_label, stale_dk, market, latest_row,
-        move_threshold, hold_threshold, split_alert_eligible,
+        move_threshold, line_move_threshold, hold_threshold, split_alert_eligible,
     )
     return_to_open = _return_toward_open(points, market)
     reason = _reason_line(
@@ -333,9 +348,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         bets_pct=bets_pct,
         money_pct=money_pct,
     )
-    kickoff_ts = _coerce_ts(latest_row.get("_sort_time")) or _coerce_ts(latest_row.get("_game_time")) or _coerce_ts(latest_row.get("dk_start_iso"))
     kickoff_label = _format_kickoff(kickoff_ts)
-    hours_to_kickoff = (kickoff_ts - as_of).total_seconds() / 3600 if kickoff_ts else None
     maturity_sort = 1 if hours_to_kickoff is not None and hours_to_kickoff > 48 else 0
     rank_reason = _rank_reason(
         reaction, path_label, stale_dk, split_capped, favorite_risk, hours_to_kickoff,
@@ -630,7 +643,10 @@ def _move_toward_side(points, market, latest_row):
     return current_value < open_value
 
 
-def _is_late_move(points, market, move_threshold):
+def _is_late_move(points, market, move_threshold, hours_to_kickoff, sport):
+    """Label a move late only when it occurs in the actual closing window."""
+    if hours_to_kickoff is None or hours_to_kickoff > LATE_WINDOW_HOURS_BY_SPORT.get(sport, 3.0):
+        return False
     if len(points) < 3:
         return False
     open_value = _motion_value(points[0], market)
@@ -726,7 +742,7 @@ def _path_summary(points):
     return " -> ".join(compact[:4])
 
 
-def _first_anomaly_seen(points, reaction, path_label, stale_dk, market, latest_row, move_threshold, hold_threshold, split_alert_eligible):
+def _first_anomaly_seen(points, reaction, path_label, stale_dk, market, latest_row, move_threshold, line_move_threshold, hold_threshold, split_alert_eligible):
     open_value = points[0]["value"]
     open_price = points[0].get("implied_pct")
     path_changes = 0
@@ -742,7 +758,7 @@ def _first_anomaly_seen(points, reaction, path_label, stale_dk, market, latest_r
         price_move_abs = abs(point.get("implied_pct", open_price) - open_price) if open_price is not None and point.get("implied_pct") is not None else 0.0
         move_abs = abs(_motion_value(point, market) - _motion_value(points[0], market))
         meaningful_move = move_abs >= move_threshold if market == "MONEYLINE" else (
-            line_move_abs >= MEANINGFUL_MOVE_BY_MARKET[market] or price_move_abs >= MEANINGFUL_PRICE_MOVE_PCT
+            line_move_abs >= line_move_threshold or price_move_abs >= MEANINGFUL_PRICE_MOVE_PCT
         )
         held = move_abs <= hold_threshold if market == "MONEYLINE" else (
             line_move_abs <= HOLD_MOVE_BY_MARKET[market] and price_move_abs <= HOLD_PRICE_MOVE_PCT
@@ -922,13 +938,13 @@ def _counterpart_row(pair_df, latest_row):
 
 
 def _price_risk_note(reaction, market, sport, current_value, current_odds):
-    """Return a caution only for high-split Freeze contexts, never a new alert."""
+    """Add pricing or large-spread context without manufacturing an alert."""
+    if market == "SPREAD" and abs(current_value) >= HIGH_SPREAD_BY_SPORT.get(sport, float("inf")):
+        return f"Price Risk: this {abs(current_value):g}-point spread needs a full-point move before it can qualify on line movement alone."
     if reaction != "Freeze":
         return ""
     if market in {"SPREAD", "TOTAL"} and current_odds is not None and current_odds <= EXPENSIVE_POINT_PRICE_ODDS:
         return f"Price Risk: the attached {int(current_odds):+d} juice is expensive for a held high-split side."
-    if market == "SPREAD" and abs(current_value) >= HIGH_SPREAD_BY_SPORT.get(sport, float("inf")):
-        return f"Price Risk: this {abs(current_value):g}-point spread is large, so the Freeze needs added context."
     return ""
 
 
