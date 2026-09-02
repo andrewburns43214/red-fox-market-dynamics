@@ -1148,7 +1148,8 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .drill-modal { border-radius: 14px; box-shadow: 0 24px 80px rgba(20,45,54,.25); }
 .game-detail-modal .drill-hdr { background:#fff; }
 .game-detail-modal .drill-title { font-size:14px; }
-.game-detail-content { max-width:980px; margin:0 auto; }
+.game-detail-content { max-width:980px; margin:0 auto; white-space:normal; }
+.detail-rationale,.detail-rank-note { white-space:normal; overflow-wrap:anywhere; word-break:normal; }
 .movement-chart { margin: 12px 0 16px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: linear-gradient(180deg,#fbfdfd,#f3f8f8); }
 .movement-chart svg { display:block; width:100%; height:180px; overflow:visible; }
 .movement-chart-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:8px; }
@@ -1198,9 +1199,12 @@ td:last-child { border-radius: 0 8px 8px 0; }
   #drill-overlay .game-detail-modal .game-detail-content { padding:14px 12px 32px !important; }
   #drill-overlay .game-detail-modal .game-detail-content,
   #drill-overlay .game-detail-modal .game-detail-content div { min-width:0; }
+  #drill-overlay .game-detail-modal .game-detail-content { white-space:normal; }
   #drill-overlay .game-detail-modal .game-detail-content [style*="font-size"],
   #drill-overlay .game-detail-modal .movement-chart-note,
-  #drill-overlay .game-detail-modal .movement-fact b { overflow-wrap:anywhere; word-break:normal; }
+  #drill-overlay .game-detail-modal .movement-fact b,
+  #drill-overlay .game-detail-modal .detail-rationale,
+  #drill-overlay .game-detail-modal .detail-rank-note { white-space:normal !important; overflow-wrap:anywhere; word-break:normal; }
   #drill-overlay .game-detail-modal .movement-chart { width:100%; max-width:100%; margin:10px 0 14px; padding:10px; overflow:hidden; }
   #drill-overlay .game-detail-modal .movement-chart svg { height:164px; }
   #drill-overlay .game-detail-modal .movement-facts { gap:6px; }
@@ -2314,8 +2318,8 @@ async function openGameDetail(r){
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Open '+(r.open_line||'--')+' -> Current '+(r.current_line||'--')+'</div>';
   if(Number(r.price_move_pct)>0) html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Price movement '+Number(r.price_move_pct).toFixed(1)+' implied points</div>';
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Path '+(r.path_summary||'--')+'</div>';
-  html+='<div style="font-size:12px;color:var(--text2);line-height:1.6;padding:8px 12px;background:var(--bg2);border-radius:6px;border-left:3px solid var(--accent)">'+(r.recorded_note||r.reason||'-')+'</div>';
-  if(r.rank_reason) html+='<div style="font-size:10px;color:var(--text3);line-height:1.5;margin-top:8px">Board rank: '+r.rank_reason+'</div>';
+  html+='<div class="detail-rationale" style="font-size:12px;color:var(--text2);line-height:1.6;padding:8px 12px;background:var(--bg2);border-radius:6px;border-left:3px solid var(--accent)">'+(r.recorded_note||r.reason||'-')+'</div>';
+  if(r.rank_reason) html+='<div class="detail-rank-note" style="font-size:10px;color:var(--text3);line-height:1.5;margin-top:8px">Board rank: '+r.rank_reason+'</div>';
   html+='</div>';
 
   // proof layer
