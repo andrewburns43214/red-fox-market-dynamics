@@ -1165,6 +1165,24 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .movement-kpis { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:12px 0; }
 .movement-kpi { padding:9px 10px; background:#f4f7f8; border-radius:8px; }
 .movement-kpi b { display:block; margin-top:3px; color:var(--text); font-size:12px; }
+.live-recent { padding:20px; overflow:auto; background:var(--bg3); }
+.live-recent-head { max-width:1120px; margin:0 auto 14px; }
+.live-recent-head h2 { margin:0; font-size:18px; }
+.live-recent-head p { margin:5px 0 0; color:var(--text3); font-size:12px; }
+.live-recent-grid { max-width:1120px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:12px; }
+.live-game-card { padding:14px; border:1px solid var(--border); border-radius:10px; background:#fff; box-shadow:0 2px 8px rgba(22,53,61,.05); }
+.live-game-top { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.live-game-name { font-size:14px; font-weight:800; line-height:1.25; }
+.live-status { margin-top:5px; color:var(--text3); font:700 9px var(--mono); text-transform:uppercase; letter-spacing:.05em; }
+.live-score { text-align:right; font:800 17px var(--mono); white-space:nowrap; }
+.live-freeze { margin:12px 0 8px; padding-top:10px; border-top:1px solid var(--border); color:var(--accent); font:800 9px var(--mono); text-transform:uppercase; letter-spacing:.06em; }
+.live-market { display:grid; grid-template-columns:70px minmax(0,1fr) auto; gap:8px; align-items:center; padding:8px 0; border-top:1px solid #eef2f3; }
+.live-market:first-of-type { border-top:0; }
+.live-market-type { color:var(--text3); font:800 9px var(--mono); }
+.live-market-side { min-width:0; font-size:12px; font-weight:700; }
+.live-market-signal { color:var(--text2); font-size:10px; text-align:right; }
+.live-market button { margin-top:3px; border:0; background:none; color:var(--accent); font:700 10px var(--sans); cursor:pointer; padding:0; }
+.live-empty { max-width:620px; margin:30px auto; padding:24px; background:#fff; border:1px solid var(--border); border-radius:10px; text-align:center; color:var(--text3); font-size:13px; }
 @media (max-width: 900px) {
   html,body { overflow:auto; }
   .topbar { padding:0 14px; } .topbar-kpis,.clock-area,.signal-key { display:none; }
@@ -1182,6 +1200,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
   .board-tools { flex:1 1 100%; } .board-tools input { width:100%; min-width:0; }
   .movement-chart-head { display:block; } .movement-tabs { justify-content:flex-start; margin-top:8px; }
   .movement-facts { grid-template-columns:1fr 1fr; }
+  .live-recent { padding:14px 10px 28px; } .live-recent-grid { grid-template-columns:1fr; gap:10px; } .live-game-card { padding:12px; }
   /* A selected game is an analysis screen on phones, not a small desktop dialog. */
   body.game-detail-open { overflow:hidden; }
   #drill-overlay:has(.game-detail-modal) { align-items:stretch; justify-content:stretch; background:#fff; backdrop-filter:none; }
@@ -1287,6 +1306,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 <nav class="tabs">
   <div class="tab active" data-tab="board" data-filter="all" onclick="setTab(this)">All Games <span class="tbadge" id="b-all">0</span></div>
   <div class="tab" data-tab="board" data-filter="today" onclick="setTab(this)">Today's Games <span class="tbadge" id="b-today">0</span></div>
+  <div class="tab" data-tab="live-recent" onclick="setTab(this)">Live &amp; Recent</div>
   <div class="sfilters">
     <div class="schip on" onclick="setSport('ALL',this)">All</div>
     <div class="schip" onclick="setSport('NBA',this)">NBA</div>
@@ -1397,6 +1417,8 @@ td:last-child { border-radius: 0 8px 8px 0; }
 
     </div>
   </div>
+
+  <div class="tab-content" id="tab-live-recent"><div class="live-recent"><div class="live-recent-head"><h2>Live &amp; Recent</h2><p>Live score context beside the frozen pregame market record. Signals do not change after kickoff.</p></div><div class="live-recent-grid" id="live-recent-grid"></div></div></div>
 
   <!-- PERFORMANCE -->
   <div class="tab-content" id="tab-perf">
@@ -1633,6 +1655,7 @@ const EVENTS_URL  = '/data/anomaly_events.csv';
 const LEDGER_URL  = '/data/anomaly_events.csv';
 const RESULTS_URL = '/data/results_resolved.csv';
 const FREEZE_URL  = '/data/decision_freeze_ledger.csv';
+const LIVE_RECENT_URL = '/data/live_recent.csv';
 
 const MOCK_DASH = [
   {sport:'nba',game_id:'101',market_display:'TOTAL',game:'CLE Cavaliers @ DET Pistons',favored_side:'Under 226.5',game_confidence:66.4,net_edge:10.0,game_decision:'LEAN',_game_time:'2026-02-27T19:10:00-05:00',bets_pct:38,money_pct:62,open_line:'226.5',current_line:'224.5',timing_bucket:'MID'},
@@ -1666,7 +1689,7 @@ const MOCK_RESULTS = [
   {date:'2026-02-24',game:'TOR @ MTL',market_display:'MONEYLINE',favored_side:'Montreal',game_confidence:66.8,net_edge:8.9,result:'WIN',timing_bucket:'EARLY',sport:'nhl'},
 ];
 
-let allDash=[], allLedger=[], allEvents=[], allResults=[], allKPI=[];
+let allDash=[], allLedger=[], allEvents=[], allResults=[], allKPI=[], allLiveRecent=[];
 let sport='ALL', market='ALL', filter='all', tabId='board';
 let sortCol='board_rank', sortAsc=true;
 let _bookLines=null, _selectedBook='dk';
@@ -1936,6 +1959,7 @@ function setTab(el){
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
   document.getElementById('tab-'+tabId).classList.add('active');
   if(tabId==='board') renderBoard();
+  if(tabId==='live-recent') loadLiveRecent();
   if(tabId==='history') renderHistory();
   if(tabId==='results') renderResults();
   if(tabId==='perf' && typeof Chart!=='undefined') buildKPIs();
@@ -1979,6 +2003,22 @@ function exportCSV(){
   const d=new Date();
   a.download='redfox_'+filter+'_'+d.toISOString().slice(0,10)+'.csv';
   a.click();
+}
+
+async function loadLiveRecent(){
+  const grid=document.getElementById('live-recent-grid');
+  if(!grid) return;
+  grid.innerHTML='<div class="live-empty">Loading live game context...</div>';
+  const rows=await loadCSV(LIVE_RECENT_URL+'?_='+Date.now())||[];
+  allLiveRecent=rows;
+  const games=new Map();
+  rows.forEach(row=>{ const key=[row.sport,row.game_id,row.game].join('|'); if(!games.has(key)) games.set(key,[]); games.get(key).push(row); });
+  if(!games.size){ grid.innerHTML='<div class="live-empty">No started games are currently in the Live &amp; Recent window.</div>'; return; }
+  grid.innerHTML=[...games.values()].map(markets=>{
+    const first=markets[0], score=(first.score_away&&first.score_home&&first.score_away!=='-')?`${first.score_away} - ${first.score_home}`:'--';
+    const status=first.score_status||'Live score updating';
+    return `<article class="live-game-card"><div class="live-game-top"><div><div>${spChip(first.sport)}</div><div class="live-game-name">${first.game||'--'}</div><div class="live-status">${status}</div></div><div class="live-score">${score}</div></div><div class="live-freeze">Frozen pregame record</div>${markets.map(row=>`<div class="live-market"><span class="live-market-type">${row.market_display||'Market'}</span><div class="live-market-side">${row.flagged_side||'--'}<button type="button" onclick="openGameDetail(allLiveRecent[${allLiveRecent.indexOf(row)}])">View pregame timeline</button></div><span class="live-market-signal">${row.reaction||'Observed'}${row.path?` / ${row.path}`:''}</span></div>`).join('')}</article>`;
+  }).join('');
 }
 
 function _decRank(d,r){ const k=(d||'').toUpperCase(); if(k==='BET') return 1; if(k==='LEAN') return (r&&isLocked(r))?3:2; return 4; }
