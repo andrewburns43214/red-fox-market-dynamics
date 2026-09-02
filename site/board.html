@@ -482,6 +482,7 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 }
 .sc-nba   { background: #eef2ff; color: #2255cc; border: 1px solid #c0cef8; }
 .sc-nfl   { background: #edfff6; color: #1a7a42; border: 1px solid #b0e8cc; }
+.sc-ncaaf { background: #fff8e8; color: #a05d00; border: 1px solid #f1d39a; }
 .sc-ncaab { background: #fff5ee; color: #c04800; border: 1px solid #f8caa8; }
 .sc-mlb   { background: #fff0f0; color: #c01818; border: 1px solid #f8c0c0; }
 .sc-nhl   { background: #eefbff; color: #0a6a80; border: 1px solid #a8e4f0; }
@@ -1076,9 +1077,13 @@ body { background: radial-gradient(circle at 88% -10%, #dceff0 0, transparent 30
 .board-tools { display:flex; align-items:center; gap:14px; min-width:0; }
 .board-tools input { width:170px; padding:6px 10px; border:1px solid var(--border); border-radius:5px; background:#fff; color:var(--text); font:600 10px var(--sans); outline:0; }
 .board-tools input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(15,95,115,.1); }
-.board-more { display:flex; justify-content:center; padding:4px 0 18px; }
+.board-footer { position:relative; min-height:28px; padding:4px 20px 8px; }
+.board-more { display:flex; justify-content:center; padding:0; }
 .board-more button { border:1px solid var(--acc-brd); border-radius:999px; padding:8px 14px; background:#fff; color:var(--accent); font:700 11px var(--sans); cursor:pointer; }
 .board-more button:hover { background:var(--acc-bg); }
+.board-freshness { position:absolute; right:20px; bottom:12px; display:flex; align-items:center; gap:8px; color:var(--text3); font:500 8px/1 var(--mono); white-space:nowrap; }
+.board-freshness .fresh-src { display:inline-flex; align-items:center; gap:3px; padding:0; border:0; border-radius:0; background:transparent; color:inherit; font-size:inherit; }
+.board-freshness .fresh-src .fs-dot { width:5px; height:5px; }
 .board-update-note { color:var(--text3); font:700 9px var(--mono); letter-spacing:.03em; }
 .tscroll { padding: 0 20px 20px; }
 table { border-spacing: 0 7px; border-collapse: separate; }
@@ -1201,6 +1206,8 @@ td:last-child { border-radius: 0 8px 8px 0; }
   .pane-hdr .grp-btn[title="Back to top"] { display:none; }
   .board-update-note { display:none; }
   .pane-meta,.mcap { display:none; } .tscroll { padding:0 8px 12px; }
+  .board-footer { min-height:0; padding:4px 10px 16px; }
+  .board-freshness { position:static; justify-content:center; flex-wrap:wrap; margin-top:6px; white-space:normal; }
   .mfilters { gap:4px; } .mchip { padding:4px 8px; font-size:10px; } .grp-btn { padding:5px; font-size:10px; }
   .board-tools { flex:1 1 100%; } .board-tools input { width:100%; min-width:0; }
   .movement-chart-head { display:block; } .movement-tabs { justify-content:flex-start; margin-top:8px; }
@@ -1418,8 +1425,11 @@ td:last-child { border-radius: 0 8px 8px 0; }
             </thead>
             <tbody id="tbody"></tbody>
           </table>
+          <div class="board-footer">
+            <div class="board-freshness" id="board-freshness" aria-live="polite"></div>
+            <div class="board-more" id="board-more" hidden><button type="button" onclick="showMoreBoardRows()">Show more markets</button></div>
+          </div>
         </div>
-        <div class="board-more" id="board-more" hidden><button type="button" onclick="showMoreBoardRows()">Show more markets</button></div>
       </div>
 
 
@@ -1660,6 +1670,7 @@ function toggleRpane() {
 <script>
 const DASH_URL    = '/data/anomaly_board.csv';
 const EVENTS_URL  = '/data/anomaly_events.csv';
+const EVENT_DETAIL_BASE = '/data/anomaly_event_details/';
 const LEDGER_URL  = '/data/anomaly_events.csv';
 const RESULTS_URL = '/data/results_resolved.csv';
 const FREEZE_URL  = '/data/decision_freeze_ledger.csv';
@@ -1709,6 +1720,7 @@ const SPORT_ALIASES = {
   ncaaf: 'ncaaf',
   cbb: 'ncaab',
   'college basketball': 'ncaab',
+  nccab: 'ncaab',
   ncaab: 'ncaab',
 };
 
@@ -1998,7 +2010,10 @@ function setTab(el){
   document.getElementById('tab-'+tabId).classList.add('active');
   if(tabId==='board') renderBoard();
   if(tabId==='live-recent') loadLiveRecent();
-  if(tabId==='history') renderHistory();
+  if(tabId==='history'){
+    renderHistory();
+    ensureEvents().then(renderHistory);
+  }
   if(tabId==='results') renderResults();
   if(tabId==='perf' && typeof Chart!=='undefined') buildKPIs();
 }
@@ -2078,7 +2093,9 @@ function filtered(){ const q=(document.getElementById('board-search')||{}).value
 window._boardRows=[];
 let _visibleBoardRows=0;
 let _boardHasRendered=false;
-function boardPageSize(){ return window.matchMedia('(max-width: 900px)').matches ? 24 : 80; }
+// Keep initial board rendering fast and predictable on every viewport. More
+// markets remain available in equal, explicit batches through the footer.
+function boardPageSize(){ return 40; }
 function showMoreBoardRows(){
   _visibleBoardRows=Math.min(window._boardRows.length,_visibleBoardRows+boardPageSize());
   renderBoard(false);
@@ -2370,7 +2387,7 @@ function setMovementView(button, view){
 }
 
 async function openGameDetail(r){
-  if(!allEvents.length) await ensureEvents();
+  const gameEvents=await ensureGameEvents(r);
   const gid=r.game_id||r.game||'';
   const n=s=>{ const x=Number(s); return isNaN(x)?null:x; };
   const gameRows=[...(window._boardRows||[]), ...(allLiveRecent||[])].filter(x=>(x.game_id||x.game||'')===gid);
@@ -2384,7 +2401,7 @@ async function openGameDetail(r){
     }
   });
   window._gameDetailRows=mkts;
-  const evRows=(allEvents||[])
+  const evRows=(gameEvents||[])
     .filter(x=>(x.game_id||x.game||'')===gid && (x.flagged_side||'')===r.flagged_side && (x.market_display||'')===r.market_display)
     .sort((a,b)=>new Date(a.timestamp||0)-new Date(b.timestamp||0));
   let marketSwitcher='';
@@ -3400,7 +3417,11 @@ async function loadCSV(url){ try{ const r=await fetch(url+'?t='+Date.now()); if(
 function updateFreshness(f){
   const bar=document.getElementById('fresh-bar');
   if(!bar) return;
-  if(!f){ return; }
+  const boardFresh=document.getElementById('board-freshness');
+  if(!f){
+    if(boardFresh) boardFresh.textContent='Freshness unavailable';
+    return;
+  }
   // bar stays hidden â€” freshness now shows in status bar
   const now=Date.now();
   function ageMin(ts){ if(!ts) return Infinity; const d=new Date(ts); return isNaN(d)?Infinity:Math.round((now-d.getTime())/60000); }
@@ -3411,6 +3432,13 @@ function updateFreshness(f){
     {name:'DK', label:'Last snapshot', ts:f.dk_ts, fresh:15, warn:30},
     {name:'Engine', label:'Engine run', ts:f.engine_ts, fresh:15, warn:30}
   ];
+  if(boardFresh){
+    boardFresh.innerHTML=sources.map(s=>{
+      const age=ageMin(s.ts);
+      const state=age>s.warn?'bad':age>s.fresh?'warn':'ok';
+      return `<span class="fresh-src" title="${s.label}: ${s.ts||'unavailable'}"><span class="fs-dot ${state}"></span><span>${s.label} ${fmtTime(s.ts)} (${fmtAge(age)})</span></span>`;
+    }).join('');
+  }
   let worst=0; // 0=live, 1=degraded, 2=stale
   let srcHtml='';
   sources.forEach(s=>{
@@ -3458,6 +3486,39 @@ function parseLine(raw,mkt){
 
 let _lastDashHash='';
 let _eventsLoadPromise=null;
+const _gameEventRequests=new Map();
+
+function eventDetailUrl(row){
+  const sport=String(row.sport||'').trim().toLowerCase();
+  const gameId=String(row.game_id||row.game||'').trim();
+  return EVENT_DETAIL_BASE+encodeURIComponent(sport)+'--'+encodeURIComponent(gameId)+'.json';
+}
+
+async function ensureGameEvents(row){
+  const url=eventDetailUrl(row);
+  if(_gameEventRequests.has(url)) return _gameEventRequests.get(url);
+  const request=(async()=>{
+    try{
+      const response=await fetch(url+'?_='+Date.now());
+      if(response.ok){
+        const events=await response.json();
+        if(Array.isArray(events)) return events;
+      }
+    }catch(e){}
+    // Compatibility fallback keeps detail views working until the next engine
+    // publish has created game payloads on an existing deployment.
+    const events=await ensureEvents();
+    const gameId=String(row.game_id||row.game||'');
+    const sport=String(row.sport||'').trim().toLowerCase();
+    return (events||[]).filter(event=>
+      String(event.game_id||event.game||'')===gameId &&
+      String(event.sport||'').trim().toLowerCase()===sport
+    );
+  })();
+  _gameEventRequests.set(url,request);
+  return request;
+}
+
 async function ensureEvents(){
   if(allEvents.length) return allEvents;
   if(_eventsLoadPromise) return _eventsLoadPromise;
@@ -3509,7 +3570,12 @@ async function loadAll({forceRender=false}={}){
   _lastDashHash=_hash;
   updateStats();
   renderResults();
-  if(tabId==='history') renderHistory();
+  if(tabId==='history'){
+    renderHistory();
+    // Full history is intentionally loaded only when this workspace is opened.
+    // Detail views use small, game-scoped payloads instead.
+    ensureEvents().then(renderHistory);
+  }
   if(_changed){
     const updateNote=document.getElementById('board-update-note');
     if(forceRender || !_boardHasRendered){
@@ -3696,8 +3762,6 @@ async function loadCSV(url){
 }
 
 loadAll();
-if(window.requestIdleCallback) window.requestIdleCallback(()=>ensureEvents(),{timeout:2500});
-else window.setTimeout(()=>ensureEvents(),1500);
 setInterval(updateStats, 1000);
 setInterval(loadAll, 60000);
 
