@@ -1085,6 +1085,8 @@ body { background: radial-gradient(circle at 88% -10%, #dceff0 0, transparent 30
 .board-freshness .fresh-src { display:inline-flex; align-items:center; gap:3px; padding:0; border:0; border-radius:0; background:transparent; color:inherit; font-size:inherit; }
 .board-freshness .fresh-src .fs-dot { width:5px; height:5px; }
 .board-update-note { color:var(--text3); font:700 9px var(--mono); letter-spacing:.03em; }
+.detail-observations { max-height:360px; overflow:auto !important; overscroll-behavior:contain; }
+.detail-observation-table thead th { position:sticky; top:0; z-index:2; background:var(--bg4); box-shadow:0 1px 0 var(--border); }
 .tscroll { padding: 0 20px 20px; }
 table { border-spacing: 0 7px; border-collapse: separate; }
 thead th { background: transparent; border: 0; padding: 9px 10px 5px; color: var(--text3); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
