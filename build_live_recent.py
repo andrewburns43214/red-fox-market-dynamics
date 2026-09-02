@@ -26,13 +26,24 @@ SCOREBOARD_URLS = {
     "nhl": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard",
 }
 
+# ESPN occasionally spells an MLB city out where the sportsbook uses its three
+# letter abbreviation. Keep these score-feed-only aliases explicit.
+SCOREBOARD_TEAM_ALIASES = {
+    "chi white sox": "chicago white sox",
+}
+
 
 def game_key(value: object, sport: str) -> str:
     value = str(value or "").replace(" vs. ", " @ ").replace(" vs ", " @ ")
     if " @ " not in value:
         return re.sub(r"[^a-z0-9]+", "", value.lower())
     away, home = value.split(" @ ", 1)
-    return "@".join((normalize_team_name(away, sport), normalize_team_name(home, sport)))
+    away_key = normalize_team_name(away, sport)
+    home_key = normalize_team_name(home, sport)
+    if sport.lower() == "mlb":
+        away_key = SCOREBOARD_TEAM_ALIASES.get(away_key, away_key)
+        home_key = SCOREBOARD_TEAM_ALIASES.get(home_key, home_key)
+    return "@".join((away_key, home_key))
 
 
 def scoreboard(sport: str, now: datetime) -> dict[str, list[dict[str, str]]]:
