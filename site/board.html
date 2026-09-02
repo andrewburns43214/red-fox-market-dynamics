@@ -1165,23 +1165,23 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .movement-kpis { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:12px 0; }
 .movement-kpi { padding:9px 10px; background:#f4f7f8; border-radius:8px; }
 .movement-kpi b { display:block; margin-top:3px; color:var(--text); font-size:12px; }
-.live-recent { padding:20px; overflow:auto; background:var(--bg3); }
-.live-recent-head { max-width:1120px; margin:0 auto 14px; }
+.live-recent { flex:1; min-width:0; width:100%; padding:20px; overflow:auto; background:var(--bg3); }
+.live-recent-head { margin:0 0 14px; }
 .live-recent-head h2 { margin:0; font-size:18px; }
 .live-recent-head p { margin:5px 0 0; color:var(--text3); font-size:12px; }
-.live-recent-grid { max-width:1120px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:12px; }
-.live-game-card { padding:14px; border:1px solid var(--border); border-radius:10px; background:#fff; box-shadow:0 2px 8px rgba(22,53,61,.05); }
+.live-recent-grid { width:100%; display:grid; grid-template-columns:repeat(auto-fit,minmax(285px,1fr)); gap:10px; align-content:start; }
+.live-game-card { padding:12px; border:1px solid var(--border); border-radius:10px; background:#fff; box-shadow:0 2px 8px rgba(22,53,61,.05); }
 .live-game-top { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
 .live-game-name { font-size:14px; font-weight:800; line-height:1.25; }
 .live-status { margin-top:5px; color:var(--text3); font:700 9px var(--mono); text-transform:uppercase; letter-spacing:.05em; }
 .live-score { text-align:right; font:800 17px var(--mono); white-space:nowrap; }
 .live-freeze { margin:12px 0 8px; padding-top:10px; border-top:1px solid var(--border); color:var(--accent); font:800 9px var(--mono); text-transform:uppercase; letter-spacing:.06em; }
-.live-market { display:grid; grid-template-columns:70px minmax(0,1fr) auto; gap:8px; align-items:center; padding:8px 0; border-top:1px solid #eef2f3; }
+.live-market { display:grid; grid-template-columns:62px minmax(0,1fr); gap:5px 8px; align-items:start; padding:7px 0; border-top:1px solid #eef2f3; }
 .live-market:first-of-type { border-top:0; }
 .live-market-type { color:var(--text3); font:800 9px var(--mono); }
-.live-market-side { min-width:0; font-size:12px; font-weight:700; }
-.live-market-signal { color:var(--text2); font-size:10px; text-align:right; }
-.live-market button { margin-top:3px; border:0; background:none; color:var(--accent); font:700 10px var(--sans); cursor:pointer; padding:0; }
+.live-market-side { min-width:0; font-size:12px; font-weight:700; line-height:1.2; }
+.live-market-meta { grid-column:2; color:var(--text3); font:600 9px var(--mono); }
+.live-market button { border:0; background:none; color:var(--accent); font:700 10px var(--sans); cursor:pointer; padding:0; }
 .live-empty { max-width:620px; margin:30px auto; padding:24px; background:#fff; border:1px solid var(--border); border-radius:10px; text-align:center; color:var(--text3); font-size:13px; }
 @media (max-width: 900px) {
   html,body { overflow:auto; }
@@ -1306,7 +1306,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 <nav class="tabs">
   <div class="tab active" data-tab="board" data-filter="all" onclick="setTab(this)">All Games <span class="tbadge" id="b-all">0</span></div>
   <div class="tab" data-tab="board" data-filter="today" onclick="setTab(this)">Today's Games <span class="tbadge" id="b-today">0</span></div>
-  <div class="tab" data-tab="live-recent" onclick="setTab(this)">Live &amp; Recent</div>
+  <div class="tab" data-tab="live-recent" onclick="setTab(this)">Live &amp; Recent <span class="tbadge" id="b-live">0</span></div>
   <div class="sfilters">
     <div class="schip on" onclick="setSport('ALL',this)">All</div>
     <div class="schip" onclick="setSport('NBA',this)">NBA</div>
@@ -1418,7 +1418,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
     </div>
   </div>
 
-  <div class="tab-content" id="tab-live-recent"><div class="live-recent"><div class="live-recent-head"><h2>Live &amp; Recent</h2><p>Live score context beside the frozen pregame market record. Signals do not change after kickoff.</p></div><div class="live-recent-grid" id="live-recent-grid"></div></div></div>
+  <div class="tab-content" id="tab-live-recent"><div class="live-recent"><div class="live-recent-head"><h2>Live &amp; Recent</h2><p>Live score and the final pregame market record.</p></div><div class="live-recent-grid" id="live-recent-grid"></div></div></div>
 
   <!-- PERFORMANCE -->
   <div class="tab-content" id="tab-perf">
@@ -2013,11 +2013,12 @@ async function loadLiveRecent(){
   allLiveRecent=rows;
   const games=new Map();
   rows.forEach(row=>{ const key=[row.sport,row.game_id,row.game].join('|'); if(!games.has(key)) games.set(key,[]); games.get(key).push(row); });
+  const badge=document.getElementById('b-live'); if(badge) badge.textContent=games.size;
   if(!games.size){ grid.innerHTML='<div class="live-empty">No started games are currently in the Live &amp; Recent window.</div>'; return; }
   grid.innerHTML=[...games.values()].map(markets=>{
     const first=markets[0], score=(first.score_away&&first.score_home&&first.score_away!=='-')?`${first.score_away} - ${first.score_home}`:'--';
     const status=first.score_status||'Live score updating';
-    return `<article class="live-game-card"><div class="live-game-top"><div><div>${spChip(first.sport)}</div><div class="live-game-name">${first.game||'--'}</div><div class="live-status">${status}</div></div><div class="live-score">${score}</div></div><div class="live-freeze">Frozen pregame record</div>${markets.map(row=>`<div class="live-market"><span class="live-market-type">${row.market_display||'Market'}</span><div class="live-market-side">${row.flagged_side||'--'}<button type="button" onclick="openGameDetail(allLiveRecent[${allLiveRecent.indexOf(row)}])">View pregame timeline</button></div><span class="live-market-signal">${row.reaction||'Observed'}${row.path?` / ${row.path}`:''}</span></div>`).join('')}</article>`;
+    return `<article class="live-game-card"><div class="live-game-top"><div><div>${spChip(first.sport)}</div><div class="live-game-name">${first.game||'--'}</div><div class="live-status">${status==='Live score unavailable'?'Score pending':status}</div></div><div class="live-score">${score}</div></div><div class="live-freeze">Frozen pregame record</div>${markets.map(row=>{const canDrill=Boolean(row.first_anomaly_seen||row.observation_count);return `<div class="live-market"><span class="live-market-type">${row.market_display||'Market'}</span><div class="live-market-side">${row.flagged_side||'--'}${canDrill?` <button type="button" onclick="openGameDetail(allLiveRecent[${allLiveRecent.indexOf(row)}])">Details</button>`:''}</div><span class="live-market-meta">${row.open_line||'--'} to ${row.current_line||'--'} | ${row.bets_pct||'--'}% bets / ${row.money_pct||'--'}% money</span></div>`}).join('')}</article>`;
   }).join('');
 }
 
