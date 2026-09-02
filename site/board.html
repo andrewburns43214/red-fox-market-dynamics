@@ -1214,8 +1214,8 @@ td:last-child { border-radius: 0 8px 8px 0; }
   #drill-overlay .game-detail-modal .detail-observation-table { display:block; width:100% !important; font-size:10px !important; }
   #drill-overlay .game-detail-modal .detail-observation-table thead { display:none; }
   #drill-overlay .game-detail-modal .detail-observation-table tbody { display:grid; gap:7px; }
-  #drill-overlay .game-detail-modal .detail-observation-table tr { display:grid; grid-template-columns:minmax(0,1.45fr) repeat(3,minmax(0,.72fr)); gap:5px; padding:8px; border:1px solid var(--border) !important; border-radius:7px; background:#fff; }
-  #drill-overlay .game-detail-modal .detail-observation-table td { display:block; min-width:0; padding:0 !important; border:0 !important; overflow-wrap:anywhere; }
+  #drill-overlay .game-detail-modal .detail-observation-table tr { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:7px 10px; padding:8px; border:1px solid var(--border) !important; border-radius:7px; background:#fff; }
+  #drill-overlay .game-detail-modal .detail-observation-table td { display:block; min-width:0; padding:0 !important; border:0 !important; white-space:normal !important; line-height:1.2; overflow-wrap:anywhere; }
   #drill-overlay .game-detail-modal .detail-observation-table td::before { content:attr(data-label); display:block; margin-bottom:3px; color:var(--text3); font:700 7px var(--mono); letter-spacing:.06em; text-transform:uppercase; }
   .lpane { min-width:0; }
   .lpane > .tscroll > table { min-width:1360px; }
