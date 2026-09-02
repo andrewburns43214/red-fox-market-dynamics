@@ -133,8 +133,10 @@ def main(scores_only: bool = False) -> None:
     # Keep this as a short look-in, not a results archive. Final games stay
     # available for the rest of the day; an unresolved live status gets a small safety window.
     state = live.get("score_state", pd.Series("", index=live.index)).astype(str).str.lower()
+    cutoff_final = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=10)
+    cutoff_unresolved = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=8)
     final = state.eq("post")
-    live = live[live["_kickoff"].notna() & (((final) & (live["_kickoff"] >= now - timedelta(hours=10))) | ((~final) & (live["_kickoff"] >= now - timedelta(hours=8))))].copy()
+    live = live[live["_kickoff"].notna() & (((final) & (live["_kickoff"] >= cutoff_final)) | ((~final) & (live["_kickoff"] >= cutoff_unresolved)))].copy()
     key_columns = [column for column in ("sport", "game_id", "market_display", "flagged_side") if column in live]
     if key_columns:
         live = live.sort_values("frozen_at_utc", na_position="last").drop_duplicates(key_columns, keep="first")
