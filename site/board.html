@@ -500,10 +500,9 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .srow { display: flex; align-items: center; gap: 4px; }
 .srow + .srow { margin-top: 3px; }
 .slbl { font-family: var(--mono); font-size: 8px; color: var(--text3); width: 22px; }
-.sbar { flex: 1; height: 2px; background: var(--surface); border-radius: 1px; overflow: hidden; }
+.sbar { flex: 1; height: 2px; background: #f7d8d4; border-radius: 1px; overflow: hidden; }
 .sfill { height: 100%; border-radius: 1px; }
-.sfill.b { background: #8892aa; }
-.sfill.m { background: var(--gold2); }
+.sfill.b, .sfill.m { background: var(--red); }
 .spct { font-family: var(--mono); font-size: 8px; color: var(--text2); width: 24px; text-align: right; }
 .split-unavailable { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .04em; color: var(--text3); text-transform: uppercase; white-space: nowrap; }
 
@@ -1118,8 +1117,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .focus-sub { font-family:var(--mono); font-size:9px; color:var(--text3); margin-top:3px; }
 .market-cue { display:flex; align-items:center; gap:4px; margin-top:5px; font-size:9px; line-height:1.2; color:var(--text2); white-space:normal; }
 .market-cue-icon { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; border-radius:50%; font:800 9px var(--mono); flex:0 0 auto; }
-.market-cue.fade .market-cue-icon { background:#e7f0f6; color:#2f607f; border:1px solid #c8dce9; }
-.market-cue.contrarian .market-cue-icon { background:#e4f5f2; color:#23796f; border:1px solid #c6e8e2; }
+.market-cue.fade .market-cue-icon,.market-cue.contrarian .market-cue-icon { width:12px; height:12px; background:#30393d; color:#fff; border:1px solid #30393d; font-size:8px; }
 .observed-prefix { display:inline-block; margin-right:4px; color:var(--text3); font:700 8px var(--mono); letter-spacing:.05em; text-transform:uppercase; vertical-align:1px; }
 .board-use-note { color:var(--text3); font:700 9px var(--mono); letter-spacing:.04em; white-space:nowrap; }
 .signal-key-note { color:var(--text3); font:700 8px var(--mono); letter-spacing:.05em; text-transform:uppercase; }
@@ -1148,6 +1146,21 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .mr-aligned { background:#e7f3f1; color:#176454; border-color:#c7e4de; }
 .mr-freeze { background:#e7f0f6; color:#2f607f; border-color:#c8dce9; }
 .mr-neutral { background:#f0f3f5; color:#60707b; border-color:#dce3e7; }
+.signal-contrarian { background:#e2f3f0; color:#126b61; border-color:#b8ded8; }
+.signal-freeze { background:#e7f0fb; color:#245b9f; border-color:#c1d5ef; }
+.signal-follow { background:#e8f5eb; color:#23733c; border-color:#c4e4cd; }
+.signal-whipsaw { background:#fff4dd; color:#9a6400; border-color:#eed29a; }
+.signal-held { background:#eef1f3; color:#60707b; border-color:#d9e0e4; }
+.signal-late { background:#fff0e8; color:#af4d1d; border-color:#f0c6ae; }
+.signal-one-way,.signal-market-move { background:#edf0fb; color:#4b5f9f; border-color:#d1d9ef; }
+.signal-market-lag { background:#fbe9ec; color:#a63245; border-color:#edc1c9; }
+.signal-ticket-led,.signal-public-pressure { background:#f8f0df; color:#8a6421; border-color:#e8d2a7; }
+.signal-low-bets-high { background:#f2edfb; color:#6c4aa2; border-color:#d9cdf0; }
+.signal-key-number { background:#edf3f8; color:#3c6581; border-color:#cbdce7; }
+.signal-juice-move { background:#e7f5f7; color:#1f7280; border-color:#bee1e6; }
+.signal-price-risk,.signal-heavy-favorite { background:#fbeceb; color:#a54436; border-color:#edc7c2; }
+.signal-capped-split { background:#f9eaee; color:#934153; border-color:#e9c2cc; }
+.signal-watch,.signal-developing-read { background:#f1f3f5; color:#61717b; border-color:#dce2e6; }
 .pat { background:transparent; border:0; padding:0; color:var(--text2); font-size:9px; white-space:normal; text-align:left; }
 .info-btn { background: #eef5f6; border-color: #cce2e4; color: var(--accent); font-weight: 700; }
 .grp-btn { display:inline-flex; align-items:center; gap:5px; border:0; border-radius:4px; padding:5px 7px; background:transparent; color:var(--text2); font-weight:700; letter-spacing:.01em; }
@@ -1169,7 +1182,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .movement-chart-note { margin-top:3px; font-size:10px; line-height:1.4; color:var(--text3); }
 .movement-tabs { display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; }
 .movement-tab { border:1px solid var(--border); border-radius:999px; padding:4px 7px; background:#fff; color:var(--text3); font:700 9px var(--sans); cursor:pointer; }
-.movement-tab.on { background:var(--acc-bg); border-color:var(--acc-brd); color:var(--accent); }
+.movement-tab.on { background:#f8e2df; border-color:#e7afa8; color:#a33f38; }
 .movement-facts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:8px; }
 .movement-fact { padding:7px 8px; border-radius:6px; background:rgba(255,255,255,.72); }
 .movement-fact span { display:block; font:700 8px var(--mono); letter-spacing:.06em; color:var(--text3); text-transform:uppercase; }
@@ -1187,13 +1200,13 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .live-game-name { font-size:14px; font-weight:800; line-height:1.25; }
 .live-status { margin-top:5px; color:var(--text3); font:700 9px var(--mono); text-transform:uppercase; letter-spacing:.05em; }
 .live-score { text-align:right; font:800 17px var(--mono); white-space:nowrap; }
-.live-freeze { margin:12px 0 8px; padding-top:10px; border-top:1px solid var(--border); color:var(--accent); font:800 9px var(--mono); text-transform:uppercase; letter-spacing:.06em; }
+.live-freeze { margin:12px 0 8px; padding-top:10px; border-top:1px solid var(--border); color:var(--red); font:800 9px var(--mono); text-transform:uppercase; letter-spacing:.06em; }
 .live-market { display:grid; grid-template-columns:62px minmax(0,1fr); gap:5px 8px; align-items:start; padding:7px 0; border-top:1px solid #eef2f3; }
 .live-market:first-of-type { border-top:0; }
 .live-market-type { color:var(--text3); font:800 9px var(--mono); }
 .live-market-side { min-width:0; font-size:12px; font-weight:700; line-height:1.2; }
 .live-market-meta { grid-column:2; color:var(--text3); font:600 9px var(--mono); }
-.live-market button { border:0; background:none; color:var(--accent); font:700 10px var(--sans); cursor:pointer; padding:0; }
+.live-market button { border:0; background:none; color:var(--red); font:700 10px var(--sans); cursor:pointer; padding:0; }
 .live-empty { max-width:620px; margin:30px auto; padding:24px; background:#fff; border:1px solid var(--border); border-radius:10px; text-align:center; color:var(--text3); font-size:13px; }
 @media (max-width: 900px) {
   html,body { overflow:auto; }
@@ -1413,7 +1426,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
             <thead>
               <tr>
           <th class="th-rank sorted" title="Priority rank uses verified signal strength, split quality, and market maturity; hover a row rank for its reason" onclick="sortBy('board_rank',this)">#</th>
-          <th class="th-game" title="Matchup, sport, and scheduled start time" onclick="sortBy('game',this)">Game</th>
+          <th class="th-game" title="Matchup, sport, and scheduled start time. Click to sort by date." onclick="sortBy('kickoff_iso',this)">Game / Date</th>
           <th class="th-mkt" title="Market type: moneyline, spread, or total" onclick="sortBy('market_display',this)">Market</th>
           <th class="th-split" title="Share of tickets and handle on the labeled signal side">Bets / Money</th>
           <th class="th-line" title="First observed line in the available snapshot history" onclick="sortBy('open_line',this)">Open</th>
@@ -1959,8 +1972,9 @@ function anomalyBadge(text){
   const t=String(text||'').trim();
   if(!t) return '';
   const meta=signalMetaFor(t);
+  const signalClass='signal-'+String(meta.label||t).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
   const clickArg=JSON.stringify(t).replace(/"/g,'&quot;');
-  return `<button class="mr signal-chip ${meta.cls||'mr-neutral'}" type="button" onclick="event.stopPropagation();openSignalGuide(${clickArg})" aria-label="Explain ${escHtml(meta.label||t)}" title="${escHtml(meta.tip)}" style="margin-right:4px">${escHtml(meta.label||t)}</button>`;
+  return `<button class="mr signal-chip ${meta.cls||'mr-neutral'} ${signalClass}" type="button" onclick="event.stopPropagation();openSignalGuide(${clickArg})" aria-label="Explain ${escHtml(meta.label||t)}" title="${escHtml(meta.tip)}" style="margin-right:4px">${escHtml(meta.label||t)}</button>`;
 }
 function dataBadge(v){
   const t=String(v||'').trim().toUpperCase();
@@ -2023,6 +2037,12 @@ function setSport(s,el){ sport=s; document.querySelectorAll('.sfilters .schip:no
 function setMarket(m,el){ market=m; document.querySelectorAll('#market-filters .mchip').forEach(x=>x.classList.remove('on')); el.classList.add('on'); renderBoard(); }
 function sortBy(col,th){ if(sortCol===col) sortAsc=!sortAsc; else{sortCol=col;sortAsc=false;} document.querySelectorAll('thead th').forEach(t=>t.classList.remove('sorted','asc')); th.classList.add('sorted'); if(sortAsc) th.classList.add('asc'); renderBoard(); }
 let groupMode=false;
+let boardDateFilter='ALL';
+let boardSignalFilter='ALL';
+window.setBoardAdvancedFilter=function(kind,value){
+  if(kind==='date') boardDateFilter=value;
+  if(kind==='signal') boardSignalFilter=value;
+};
 function toggleGroup(el){ groupMode=!groupMode; el.classList.toggle('grp-on',groupMode); el.querySelector('span').textContent=groupMode?'Ungroup':'Group'; renderBoard(); }
 function jumpToLocked(){
   const div=document.querySelector('.locked-divider');
@@ -2090,7 +2110,36 @@ async function refreshLiveRecentCount(){
 }
 
 function _decRank(d,r){ const k=(d||'').toUpperCase(); if(k==='BET') return 1; if(k==='LEAN') return (r&&isLocked(r))?3:2; return 4; }
-function filtered(){ const q=(document.getElementById('board-search')||{}).value||''; const ql=q.toLowerCase().trim(); let d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport); if(filter==='today') d=d.filter(r=>isToday(r.kickoff_iso)); if(filter==='highconf') d=d.filter(r=>['Contrarian','Freeze'].includes(r.recorded_reaction||r.reaction||'')); if(market!=='ALL') d=d.filter(r=>(r.market_display||'').toUpperCase()===market); if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.flagged_side||'').toLowerCase().includes(ql)||(r.action_side||'').toLowerCase().includes(ql)||(r.action_type||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)||(r.reaction||'').toLowerCase().includes(ql)||(r.recorded_reaction||'').toLowerCase().includes(ql)||(r.path||'').toLowerCase().includes(ql)||(r.context_chips||'').toLowerCase().includes(ql)||(r.data_badge||'').toLowerCase().includes(ql)||(r.reason||'').toLowerCase().includes(ql)||(r.recorded_note||'').toLowerCase().includes(ql)); return d.sort((a,b)=>{ let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); }); }
+function filtered(){
+  const q=(document.getElementById('board-search')||{}).value||'';
+  const ql=q.toLowerCase().trim();
+  let d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport);
+  // NFL is a one-week board: its next upcoming slate is the only NFL week shown.
+  if(sport==='NFL'){
+    const now=Date.now();
+    const upcoming=d.filter(r=>{ const kickoff=new Date(r.kickoff_iso||r._game_time||''); return !Number.isNaN(kickoff.getTime())&&kickoff.getTime()>=now; }).sort((a,b)=>new Date(a.kickoff_iso||a._game_time)-new Date(b.kickoff_iso||b._game_time));
+    if(upcoming.length){
+      // NFL slates run Thursday through the following Wednesday. Anchor the
+      // seven-day window to the first upcoming kickoff so Sunday games stay
+      // with their Thursday opener while later weeks remain out of view.
+      const firstKickoff=new Date(upcoming[0].kickoff_iso||upcoming[0]._game_time).getTime();
+      const weekEnds=firstKickoff+(7*24*60*60*1000);
+      d=upcoming.filter(r=>{ const kickoff=new Date(r.kickoff_iso||r._game_time||'').getTime(); return kickoff>=firstKickoff&&kickoff<weekEnds; });
+    } else d=[];
+  }
+  if(filter==='today') d=d.filter(r=>isToday(r.kickoff_iso));
+  if(filter==='highconf') d=d.filter(r=>['Contrarian','Freeze'].includes(r.recorded_reaction||r.reaction||''));
+  if(market!=='ALL') d=d.filter(r=>(r.market_display||'').toUpperCase()===market);
+  if(boardDateFilter==='TODAY') d=d.filter(r=>isToday(r.kickoff_iso));
+  if(boardDateFilter==='THIS_WEEK'){
+    const now=new Date(), end=new Date(now); end.setDate(end.getDate()+7);
+    d=d.filter(r=>{const date=new Date(r.kickoff_iso||r._game_time||'');return !Number.isNaN(date.getTime())&&date>=now&&date<end;});
+  }
+  if(boardDateFilter==='UPCOMING') d=d.filter(r=>{const date=new Date(r.kickoff_iso||r._game_time||'');return !Number.isNaN(date.getTime())&&date>=new Date();});
+  if(boardSignalFilter!=='ALL') d=d.filter(r=>orderedSignalValues(anomalyParts(r)).some(value=>String(value).trim().toUpperCase()===boardSignalFilter));
+  if(ql) d=d.filter(r=>(r.game||'').toLowerCase().includes(ql)||(r.flagged_side||'').toLowerCase().includes(ql)||(r.action_side||'').toLowerCase().includes(ql)||(r.action_type||'').toLowerCase().includes(ql)||(r.market_display||'').toLowerCase().includes(ql)||(r.reaction||'').toLowerCase().includes(ql)||(r.recorded_reaction||'').toLowerCase().includes(ql)||(r.path||'').toLowerCase().includes(ql)||(r.context_chips||'').toLowerCase().includes(ql)||(r.data_badge||'').toLowerCase().includes(ql)||(r.reason||'').toLowerCase().includes(ql)||(r.recorded_note||'').toLowerCase().includes(ql));
+  return d.sort((a,b)=>{ let va=a[sortCol],vb=b[sortCol]; if(!isNaN(Number(va))&&!isNaN(Number(vb))){va=Number(va);vb=Number(vb);} return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0); });
+}
 
 window._boardRows=[];
 let _visibleBoardRows=0;
