@@ -158,6 +158,7 @@ def test_freeze_focus_identifies_the_high_split_side_not_a_recommendation():
     assert row["focus_basis"] == "High-split side; market held"
     assert row["action_type"] == "OBSERVE ONLY"
     assert not row["kpi_eligible"]
+    assert row["reason"].startswith("82% bets and 76% money")
 
 
 def test_sustained_non_key_freeze_emits_the_opposing_fade_candidate():

@@ -354,6 +354,8 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         price_move_pct=price_move_pct,
         developing_read=developing_read,
         market_move=market_move,
+        bets_pct=bets_pct,
+        money_pct=money_pct,
     )
     market_move_note = _market_move_note(sport, market, line_move_abs, price_move_pct) if market_move else ""
     if market_move_note:
@@ -642,7 +644,7 @@ def _market_move_note(sport, market, line_move_abs, price_move_pct):
         return f"Market Move: moneyline price changed {price_move_pct:.1f} implied points from open to current"
     if line_move_abs >= _market_move_line_threshold(sport, market):
         return f"Market Move: line changed {line_move_abs:g} points from open to current"
-    return f"Market Move: attached price changed {price_move_pct:.1f} implied points while the line held"
+    return f"Market Move: attached price changed {price_move_pct:.1f} implied points while the line stayed below its movement threshold"
 
 
 def _count_direction_changes(points, market):
@@ -844,7 +846,7 @@ def _return_toward_open(points, market):
     return abs(current_value - open_value) < best_excursion
 
 
-def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ticket_led, low_bets_high_money, move_abs, move_threshold, held, broader_summary, split_capped, favorite_risk, price_move_pct, developing_read=False, market_move=False):
+def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ticket_led, low_bets_high_money, move_abs, move_threshold, held, broader_summary, split_capped, favorite_risk, price_move_pct, developing_read=False, market_move=False, bets_pct=0.0, money_pct=0.0):
     if split_capped:
         if price_move_pct >= MEANINGFUL_PRICE_MOVE_PCT:
             return f"Price moved {price_move_pct:.1f} implied points, but a capped 0%/100% split is excluded from alert ranking"
@@ -861,8 +863,8 @@ def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ti
         if stale_dk and broader_summary:
             return broader_summary
         if held:
-            return "The tracked side had heavy tickets and money while its number held near open"
-        return "The tracked side had strong ticket and money support with a mostly held number"
+            return f"{bets_pct:.0f}% bets and {money_pct:.0f}% money stayed on the observed side while its number held near open"
+        return f"{bets_pct:.0f}% bets and {money_pct:.0f}% money stayed on the observed side with a mostly held number"
     if reaction == "Follow":
         if path_label == "Late":
             return "Public side finally got a late move toward it"
@@ -877,6 +879,8 @@ def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ti
         return "Line reversed direction after a meaningful excursion"
     if path_label == "Juice Move":
         return f"Point line held while price moved {price_move_pct:.1f} implied points"
+    if low_bets_high_money and held:
+        return f"{bets_pct:.0f}% bets versus {money_pct:.0f}% money held near open; the split is notable but has no confirming move"
     if ticket_led and held:
         return "High ticket share had weak money support and the line held"
     if ticket_led:
