@@ -119,9 +119,8 @@ def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
         kind="mergesort",
     ).reset_index(drop=True)
     board_df["board_rank"] = range(1, len(board_df) + 1)
-    # Keep severity until the one-side-per-market publisher selects a leader.
-    # The public exporter removes this internal field after ranking is final.
-    board_df = board_df.drop(columns=["maturity_sort", "kickoff_sort"], errors="ignore")
+    # The one-side-per-market publisher uses maturity and kickoff to preserve
+    # the same ordering rationale in the final public board.
 
     if not events_df.empty:
         events_df = events_df.sort_values(
@@ -164,14 +163,14 @@ def select_market_leaders(board_df):
     work["_kickoff_sort"] = kickoff_sort.fillna("").astype(str)
 
     work = work.sort_values(
-        ["_has_recorded_signal", "_signal_rank", "_anomaly_sort", "_maturity_sort", "_severity_sort", "_kickoff_sort", "flagged_side"],
-        ascending=[False, True, True, True, False, True, True],
+        ["_signal_rank", "_anomaly_sort", "_maturity_sort", "_severity_sort", "_kickoff_sort", "_has_recorded_signal", "flagged_side"],
+        ascending=[True, True, True, False, True, False, True],
         kind="mergesort",
     )
     leaders = work.drop_duplicates(keys, keep="first").copy()
     leaders = leaders.sort_values(
-        ["_has_recorded_signal", "_signal_rank", "_anomaly_sort", "_maturity_sort", "_severity_sort", "_kickoff_sort", "game", "market_display"],
-        ascending=[False, True, True, True, False, True, True, True],
+        ["_signal_rank", "_anomaly_sort", "_maturity_sort", "_severity_sort", "_kickoff_sort", "_has_recorded_signal", "game", "market_display"],
+        ascending=[True, True, True, False, True, False, True, True],
         kind="mergesort",
     ).reset_index(drop=True)
     leaders["board_rank"] = range(1, len(leaders) + 1)
