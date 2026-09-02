@@ -2380,19 +2380,20 @@ async function openGameDetail(r){
   const evRows=(allEvents||[])
     .filter(x=>(x.game_id||x.game||'')===gid && (x.flagged_side||'')===r.flagged_side && (x.market_display||'')===r.market_display)
     .sort((a,b)=>new Date(a.timestamp||0)-new Date(b.timestamp||0));
-
-  let html='<div class="game-detail-content" style="padding:16px 20px">';
-  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--border)">';
-  html+=spChip(r.sport);
-  html+='<div><div style="font-size:16px;font-weight:800;color:var(--text);">'+(r.game||'--')+'</div>';
-  html+='<div style="font-size:11px;color:var(--text3);margin-top:2px">'+(r.kickoff_time||'--')+'</div></div></div>';
+  let marketSwitcher='';
   if(mkts.length>1){
     const marketTabs=mkts.map((row,index)=>{
       const active=(String(row.market_display||'').toUpperCase()===String(r.market_display||'').toUpperCase());
       return '<button type="button" class="movement-tab '+(active?'on':'')+'" title="Open '+escHtml(row.market_display||'market')+' timeline" onclick="openGameDetail(window._gameDetailRows['+index+'])">'+escHtml(row.market_display||'Market')+'</button>';
     }).join('');
-    html+='<div class="detail-market-switcher" aria-label="Other markets for this game"><span>Market</span><div class="movement-tabs">'+marketTabs+'</div></div>';
+    marketSwitcher='<div class="detail-market-switcher" aria-label="Other markets for this game"><div class="movement-tabs">'+marketTabs+'</div></div>';
   }
+
+  let html='<div class="game-detail-content" style="padding:16px 20px">';
+  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--border)">';
+  html+=spChip(r.sport);
+  html+='<div><div style="font-size:16px;font-weight:800;color:var(--text);">'+(r.game||'--')+'</div>';
+  html+='<div style="font-size:11px;color:var(--text3);margin-top:2px">'+(r.kickoff_time||'--')+'</div>'+marketSwitcher+'</div></div>';
 
   // anomaly summary
   const an=anomalyParts(r);
