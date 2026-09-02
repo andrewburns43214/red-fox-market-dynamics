@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#c0392b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/app-icon.svg">
 <title>Red Fox Market Intelligence</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -186,6 +191,13 @@ section { padding: 100px 40px; }
   grid-template-columns: repeat(3, 1fr);
   gap: 40px;
 }
+.coverage { padding:48px 40px; background:var(--bg2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+.coverage-inner { display:flex; align-items:center; justify-content:space-between; gap:28px; flex-wrap:wrap; }
+.coverage-title { color:var(--text3); font:700 10px var(--mono); letter-spacing:1.5px; text-transform:uppercase; }
+.coverage-group { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.coverage-label { color:var(--text2); font-size:12px; font-weight:700; margin-right:2px; }
+.coverage-chip { padding:5px 9px; border:1px solid var(--border2); border-radius:999px; background:#fff; color:var(--text2); font:700 10px var(--mono); }
+.coverage-note { flex-basis:100%; color:var(--text3); font-size:12px; }
 .feat-card {
   padding: 36px 28px;
   border-radius: var(--radius3);
@@ -588,6 +600,10 @@ section { padding: 100px 40px; }
   margin-top: 16px;
   text-align: center;
 }
+.consent { display:flex; align-items:flex-start; gap:8px; max-width:720px; margin:22px auto 0; color:var(--text3); font-size:12px; line-height:1.45; text-align:left; }
+.consent input { width:16px; height:16px; margin-top:1px; accent-color:var(--red); flex:0 0 auto; }
+.consent a { color:var(--accent); font-weight:700; }
+.auth-consent { margin:14px 0 4px; font-size:11px; }
 
 .btn-submit {
   width: 100%;
@@ -646,6 +662,10 @@ section { padding: 100px 40px; }
   .hero-ctas { flex-direction: column; align-items: center; gap: 10px; }
   .hero-ctas .btn-lg { width: 100%; max-width: 300px; padding: 12px 24px; font-size: 14px; }
   .features-grid { grid-template-columns: 1fr; gap: 20px; }
+  .coverage { padding:34px 16px; }
+  .coverage-inner { display:block; }
+  .coverage-group { margin-top:12px; }
+  .coverage-note { margin-top:12px; }
   .feat-card { padding: 28px 22px; }
   .not-grid { grid-template-columns: 1fr; }
   .not-section h2 { font-size: 24px; margin-bottom: 32px; }
@@ -696,7 +716,7 @@ section { padding: 100px 40px; }
     <p class="hero-sub">Red Fox Market Intelligence gives sports bettors the data and market signals they need to make more informed wagering decisions. Instead of blindly following picks, see what the betting market is telling you and decide for yourself.</p>
     <p class="hero-positioning">Bloomberg-style market intelligence for sports bettors.</p>
     <div class="hero-ctas">
-      <button class="btn btn-primary btn-lg" onclick="openModal('signup')">Unlock Today - $3.99</button>
+      <button class="btn btn-primary btn-lg" onclick="startFreeTrial()">Start Free Day</button>
       <button class="btn btn-dark btn-lg" onclick="openModal('signup')">Go Unlimited - $29.99/mo</button>
     </div>
   </div>
@@ -726,6 +746,24 @@ section { padding: 100px 40px; }
 </section>
 
 <!-- ─── WHAT RED FOX IS NOT ─── -->
+<section class="coverage" aria-labelledby="coverage-title">
+  <div class="container coverage-inner">
+    <h2 class="coverage-title" id="coverage-title">Live board coverage</h2>
+    <div class="coverage-group">
+      <span class="coverage-label">Sports</span>
+      <span class="coverage-chip">NBA</span><span class="coverage-chip">NFL</span>
+      <span class="coverage-chip">CFB</span><span class="coverage-chip">MLB</span>
+      <span class="coverage-chip">NHL</span><span class="coverage-chip">UFC</span>
+    </div>
+    <div class="coverage-group">
+      <span class="coverage-label">Markets</span>
+      <span class="coverage-chip">Moneyline</span><span class="coverage-chip">Spread</span>
+      <span class="coverage-chip">Total</span>
+    </div>
+    <p class="coverage-note">UFC coverage is currently Moneyline only. Available games and markets change with the live schedule and source availability.</p>
+  </div>
+</section>
+
 <section class="not-section">
   <div class="container">
     <h2>Not another picks service.</h2>
@@ -775,7 +813,8 @@ section { padding: 100px 40px; }
           <li>Market journey and timeline</li>
           <li>Real-time updates</li>
         </ul>
-        <button class="btn btn-primary btn-lg" onclick="handleCheckout('day_pass')">Unlock Today</button>
+        <button class="btn btn-primary btn-lg" onclick="startFreeTrial()">Start Free Day</button>
+        <button class="btn btn-ghost" style="margin-top:10px;width:100%" onclick="handleCheckout('day_pass')">Buy Day Access - $3.99</button>
       </div>
       <div class="price-card featured">
         <div class="price-label">Monthly Unlimited</div>
@@ -801,12 +840,14 @@ section { padding: 100px 40px; }
         <button class="btn btn-primary btn-lg" onclick="handleCheckout('annual')">Choose Annual</button>
       </div>
     </div>
+    <label class="consent"><input id="purchase-consent" type="checkbox"><span>I am at least 21, understand this is market information rather than betting advice, and agree to the <a href="/terms.html" target="_blank">Terms</a>, <a href="/privacy.html" target="_blank">Privacy Policy</a>, and <a href="/refund-policy.html" target="_blank">Refund and Cancellation Policy</a>.</span></label>
   </div>
 </section>
 
 <!-- ─── FOOTER ─── -->
 <footer class="footer">
   <p>&copy; 2026 Red Fox Market Intelligence. All rights reserved.</p>
+  <p style="margin-top:8px"><a href="/terms.html">Terms</a> &middot; <a href="/privacy.html">Privacy</a> &middot; <a href="/refund-policy.html">Refunds &amp; Cancellations</a> &middot; <a href="/affiliate-terms.html">Affiliate Terms</a> &middot; <a href="/support.html">Support</a></p>
 </footer>
 
 <!-- ─── AUTH MODAL ─── -->
@@ -828,8 +869,9 @@ section { padding: 100px 40px; }
       </div>
       <div class="form-group">
         <label class="form-label" for="auth-password">Password</label>
-        <input class="form-input" id="auth-password" type="password" placeholder="Password" required minlength="12">
+        <input class="form-input" id="auth-password" type="password" placeholder="Password" required>
       </div>
+      <label class="consent auth-consent"><input id="auth-consent" type="checkbox"><span>I agree to the <a href="/terms.html" target="_blank">Terms</a> and <a href="/privacy.html" target="_blank">Privacy Policy</a>.</span></label>
       <button class="btn btn-primary btn-submit" type="submit" id="auth-submit">Sign In</button>
     </form>
     <div class="form-footer">
@@ -841,6 +883,7 @@ section { padding: 100px 40px; }
 <!-- ─── SCRIPTS ─── -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
+<script src="/pwa.js" defer></script>
 <script>
 // ── Supabase client ──
 const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -901,6 +944,7 @@ function switchTab(mode) {
     : 'Create your account, then choose your access.';
   document.getElementById('auth-submit').textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
   document.getElementById('forgot-link').style.display = mode === 'signin' ? '' : 'none';
+  document.querySelector('.auth-consent').style.display = mode === 'signup' ? '' : 'none';
 }
 
 async function handleAuth(event) {
@@ -916,12 +960,15 @@ async function handleAuth(event) {
 
   try {
     if (_authMode === 'signup') {
+      if (!document.getElementById('auth-consent').checked) {
+        throw new Error('Please accept the Terms and Privacy Policy to create an account.');
+      }
       const { data, error } = await _supabase.auth.signUp({ email, password });
       if (error) throw error;
       if (data.session) {
         syncAccessCookie(data.session);
         closeModal();
-        document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
+        window.location.href = '/board.html?trial=started';
         return;
       }
       successEl.textContent = 'Account created. Sign in to choose your access.';
@@ -983,6 +1030,11 @@ async function signInWithProvider(provider) {
 }
 
 async function handleCheckout(plan) {
+  const consent = document.getElementById('purchase-consent');
+  if (!consent || !consent.checked) {
+    alert('Please review and accept the Terms, Privacy Policy, and Refund and Cancellation Policy before checkout.');
+    return;
+  }
   const { data: { session } } = await _supabase.auth.getSession();
   syncAccessCookie(session);
   if (!session) {
@@ -1020,6 +1072,7 @@ async function handleCheckout(plan) {
       ? "window.location.href='/board.html'"
       : "document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' })";
     actions.innerHTML = '<button class="btn btn-primary" onclick="' + boardAction + '">' + boardButton + '</button>' +
+      '<button class="btn btn-ghost" onclick="openBillingPortal()">Billing</button>' +
       '<button class="btn btn-ghost" onclick="handleSignOut()">Sign Out</button>';
   }
   const params = new URLSearchParams(window.location.search);
@@ -1038,6 +1091,35 @@ async function handleSignOut() {
   await _supabase.auth.signOut();
   syncAccessCookie(null);
   window.location.href = '/';
+}
+
+async function openBillingPortal() {
+  const { data: { session } } = await _supabase.auth.getSession();
+  if (!session) return;
+  try {
+    const response = await fetch(SUPABASE_URL + '/functions/v1/create-customer-portal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+    });
+    const data = await response.json();
+    if (data.url) window.location.href = data.url;
+    else alert('No subscription is available to manage yet.');
+  } catch (error) {
+    alert('Unable to open billing right now. Please try again later.');
+  }
+}
+
+async function startFreeTrial() {
+  const { data: { session } } = await _supabase.auth.getSession();
+  if (!session) {
+    openModal('signup');
+    return;
+  }
+  if (await hasBoardAccess(session)) {
+    window.location.href = '/board.html';
+    return;
+  }
+  alert('The free day is available once for new accounts. Choose a plan to continue access.');
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });

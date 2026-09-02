@@ -3,10 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f5f73">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/app-icon.svg">
 <title>Red Fox - Market Intelligence</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
+<script src="/pwa.js" defer></script>
 <script>
 // Keep the server-side access cookie aligned with the signed-in Supabase session.
 (function () {
@@ -1136,6 +1142,9 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .grp-btn:hover, .grp-btn.grp-on { background:var(--acc-bg); color:var(--accent); border-color:transparent; }
 .grp-btn svg { flex:0 0 auto; }
 .drill-modal { border-radius: 14px; box-shadow: 0 24px 80px rgba(20,45,54,.25); }
+.game-detail-modal .drill-hdr { background:#fff; }
+.game-detail-modal .drill-title { font-size:14px; }
+.game-detail-content { max-width:980px; margin:0 auto; }
 .movement-chart { margin: 12px 0 16px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: linear-gradient(180deg,#fbfdfd,#f3f8f8); }
 .movement-chart svg { display:block; width:100%; height:180px; overflow:visible; }
 .movement-chart-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:8px; }
@@ -1167,6 +1176,26 @@ td:last-child { border-radius: 0 8px 8px 0; }
   .board-tools { flex:1 1 100%; } .board-tools input { width:100%; min-width:0; }
   .movement-chart-head { display:block; } .movement-tabs { justify-content:flex-start; margin-top:8px; }
   .movement-facts { grid-template-columns:1fr 1fr; } .movement-fact:last-child { grid-column:1 / -1; }
+  /* A selected game is an analysis screen on phones, not a small desktop dialog. */
+  body.game-detail-open { overflow:hidden; }
+  #drill-overlay:has(.game-detail-modal) { align-items:stretch; justify-content:stretch; background:#fff; backdrop-filter:none; }
+  #drill-overlay .game-detail-modal { width:100%; max-width:none; max-height:none; height:100%; border:0; border-radius:0; box-shadow:none; }
+  #drill-overlay .game-detail-modal .drill-hdr { min-height:58px; padding:12px 16px; position:relative; z-index:3; box-shadow:0 1px 0 var(--border); }
+  #drill-overlay .game-detail-modal .drill-title { font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #drill-overlay .game-detail-modal .drill-close { width:34px; height:34px; border-radius:50%; background:var(--bg2); font-size:22px; }
+  #drill-overlay .game-detail-modal .drill-body { overscroll-behavior:contain; background:var(--bg); }
+  #drill-overlay .game-detail-modal .drill-tbl,
+  #drill-overlay .game-detail-modal .drill-tbl tbody,
+  #drill-overlay .game-detail-modal .drill-tbl tr,
+  #drill-overlay .game-detail-modal .drill-tbl td { display:block; width:100%; }
+  #drill-overlay .game-detail-modal .drill-tbl { table-layout:auto; }
+  #drill-overlay .game-detail-modal .drill-tbl td { padding:0; }
+  #drill-overlay .game-detail-modal .game-detail-content { padding:14px 12px 32px !important; }
+  #drill-overlay .game-detail-modal .movement-chart { margin:10px 0 14px; padding:10px; }
+  #drill-overlay .game-detail-modal .movement-chart svg { height:164px; }
+  #drill-overlay .game-detail-modal .movement-facts { gap:6px; }
+  #drill-overlay .game-detail-modal .movement-fact { padding:8px; }
+  #drill-overlay .game-detail-modal [style*="grid-template-columns:repeat(2"] { grid-template-columns:1fr !important; }
   .lpane { min-width:0; }
   .lpane > .tscroll > table { min-width:1360px; }
   .td-game { width:220px; max-width:220px; }
@@ -2093,6 +2122,8 @@ function confBucket(c) {
 }
 
 function openDrill(title, rows) {
+  document.querySelector('#drill-overlay .drill-modal').classList.remove('game-detail-modal');
+  document.body.classList.remove('game-detail-open');
   document.getElementById('drill-export').style.display='';
   _drillTitle = title;
   _drillRows = rows;
@@ -2135,6 +2166,8 @@ function openDrill(title, rows) {
 
 function closeDrill() {
   document.getElementById('drill-overlay').classList.remove('open');
+  document.querySelector('#drill-overlay .drill-modal').classList.remove('game-detail-modal');
+  document.body.classList.remove('game-detail-open');
 }
 function openPatLegend() {
   document.getElementById('pat-legend-overlay').classList.add('open');
@@ -2211,7 +2244,7 @@ function openGameDetail(r){
     .filter(x=>(x.game_id||x.game||'')===gid && (x.flagged_side||'')===r.flagged_side && (x.market_display||'')===r.market_display)
     .sort((a,b)=>new Date(a.timestamp||0)-new Date(b.timestamp||0));
 
-  let html='<div style="padding:16px 20px">';
+  let html='<div class="game-detail-content" style="padding:16px 20px">';
   html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--border)">';
   html+=spChip(r.sport);
   html+='<div><div style="font-size:16px;font-weight:800;color:var(--text);">'+(r.game||'--')+'</div>';
@@ -2457,6 +2490,8 @@ function openGameDetail(r){
   document.getElementById('drill-title').textContent=(r.game||'Game Detail');
   document.getElementById('drill-tbl').innerHTML='<tr><td style="padding:0">'+html+'</td></tr>';
   document.getElementById('drill-export').style.display='none';
+  document.querySelector('#drill-overlay .drill-modal').classList.add('game-detail-modal');
+  document.body.classList.add('game-detail-open');
   document.getElementById('drill-overlay').classList.add('open');
 }
 

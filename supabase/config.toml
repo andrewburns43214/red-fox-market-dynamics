@@ -1,3 +1,7 @@
 [functions.stripe-webhook]
 # Stripe authenticates this endpoint with its signed payload, not a Supabase JWT.
 verify_jwt = false
+
+[functions.send-support-message]
+# This public contact form has server-side validation and a honeypot field.
+verify_jwt = false
