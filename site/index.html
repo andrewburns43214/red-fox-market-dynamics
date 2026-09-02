@@ -736,7 +736,7 @@ section { padding: 100px 40px; }
     <p class="hero-positioning">Bloomberg-style market intelligence for sports bettors.</p>
     <div class="hero-ctas">
       <button class="btn btn-primary btn-lg" onclick="startFreeTrial()">Start Free Day</button>
-      <button class="btn btn-dark btn-lg" onclick="openModal('signup')">Go Unlimited - $29.99/mo</button>
+      <button class="btn btn-dark btn-lg" onclick="beginAccess('professional')">Go Unlimited - $29.99/mo</button>
     </div>
   </div>
 </section>
@@ -810,7 +810,7 @@ section { padding: 100px 40px; }
       <div class="preview-overlay">
         <div class="preview-lock">&#128274;</div>
         <div class="preview-overlay-text">The Full Market Journey, In One Board</div>
-        <button class="btn btn-primary btn-lg" onclick="openModal('signup')">Unlock Full Board - $3.99</button>
+        <button class="btn btn-primary btn-lg" onclick="beginAccess('day_pass')">Unlock Full Board - $3.99</button>
       </div>
     </div>
     <div class="journey-teaser" aria-label="Locked market journey preview">
@@ -1119,6 +1119,20 @@ async function handleCheckout(plan) {
     console.error('Stripe checkout request failed for ' + plan + ':', err);
     alert('Error creating checkout session. Please try again.');
   }
+}
+
+async function beginAccess(_plan) {
+  const { data: { session } } = await _supabase.auth.getSession();
+  if (!session) {
+    openModal('signup');
+    return;
+  }
+  syncAccessCookie(session);
+  if (await hasBoardAccess(session)) {
+    window.location.href = '/board.html';
+    return;
+  }
+  document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
 }
 
 // ── On load: check existing session ──
