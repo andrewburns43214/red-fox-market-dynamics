@@ -34,6 +34,14 @@ def main():
     dashboard["canonical_key"] = dashboard["sport"] + "|" + dashboard["game_id"]
     dashboard["_sort_time"] = dashboard.get("dk_start_iso", "")
 
+    # This is a pregame board. Once a scheduled game has been underway for five
+    # minutes, its market observations stay in history but leave the live board.
+    kickoff = pd.to_datetime(dashboard.get("dk_start_iso", ""), utc=True, errors="coerce")
+    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=5)
+    before_expiry = len(dashboard)
+    dashboard = dashboard.loc[kickoff.isna() | (kickoff > cutoff)].copy()
+    print(f"[ok] kept {len(dashboard)}/{before_expiry} pregame markets after kickoff expiry")
+
     l2_path = DATA / "l2_consensus.csv"
     l2 = pd.read_csv(l2_path, dtype=str, keep_default_na=False) if l2_path.exists() else pd.DataFrame()
     board, events = build_anomaly_outputs(dashboard, history, l2)
