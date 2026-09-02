@@ -1129,10 +1129,8 @@ async function beginAccess(_plan) {
     return;
   }
   syncAccessCookie(session);
-  if (await hasBoardAccess(session)) {
-    window.location.href = '/board.html';
-    return;
-  }
+  // Paid-plan calls must always lead to plan selection, even if a customer is
+  // currently using the free day. Only the free-day CTA itself opens the board.
   document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
 }
 
