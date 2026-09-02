@@ -131,7 +131,9 @@ def main(scores_only: bool = False) -> None:
     live = pd.concat(rows, ignore_index=True, sort=False)
     # Compare in one timezone-free representation; CSVs can contain a mix of
     # offset-aware and legacy naive kickoff values.
-    live["_kickoff"] = pd.to_datetime(live.get("kickoff_iso", ""), errors="coerce", utc=True).dt.tz_localize(None)
+    kickoff_values = live["kickoff_iso"] if "kickoff_iso" in live.columns else pd.Series(pd.NaT, index=live.index)
+    kickoff_parsed = pd.to_datetime(kickoff_values, errors="coerce", utc=True)
+    live["_kickoff"] = kickoff_parsed.dt.tz_localize(None) if isinstance(kickoff_parsed, pd.Series) else pd.Series(pd.NaT, index=live.index)
     # Keep this as a short look-in, not a results archive. Final games stay
     # available for the rest of the day; an unresolved live status gets a small safety window.
     state = live.get("score_state", pd.Series("", index=live.index)).astype(str).str.lower()
