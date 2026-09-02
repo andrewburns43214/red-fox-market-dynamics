@@ -377,6 +377,21 @@ section { padding: 100px 40px; }
   color: #8890a0;
   margin-bottom: 8px;
 }
+.journey-teaser { position:relative; max-width:1060px; margin:26px auto 0; padding:26px; overflow:hidden; border:1px solid #26303d; border-radius:var(--radius3); background:linear-gradient(120deg,#101722,#0a0f16); text-align:left; }
+.journey-teaser-grid { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(300px,.95fr); gap:28px; align-items:center; }
+.journey-eyebrow { color:#7cc6cf; font:700 10px var(--mono); letter-spacing:1.4px; text-transform:uppercase; }
+.journey-teaser h3 { max-width:430px; margin:8px 0; color:#fff; font-size:23px; line-height:1.15; letter-spacing:-.7px; }
+.journey-teaser p { max-width:470px; margin:0; color:#98a5b3; font-size:13px; line-height:1.6; }
+.journey-visual { padding:16px; border:1px solid #2a3744; border-radius:12px; background:#0d141d; }
+.journey-visual-head { display:flex; justify-content:space-between; align-items:center; gap:12px; color:#d7e0e6; font:700 10px var(--mono); letter-spacing:.7px; text-transform:uppercase; }
+.journey-chip { padding:3px 7px; border-radius:999px; background:#173642; color:#8bd4dc; font:700 9px var(--sans); letter-spacing:0; text-transform:none; }
+.journey-chart { width:100%; height:96px; margin:14px 0 12px; display:block; }
+.journey-facts { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+.journey-fact { padding:8px; border-radius:7px; background:#151f29; }
+.journey-fact span { display:block; color:#778796; font:700 8px var(--mono); letter-spacing:.8px; text-transform:uppercase; }
+.journey-fact b { display:block; margin-top:4px; color:#edf3f5; font:700 12px var(--mono); }
+.journey-gate { position:absolute; inset:0; display:flex; align-items:flex-end; justify-content:flex-end; padding:18px 22px; pointer-events:none; background:linear-gradient(90deg,rgba(10,15,22,0) 36%,rgba(10,15,22,.15) 65%,rgba(10,15,22,.72)); }
+.journey-gate span { padding:6px 9px; border:1px solid rgba(139,212,220,.35); border-radius:999px; background:rgba(13,20,29,.86); color:#bde8eb; font:700 10px var(--sans); }
 
 /* ─── PRICING ─── */
 .pricing { text-align: center; background: var(--bg); }
@@ -686,6 +701,10 @@ section { padding: 100px 40px; }
   .preview-overlay-sub { display: none; }
   .preview-lock { font-size: 22px; }
   .preview-overlay .btn-lg { padding: 10px 24px; font-size: 13px; }
+  .journey-teaser { padding:20px; }
+  .journey-teaser-grid { grid-template-columns:1fr; gap:18px; }
+  .journey-teaser h3 { font-size:20px; }
+  .journey-gate { align-items:flex-start; padding:12px; background:linear-gradient(180deg,rgba(10,15,22,.48),transparent 45%); }
   .pricing h2 { font-size: 24px; }
   .pricing-grid { grid-template-columns: 1fr; gap: 16px; }
   .price-card { padding: 32px 24px; }
@@ -793,6 +812,21 @@ section { padding: 100px 40px; }
         <div class="preview-overlay-text">The Full Market Journey, In One Board</div>
         <button class="btn btn-primary btn-lg" onclick="openModal('signup')">Unlock Full Board - $3.99</button>
       </div>
+    </div>
+    <div class="journey-teaser" aria-label="Locked market journey preview">
+      <div class="journey-teaser-grid">
+        <div>
+          <div class="journey-eyebrow">Inside each signal</div>
+          <h3>See the evidence behind the market move.</h3>
+          <p>Open any market to trace the price or line from first observation to current state, compare ticket and money-share changes, and review the timestamped proof layer.</p>
+        </div>
+        <div class="journey-visual" aria-hidden="true">
+          <div class="journey-visual-head"><span>Market trajectory</span><span class="journey-chip">Locked preview</span></div>
+          <svg class="journey-chart" viewBox="0 0 360 96" preserveAspectRatio="none"><path d="M10 18 H112 L145 23 L166 70 L238 72 L270 66 L350 67" fill="none" stroke="#5dc4cc" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 18 H112 L145 23 L166 70 L238 72 L270 66 L350 67 V89 H10Z" fill="url(#journey-fill)" opacity=".32"/><defs><linearGradient id="journey-fill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#5dc4cc"/><stop offset="1" stop-color="#5dc4cc" stop-opacity="0"/></linearGradient></defs><circle cx="10" cy="18" r="4" fill="#0d141d" stroke="#5dc4cc" stroke-width="2"/><circle cx="350" cy="67" r="4" fill="#5dc4cc"/></svg>
+          <div class="journey-facts"><div class="journey-fact"><span>Start</span><b>Open</b></div><div class="journey-fact"><span>Current</span><b>Live</b></div><div class="journey-fact"><span>Evidence</span><b>Timed</b></div></div>
+        </div>
+      </div>
+      <div class="journey-gate"><span>Unlock the full proof layer</span></div>
     </div>
   </div>
 </section>
