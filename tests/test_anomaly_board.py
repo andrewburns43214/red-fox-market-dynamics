@@ -56,14 +56,14 @@ class TestAnomalyBoard(unittest.TestCase):
                 [
                     {"flagged_side": "Over 56.5", "bets_pct": 70, "money_pct": 82, "open_line": "O 56.5 (-105)", "current_line": "O 55.5 (-115)", "reaction": "Watch", "context_chips": "Public Pressure"},
                     {"flagged_side": "Under 56.5", "bets_pct": 30, "money_pct": 18, "open_line": "U 56.5 (-115)", "current_line": "U 55.5 (-105)", "reaction": "Contrarian", "context_chips": "Whipsaw"},
-                ], ["Despite 70% bets / 82% money", "total fell 56.5 → 55.5", "Whipsaw risk"],
+                ], ["Despite 70% bets / 82% money", "line moved 56.5 → 55.5", "Whipsaw risk"],
             ),
             (
                 "follow moneyline", "MONEYLINE",
                 [
                     {"flagged_side": "CHI Bears", "bets_pct": 79, "money_pct": 71, "open_line": "-142", "current_line": "-162", "reaction": "Follow"},
                     {"flagged_side": "CAR Panthers", "bets_pct": 21, "money_pct": 29, "open_line": "+120", "current_line": "+136", "reaction": "Watch"},
-                ], ["CHI Bears has 79% bets / 71% money", "-142 → -162", "confirming the same direction"],
+                ], ["CHI Bears has 79% bets / 71% money", "moneyline price moved -142 → -162", "same direction"],
             ),
             (
                 "freeze", "SPREAD",
@@ -77,7 +77,7 @@ class TestAnomalyBoard(unittest.TestCase):
                 [
                     {"flagged_side": "Dodgers -1.5", "bets_pct": 74, "money_pct": 68, "open_line": "-1.5 (-105)", "current_line": "-1.5 (-135)", "reaction": "Follow", "path": "Juice Move"},
                     {"flagged_side": "Opponents +1.5", "bets_pct": 46, "money_pct": 48, "open_line": "+1.5 (-115)", "current_line": "+1.5 (+115)", "reaction": "Watch"},
-                ], ["stayed -1.5", "juice moved -105 → -135"],
+                ], ["price/juice moved -105 → -135"],
             ),
             (
                 "watch whipsaw", "TOTAL",

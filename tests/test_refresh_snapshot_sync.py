@@ -1,7 +1,26 @@
 import pandas as pd
 
 from anomaly_board import build_anomaly_outputs
-from refresh_anomaly_board import complete_public_market_rows, latest_synchronized_market_rows
+from refresh_anomaly_board import complete_public_market_rows, filter_publication_eligible_markets, latest_synchronized_market_rows
+
+
+def test_rolling_football_publication_window_keeps_board_and_csv_market_sets_in_parity():
+    now = "2026-09-03T12:00:00-04:00"
+    rows = pd.DataFrame([
+        {"sport": "nfl", "game_id": "today", "market_display": "TOTAL", "dk_start_iso": "2026-09-03T23:00:00Z"},
+        {"sport": "ncaaf", "game_id": "day-seven", "market_display": "TOTAL", "dk_start_iso": "2026-09-10T23:00:00Z"},
+        {"sport": "nfl", "game_id": "day-eight", "market_display": "TOTAL", "dk_start_iso": "2026-09-11T00:00:00-04:00"},
+        {"sport": "nfl", "game_id": "past", "market_display": "TOTAL", "dk_start_iso": "2026-09-03T09:00:00-04:00"},
+        {"sport": "mlb", "game_id": "unaffected", "market_display": "TOTAL", "dk_start_iso": "2026-09-20T23:00:00Z"},
+    ])
+    published = filter_publication_eligible_markets(rows, now=now)
+    keys = set(published.game_id)
+    assert {"today", "day-seven", "unaffected"}.issubset(keys)
+    assert "day-eight" not in keys
+    # Existing kickoff expiry owns removal of already-started rows; the rolling
+    # calendar window itself intentionally does not redefine that gate.
+    assert "past" in keys
+    assert keys == set(published.loc[:, "game_id"])
 
 
 def test_board_uses_latest_shared_snapshot_for_both_market_sides():

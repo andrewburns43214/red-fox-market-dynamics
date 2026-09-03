@@ -82,7 +82,9 @@ STADIUMS = {
     "milwaukee brewers":     (43.0280, -87.9712, True),    # American Family Field (retractable roof)
     "minnesota twins":       (44.9817, -93.2778, False),   # Target Field
     "ny mets":               (40.7571, -73.8458, False),   # Citi Field
+    "new york mets":         (40.7571, -73.8458, False),   # Citi Field
     "ny yankees":            (40.8296, -73.9262, False),   # Yankee Stadium
+    "new york yankees":      (40.8296, -73.9262, False),   # Yankee Stadium
     "oakland athletics":     (37.7516, -122.2005, False),  # Oakland Coliseum
     "philadelphia phillies": (39.9061, -75.1665, False),   # Citizens Bank Park
     "pittsburgh pirates":    (40.4469, -80.0057, False),   # PNC Park
@@ -94,6 +96,10 @@ STADIUMS = {
     "texas rangers":         (32.7512, -97.0832, True),    # Globe Life Field (retractable roof)
     "toronto blue jays":     (43.6414, -79.3894, True),    # Rogers Centre (retractable roof)
     "washington nationals":  (38.8730, -77.0075, False),   # Nationals Park
+    "los angeles angels":    (33.8003, -117.8827, False),  # Angel Stadium
+    "los angeles dodgers":   (34.0739, -118.2400, False),  # Dodger Stadium
+    "chicago cubs":          (41.9484, -87.6553, False),   # Wrigley Field
+    "chicago white sox":     (41.8299, -87.6338, False),   # Guaranteed Rate Field
 }
 
 

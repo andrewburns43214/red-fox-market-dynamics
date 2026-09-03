@@ -1134,9 +1134,10 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .two-side-splits.is-total .two-side-row { grid-template-columns:14px 24px minmax(32px,1fr) 27px 19px minmax(32px,1fr) 27px; column-gap:5px; }
 .two-side-splits.is-team .two-side-row { grid-template-columns:24px minmax(32px,1fr) 27px 19px minmax(32px,1fr) 27px; column-gap:5px; }
 .two-side-lines .two-side-row { grid-template-columns:minmax(0,1fr); }
+.two-side-current .two-side-row { align-content:center; gap:2px; }
 .two-side-read { width:100%; max-width:100%; overflow:hidden; }
 .two-side-read .two-side-row { display:flex; align-items:center; align-content:center; flex-wrap:wrap; gap:3px; padding:2px 0; white-space:normal; overflow:hidden; max-width:100%; }
-.two-side-read .two-side-row.is-strongest { background:linear-gradient(90deg,rgba(227,72,64,.07),rgba(227,72,64,0)); box-shadow:inset 2px 0 0 var(--red); padding-left:6px; }
+.two-side-read .two-side-row.is-strongest { background:linear-gradient(90deg,rgba(21,134,106,.10),rgba(21,134,106,0)); box-shadow:inset 2px 0 0 var(--green); padding-left:6px; }
 .two-side-read .two-side-row.is-strongest .mr:first-of-type { font-weight:800; }
 .two-side-game .two-side-row { grid-template-columns:minmax(0,1fr); padding-left:64px; }
 .two-side-game .two-side-row:first-child { padding-top:1px; }
@@ -1159,6 +1160,8 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .two-side-track { height:4px; overflow:hidden; border-radius:99px; background:#f8d8d4; }
 .two-side-fill { display:block; height:100%; border-radius:99px; background:#e34840; }
 .two-side-line { min-width:0; color:var(--text); font:600 11px var(--mono); white-space:nowrap; }
+.market-move { display:block; font:600 7.5px/1.15 var(--sans); letter-spacing:.03em; white-space:nowrap; }
+.market-move.toward { color:#15866a; }.market-move.against { color:#c74138; }.market-move.held { color:var(--text3); }.market-move.mixed { color:#66747a; }
 .two-side-read .mr { display:inline-flex; flex:0 0 auto; align-items:center; margin:0!important; padding:2px 5px; font-size:8px; line-height:1.1; }
 .two-side-rationale .two-side-row { height:auto; min-height:76px; align-content:center; padding:6px 0; color:var(--text2); font-size:11px; line-height:1.32; }
 .two-side-rationale .two-side-row + .two-side-row { border-top:1px solid #f0efeb; }
@@ -1231,11 +1234,60 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .movement-tab.on { background:#f8e2df; border-color:#e7afa8; color:#a33f38; }
 .movement-facts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:8px; }
 .movement-fact { padding:7px 8px; border-radius:6px; background:rgba(255,255,255,.72); }
-.movement-fact span { display:block; font:700 8px var(--mono); letter-spacing:.06em; color:var(--text3); text-transform:uppercase; }
-.movement-fact b { display:block; margin-top:3px; font:700 11px var(--mono); color:var(--text); }
+.movement-fact span { display:block; font:700 9px var(--sans); letter-spacing:.055em; color:var(--text3); text-transform:uppercase; }
+.movement-fact b { display:block; margin-top:3px; font:700 13px var(--sans); letter-spacing:-.015em; color:var(--text); }
 .movement-kpis { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:12px 0; }
 .movement-kpi { padding:9px 10px; background:#f4f7f8; border-radius:8px; }
 .movement-kpi b { display:block; margin-top:3px; color:var(--text); font-size:12px; }
+.detail-side-picker { margin:0 0 14px; }
+.detail-side-toggle { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:3px; padding:3px; border:1px solid var(--border2); border-radius:8px; background:var(--bg2); }
+.detail-side-toggle button { min-width:0; border:1px solid transparent; border-radius:5px; padding:7px 10px; background:transparent; color:var(--text2); font:800 10px var(--sans); cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
+.detail-side-toggle button:hover { background:#fff; color:var(--text); border-color:var(--border); }
+.detail-side-toggle button.on { background:var(--red); border-color:var(--red); color:#fff; box-shadow:0 1px 2px rgba(155,48,42,.22); }
+.detail-current-read { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin:0 0 10px; }
+.detail-current-line { color:var(--text); font:800 18px var(--sans); letter-spacing:-.025em; }
+.detail-current-movement { margin-top:3px; }
+.detail-current-splits { display:flex; gap:8px; margin-top:4px; color:var(--text3); font:600 11px var(--sans); }
+.market-journey { margin:14px 0; border:1px solid var(--border); border-radius:10px; background:#fff; overflow:hidden; }
+.market-journey-toggle { width:100%; border:0; background:var(--bg3); color:var(--text); padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; text-align:left; }
+.market-journey-toggle strong { display:block; font:800 11px var(--sans); letter-spacing:.06em; text-transform:uppercase; }
+.market-journey-toggle small { display:block; margin-top:2px; color:var(--text3); font:600 9px var(--mono); }
+.market-journey-chevron { flex:0 0 auto; color:var(--text2); font-size:15px; }
+.market-journey-body { padding:12px; }
+.journey-track { display:flex; align-items:stretch; gap:0; overflow-x:auto; padding-bottom:2px; }
+.journey-event { min-width:118px; max-width:174px; flex:0 1 auto; padding:0 12px 3px 0; position:relative; }
+.journey-event-select { width:100%; border:0; padding:0; background:transparent; color:inherit; text-align:left; cursor:pointer; }
+.journey-event:hover .journey-event-name,.journey-event.selected .journey-event-name { color:var(--accent); }
+.journey-event.selected .journey-dot { box-shadow:0 0 0 3px rgba(15,111,127,.16); }
+.journey-event:not(:last-child)::after { content:''; position:absolute; top:6px; right:0; width:14px; height:3px; background:linear-gradient(90deg,#b9c8c8,#cbd9d8); border-radius:2px; }
+.journey-dot { width:14px; height:14px; border-radius:50%; display:grid; place-items:center; background:var(--text3); color:#fff; font:800 8px var(--mono); }
+.journey-event.signal .journey-dot { background:var(--red); }
+.journey-event.current .journey-dot { background:var(--accent); }
+.journey-event-name { display:block; margin-top:6px; color:var(--text); font:800 9px var(--mono); letter-spacing:.04em; text-transform:uppercase; }
+.journey-event-line { display:block; margin-top:4px; color:var(--text); font:700 11px var(--mono); }
+.journey-event-meta { display:block; margin-top:3px; color:var(--text3); font:600 9px/1.35 var(--sans); }
+.journey-event .mr { margin:4px 2px 0 0 !important; padding:2px 5px; font-size:8px; }
+.journey-event-signals { margin-top:4px; line-height:1; }
+.journey-event-detail { margin-top:10px; padding:9px 10px; border:1px solid var(--border); border-radius:7px; background:var(--bg3); color:var(--text2); font:600 10px/1.45 var(--sans); }
+.journey-event-detail strong { color:var(--text); font:800 10px var(--sans); }
+.detail-observation-row.is-selected { box-shadow:inset 3px 0 0 var(--accent); background:#f0f7f7; }
+.market-story { margin:14px 0; padding:12px; border:1px solid var(--border); border-radius:10px; background:var(--bg3); }
+.market-story h3 { margin:0; color:var(--text); font:800 11px var(--sans); letter-spacing:.06em; text-transform:uppercase; }
+.market-story-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:10px; }
+.market-story-item { min-width:0; }
+.market-story-item span { display:block; color:var(--text3); font:700 8px var(--mono); letter-spacing:.05em; text-transform:uppercase; }
+.market-story-item b { display:block; margin-top:3px; color:var(--text); font:700 11px var(--sans); overflow-wrap:anywhere; }
+.market-story-copy { margin:10px 0 0; color:var(--text2); font-size:11px; line-height:1.5; }
+.detail-proof { margin:14px 0; border:1px solid var(--border); border-radius:10px; background:var(--bg3); overflow:hidden; }
+.detail-proof-head { padding:12px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.detail-proof-head h3 { margin:0; color:var(--text); font:800 11px var(--sans); letter-spacing:.06em; text-transform:uppercase; }
+.detail-proof-head small { display:block; margin-top:4px; color:var(--text3); font:600 11px var(--sans); }
+.detail-proof-body { padding:0 12px 12px; }
+.detail-quality { margin:14px 0; border:1px solid var(--border); border-radius:10px; background:var(--bg3); }
+.detail-quality-clean { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 12px; }
+.detail-quality-label { color:var(--text3); font:800 9px var(--sans); letter-spacing:.06em; text-transform:uppercase; }
+.detail-quality-warning { padding:12px; }
+.detail-quality-warning h3 { margin:0 0 7px; color:var(--text); font:800 11px var(--sans); letter-spacing:.06em; text-transform:uppercase; }
 .live-recent { flex:1; min-width:0; width:100%; padding:20px; overflow:auto; background:var(--bg3); }
 .live-recent-head { margin:0 0 14px; }
 .live-recent-head h2 { margin:0; font-size:18px; }
@@ -1247,12 +1299,15 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .live-status { margin-top:5px; color:var(--text3); font:700 9px var(--mono); text-transform:uppercase; letter-spacing:.05em; }
 .live-score { text-align:right; font:800 17px var(--mono); white-space:nowrap; }
 .live-freeze { margin:12px 0 8px; padding-top:10px; border-top:1px solid var(--border); color:var(--red); font:800 9px var(--mono); text-transform:uppercase; letter-spacing:.06em; }
-.live-market { display:grid; grid-template-columns:62px minmax(0,1fr); gap:5px 8px; align-items:start; padding:7px 0; border-top:1px solid #eef2f3; }
-.live-market:first-of-type { border-top:0; }
-.live-market-type { color:var(--text3); font:800 9px var(--mono); }
-.live-market-side { min-width:0; font-size:12px; font-weight:700; line-height:1.2; }
-.live-market-meta { grid-column:2; color:var(--text3); font:600 9px var(--mono); }
-.live-market button { border:0; background:none; color:var(--red); font:700 10px var(--sans); cursor:pointer; padding:0; }
+.live-market-section { margin-top:8px; padding-top:8px; border-top:1px solid #eef2f3; }
+.live-market-section:first-of-type { margin-top:0; padding-top:0; border-top:0; }
+.live-market-type { margin-bottom:3px; color:var(--text3); font:800 9px var(--mono); }
+.live-market-side-row { display:grid; width:100%; grid-template-columns:minmax(112px,42%) minmax(0,1fr); gap:3px 8px; align-items:start; padding:5px 6px; border:0; border-radius:5px; background:transparent; color:inherit; text-align:left; font:inherit; cursor:pointer; }
+.live-market-side-row:hover { background:#f6fbfa; }
+.live-market-side-row:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.live-market-side { min-width:0; font-size:12px; font-weight:700; line-height:1.25; }
+.live-market-meta { min-width:0; color:var(--text3); font:600 9px/1.35 var(--mono); text-align:left; overflow-wrap:anywhere; }
+.detail-frozen-status { margin-top:4px; color:var(--red); font:800 9px var(--mono); text-transform:uppercase; letter-spacing:.06em; }
 .live-empty { max-width:620px; margin:30px auto; padding:24px; background:#fff; border:1px solid var(--border); border-radius:10px; text-align:center; color:var(--text3); font-size:13px; }
 @media (max-width: 900px) {
   html,body { overflow:auto; }
@@ -1304,6 +1359,14 @@ td:last-child { border-radius: 0 8px 8px 0; }
   #drill-overlay .game-detail-modal .movement-facts { gap:6px; }
   #drill-overlay .game-detail-modal .movement-fact { padding:8px; }
   #drill-overlay .game-detail-modal .detail-proof-metrics { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
+  #drill-overlay .game-detail-modal .detail-side-toggle { width:100%; }
+  #drill-overlay .game-detail-modal .detail-side-toggle button { min-width:0; }
+  #drill-overlay .game-detail-modal .journey-track { display:block; overflow:visible; padding:0 0 0 20px; }
+  #drill-overlay .game-detail-modal .journey-event { max-width:none; min-width:0; padding:0 0 12px 14px; }
+  #drill-overlay .game-detail-modal .journey-event:not(:last-child)::after { top:15px; right:auto; left:6px; width:2px; height:calc(100% - 10px); }
+  #drill-overlay .game-detail-modal .journey-dot { position:absolute; top:0; left:0; }
+  #drill-overlay .game-detail-modal .journey-event-name { margin-top:0; }
+  #drill-overlay .game-detail-modal .market-story-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   #drill-overlay .game-detail-modal .detail-observations { overflow:visible !important; }
   #drill-overlay .game-detail-modal .detail-observation-table { display:block; width:100% !important; font-size:10px !important; }
   #drill-overlay .game-detail-modal .detail-observation-table thead { display:none; }
@@ -1454,7 +1517,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
               <button class="mchip" type="button" onclick="setMarket('TOTAL',this)">Total</button>
             </div>
             <button class="grp-btn" id="grp-toggle" onclick="toggleGroup(this)" title="Group markets by game"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3h8M2 8h12M2 13h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M11 2v3M13 7v3M11 12v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span>Group</span></button>
-            <button class="signal-guide-btn" type="button" onclick="openSignalGuide()">Signal Guide</button>
+            <button class="signal-guide-btn" type="button" onclick="openSignalGuide()">Market Guide</button>
             <button class="grp-btn" id="locked-jump" onclick="jumpToLocked()" style="display:none">Live / Locked Games</button>
             <button class="grp-btn" onclick="scrollToTop()" title="Back to top"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4M3 14h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Top</span></button>
             <button class="grp-btn" type="button" onclick="refreshBoardNow()" title="Check for the latest board data without reloading the page">Refresh</button>
@@ -1476,9 +1539,9 @@ td:last-child { border-radius: 0 8px 8px 0; }
           <th class="th-mkt" title="Market type: moneyline, spread, or total" onclick="sortBy('market_display',this)">Market</th>
           <th class="th-split" title="Share of tickets and handle on the labeled signal side">Bets / Money</th>
           <th class="th-line" title="First observed line in the available snapshot history" onclick="sortBy('open_line',this)">Open</th>
-          <th class="th-line" title="Most recent observed line" onclick="sortBy('current_line',this)">Current</th>
+          <th class="th-line" title="Movement is relative to each side: TOWARD means the market moved toward that row; AGAINST means it moved against it. JUICE or PRICE indicates odds movement rather than the primary spread or total number." onclick="sortBy('current_line',this)">Current</th>
           <th class="th-market-read" title="Side-specific market signals and context across the full market" onclick="sortBy('reaction',this)">Market Read</th>
-          <th class="th-dec" title="A concise explanation of both sides of the market">Signal Rationale</th>
+          <th class="th-dec" title="A concise explanation of the positioning, movement, and context behind the Market Read">Market Explanation</th>
               </tr>
             </thead>
             <tbody id="tbody"></tbody>
@@ -1573,8 +1636,8 @@ td:last-child { border-radius: 0 8px 8px 0; }
   <div class="signal-guide-overlay" id="signal-guide-overlay" onclick="if(event.target===this)closeSignalGuide()" role="dialog" aria-modal="true" aria-labelledby="signal-guide-title">
     <section class="signal-guide-sheet">
       <div class="signal-guide-head">
-        <div class="signal-guide-title" id="signal-guide-title">Signal Guide</div>
-        <button class="signal-guide-close" type="button" onclick="closeSignalGuide()" aria-label="Close signal guide">&times;</button>
+        <div class="signal-guide-title" id="signal-guide-title">Market Guide</div>
+        <button class="signal-guide-close" type="button" onclick="closeSignalGuide()" aria-label="Close market guide">&times;</button>
       </div>
       <div class="signal-guide-body" id="signal-guide-body"></div>
     </section>
@@ -1922,41 +1985,53 @@ function displayRationale(r){
   return [recorded,...extras].join(' ')||'-';
 }
 const SIGNAL_META={
-  'Contrarian':{cls:'mr-aligned',tip:'Low support on the observed side while its price or line moved toward it.'},
-  'Freeze':{cls:'mr-freeze',tip:'High tickets and money on the observed side while both its line and price held near open.'},
-  'Follow':{cls:'mr-aligned',tip:'High tickets and money on the observed side while its price or line moved with it.'},
-  'Whipsaw':{cls:'mr-reverse',tip:'The observed price or line moved materially, then reversed direction.'},
-  'Held':{cls:'mr-neutral',tip:'The observed line and price changed less than the hold threshold from the first snapshot.'},
+  'Contrarian':{cls:'mr-aligned',tip:'Low support on that side while its price or line moved toward it.'},
+  'Freeze':{cls:'mr-freeze',tip:'Heavy ticket and money support on a side without a meaningful market response; its line/price remains near the opener.'},
+  'Follow':{cls:'mr-aligned',tip:'High tickets and money on that side while its price or line moved with it.'},
+  'Whipsaw':{cls:'mr-reverse',tip:'The market moved materially in one direction, then reversed.'},
+  'Held':{cls:'mr-neutral',tip:'The line/price changed less than the hold threshold from the first valid observation.'},
   'Late':{cls:'mr-reverse',tip:'A meaningful move first appeared in the closing window before the game starts.'},
-  'One-Way':{cls:'mr-neutral',tip:'The observed path made a meaningful move without reversing.'},
+  'One-Way':{cls:'mr-neutral',tip:'The market made a meaningful move without a qualifying reversal.'},
   'Market Move':{cls:'mr-neutral',tip:'The market moved meaningfully from open in either direction, regardless of the current split. This is evidence, not a directional signal.'},
-  'Market Lag':{cls:'mr-contra',tip:'The broader market moved while the observed price held, indicating a possible market lag.'},
-  'Stale DK':{label:'Market Lag',cls:'mr-contra',tip:'The broader market moved while the observed price held, indicating a possible market lag.'},
+  'Market Lag':{cls:'mr-contra',tip:'The broader market moved while the displayed price held, indicating a possible market lag.'},
+  'Stale DK':{label:'Market Lag',cls:'mr-contra',tip:'The broader market moved while the displayed price held, indicating a possible market lag.'},
   'Ticket-led':{cls:'mr-reverse',tip:'Tickets are concentrated while money is not strong enough for a Freeze or Follow.'},
   'Public Pressure':{cls:'mr-reverse',tip:'High tickets and money are present, but the market is neither held nor meaningfully moving with that side. Context only, not an anomaly.'},
   'Developing Read':{cls:'mr-neutral',tip:'Split support and direction agree, but the move is below the confirmed signal threshold.'},
-  'Low Bets / High $':{cls:'mr-aligned',tip:'Low ticket share with high money share on the observed side.'},
-  'Key Number':{cls:'mr-neutral',tip:'The observed spread touched or crossed a sport-specific key number.'},
-  'K3':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 3.'},
-  'K7':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 7.'},
-  'K10':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 10.'},
-  'K14':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 14.'},
-  'K17':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 17.'},
-  'K21':{label:'Key Number',cls:'mr-neutral',tip:'The observed spread touched or crossed the key number 21.'},
-  'Juice Move':{cls:'mr-freeze',tip:'The point line held while the attached American odds moved materially.'},
+  'Low Bets / High $':{cls:'mr-aligned',tip:'Low ticket share with high money share on that side.'},
+  'Key Number':{cls:'mr-neutral',tip:'The spread touched or crossed a sport-specific key number.'},
+  'K3':{label:'Key Number',cls:'mr-neutral',tip:'The spread touched or crossed the key number 3.'},
+  'K7':{label:'Key Number',cls:'mr-neutral',tip:'The spread touched or crossed the key number 7.'},
+  'K10':{label:'Key Number',cls:'mr-neutral',tip:'The spread touched or crossed the key number 10.'},
+  'K14':{label:'Key Number',cls:'mr-neutral',tip:'The spread touched or crossed the key number 14.'},
+  'K17':{label:'Key Number',cls:'mr-neutral',tip:'The spread touched or crossed the key number 17.'},
+  'K21':{label:'Key Number',cls:'mr-neutral',tip:'The spread touched or crossed the key number 21.'},
+  'Juice Move':{cls:'mr-freeze',tip:'The primary spread or total number held while the attached American odds moved materially.'},
   'Price Risk':{cls:'mr-reverse',tip:'An extreme moneyline price, expensive attached juice, or unusually large spread. This is caution context, not a directional signal.'},
   'Heavy Favorite':{cls:'mr-reverse',tip:'A heavily priced or ticket-heavy moneyline favorite. This is risk context, not a directional signal.'},
   'Split Cap':{label:'Capped Split',cls:'mr-contra',tip:'The source reported a capped 0% or 100% split, so directional split signals are disabled.'},
-  'Watch':{cls:'mr-neutral',tip:'Worth monitoring, not a directional call: the market has a notable split, path, or price move but lacks the full confirmation for a Contrarian, Freeze, Follow, or Fade candidate. Read the accompanying chips and rationale to see what is missing.'}
+  'Watch':{cls:'mr-neutral',tip:'Worth monitoring, not a directional call: the market has notable positioning, movement, or context but lacks full confirmation for Contrarian, Freeze, or Follow. Read the accompanying chips and Market Explanation to see what is missing.'}
 };
 const BOARD_FIELD_META = [
-  ['Observed side', 'The team, side, or total the board is describing. It is market evidence, not a wager recommendation.'],
-  ['Bets / Money', 'The share of tickets and handle on the observed side. Higher percentages describe participation, not a prediction.'],
-  ['Open / Current', 'The first and most recent observed number. Moneyline shows American odds; spreads and totals may include attached juice.'],
-  ['Market signal', 'The detected relationship between participation and price movement. Multiple chips provide context for the same market.'],
-  ['Data quality', 'Clean has at least three valid observations. Thin has two. Feed Risk or Split Risk means the source data cannot support a reliable split read.'],
-  ['Signal rationale', 'The plain-language reason the board surfaced the market at its current rank.'],
-  ['Timeline', 'Open the row to review the line and split journey across timestamped snapshots.'],
+  ['Bets / Money', 'The share of tickets and handle on each side. Higher percentages describe positioning, not a prediction.'],
+  ['Open / Current', 'Open is the first valid observed market state; Current is the latest valid observation. Movement displayed beneath Current is interpreted relative to that side.'],
+  ['Market Read', 'The current Red Fox interpretation for each side, together with supporting market-behavior, positioning, and risk/context labels.'],
+  ['Data Quality', 'Clean has at least three valid observations. Thin has two. Feed Risk or Split Risk means the source data cannot support a reliable split read.'],
+  ['Market Explanation', 'The plain-language explanation of the positioning, movement, and context behind the displayed Market Read.'],
+  ['Market Trajectory', 'The full timestamped path for the selected side. Use Line, Price, Bets %, and Money % to inspect how the market developed over time.'],
+  ['Market Journey', 'A milestone view of the most meaningful events in the market path, such as the open, signal changes, major moves, reversals, and current state.'],
+];
+const MARKET_GUIDE_SECTIONS=[
+  ['Directional Reads',['Contrarian','Freeze','Follow','Watch']],
+  ['Market Behavior',['Whipsaw','Held','Late','One-Way','Market Move','Market Lag','Juice Move','Key Number']],
+  ['Positioning & Context',['Ticket-led','Public Pressure','Developing Read','Low Bets / High $','Heavy Favorite']],
+  ['Risk / Data Limitations',['Price Risk','Capped Split']],
+];
+const MARKET_GUIDE_MOVEMENT=[
+  ['Toward / Against','Movement is interpreted relative to each side. TOWARD means the market moved from Open toward that side; AGAINST means it moved against that side. Green/red represents market direction, not whether a wager is good or bad.'],
+  ['Point movement','For spreads and totals, a meaningful change in the primary number may appear beneath Current as 1.0 pt · TOWARD or 1.0 pt · AGAINST.'],
+  ['Juice','When a spread or total number holds but its attached American odds move meaningfully, the board may show JUICE · TOWARD or JUICE · AGAINST.'],
+  ['Price','Moneyline movement may appear as PRICE · TOWARD or PRICE · AGAINST.'],
 ];
 
 function escHtml(value){
@@ -1997,19 +2072,11 @@ function openSignalGuide(selected){
       '<div class="signal-guide-section">'+signalGuideItem(meta.label||requested,meta.tip)+'</div>'+
       '<div class="signal-guide-section"><h3>Board context</h3>'+BOARD_FIELD_META.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'</div>';
   } else {
-    const seen=new Set();
-    const signals=Object.entries(SIGNAL_META).map(function(entry){
-      return {label:entry[1].label||entry[0],tip:entry[1].tip};
-    }).filter(function(item){
-      const key=item.label.toLowerCase();
-      if(seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    title.textContent='Signal guide';
-    body.innerHTML='<p class="signal-guide-intro">Tap any signal chip in a row for its specific definition. These labels describe market behavior and context, not picks.</p>'+
-      '<div class="signal-guide-section"><h3>Market signals</h3>'+signals.map(function(item){return signalGuideItem(item.label,item.tip);}).join('')+'</div>'+
-      '<div class="signal-guide-section"><h3>Board fields</h3>'+BOARD_FIELD_META.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'</div>';
+    title.textContent='Market Guide';
+    body.innerHTML='<p class="signal-guide-intro">Use this guide to understand Red Fox market reads, movement, and context. These labels describe market behavior and evidence—not picks or wager recommendations. Tap any signal chip on the board for its definition.</p>'+
+      MARKET_GUIDE_SECTIONS.map(function(section){return '<div class="signal-guide-section"><h3>'+escHtml(section[0])+'</h3>'+section[1].map(function(label){return signalGuideItem(label,signalMetaFor(label).tip);}).join('')+'</div>';}).join('')+
+      '<div class="signal-guide-section"><h3>Market Movement</h3>'+MARKET_GUIDE_MOVEMENT.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'<p class="signal-guide-note">A blank movement indicator beneath Current does not necessarily mean the market never moved. It means there is no qualifying Open-to-Current directional movement being shown. Open the drilldown’s Market Trajectory and Market Journey to review the full intraday path, including reversals.</p></div>'+
+      '<div class="signal-guide-section"><h3>Board Fields</h3>'+BOARD_FIELD_META.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'</div>';
   }
   overlay.classList.add('open');
 }
@@ -2067,9 +2134,25 @@ function sideLabel(side,r){
   if(String(r.market_display||'').toUpperCase()==='TOTAL') return /^under/i.test(text)?'UNDER':'OVER';
   return text.replace(/\s[+-]\d+(?:\.\d+)?(?:\s*\([^)]*\))?\s*$/,'')||text;
 }
+function marketSideIdentity(side,r){
+  const market=String(r?.market_display||'').toUpperCase();
+  const label=String(side?.flagged_side||'').trim();
+  if(market==='TOTAL') return /^under|^u\b/i.test(label)?'UNDER':'OVER';
+  return sideLabel({flagged_side:label},r).trim().toLowerCase();
+}
 function sideSignals(side){
-  const values=[side.reaction,side.path,...String(side.context_chips||'').split('|')].map(value=>String(value||'').trim()).filter(Boolean);
-  return [...new Set(values)];
+  const seen=new Set();
+  return [side.reaction,side.path,...String(side.context_chips||'').split('|')]
+    .map(value=>String(value||'').trim())
+    .filter(Boolean)
+    // Raw keys such as K10 and K14 share the displayed Key Number chip.
+    // Deduplicate by the presentation label without changing source signals.
+    .filter(value=>{
+      const label=String(signalMetaFor(value).label||value).trim().toLowerCase();
+      if(seen.has(label)) return false;
+      seen.add(label);
+      return true;
+    });
 }
 function gameLanes(r){
   const game=String(r.game||'');
@@ -2097,14 +2180,69 @@ function twoSideSplitCell(r){
 function twoSideLineCell(r,field){
   const sides=marketSides(r);
   if(sides.length<2) return '<div class="two-side-missing">—</div>';
-  return '<div class="two-side-cell two-side-lines">'+sides.slice(0,2).map(side=>'<div class="two-side-row"><span class="two-side-line">'+escHtml(side[field]||'—')+'</span></div>').join('')+'</div>';
+  const current=field==='current_line';
+  return '<div class="two-side-cell two-side-lines '+(current?'two-side-current':'')+'">'+sides.slice(0,2).map(side=>'<div class="two-side-row"><span class="two-side-line">'+escHtml(side[field]||'—')+'</span>'+(current?sideMovementHtml(side,r):'')+'</div>').join('')+'</div>';
+}
+function sideLineParts(line){
+  const text=String(line||'');
+  const number=Number((text.match(/(?:^|\s)[OU]?\s*([+-]?\d+(?:\.\d+)?)/i)||[])[1]);
+  const parenthesizedOdds=Number((text.match(/\(([-+]\d+)\)\s*$/)||[])[1]);
+  // Moneylines are stored as standalone odds, while spread/total juice is
+  // parenthesized. Support both representations without treating a line
+  // number as a price.
+  const standaloneOdds=/^[-+]\d+$/.test(text.trim())?Number(text.trim()):null;
+  const odds=Number.isFinite(parenthesizedOdds)?parenthesizedOdds:standaloneOdds;
+  return {number:Number.isFinite(number)?number:null,odds:Number.isFinite(odds)?odds:null};
+}
+function impliedProbability(odds){ return odds<0?(-odds)/(-odds+100):100/(odds+100); }
+const MOVEMENT_TOOLTIP='Movement is relative to each side: TOWARD means the market moved toward that row; AGAINST means it moved against it. JUICE or PRICE indicates odds movement rather than the primary spread or total number.';
+function sideMovementHtml(side,row){
+  // The engine's Held path already applies the authoritative line/price
+  // thresholds. Keep that state visually quiet beneath Current while leaving
+  // its Held/Freeze chips intact in Market Read.
+  const path=String(side.path||'').trim();
+  if(!['One-Way','Whipsaw','Juice Move'].includes(path)) return '';
+  const market=String(row.market_display||'').toUpperCase(), open=sideLineParts(side.open_line), current=sideLineParts(side.current_line);
+  const label=String(side.flagged_side||sideLabel(side,row)).toLowerCase();
+  let primary=0, juice=0, delta='', direction='HELD', cls='held';
+  if(market==='MONEYLINE'&&open.odds!==null&&current.odds!==null){
+    primary=impliedProbability(current.odds)-impliedProbability(open.odds); juice=primary; delta=(current.odds-open.odds);
+  } else {
+    if(open.number!==null&&current.number!==null) primary=current.number-open.number;
+    if(open.odds!==null&&current.odds!==null) juice=impliedProbability(current.odds)-impliedProbability(open.odds);
+    delta=primary||((current.odds??0)-(open.odds??0));
+  }
+  const isToward=market==='TOTAL'?(label.includes('over')?primary>0:primary<0):market==='SPREAD'?primary<0:primary>0;
+  const juiceToward=juice>0;
+  const lineChanged=Math.abs(primary)>0.0001, juiceChanged=Math.abs(juice)>0.005;
+  // For spreads and totals the number is the primary market signal. Attached
+  // juice only decides direction when that number has held. Moneylines use
+  // their price/implied-probability direction above.
+  if(!lineChanged&&!juiceChanged){ direction='HELD'; cls='held'; }
+  else if(market!=='MONEYLINE'&&lineChanged){ direction=isToward?'TOWARD':'AGAINST'; cls=isToward?'toward':'against'; }
+  else if(market==='MONEYLINE'&&Math.abs(primary)<=0.0001){ direction='MIXED'; cls='mixed'; }
+  else if(juiceToward){ direction='TOWARD'; cls='toward'; }
+  else { direction='AGAINST'; cls='against'; }
+  // A held market adds no new information beneath its current value; the
+  // analytical Held/Freeze chips remain in the Market Read column.
+  if(direction==='HELD') return '';
+  if(direction==='MIXED'){
+    return '<span class="market-move '+cls+'" title="'+escHtml(MOVEMENT_TOOLTIP)+'" aria-label="'+escHtml(MOVEMENT_TOOLTIP)+'">'+direction+'</span>';
+  }
+  let descriptor;
+  if(market==='MONEYLINE') descriptor='PRICE';
+  else if(lineChanged){
+    const points=Math.abs(primary).toFixed(1);
+    descriptor=points+' '+(Math.abs(primary)===1?'pt':'pts');
+  } else descriptor='JUICE';
+  return '<span class="market-move '+cls+'" title="'+escHtml(MOVEMENT_TOOLTIP)+'" aria-label="'+escHtml(MOVEMENT_TOOLTIP)+'">'+descriptor+' · '+direction+'</span>';
 }
 function twoSideReadCell(r){
   const sides=marketSides(r);
   if(sides.length<2) return '<div class="two-side-missing">Market read loading</div>';
   const strongest=strongestSideIndex(sides,r);
   return '<div class="two-side-cell two-side-read">'+sides.slice(0,2).map((side,index)=>{
-    const chips=sideSignals(side).map(value=>anomalyBadge(value)).join('');
+    const chips=[...new Set(sideSignals(side))].map(value=>anomalyBadge(value)).join('');
     const isStrongest=index===strongest;
     return '<div class="two-side-row'+(isStrongest?' is-strongest':'')+'">'+(chips||'<span class="two-side-missing">No active signal</span>')+'</div>';
   }).join('')+'</div>';
@@ -2292,22 +2430,49 @@ async function loadLiveRecent(){
   if(!grid) return;
   grid.innerHTML='<div class="live-empty">Loading live game context...</div>';
   const rows=await loadCSV(LIVE_RECENT_URL+'?_='+Date.now())||[];
-  allLiveRecent=rows;
+  // A Live & Recent card is a frozen market record. Resolve its compact
+  // summary from the same final pregame observations the detail uses, rather
+  // than mixing a summary export with a historical event payload.
+  allLiveRecent=await Promise.all(rows.map(async function(row){
+    try { return frozenLiveRecord(row,await ensureGameEvents(row)); }
+    catch(error) { return row; }
+  }));
   const games=new Map();
-  rows.forEach(row=>{ const key=[row.sport,row.game_id,row.game].join('|'); if(!games.has(key)) games.set(key,[]); games.get(key).push(row); });
+  allLiveRecent.forEach(row=>{ const key=[row.sport,row.game_id,row.game].join('|'); if(!games.has(key)) games.set(key,[]); games.get(key).push(row); });
   const badge=document.getElementById('b-live'); if(badge) badge.textContent=games.size;
   if(!games.size){ grid.innerHTML='<div class="live-empty">No started games are currently in the Live &amp; Recent window.</div>'; return; }
   grid.innerHTML=[...games.values()].map(markets=>{
     const first=markets[0], score=(first.score_away&&first.score_home&&first.score_away!=='-')?`${first.score_away} - ${first.score_home}`:'--';
     const status=first.score_status||'Live score updating';
-    return `<article class="live-game-card"><div class="live-game-top"><div><div>${spChip(first.sport)}</div><div class="live-game-name">${first.game||'--'}</div><div class="live-status">${status==='Live score unavailable'?'Score pending':status}</div></div><div class="live-score">${score}</div></div><div class="live-freeze">Frozen pregame record</div>${markets.map(row=>{const canDrill=Boolean(row.first_anomaly_seen||row.observation_count);return `<div class="live-market"><span class="live-market-type">${row.market_display||'Market'}</span><div class="live-market-side">${row.flagged_side||'--'}${canDrill?` <button type="button" onclick="openGameDetail(allLiveRecent[${allLiveRecent.indexOf(row)}])">Details</button>`:''}</div><span class="live-market-meta">${row.open_line||'--'} to ${row.current_line||'--'} | ${row.bets_pct||'--'}% bets / ${row.money_pct||'--'}% money</span></div>`}).join('')}</article>`;
+    return `<article class="live-game-card"><div class="live-game-top"><div><div>${spChip(first.sport)}</div><div class="live-game-name">${first.game||'--'}</div><div class="live-status">${status==='Live score unavailable'?'Score pending':status}</div></div><div class="live-score">${score}</div></div><div class="live-freeze">Frozen pregame record</div>${liveMarketSections(markets).map(function(section){return `<section class="live-market-section"><div class="live-market-type">${escHtml(section.market)}</div>${section.sides.map(function(item){const sideArg=JSON.stringify(item.side.flagged_side||'').replace(/"/g,'&quot;');return `<button class="live-market-side-row" type="button" onclick="openGameDetail(allLiveRecent[${item.index}],${sideArg})" aria-label="Open frozen pregame ${escHtml(section.market)} market for ${escHtml(item.side.flagged_side||'side')}"><span class="live-market-side">${escHtml(item.side.flagged_side||'--')}</span><span class="live-market-meta">${escHtml(item.side.open_line||'--')} → ${escHtml(item.side.current_line||'--')} · ${escHtml(detailPercent(item.side.bets_pct))} Bets / ${escHtml(detailPercent(item.side.money_pct))} Money</span></button>`;}).join('')}</section>`;}).join('')}</article>`;
   }).join('');
+}
+
+function liveMarketSections(rows){
+  const groups=new Map();
+  rows.forEach(function(row){
+    const market=String(row.market_display||'Market').toUpperCase();
+    if(!groups.has(market)) groups.set(market,new Map());
+    const sides=groups.get(market), index=allLiveRecent.indexOf(row);
+    marketSides(row).forEach(function(side){
+      const identity=marketSideIdentity(side,row);
+      if(!identity) return;
+      const existing=sides.get(identity);
+      // Prefer the row whose selected side is this exact side, but never
+      // invent a paired value: every entry still comes from market_sides.
+      if(!existing||marketSideIdentity(row,row)===identity) sides.set(identity,{side,index,row});
+    });
+  });
+  const order=['MONEYLINE','TOTAL','SPREAD'];
+  return [...groups.entries()].sort(function(a,b){
+    const ai=order.indexOf(a[0]), bi=order.indexOf(b[0]);
+    return (ai<0?order.length:ai)-(bi<0?order.length:bi);
+  }).map(function(entry){return {market:entry[0],sides:[...entry[1].values()]};});
 }
 
 async function refreshLiveRecentCount(){
   try{
     const rows=await loadCSV(LIVE_RECENT_URL+'?_='+Date.now())||[];
-    allLiveRecent=rows;
     const games=new Set(rows.map(row=>[row.sport,row.game_id,row.game].join('|')));
     const badge=document.getElementById('b-live');
     if(badge) badge.textContent=games.size;
@@ -2393,7 +2558,7 @@ function renderBoard(resetPage=true){
   visibleData.forEach((r,i)=>{
     const rankReason=String(r.rank_reason||'Board priority reflects verified signal strength and market maturity.').replace(/"/g,'&quot;');
     const tr=document.createElement('tr');
-    tr.title='Open timeline and evidence';
+    tr.title='Open Market Journey and evidence';
     tr.onclick=()=>openGameDetail(window._boardRows[i]);
     if((r.recorded_reaction||r.reaction)==='Contrarian'||(r.recorded_reaction||r.reaction)==='Freeze') tr.classList.add('row-hi');
     if(r._grpSub) tr.classList.add('row-grp-sub');
@@ -2422,7 +2587,7 @@ function renderBoard(resetPage=true){
 function actionLens(r){
   const eligible=String(r.kpi_eligible||'').toLowerCase()==='true';
   const recorded=Boolean(r.recorded_reaction);
-  const observed=`<div class="focus-label"><span class="observed-prefix">Observed</span>${r.flagged_side||'-'}</div><div class="focus-sub">${r.focus_basis||'Observed side'}</div>`;
+  const observed=`<div class="focus-label"><span class="observed-prefix">Market</span>${r.flagged_side||'-'}</div><div class="focus-sub">${r.focus_basis||'Market side'}</div>`;
   if(!eligible&&!recorded){
     if((r.reaction||'')==='Freeze' && r.action_basis){
       return observed+`<div class="market-cue" title="${r.action_basis}"><span class="market-cue-icon">i</span><span>Candidate status: ${r.action_basis}</span></div>`;
@@ -2431,10 +2596,9 @@ function actionLens(r){
   }
   const type=eligible?r.action_type:r.recorded_action_type;
   const side=eligible?r.action_side:r.recorded_action_side;
-  const fade=String(type||'').toUpperCase()==='FADE CANDIDATE';
-  const cue=(recorded?'Recorded ':'')+(fade?'public fade lens':'contrarian lens');
-  const icon=fade?'F':'C';
-  const kind=fade?'fade':'contrarian';
+  const cue=(recorded?'Recorded ':'')+'market lens';
+  const icon='M';
+  const kind='contrarian';
   return observed+`<div class="market-cue ${kind}" title="${recorded?r.recorded_note:(r.action_basis||'')}"><span class="market-cue-icon">${icon}</span><span>${cue}: <b>${side||'-'}</b></span></div>`;
 }
 
@@ -2576,7 +2740,7 @@ function closeBkdnLegend() {
   document.getElementById('bkdn-legend-overlay').classList.remove('open');
 }
 
-function movementChart(rows, market){
+function movementChart(rows, market, selectedTimestamp='', selectedSide=''){
   if(!rows || rows.length < 2) return '';
   const marketKey=String(market||'').toUpperCase();
   const number=value=>{ const parsed=Number(value); return Number.isFinite(parsed)?parsed:null; };
@@ -2593,9 +2757,10 @@ function movementChart(rows, market){
     return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(parsed);
   };
   const totalPrefix=(lineLabel(rows[0]).split(' ')[0]||'').toUpperCase();
+  const selectedSideText=String(selectedSide||'this market side').trim();
   const makeView=key=>{
     if(key==='market'){
-      if(marketKey==='MONEYLINE') return {key,label:'Price',title:'Moneyline price',note:'American odds are the moneyline market. More negative means a more expensive price.',values:rows.map(r=>number(r.price_odds)),pointLabel:r=>signed(r.price_odds),axisLabel:signed};
+      if(marketKey==='MONEYLINE') return {key,label:'Price',title:'Moneyline price',note:'American odds at each snapshot. More negative means a more expensive price.',values:rows.map(r=>number(r.price_odds)),pointLabel:r=>signed(r.price_odds),axisLabel:signed};
       const label=marketKey==='TOTAL'?'Total line':'Spread line';
       const note=marketKey==='TOTAL'?'The over/under number at each snapshot. Use Price to inspect the attached juice.':'The spread number at each snapshot. Use Price to inspect the attached juice.';
       return {key,label:'Line',title:label,note,values:rows.map(r=>number(r.line_value)),pointLabel:lineLabel,axisLabel:value=>marketKey==='TOTAL'?(totalPrefix+' '+compact(value)):((value>0?'+':'')+compact(value))};
@@ -2618,16 +2783,19 @@ function movementChart(rows, market){
     });
     const polyline=points.map(point=>point.join(',')).join(' ');
     const area=`${padLeft},${height-padY} ${polyline} ${width-padRight},${height-padY}`;
+    const selectedIndex=rows.findIndex(row=>String(row.timestamp||'')===String(selectedTimestamp||''));
+    const selectedPoint=selectedIndex>=0?points[selectedIndex]:null;
+    const selectedMarker=selectedPoint?`<line x1="${selectedPoint[0]}" y1="${padY}" x2="${selectedPoint[0]}" y2="${height-padY}" stroke="#0f6f7f" stroke-width="1.5" stroke-dasharray="3 3"/><circle cx="${selectedPoint[0]}" cy="${selectedPoint[1]}" r="6" fill="#fff" stroke="#0f6f7f" stroke-width="3"/>`:'';
     const ticks=[max,(max+min)/2,min].map(value=>{
       const y=height-padY-((value-min)/span)*(height-padY*2);
       return `<path d="M${padLeft} ${y.toFixed(1)} H${width-padRight}" stroke="#d8e3e6" stroke-dasharray="3 4"/><text x="${width-padRight+6}" y="${(y+3).toFixed(1)}" fill="#74808a" font-size="9" font-family="var(--mono)">${view.axisLabel(value)}</text>`;
     }).join('');
     const first=rows[0], last=rows[rows.length-1];
     const xLabels=`<text x="${padLeft}" y="${height-3}" fill="#74808a" font-size="8" font-family="var(--mono)">${timeLabel(first)}</text><text x="${width-padRight}" y="${height-3}" text-anchor="end" fill="#74808a" font-size="8" font-family="var(--mono)">${timeLabel(last)}</text>`;
-    return `<div class="movement-panel" data-movement-view="${view.key}" style="display:${view.key==='market'?'block':'none'}"><div class="movement-chart-note">${view.note}</div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${view.title} trajectory"><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#5bb6bf" stop-opacity=".32"/><stop offset="1" stop-color="#5bb6bf" stop-opacity=".02"/></linearGradient></defs>${ticks}<path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${polyline}" fill="none" stroke="#0f6f7f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#0f6f7f" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#0f6f7f"/>${xLabels}</svg><div class="movement-facts"><div class="movement-fact"><span>Start</span><b>${view.pointLabel(first)}</b></div><div class="movement-fact"><span>Current</span><b>${view.pointLabel(last)}</b></div><div class="movement-fact"><span>High</span><b>${view.axisLabel(max)}</b></div><div class="movement-fact"><span>Low</span><b>${view.axisLabel(min)}</b></div></div></div>`;
+    return `<div class="movement-panel" data-movement-view="${view.key}" style="display:${view.key==='market'?'block':'none'}"><div class="movement-chart-note">${view.note}</div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${view.title} trajectory"><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#5bb6bf" stop-opacity=".32"/><stop offset="1" stop-color="#5bb6bf" stop-opacity=".02"/></linearGradient></defs>${ticks}<path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${polyline}" fill="none" stroke="#0f6f7f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#0f6f7f" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#0f6f7f"/>${selectedMarker}${xLabels}</svg><div class="movement-facts"><div class="movement-fact"><span>Start</span><b>${view.pointLabel(first)}</b></div><div class="movement-fact"><span>Current</span><b>${view.pointLabel(last)}</b></div><div class="movement-fact"><span>High</span><b>${view.axisLabel(max)}</b></div><div class="movement-fact"><span>Low</span><b>${view.axisLabel(min)}</b></div></div></div>`;
   };
   const tabs=views.map(view=>`<button type="button" class="movement-tab ${view.key==='market'?'on':''}" onclick="setMovementView(this,'${view.key}')">${view.label}</button>`).join('');
-  return `<div class="movement-chart" data-movement-chart><div class="movement-chart-head"><div><div class="movement-chart-title">Market trajectory</div><div class="movement-chart-note">${rows.length} timestamped observations for this exact signal side.</div></div><div class="movement-tabs">${tabs}</div></div>${views.map(panel).join('')}</div>`;
+  return `<div class="movement-chart" data-movement-chart><div class="movement-chart-head"><div><div class="movement-chart-title">Market trajectory</div><div class="movement-chart-note">${rows.length} timestamped observations for ${escHtml(selectedSideText)}.</div></div><div class="movement-tabs">${tabs}</div></div>${views.map(panel).join('')}</div>`;
 }
 function setMovementView(button, view){
   const chart=button.closest('[data-movement-chart]');
@@ -2636,7 +2804,7 @@ function setMovementView(button, view){
   chart.querySelectorAll('[data-movement-view]').forEach(panel=>{ panel.style.display=panel.dataset.movementView===view?'block':'none'; });
 }
 
-async function openGameDetail(r){
+async function openGameDetail(r,selectedSideLabel){
   const gameEvents=await ensureGameEvents(r);
   const gid=r.game_id||r.game||'';
   const n=s=>{ const x=Number(s); return isNaN(x)?null:x; };
@@ -2658,7 +2826,7 @@ async function openGameDetail(r){
   if(mkts.length>1){
     const marketTabs=mkts.map((row,index)=>{
       const active=(String(row.market_display||'').toUpperCase()===String(r.market_display||'').toUpperCase());
-      return '<button type="button" class="movement-tab '+(active?'on':'')+'" title="Open '+escHtml(row.market_display||'market')+' timeline" onclick="openGameDetail(window._gameDetailRows['+index+'])">'+escHtml(row.market_display||'Market')+'</button>';
+      return '<button type="button" class="movement-tab '+(active?'on':'')+'" title="Open '+escHtml(row.market_display||'market')+' Market Journey" onclick="openGameDetail(window._gameDetailRows['+index+'])">'+escHtml(row.market_display||'Market')+'</button>';
     }).join('');
     marketSwitcher='<div class="detail-market-switcher" aria-label="Other markets for this game"><div class="movement-tabs">'+marketTabs+'</div></div>';
   }
@@ -2678,12 +2846,12 @@ async function openGameDetail(r){
   html+='</div>';
   html+=movementChart(evRows,r.market_display);
   html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+orderedSignalValues(an).map(value=>anomalyBadge(value)).join('')+'</div>';
-  html+='<div style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">Observed Market Side</div>';
+  html+='<div style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">Market Side</div>';
   html+='<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:3px">'+(r.flagged_side||'--')+'</div>';
-  html+='<div style="font-size:11px;color:var(--text3);margin-bottom:8px">'+(r.focus_basis||'Observed side')+'</div>';
+  html+='<div style="font-size:11px;color:var(--text3);margin-bottom:8px">'+(r.focus_basis||'Market side')+'</div>';
   const actionEligible=String(r.kpi_eligible||'').toLowerCase()==='true';
   html+='<div style="font-size:10px;font-weight:800;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin:10px 0 3px">Contextual Market Lens</div>';
-  html+='<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">'+(actionEligible?((String(r.action_type||'').toUpperCase()==='FADE CANDIDATE'?'Public fade lens':'Contrarian lens')+': '+(r.action_side||'--')):'No additional market lens')+'</div>';
+  html+='<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">'+(actionEligible?('Market lens: '+(r.action_side||'--')):'No additional market lens')+'</div>';
   if(actionEligible) html+='<div style="font-size:11px;color:var(--text2);margin-bottom:3px">Decision line '+(r.action_line||'--')+'</div>';
   html+='<div style="font-size:11px;color:var(--text3);margin-bottom:8px">'+(r.action_basis||'Evidence only; no additional market lens.')+'</div>';
   html+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">'+splitSummary(r)+'</div>';
@@ -3719,6 +3887,334 @@ function updateFreshness(f){
     });
     sbf.innerHTML=sh;
   }
+}
+
+function detailSideRows(events,row,side){
+  const gid=String(row.game_id||row.game||'');
+  const market=String(row.market_display||'').toUpperCase();
+  const identity=marketSideIdentity(side,row);
+  return (events||[]).filter(event=>
+    String(event.game_id||event.game||'')===gid &&
+    String(event.market_display||'').toUpperCase()===market &&
+    marketSideIdentity(event,row)===identity
+  ).sort((a,b)=>new Date(a.timestamp||0)-new Date(b.timestamp||0));
+}
+function detailNumber(value){
+  const text=String(value??'').trim();
+  if(!text) return null;
+  const number=Number(text);
+  return Number.isFinite(number)?number:null;
+}
+function detailPercent(value){
+  const number=detailNumber(value);
+  return number===null?'--':number.toFixed(0)+'%';
+}
+function frozenPregameRows(rows,frozenAt){
+  const cutoff=new Date(frozenAt||'').getTime();
+  if(!Number.isFinite(cutoff)) return rows;
+  return rows.filter(row=>{
+    const timestamp=new Date(row.timestamp||'').getTime();
+    return !Number.isFinite(timestamp)||timestamp<=cutoff;
+  });
+}
+function frozenSeriesForSide(events,row,side){
+  return frozenPregameRows(detailSideRows(events,row,side),row.frozen_at_utc||'');
+}
+function validFrozenSignal(timestamp,rows){
+  const signalAt=new Date(timestamp||'').getTime();
+  if(!Number.isFinite(signalAt)||!rows.length) return '';
+  const first=new Date(rows[0].timestamp||'').getTime();
+  const last=new Date(rows[rows.length-1].timestamp||'').getTime();
+  return Number.isFinite(first)&&Number.isFinite(last)&&signalAt>=first&&signalAt<=last?timestamp:'';
+}
+function frozenMaxExcursion(rows,market){
+  if(!rows.length) return {value:'',unit:''};
+  const isMoneyline=String(market||'').toUpperCase()==='MONEYLINE';
+  const valueFor=function(row){
+    if(isMoneyline){
+      const implied=detailNumber(row.implied_pct);
+      if(implied!==null) return implied;
+      const odds=detailNumber(row.price_odds);
+      return odds===null?null:impliedProbability(odds)*100;
+    }
+    return detailNumber(row.line_value);
+  };
+  const opening=valueFor(rows[0]);
+  if(opening===null) return {value:'',unit:''};
+  const max=rows.reduce(function(best,row){
+    const value=valueFor(row);
+    return value!==null&&Math.abs(value-opening)>best?Math.abs(value-opening):best;
+  },0);
+  return {value:max,unit:isMoneyline?'implied probability points':'line points'};
+}
+function frozenMarketSides(row,events){
+  // Live rows may carry only the originally observed side.  The frozen event
+  // series is the authoritative paired source, so use its actual side records
+  // rather than deriving an opponent from a complementary percentage.
+  const sides=new Map();
+  marketSides(row).forEach(function(side){
+    const key=marketSideIdentity(side,row);
+    if(key) sides.set(key,side);
+  });
+  const market=String(row.market_display||'').toUpperCase();
+  const frozen=frozenPregameRows((events||[]).filter(function(event){
+    return String(event.game_id||event.game||'')===String(row.game_id||row.game||'') &&
+      String(event.market_display||'').toUpperCase()===market;
+  }).sort(function(a,b){return new Date(a.timestamp||0)-new Date(b.timestamp||0);}),row.frozen_at_utc||'');
+  frozen.forEach(function(event){
+    const key=marketSideIdentity(event,row);
+    if(!key) return;
+    // Later observations provide the latest trusted side metadata; a source
+    // side record retains any additional published signal context it has.
+    const published=sides.get(key)||{};
+    sides.set(key,{...event,...published,
+      // The published frozen record carries the final classified read.  The
+      // event series supplies the timestamped numeric history, but must not
+      // replace that final read with an older per-observation Watch state.
+      reaction:published.reaction||event.reaction||'',
+      path:published.path||event.path||'',
+      context_chips:published.context_chips||event.context_chips||'',
+      anomaly_chips:published.anomaly_chips||event.anomaly_chips||'',
+      flagged_side:String(event.flagged_side||published.flagged_side||'').trim()});
+  });
+  return marketSides({...row,market_sides:JSON.stringify([...sides.values()])});
+}
+function frozenLiveRecord(row,events){
+  const sides=frozenMarketSides(row,events).map(function(side){
+    const rows=frozenSeriesForSide(events,row,side);
+    const first=rows[0], last=rows[rows.length-1];
+    if(!last) return side;
+    const bets=detailNumber(last.bets_pct), money=detailNumber(last.money_pct);
+    const excursion=frozenMaxExcursion(rows,row.market_display);
+    return {...side,
+      open_line:first?.line_display||side.open_line,
+      current_line:last.line_display||side.current_line,
+      bets_pct:bets===null?'':last.bets_pct,
+      money_pct:money===null?'':last.money_pct,
+      observation_count:rows.length,
+      first_anomaly_seen:validFrozenSignal(side.first_anomaly_seen,rows)||validFrozenSignal(last.first_anomaly_seen,rows),
+      _frozen_last_snapshot_at:last.timestamp,
+      max_excursion:excursion.value,
+      excursion_unit:excursion.unit,
+    };
+  });
+  const selected=sides.find(function(side){return marketSideIdentity(side,row)===marketSideIdentity(row,row);})||sides[0]||row;
+  return {...row,
+    market_sides:JSON.stringify(sides),
+    open_line:selected.open_line||row.open_line,
+    current_line:selected.current_line||row.current_line,
+    bets_pct:selected.bets_pct,
+    money_pct:selected.money_pct,
+    observation_count:selected.observation_count||row.observation_count,
+    first_anomaly_seen:selected.first_anomaly_seen||'',
+    _frozen_last_snapshot_at:selected._frozen_last_snapshot_at||'',
+  };
+}
+function frozenSnapshotLabel(timestamp){
+  const date=new Date(timestamp||'');
+  if(Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true,timeZone:'America/New_York'});
+}
+function detailJourneyMilestones(rows,side){
+  if(!rows.length) return [];
+  const valid=rows.filter(row=>Number.isFinite(Number(row.line_value)) || String(row.line_display||'').trim());
+  if(!valid.length) return [];
+  const first=valid[0], last=valid[valid.length-1], items=[];
+  const add=(name,row,signal='')=>{
+    if(!row) return;
+    const timestamp=String(row.timestamp||'');
+    const existing=items.find(item=>String(item.row.timestamp||'')===timestamp);
+    const priority={Open:4,Current:4,'Max move':3,Reversal:2};
+    if(existing){
+      if((priority[name]||1)>(priority[existing.name]||1)) existing.name=name;
+      if(signal) existing.signals=[...new Set([...(existing.signals||[]),signal])];
+      return;
+    }
+    items.push({name,row,signals:signal?[signal]:[]});
+  };
+  add('Open',first);
+  const signalName=String(side.reaction||'').trim();
+  const firstSignalAt=String(side.first_anomaly_seen||'').trim();
+  if(signalName&&firstSignalAt){
+    const trigger=valid.find(row=>new Date(row.timestamp||0)>=new Date(firstSignalAt));
+    if(trigger) add(signalName,trigger,signalName);
+  }
+  const start=Number(first.line_value);
+  const linePoints=valid.filter(row=>Number.isFinite(Number(row.line_value)));
+  if(Number.isFinite(start)&&linePoints.length){
+    const max=linePoints.reduce((best,row)=>Math.abs(Number(row.line_value)-start)>Math.abs(Number(best.line_value)-start)?row:best,linePoints[0]);
+    if(max!==first&&max!==last&&Number(max.line_value)!==start) add('Max move',max);
+    let previousDirection=0, reversal=null;
+    for(let index=1;index<linePoints.length;index++){
+      const direction=Math.sign(Number(linePoints[index].line_value)-Number(linePoints[index-1].line_value));
+      if(direction&&previousDirection&&direction!==previousDirection){ reversal=linePoints[index]; break; }
+      if(direction) previousDirection=direction;
+    }
+    if(reversal&&reversal!==last) add('Reversal',reversal,'Whipsaw');
+  }
+  // CURRENT describes the same classified frozen side state as the selected
+  // header.  Earlier milestones may retain their historical labels, but the
+  // current primary read cannot contradict the final frozen Market Read.
+  add('Current',last,String(side.reaction||last.reaction||'').trim());
+  // A deterministic concise path: retain Open/Current and the first major state changes.
+  return items.sort((a,b)=>new Date(a.row.timestamp||0)-new Date(b.row.timestamp||0)).slice(0,7);
+}
+function detailJourneyStats(rows){
+  const points=(rows||[]).filter(row=>Number.isFinite(Number(row.line_value)));
+  let reversals=0, previousDirection=0;
+  for(let index=1;index<points.length;index++){
+    const direction=Math.sign(Number(points[index].line_value)-Number(points[index-1].line_value));
+    if(direction&&previousDirection&&direction!==previousDirection) reversals++;
+    if(direction) previousDirection=direction;
+  }
+  return {reversals};
+}
+function detailStoryCopy(side,rows){
+  if(!rows.length) return 'Historical observations are not available yet for this side.';
+  const first=rows[0], last=rows[rows.length-1];
+  const firstLine=first.line_display||'the opening number';
+  const lastLine=last.line_display||'the latest number';
+  const milestones=detailJourneyMilestones(rows,side);
+  const intermediate=milestones.slice(1,-1);
+  const changed=String(firstLine)!==String(lastLine);
+  const clauses=intermediate.map(item=>{
+    const line=item.row.line_display||'--';
+    if(item.name==='Max move') return `reached its largest move at ${line}`;
+    if(item.name==='Reversal') return `reversed at ${line}`;
+    return `recorded a ${String(item.name).toLowerCase()} event at ${line}`;
+  });
+  if(clauses.length) return `The line opened at ${firstLine}, ${clauses.join(', then ')}, and finished at ${lastLine}.`;
+  if(changed) return `The line opened at ${firstLine} and moved steadily to ${lastLine}.`;
+  return `The listed line held at ${lastLine} across the recorded observations.`;
+}
+function detailStoryLine(row){
+  const value=Number(row?.line_value);
+  return Number.isFinite(value)?String(value):String(row?.line_display||'--').replace(/\s*\([^)]*\)\s*$/,'');
+}
+function detailLatestDevelopment(rows,side){
+  if(!rows.length) return 'No observation history is available yet.';
+  const milestones=detailJourneyMilestones(rows,side);
+  const latest=milestones[milestones.length-1];
+  const previous=milestones[milestones.length-2];
+  if(!latest) return 'No meaningful journey event is available yet.';
+  const line=detailStoryLine(latest.row);
+  if(previous?.name==='Reversal') return `Returned to ${line} after reversal.`;
+  if(previous?.name==='Max move') return `Settled at ${line} after the largest move.`;
+  if(previous&&previous.name!=='Open') return `Moved to ${line} after the ${String(previous.name).toLowerCase()} event.`;
+  return `Held at ${line} through the latest observation.`;
+}
+function detailJourneyHtml(rows,side,selectedTimestamp=''){
+  const milestones=detailJourneyMilestones(rows,side);
+  const latest=rows.length?et(rows[rows.length-1].timestamp):'--';
+  const selected=milestones.find(item=>String(item.row.timestamp||'')===String(selectedTimestamp||''));
+  const events=milestones.map(item=>{
+    const row=item.row;
+    const bets=detailNumber(row.bets_pct), money=detailNumber(row.money_pct);
+    const split=bets!==null&&money!==null?`${bets.toFixed(0)}% Bets / ${money.toFixed(0)}% Money`:'';
+    const isSelected=String(row.timestamp||'')===String(selectedTimestamp||'');
+    const cls=((item.signals||[]).length?' signal':'')+(item.name==='Current'?' current':'')+(isSelected?' selected':'');
+    const clickArg=JSON.stringify(String(row.timestamp||'')).replace(/"/g,'&quot;');
+    const chips=(item.signals||[]).map(anomalyBadge).join('');
+    return `<div class="journey-event${cls}"><button class="journey-event-select" type="button" onclick="selectJourneyEvent(${clickArg})" aria-pressed="${isSelected}" title="Show this observation on the trajectory chart"><span class="journey-dot">${item.name==='Current'?'•':''}</span><span class="journey-event-name">${escHtml(item.name)}</span><span class="journey-event-line">${escHtml(row.line_display||'--')}</span>${split?`<span class="journey-event-meta">${escHtml(split)}</span>`:''}<span class="journey-event-meta">${escHtml(et(row.timestamp))}</span></button>${chips?`<div class="journey-event-signals">${chips}</div>`:''}</div>`;
+  }).join('')||'<div class="journey-event-meta">No meaningful journey milestones are available yet.</div>';
+  const selectedDetail=selected?`<div class="journey-event-detail"><strong>${escHtml(et(selected.row.timestamp))}</strong> · ${escHtml(selected.row.line_display||'--')} · ${escHtml(detailPct(selected.row.bets_pct,'Bets'))} · ${escHtml(detailPct(selected.row.money_pct,'Money'))}</div>`:'';
+  return `<section class="market-journey" data-market-journey><button class="market-journey-toggle" type="button" onclick="toggleMarketJourney(this)" aria-expanded="true"><span><strong>Market Journey</strong><small>${milestones.length} milestone${milestones.length===1?'':'s'} · Latest ${escHtml(latest)}</small></span><span class="market-journey-chevron" aria-hidden="true">⌃</span></button><div class="market-journey-body"><div class="journey-track">${events}</div>${selectedDetail}</div></section>`;
+}
+function toggleMarketJourney(button){
+  const section=button.closest('[data-market-journey]'); if(!section) return;
+  const body=section.querySelector('.market-journey-body'); const open=body.style.display!=='none';
+  body.style.display=open?'none':''; button.setAttribute('aria-expanded',String(!open));
+  button.querySelector('.market-journey-chevron').textContent=open?'⌄':'⌃';
+}
+function setDetailSide(index){
+  if(!window._gameDetailState) return;
+  window._gameDetailState.sideIndex=index;
+  window._gameDetailState.selectedJourneyTimestamp='';
+  renderGameDetail();
+}
+function selectJourneyEvent(timestamp){
+  if(!window._gameDetailState) return;
+  window._gameDetailState.selectedJourneyTimestamp=timestamp;
+  renderGameDetail();
+}
+function detailPct(value,label){
+  const number=detailNumber(value);
+  return number!==null?`${number.toFixed(0)}% ${label}`:`-- ${label}`;
+}
+function detailPointValue(value){
+  const text=String(value??'').trim();
+  if(!text) return '--';
+  return /\bpt\b/i.test(text)?text:`${text} pt`;
+}
+function detailMaxExcursion(row,market){
+  const value=detailNumber(row?.max_excursion);
+  if(value===null) return '--';
+  const isMoneyline=String(market||'').toUpperCase()==='MONEYLINE';
+  const unit=String(row?.excursion_unit||'').toLowerCase();
+  if(isMoneyline&&unit.includes('implied probability')) return `${value.toFixed(1)} pp`;
+  return detailPointValue(value);
+}
+function detailCoverageTime(value){
+  const date=new Date(value||'');
+  if(Number.isNaN(date.getTime())) return '--';
+  return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(date);
+}
+function detailCoverageRange(rows){
+  if(!rows.length) return 'No observations available';
+  const first=detailCoverageTime(rows[0].timestamp);
+  const last=detailCoverageTime(rows[rows.length-1].timestamp);
+  return first===last?first:`${first} → ${last}`;
+}
+function renderGameDetail(){
+  const state=window._gameDetailState; if(!state) return;
+  const r=state.row, sides=marketSides(r), side=sides[Math.max(0,Math.min(state.sideIndex,sides.length-1))]||r;
+  const selected={...r,...side};
+  const evRows=detailSideRows(state.events,r,side);
+  const detailRows=state.frozenPregame?frozenPregameRows(evRows,state.frozenCutoff):evRows;
+  const mkts=state.markets||[];
+  const marketSwitcher=mkts.length>1?`<div class="detail-market-switcher" aria-label="Other markets for this game"><div class="movement-tabs">${mkts.map((row,index)=>`<button type="button" class="movement-tab ${String(row.market_display||'').toUpperCase()===String(r.market_display||'').toUpperCase()?'on':''}" onclick="openGameDetail(window._gameDetailRows[${index}])">${escHtml(row.market_display||'Market')}</button>`).join('')}</div></div>`:'';
+  const sideToggle=sides.length>1?`<div class="detail-side-picker"><div class="detail-side-toggle" role="group" aria-label="Select market side">${sides.map((candidate,index)=>`<button type="button" class="${index===state.sideIndex?'on':''}" onclick="setDetailSide(${index})" aria-pressed="${index===state.sideIndex}">${escHtml(candidate.flagged_side||sideLabel(candidate,r))}</button>`).join('')}</div></div>`:'';
+  const signals=sideSignals(selected);
+  const currentMovement=sideMovementHtml(selected,r);
+  const frozenSignal=state.frozenPregame?validFrozenSignal(selected.first_anomaly_seen,detailRows):selected.first_anomaly_seen;
+  const firstSignal=frozenSignal?`${selected.reaction||'Signal'} · ${et(frozenSignal)}`:'No recorded signal timestamp';
+  const hasClassifiedSignal=Boolean(String(frozenSignal||'').trim());
+  const proofSummary=detailCoverageRange(detailRows);
+  const journeyStats=detailJourneyStats(detailRows);
+  const maxExcursion=String(r.market_display||'').toUpperCase()==='MONEYLINE'
+    ?detailMaxExcursion(selected,r.market_display)
+    :detailPointValue(selected.max_excursion);
+  const isClean=String(r.data_badge||'').trim().toUpperCase()==='CLEAN';
+  let html='<div class="game-detail-content" style="padding:16px 20px">';
+  const frozenStatus=state.frozenPregame?'<div class="detail-frozen-status">Frozen pregame market'+(frozenSnapshotLabel(state.frozenAt)?' · Last snapshot '+escHtml(frozenSnapshotLabel(state.frozenAt)):'')+'</div>':'';
+  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--border)">'+spChip(r.sport)+'<div><div class="detail-game-heading">'+escHtml(r.game||'--')+'</div><div class="detail-game-meta">'+escHtml(r.kickoff_time||'--')+'</div>'+frozenStatus+marketSwitcher+'</div></div>';
+  html+='<section style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px">'+sideToggle;
+  html+='<div class="detail-current-read"><div><div class="detail-current-line">'+escHtml(selected.current_line||'--')+'</div>'+(currentMovement?'<div class="detail-current-movement">'+currentMovement+'</div>':'')+'<div class="detail-current-splits"><span>'+escHtml(detailPct(selected.bets_pct,'Bets'))+'</span><span>'+escHtml(detailPct(selected.money_pct,'Money'))+'</span></div></div><div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">'+signals.map(anomalyBadge).join('')+'</div></div>';
+  html+=movementChart(detailRows,r.market_display,state.selectedJourneyTimestamp,selected.flagged_side||sideLabel(selected,r));
+  html+=detailJourneyHtml(detailRows,selected,state.selectedJourneyTimestamp);
+  html+='<section class="market-story"><h3>Market Story</h3><div class="market-story-grid"><div class="market-story-item"><span>Since Open</span><b>'+escHtml((detailRows[0]?.line_display||selected.open_line||'--')+' → '+(detailRows[detailRows.length-1]?.line_display||selected.current_line||'--'))+'</b></div><div class="market-story-item"><span>Positioning</span><b>'+escHtml(detailPct(selected.bets_pct,'Bets')+' / '+detailPct(selected.money_pct,'Money'))+'</b></div><div class="market-story-item"><span>First Signal</span><b>'+escHtml(firstSignal)+'</b></div><div class="market-story-item"><span>Latest Development</span><b>'+escHtml(detailLatestDevelopment(detailRows,selected))+'</b></div></div><p class="market-story-copy">'+escHtml(detailStoryCopy(selected,detailRows))+'</p></section>';
+  html+='<section class="detail-proof"><div class="detail-proof-head"><div><h3>Proof / Observation History</h3><small>'+escHtml(proofSummary)+'</small></div></div><div class="detail-proof-body"><div class="detail-proof-metrics" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px"><div class="movement-fact"><span>'+escHtml(hasClassifiedSignal?'First Signal':'First Observed')+'</span><b>'+escHtml(hasClassifiedSignal?et(frozenSignal):(detailRows.length?et(detailRows[0].timestamp):'--'))+'</b></div><div class="movement-fact"><span>Max Excursion</span><b>'+escHtml(maxExcursion)+'</b></div><div class="movement-fact"><span title="Counts every raw line-direction change across timestamped observations; Market Journey shows only meaningful reversal milestones.">Raw Reversals</span><b>'+escHtml(String(journeyStats.reversals))+'</b></div><div class="movement-fact"><span>Observations</span><b>'+escHtml(String(detailRows.length||selected.observation_count||'--'))+'</b></div></div>';
+  if(detailRows.length){ html+='<div class="detail-observations" style="overflow:auto"><table class="detail-observation-table" style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px"><thead><tr style="background:var(--bg4)"><th style="padding:5px 8px;text-align:left">Time</th><th style="padding:5px 8px;text-align:left">Line</th><th style="padding:5px 8px;text-align:left">Bets</th><th style="padding:5px 8px;text-align:left">Money</th></tr></thead><tbody>'+detailRows.map(row=>'<tr class="detail-observation-row '+(String(row.timestamp||'')===String(state.selectedJourneyTimestamp||'')?'is-selected':'')+'" style="border-bottom:1px solid var(--border)"><td data-label="Time" style="padding:4px 8px">'+escHtml(et(row.timestamp))+'</td><td data-label="Line" style="padding:4px 8px">'+escHtml(row.line_display||'--')+'</td><td data-label="Bets" style="padding:4px 8px">'+escHtml(detailPercent(row.bets_pct))+'</td><td data-label="Money" style="padding:4px 8px">'+escHtml(detailPercent(row.money_pct))+'</td></tr>').join('')+'</tbody></table></div>'; } else { html+='<div style="color:var(--text3);font-size:12px;padding:10px">No event history yet</div>'; }
+  html+='</div></section>'+(isClean?'<footer class="detail-quality detail-quality-clean"><span class="detail-quality-label">Data Quality</span>'+dataBadge(r.data_badge)+'</footer>':'<section class="detail-quality detail-quality-warning"><h3>Data Quality</h3>'+dataBadge(r.data_badge)+'</section>')+'</div>';
+  document.getElementById('drill-title').textContent=r.game||'Game Detail';
+  document.getElementById('drill-tbl').innerHTML='<tr><td style="padding:0">'+html+'</td></tr>';
+  document.getElementById('drill-export').style.display='none';
+  document.querySelector('#drill-overlay .drill-modal').classList.add('game-detail-modal');
+  document.body.classList.add('game-detail-open');
+  document.getElementById('drill-overlay').classList.add('open');
+}
+async function openGameDetail(r,selectedSideLabel){
+  const events=await ensureGameEvents(r), gid=r.game_id||r.game||'';
+  const markets=[]; const seen=new Set();
+  const frozenPregame=(allLiveRecent||[]).includes(r);
+  const relatedRows=frozenPregame?(allLiveRecent||[]):[...(window._boardRows||[]),...(allLiveRecent||[])];
+  relatedRows.filter(row=>(row.game_id||row.game||'')===gid).forEach(row=>{ const key=String(row.market_display||'').toUpperCase(); if(key&&!seen.has(key)){seen.add(key);markets.push(row);} });
+  window._gameDetailRows=markets;
+  const sides=marketSides(r);
+  const selectedIdentity=marketSideIdentity({flagged_side:selectedSideLabel||r.flagged_side||''},r);
+  const selectedIndex=Math.max(0,sides.findIndex(side=>marketSideIdentity(side,r)===selectedIdentity));
+  window._gameDetailState={row:r,events,markets,sideIndex:selectedIndex,selectedJourneyTimestamp:'',frozenPregame,frozenCutoff:r.frozen_at_utc||'',frozenAt:r._frozen_last_snapshot_at||''};
+  renderGameDetail();
 }
 
 function parseLine(raw,mkt){

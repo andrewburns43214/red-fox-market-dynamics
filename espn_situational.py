@@ -429,13 +429,19 @@ def fetch_all_situational(sport: str) -> dict:
         result["rest_days"] = rest["rest_days"]
 
     # Use today's date for scoreboard-based fetches (ESPN defaults to yesterday)
-    today_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    # MLB boards often include tomorrow's games, so pull a 2-day window.
+    _today_dt = datetime.now(timezone.utc)
+    today_str = _today_dt.strftime("%Y%m%d")
 
     # Pitchers (MLB only)
     if sport.lower() == "mlb":
-        pitch = fetch_probable_pitchers(date=today_str)
-        if not pitch.get("error"):
-            result["pitchers"] = pitch["pitchers"]
+        pitcher_map = {}
+        for _offset in (0, 1):
+            _date_str = (_today_dt + timedelta(days=_offset)).strftime("%Y%m%d")
+            pitch = fetch_probable_pitchers(date=_date_str)
+            if not pitch.get("error"):
+                pitcher_map.update(pitch["pitchers"])
+        result["pitchers"] = pitcher_map
 
     # Goalies (NHL only)
     if sport.lower() == "nhl":

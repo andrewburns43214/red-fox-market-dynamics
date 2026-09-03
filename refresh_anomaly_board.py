@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -14,6 +15,52 @@ from main import infer_market_type, normalize_side_key
 
 
 DATA = Path(os.environ.get("REDFOX_DATA_DIR", "data"))
+PUBLIC_TIMEZONE = ZoneInfo("America/New_York")
+FOOTBALL_SPORTS = {"nfl", "ncaaf", "cfb"}
+PUBLIC_EXPORT_COLUMNS = {
+    "anomaly_board.csv": [
+        "sport", "game_id", "canonical_key", "kickoff_time", "kickoff_sort", "kickoff_iso", "game", "market_display",
+        "flagged_side", "focus_basis", "action_side", "action_line", "action_type", "action_basis", "kpi_eligible",
+        "reaction", "path", "context_chips", "anomaly_chips", "bets_pct", "money_pct", "open_line", "current_line",
+        "path_summary", "reason", "data_badge", "observation_count", "first_anomaly_seen", "max_excursion",
+        "return_toward_open", "broader_market_comparison", "key_number_note", "key_numbers_crossed", "open_line_value",
+        "current_line_value", "move_abs", "line_move_abs", "price_move_pct", "movement_unit", "line_dir_changes",
+        "path_min", "path_max", "observed_path", "rank_reason", "anomaly_sort", "maturity_sort", "severity_sort",
+        "board_rank", "recorded_reaction", "recorded_action_type", "recorded_action_side", "recorded_action_line",
+        "recorded_at", "recorded_note", "market_sides", "read_anchor_side", "directional_lean_side", "market_rationale",
+    ],
+    "anomaly_events.csv": [
+        "sport", "game_id", "canonical_key", "game", "market_display", "flagged_side", "focus_basis", "action_side",
+        "action_line", "action_type", "action_basis", "kpi_eligible", "timestamp", "step_index", "observation_count",
+        "line_value", "line_display", "price_odds", "implied_pct", "bets_pct", "money_pct", "is_open", "is_current",
+        "reaction", "path", "first_anomaly_seen", "max_excursion", "return_toward_open", "broader_market_comparison",
+        "key_number_note", "key_numbers_crossed",
+    ],
+}
+
+
+def filter_publication_eligible_markets(dashboard, now=None):
+    """Apply the rolling public football window before board ranking/export.
+
+    Non-football rows retain their existing publication behavior.  Football
+    rows are eligible from the local calendar day through the end of the
+    seventh following calendar day, inclusive.
+    """
+    if dashboard is None or dashboard.empty:
+        return pd.DataFrame() if dashboard is None else dashboard.copy()
+    work = dashboard.copy()
+    now = pd.Timestamp.now(tz=PUBLIC_TIMEZONE) if now is None else pd.Timestamp(now)
+    if now.tzinfo is None:
+        now = now.tz_localize(PUBLIC_TIMEZONE)
+    else:
+        now = now.tz_convert(PUBLIC_TIMEZONE)
+    start = now.normalize()
+    end_exclusive = start + pd.Timedelta(days=8)
+    kickoff = pd.to_datetime(work.get("dk_start_iso", ""), errors="coerce", utc=True).dt.tz_convert(PUBLIC_TIMEZONE)
+    sport = work.get("sport", "").fillna("").astype(str).str.strip().str.lower()
+    football = sport.isin(FOOTBALL_SPORTS)
+    eligible_football = kickoff.notna() & (kickoff >= start) & (kickoff < end_exclusive)
+    return work.loc[~football | eligible_football].copy()
 
 
 def _event_detail_filename(sport, game_id):
@@ -163,6 +210,9 @@ def main():
     before_expiry = len(dashboard)
     dashboard = dashboard.loc[kickoff.notna() & (kickoff > cutoff)].copy()
     print(f"[ok] kept {len(dashboard)}/{before_expiry} pregame markets after kickoff expiry")
+    before_window = len(dashboard)
+    dashboard = filter_publication_eligible_markets(dashboard)
+    print(f"[ok] kept {len(dashboard)}/{before_window} markets after rolling football publication window")
 
     l2_path = DATA / "l2_consensus.csv"
     l2 = pd.read_csv(l2_path, dtype=str, keep_default_na=False) if l2_path.exists() else pd.DataFrame()
@@ -177,7 +227,11 @@ def main():
     # Replace each public file only after its complete export is ready for Nginx.
     for frame, name in ((board, "anomaly_board.csv"), (events, "anomaly_events.csv")):
         temporary = DATA / f".{name}.tmp"
-        frame.to_csv(temporary, index=False)
+        # A valid, header-only CSV keeps the browser export and downstream
+        # readers parseable when the existing kickoff/publication gates leave
+        # no currently eligible markets.
+        output = frame if len(frame.columns) else pd.DataFrame(columns=PUBLIC_EXPORT_COLUMNS[name])
+        output.to_csv(temporary, index=False)
         temporary.replace(DATA / name)
     resolved_count = rebuild_action_results(DATA)
     print(f"[ok] wrote {len(board)} board rows, {len(events)} timeline events across {detail_count} fast detail payloads, captured {action_count} KPI candidates, and reconciled {resolved_count} results")

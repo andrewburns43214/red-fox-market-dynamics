@@ -58,7 +58,7 @@ def _build_email_html(new_bets):
         market = b.get("market_display", "")
         pick = b.get("favored_side", "")
         line = b.get("decision_line", "") or b.get("current_line", "")
-        score = b.get("total_score", b.get("game_confidence", ""))
+        score = b.get("total_score") or b.get("game_confidence", "")
         edge = b.get("net_edge", "")
         pattern = (b.get("pattern_primary", "") or "NEUTRAL").replace("_", " ")
         timing = b.get("timing_bucket", "")

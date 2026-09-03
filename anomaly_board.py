@@ -304,7 +304,7 @@ def _market_rationale(leader):
             sentence += " Its price path also reversed, adding Whipsaw risk."
         return sentence
     if "Heavy Favorite" in context or "Heavy Favorite" in other_context:
-        return "A short moneyline favorite has concentrated tickets; that may be parlay-driven, so the split remains context only."
+        return "A heavy moneyline favorite has concentrated tickets; that may be parlay-driven, so the split remains context only."
 
     if primary == "Contrarian":
         sentence = _rationale_contrarian(strongest, other, market, strongest_name, other_name, other_support)
@@ -400,15 +400,17 @@ def _rationale_contrarian(side, other, market, side_name, other_name, other_supp
     base_open, base_current = _rationale_base_line(open_line), _rationale_base_line(current_line)
     old_odds, new_odds = _rationale_odds(open_line), _rationale_odds(current_line)
     if str(side.get("path", "")) == "Juice Move" and base_open == base_current:
-        return f"Despite {other_support} on {other_name}, {side_name} held {base_current} while juice moved {old_odds} → {new_odds} in its favor, putting price movement against the heavier-supported side."
+        return f"Despite {other_support} on {other_name}, price/juice moved {old_odds} → {new_odds} toward {side_name}, against the heavier-supported side."
     if market == "TOTAL":
         start, end = _rationale_line_number(open_line), _rationale_line_number(current_line)
         try:
             verb = "fell" if float(end) < float(start) else "rose" if float(end) > float(start) else "held"
         except (TypeError, ValueError):
             verb = "moved"
-        return f"Despite {other_support} on {other_name}, the total {verb} {start} → {end} toward {side_name}, putting price movement against the heavier-supported side."
-    return f"Despite {other_support} on {other_name}, {side_name} moved {open_line} → {current_line}, putting price movement against the heavier-supported side."
+        return f"Despite {other_support} on {other_name}, the line moved {start} → {end} toward {side_name}, against the heavier-supported side."
+    if market == "MONEYLINE":
+        return f"Despite {other_support} on {other_name}, the moneyline price moved {open_line} → {current_line} toward {side_name}, against the heavier-supported side."
+    return f"Despite {other_support} on {other_name}, the line moved {open_line} → {current_line} toward {side_name}, against the heavier-supported side."
 
 
 def _rationale_follow(side, market, side_name, support):
@@ -418,15 +420,17 @@ def _rationale_follow(side, market, side_name, support):
     if open_line == current_line:
         return f"{side_name} has {support} and held at {_rationale_base_line(current_line) or current_line}; no price movement is implied."
     if str(side.get("path", "")) == "Juice Move" and base_open == base_current:
-        return f"{side_name} has {support}, while the line stayed {base_current} and juice moved {old_odds} → {new_odds} in the same direction."
+        return f"{side_name} has {support}, and price/juice moved {old_odds} → {new_odds} in the same direction."
     if market == "TOTAL":
         start, end = _rationale_line_number(open_line), _rationale_line_number(current_line)
         try:
             verb = "rose" if float(end) > float(start) else "fell" if float(end) < float(start) else "held"
         except (TypeError, ValueError):
             verb = "moved"
-        return f"{side_name} has {support}, and the total {verb} {start} → {end} in the same direction."
-    return f"{side_name} has {support} and moved {open_line} → {current_line}, confirming the same direction."
+        return f"{side_name} has {support}, and the line moved {start} → {end} in the same direction."
+    if market == "MONEYLINE":
+        return f"{side_name} has {support}, and the moneyline price moved {open_line} → {current_line} in the same direction."
+    return f"{side_name} has {support}, and the line moved {open_line} → {current_line} in the same direction."
 
 
 def _rationale_watch(side, other, market, side_name, other_name, side_support, other_support, context):
@@ -443,19 +447,21 @@ def _rationale_watch(side, other, market, side_name, other_name, side_support, o
         base_open, base_current = _rationale_base_line(open_line), _rationale_base_line(current_line)
         old_odds, new_odds = _rationale_odds(open_line), _rationale_odds(current_line)
         if base_open == base_current:
-            return f"{side_name} stayed {base_current} while juice moved {old_odds} → {new_odds}."
-        return f"{side_name} moved {open_line} → {current_line}, with the price change doing most of the work."
+            return f"{side_name} stayed {base_current} while price/juice moved {old_odds} → {new_odds}."
+        return f"The market moved {open_line} → {current_line}, with price/juice doing most of the work."
     if "Low Bets / High $" in context:
-        return f"Only {_rationale_pct(side.get('bets_pct'))} of tickets are on {side_name}, but {_rationale_pct(side.get('money_pct'))} of money is there; {side_name} moved {open_line} → {current_line}. The split conflict keeps the market on Watch."
+        return f"Only {_rationale_pct(side.get('bets_pct'))} of tickets are on {side_name}, but {_rationale_pct(side.get('money_pct'))} of money is there; the market moved {open_line} → {current_line}. The split conflict keeps the market on Watch."
     if "Developing Read" in context:
-        return f"{side_name} has {side_support} and has started to move {open_line} → {current_line}, but remains below the confirmed threshold."
+        return f"{side_name} has {side_support} and the market moved {open_line} → {current_line}, but remains below the confirmed threshold."
     if "Ticket-led" in context:
         return f"{side_name} has {side_support}; ticket support exceeds money support, so the move has not earned a confirmed read."
     if "Public Pressure" in context:
         return f"{side_name} has concentrated support at {side_support}, but the market has not produced a meaningful confirming move."
     if "Market Move" in context:
         return f"{side_name} moved {open_line} → {current_line}; the change is material, but the current split does not create a confirmed directional read."
-    return f"{side_name} has {side_support} versus {other_name} at {other_support}; the market remains on Watch."
+    if open_line != current_line:
+        return f"The market moved {open_line} → {current_line}, but the available split and movement do not yet establish a confirmed direction."
+    return f"{side_name} has {side_support} versus {other_name} at {other_support}, but the market remains near the opener without a meaningful response."
 
 
 def _rationale_key_numbers(side):
