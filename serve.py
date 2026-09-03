@@ -18,7 +18,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(404)
                 return
             try:
-                local_path = os.path.join(os.path.dirname(__file__), 'data', *filename.split('/')) if is_detail else ''
+                staging_root = os.path.join(os.path.dirname(__file__), 'data', 'two_side_staging')
+                use_staging = filename in {'anomaly_board.csv', 'anomaly_events.csv'} or is_detail
+                local_path = os.path.join(staging_root, *filename.split('/')) if use_staging else ''
                 if local_path and os.path.isfile(local_path):
                     with open(local_path, 'rb') as local_file:
                         body = local_file.read()

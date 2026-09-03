@@ -1,5 +1,6 @@
 """Build the public anomaly board without rerunning the legacy report pipeline."""
 
+import os
 from pathlib import Path
 from urllib.parse import quote
 
@@ -12,7 +13,7 @@ from build_live_recent import main as build_live_recent
 from main import infer_market_type, normalize_side_key
 
 
-DATA = Path("data")
+DATA = Path(os.environ.get("REDFOX_DATA_DIR", "data"))
 
 
 def _event_detail_filename(sport, game_id):
@@ -65,9 +66,11 @@ def market_for(row):
 
 
 def main():
+    DATA.mkdir(parents=True, exist_ok=True)
     # Capture any just-started games from the prior pregame export before this
     # run replaces it. The separate file is the only source for Live & Recent.
-    build_live_recent()
+    if DATA == Path("data"):
+        build_live_recent()
     snapshots = pd.read_csv(DATA / "snapshots.csv", dtype=str, keep_default_na=False)
 
     snapshots["market_display"] = snapshots.apply(market_for, axis=1)

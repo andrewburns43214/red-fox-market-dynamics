@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 import unittest
 
 import pandas as pd
@@ -23,6 +24,19 @@ class TestAnomalyBoard(unittest.TestCase):
         self.assertEqual(len(leaders), 2)
         self.assertEqual(leaders.iloc[0]["flagged_side"], "SEA +3")
         self.assertEqual(leaders.iloc[0]["board_rank"], 1)
+
+    def test_market_leader_retains_the_exact_two_side_payload(self):
+        board = pd.DataFrame([
+            {"sport": "nfl", "game_id": "g1", "market_display": "SPREAD", "flagged_side": "NE +3", "bets_pct": 31, "money_pct": 15, "open_line": "NE +3 (-110)", "current_line": "NE +3.5 (-118)", "reaction": "Contrarian", "path": "One-Way", "anomaly_sort": 1, "severity_sort": 80, "game": "NE @ PIT"},
+            {"sport": "nfl", "game_id": "g1", "market_display": "SPREAD", "flagged_side": "PIT -3", "bets_pct": 69, "money_pct": 85, "open_line": "PIT -3 (-110)", "current_line": "PIT -3.5 (-102)", "reaction": "Public Pressure", "anomaly_sort": 4, "severity_sort": 20, "game": "NE @ PIT"},
+        ])
+
+        leaders = select_market_leaders(board)
+
+        self.assertEqual(len(leaders), 1)
+        sides = json.loads(leaders.iloc[0]["market_sides"])
+        self.assertEqual([side["flagged_side"] for side in sides], ["NE +3", "PIT -3"])
+        self.assertEqual(sides[1]["current_line"], "PIT -3.5 (-102)")
 
     def test_board_rank_keeps_more_severe_like_signals_ahead_of_alphabetical_order(self):
         board = pd.DataFrame([

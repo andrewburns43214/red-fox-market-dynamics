@@ -1124,6 +1124,21 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .td-total { width: 205px; text-align:left; white-space:normal; }
 .td-pat { width: 110px; text-align:left; }
 .td-dec { width: 300px; text-align:left; }
+.td-market-read { width:220px; padding:6px 8px; text-align:left; white-space:normal; vertical-align:middle; }
+.two-side-cell { display:grid; gap:4px; min-width:0; }
+.two-side-row { display:grid; align-items:center; min-width:0; }
+.two-side-splits .two-side-row { grid-template-columns:29px minmax(0,1fr) 28px 28px; column-gap:5px; }
+.two-side-lines .two-side-row { grid-template-columns:29px minmax(0,1fr); column-gap:4px; }
+.two-side-read .two-side-row { grid-template-columns:minmax(0,1fr); gap:2px; }
+.two-side-label { overflow:hidden; text-overflow:ellipsis; color:var(--text2); font:700 8px var(--mono); white-space:nowrap; text-transform:uppercase; }
+.two-side-value { color:var(--text); font:600 10px var(--mono); white-space:nowrap; }
+.two-side-splits .two-side-value { text-align:right; }
+.two-side-track { height:2px; overflow:hidden; border-radius:2px; background:#f7d8d4; }
+.two-side-fill { height:100%; border-radius:2px; background:var(--red); }
+.two-side-line { min-width:0; color:var(--text); font:600 10px var(--mono); white-space:nowrap; }
+.two-side-read .two-side-label { color:var(--text); font-size:9px; }
+.two-side-read .mr { display:inline-flex; align-items:center; margin:0 3px 0 0!important; padding:2px 5px; font-size:8px; line-height:1.1; }
+.two-side-missing { color:var(--text3); font:600 9px var(--mono); }
 .td-pick { width: 72px; text-align:center; }
 .mr { border-radius: 999px; padding: 4px 8px; font-size: 9px; letter-spacing: .02em; }
 .signal-chip { cursor:pointer; border:1px solid transparent; font-family:var(--sans); }
@@ -1431,11 +1446,9 @@ td:last-child { border-radius: 0 8px 8px 0; }
           <th class="th-split" title="Share of tickets and handle on the labeled signal side">Bets / Money</th>
           <th class="th-line" title="First observed line in the available snapshot history" onclick="sortBy('open_line',this)">Open</th>
           <th class="th-line" title="Most recent observed line" onclick="sortBy('current_line',this)">Current</th>
-          <th class="th-edge" title="The exact side or total observed by the board. It is market evidence, not a wager recommendation. A smaller market lens appears only when the evidence qualifies for KPI tracking." onclick="sortBy('flagged_side',this)">Market Evidence</th>
-          <th class="th-total" title="Detected reaction between participation and price movement" onclick="sortBy('reaction',this)">Market Signal</th>
+          <th class="th-market-read" title="Side-specific market signals and context across the full market" onclick="sortBy('reaction',this)">Market Read</th>
+          <th class="th-dec" title="A concise explanation of both sides of the market">Signal Rationale</th>
           <th class="th-pat" title="Data quality: Clean has 3 or more valid observations; Thin has 2" onclick="sortBy('data_badge',this)">Data Quality</th>
-          <th class="th-dec" title="Plain-language evidence for the displayed signal state">Signal Rationale</th>
-          <th class="th-play" title="Open the chart, evidence, and observation history">Timeline</th>
               </tr>
             </thead>
             <tbody id="tbody"></tbody>
@@ -1998,6 +2011,64 @@ function splitCell(r){
       <span class="spct" style="${splitPctStyle('money',r.money_pct)}">${r.money_pct?Number(r.money_pct).toFixed(0)+'%':'-'}</span>
     </div>`;
 }
+function marketSides(r){
+  let sides=[];
+  try { sides=JSON.parse(r.market_sides||'[]'); } catch(error) { sides=[]; }
+  if(!Array.isArray(sides)||!sides.length) sides=[r];
+  const mkt=String(r.market_display||'').toUpperCase();
+  const game=String(r.game||'');
+  const [away='',home='']=game.split(' @ ');
+  const score=side=>{
+    const label=String(side.flagged_side||'').toLowerCase();
+    if(mkt==='TOTAL') return label.includes('over')?0:label.includes('under')?1:2;
+    const matches=name=>{ const short=String(name).trim().toLowerCase().split(/\s+/).pop(); return label.includes(String(name).trim().toLowerCase())||Boolean(short&&label.includes(short)); };
+    if(matches(away)) return 0;
+    if(matches(home)) return 1;
+    return 2;
+  };
+  return sides.slice().sort((a,b)=>score(a)-score(b));
+}
+function sideLabel(side,r){
+  const text=String(side.flagged_side||'').trim();
+  if(String(r.market_display||'').toUpperCase()==='TOTAL') return /^under/i.test(text)?'U':'O';
+  return text.replace(/\s[+-]\d+(?:\.\d+)?(?:\s*\([^)]*\))?\s*$/,'').split(/\s+/).pop()||text;
+}
+function sideSignals(side){
+  const values=[side.reaction,side.path,...String(side.context_chips||'').split('|')].map(value=>String(value||'').trim()).filter(Boolean);
+  return [...new Set(values)];
+}
+function twoSideSplitCell(r){
+  const sides=marketSides(r);
+  if(sides.length<2) return '<div class="two-side-missing">Paired side data unavailable</div>';
+  return '<div class="two-side-cell two-side-splits">'+sides.slice(0,2).map(side=>{
+    const bets=Number(side.bets_pct), money=Number(side.money_pct);
+    const betsText=Number.isFinite(bets)?bets.toFixed(0)+'%':'—', moneyText=Number.isFinite(money)?money.toFixed(0)+'%':'—';
+    return '<div class="two-side-row"><span class="two-side-label">'+escHtml(sideLabel(side,r))+'</span><span class="two-side-track"><span class="two-side-fill" style="width:'+Math.max(0,Math.min(100,bets||0))+'%"></span></span><span class="two-side-value">'+betsText+'</span><span class="two-side-value">'+moneyText+'</span></div>';
+  }).join('')+'</div>';
+}
+function twoSideLineCell(r,field){
+  const sides=marketSides(r);
+  if(sides.length<2) return '<div class="two-side-missing">—</div>';
+  return '<div class="two-side-cell two-side-lines">'+sides.slice(0,2).map(side=>'<div class="two-side-row"><span class="two-side-label">'+escHtml(sideLabel(side,r))+'</span><span class="two-side-line">'+escHtml(side[field]||'—')+'</span></div>').join('')+'</div>';
+}
+function twoSideReadCell(r){
+  const sides=marketSides(r);
+  if(sides.length<2) return '<div class="two-side-missing">Market read loading</div>';
+  return '<div class="two-side-cell two-side-read">'+sides.slice(0,2).map(side=>{
+    const chips=sideSignals(side).map(value=>anomalyBadge(value)).join('');
+    return '<div class="two-side-row"><span><span class="two-side-label">'+escHtml(side.flagged_side||sideLabel(side,r))+'</span>'+chips+'</span></div>';
+  }).join('')+'</div>';
+}
+function twoSideRationale(r){
+  const sides=marketSides(r);
+  if(sides.length<2) return displayRationale(r);
+  const [first,second]=sides;
+  const firstBets=Number(first.bets_pct), firstMoney=Number(first.money_pct), secondBets=Number(second.bets_pct), secondMoney=Number(second.money_pct);
+  const firstSplit=Number.isFinite(firstBets)&&Number.isFinite(firstMoney)?firstBets.toFixed(0)+'% bets / '+firstMoney.toFixed(0)+'% money':'split unavailable';
+  const secondSplit=Number.isFinite(secondBets)&&Number.isFinite(secondMoney)?secondBets.toFixed(0)+'% bets / '+secondMoney.toFixed(0)+'% money':'split unavailable';
+  const movement=(first.open_line&&first.current_line&&first.open_line!==first.current_line)?' '+escHtml(first.flagged_side||sideLabel(first,r))+' moved from '+escHtml(first.open_line)+' to '+escHtml(first.current_line)+'.':'';
+  return escHtml(first.flagged_side||sideLabel(first,r))+' has '+firstSplit+', while '+escHtml(second.flagged_side||sideLabel(second,r))+' has '+secondSplit+'.'+movement;
+}
 function splitSummary(r){
   if(!hasSplitRead(r)) return '<span style="color:var(--text3)">Split data unavailable</span>';
   return '<span style="'+splitPctStyle('bets',r.bets_pct)+'">'+Number(r.bets_pct||0).toFixed(0)+'%</span> bets | <span style="'+splitPctStyle('money',r.money_pct)+'">'+Number(r.money_pct||0).toFixed(0)+'%</span> money';
@@ -2184,13 +2255,11 @@ function renderBoard(resetPage=true){
   document.getElementById('board-meta').textContent=`${_nGames} games | showing ${visibleData.length} of ${data.length} markets | ${_marketLabel} | sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' | grouped':''}`;
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
   visibleData.forEach((r,i)=>{
-    const an=anomalyParts(r);
     const rankReason=String(r.rank_reason||'Board priority reflects verified signal strength and market maturity.').replace(/"/g,'&quot;');
-    const signalChips=orderedSignalValues(an).map(value=>anomalyBadge(value)).join('');
     const tr=document.createElement('tr');
     tr.title='Open timeline and evidence';
     tr.onclick=()=>openGameDetail(window._boardRows[i]);
-    if(an.reaction==='Contrarian'||an.reaction==='Freeze') tr.classList.add('row-hi');
+    if((r.recorded_reaction||r.reaction)==='Contrarian'||(r.recorded_reaction||r.reaction)==='Freeze') tr.classList.add('row-hi');
     if(r._grpSub) tr.classList.add('row-grp-sub');
     if(r._grpFirst) tr.classList.add('row-grp-first');
     tr.innerHTML=`
@@ -2200,14 +2269,12 @@ function renderBoard(resetPage=true){
         <div class="game-row2"><span class="game-row2-time">${r.kickoff_time||'-'}</span></div>
       </td>
       <td class="td-mkt">${r.market_display||'-'}</td>
-      <td class="td-split">${splitCell(r)}</td>
-      <td class="td-line td-open">${r.open_line||'-'}</td>
-      <td class="td-line td-current">${r.current_line||'-'}</td>
-      <td class="td-edge">${actionLens(r)}</td>
-      <td class="td-total">${signalChips}</td>
+      <td class="td-split">${twoSideSplitCell(r)}</td>
+      <td class="td-line td-open">${twoSideLineCell(r,'open_line')}</td>
+      <td class="td-line td-current">${twoSideLineCell(r,'current_line')}</td>
+      <td class="td-market-read">${twoSideReadCell(r)}</td>
+      <td class="td-dec"><span style="font-size:11px;color:var(--text2);white-space:normal;display:block;line-height:1.35">${twoSideRationale(r)}</span></td>
       <td class="td-pat">${dataBadge(r.data_badge)}</td>
-      <td class="td-dec"><span style="font-size:11px;color:var(--text2);white-space:normal;display:block;line-height:1.35">${displayRationale(r)}</span></td>
-      <td class="td-pick"><button class="mr mr-neutral" onclick="event.stopPropagation();openGameDetail(window._boardRows[${i}])">View</button></td>
     `;
     tbody.appendChild(tr);
   });
