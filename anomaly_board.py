@@ -1,5 +1,6 @@
 import json
 import math
+import re
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -50,6 +51,7 @@ HIGH_SPREAD_BY_SPORT = {
 LATE_WINDOW_HOURS_BY_SPORT = {
     "nfl": 6.0,
     "ncaaf": 6.0,
+    "cfb": 6.0,
 }
 MIN_CANDIDATE_OBSERVATIONS = 3
 MIN_FREEZE_FADE_OBSERVATIONS = 4
@@ -84,6 +86,27 @@ def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
         history_key_cols = ["sport", "game_id", "market_display", "side_key"]
         candidate_keys = latest_side_df[history_key_cols].drop_duplicates()
         history_df = history_df.merge(candidate_keys, on=history_key_cols, how="inner")
+        # A two-sided market must build both price paths from the same complete
+        # captures.  Otherwise a side-specific first observation can make one
+        # total appear to have two opening numbers.  Preserve one-sided inputs
+        # for diagnostic/unit paths; only markets represented by two current
+        # sides require paired historical captures.
+        market_id_cols = ["sport", "game_id", "market_display"]
+        market_keys = [*market_id_cols, "timestamp"]
+        expected_sides = (
+            latest_side_df.groupby(market_id_cols, dropna=False)["side_key"].nunique()
+            .reset_index(name="expected_side_count")
+        )
+        complete_captures = (
+            history_df.groupby(market_keys, dropna=False)["side_key"].nunique()
+            .reset_index(name="side_count")
+            .merge(expected_sides, on=market_id_cols, how="left")
+        )
+        valid_captures = complete_captures[
+            (complete_captures["expected_side_count"] < 2)
+            | (complete_captures["side_count"] >= complete_captures["expected_side_count"])
+        ][market_keys]
+        history_df = history_df.merge(valid_captures, on=market_keys, how="inner")
 
     if not l2_df.empty:
         l2_df["timestamp"] = pd.to_datetime(l2_df.get("timestamp"), errors="coerce", utc=True, format="mixed")
@@ -160,10 +183,11 @@ def select_market_leaders(board_df):
     for column in keys:
         if column not in work.columns:
             work[column] = ""
-    recorded_reaction = work.get("recorded_reaction", pd.Series("", index=work.index))
-    work["_has_recorded_signal"] = recorded_reaction.fillna("").astype(str).str.strip().ne("")
     current_reaction = work.get("reaction", pd.Series("Watch", index=work.index))
-    effective_reaction = recorded_reaction.where(work["_has_recorded_signal"], current_reaction).fillna("Watch")
+    # Recorded signals are immutable timeline evidence, not the current public
+    # market read.  Using them as the board's primary state can make a Watch
+    # chip render beside a Contrarian rationale, which is misleading.
+    effective_reaction = current_reaction.fillna("Watch")
     context = work.get("context_chips", pd.Series("", index=work.index)).fillna("").astype(str)
     market_move = context.str.contains(r"(?:^|\|)\s*Market Move\s*(?:\||$)", regex=True)
     price_risk = context.str.contains(r"(?:^|\|)\s*Price Risk\s*(?:\||$)", regex=True)
@@ -189,8 +213,8 @@ def select_market_leaders(board_df):
     work["_kickoff_sort"] = kickoff_sort.fillna("").astype(str)
 
     work = work.sort_values(
-        ["_signal_rank", "_anomaly_sort", "_maturity_sort", "_severity_sort", "_kickoff_sort", "_has_recorded_signal", "flagged_side"],
-        ascending=[True, True, True, False, True, False, True],
+        ["_signal_rank", "_anomaly_sort", "_maturity_sort", "_severity_sort", "_kickoff_sort", "flagged_side"],
+        ascending=[True, True, True, False, True, True],
         kind="mergesort",
     )
     # A published board row remains one ranked market, but carries an exact
@@ -198,7 +222,10 @@ def select_market_leaders(board_df):
     # split, or signal context from a single-side leader.
     side_fields = [
         "flagged_side", "bets_pct", "money_pct", "open_line", "current_line",
-        "reaction", "path", "context_chips", "anomaly_chips", "data_badge",
+        "reaction", "recorded_reaction", "path", "context_chips", "anomaly_chips", "data_badge",
+        "broader_market_comparison", "line_dir_changes", "return_toward_open",
+        "line_move_abs", "price_move_pct", "observation_count", "key_numbers_crossed",
+        "action_side", "action_type", "kpi_eligible",
     ]
     available_side_fields = [field for field in side_fields if field in work.columns]
     side_payload = (
@@ -209,13 +236,234 @@ def select_market_leaders(board_df):
     )
     leaders = work.drop_duplicates(keys, keep="first").copy()
     leaders = leaders.merge(side_payload, on=keys, how="left", validate="one_to_one")
+    semantics = leaders.apply(_market_read_semantics, axis=1, result_type="expand")
+    leaders[["read_anchor_side", "directional_lean_side"]] = semantics
+    # The board consumes this prebuilt market-level explanation verbatim.  Keep
+    # narrative logic beside the evaluated evidence rather than duplicating it
+    # in the browser, where only partial facts are available.
+    leaders["market_rationale"] = leaders.apply(_market_rationale, axis=1)
     leaders = leaders.sort_values(
-        ["_signal_rank", "_anomaly_sort", "_maturity_sort", "_severity_sort", "_kickoff_sort", "_has_recorded_signal", "game", "market_display"],
-        ascending=[True, True, True, False, True, False, True, True],
+        ["_signal_rank", "_anomaly_sort", "_maturity_sort", "_severity_sort", "_kickoff_sort", "game", "market_display"],
+        ascending=[True, True, True, False, True, True, True],
         kind="mergesort",
     ).reset_index(drop=True)
     leaders["board_rank"] = range(1, len(leaders) + 1)
-    return leaders.drop(columns=["_has_recorded_signal", "_signal_rank", "_anomaly_sort", "_maturity_sort", "_severity_sort", "_kickoff_sort"], errors="ignore")
+    return leaders.drop(columns=["_signal_rank", "_anomaly_sort", "_maturity_sort", "_severity_sort", "_kickoff_sort"], errors="ignore")
+
+
+def _market_read_semantics(leader):
+    """Return (read anchor, directional lean) without turning context into a pick."""
+    try:
+        sides = json.loads(str(leader.get("market_sides", "[]")))
+    except (TypeError, json.JSONDecodeError):
+        sides = []
+    if not sides:
+        return "", ""
+    anchor = min(sides, key=_rationale_side_rank)
+    anchor_side = str(anchor.get("flagged_side", "")).strip()
+    primary = str(anchor.get("reaction") or "Watch").strip()
+    if primary in {"Contrarian", "Follow"}:
+        return anchor_side, anchor_side
+    if primary == "Freeze":
+        eligible = str(anchor.get("kpi_eligible", "")).strip().lower() == "true"
+        action_type = str(anchor.get("action_type", "")).strip().upper()
+        action_side = str(anchor.get("action_side", "")).strip()
+        if eligible and action_type == "FADE CANDIDATE" and action_side:
+            return anchor_side, action_side
+    return anchor_side, ""
+
+
+def _market_rationale(leader):
+    """Build one factual, whole-market rationale from the paired side payload.
+
+    Classification remains side-level.  This layer only explains the paired
+    relationship in primary-read -> exact behavior -> context/risk order.
+    """
+    try:
+        sides = json.loads(str(leader.get("market_sides", "[]")))
+    except (TypeError, json.JSONDecodeError):
+        sides = []
+    if len(sides) < 2:
+        return str(leader.get("reason", "Market evidence is still loading.")).strip()
+
+    market = str(leader.get("market_display", "")).upper()
+    sides = sides[:2]
+    strongest = min(sides, key=_rationale_side_rank)
+    other = next((side for side in sides if side is not strongest), sides[1])
+    primary = str(strongest.get("reaction") or "Watch").strip()
+    context = _rationale_context(strongest)
+    other_context = _rationale_context(other)
+    strongest_name = _rationale_side_name(strongest, market)
+    other_name = _rationale_side_name(other, market)
+    strongest_support = _rationale_support(strongest)
+    other_support = _rationale_support(other)
+
+    if "Split Cap" in context or "Split Cap" in other_context:
+        sentence = "The source returned a capped 0%/100% split, so this market is shown for price context only."
+        if "Whipsaw" in context or "Whipsaw" in other_context:
+            sentence += " Its price path also reversed, adding Whipsaw risk."
+        return sentence
+    if "Heavy Favorite" in context or "Heavy Favorite" in other_context:
+        return "A short moneyline favorite has concentrated tickets; that may be parlay-driven, so the split remains context only."
+
+    if primary == "Contrarian":
+        sentence = _rationale_contrarian(strongest, other, market, strongest_name, other_name, other_support)
+    elif primary == "Freeze":
+        sentence = f"{strongest_name} has {strongest_support}, but the market remains near its opening number—heavy pressure has not produced a meaningful response."
+    elif primary == "Follow":
+        sentence = _rationale_follow(strongest, market, strongest_name, strongest_support)
+    else:
+        sentence = _rationale_watch(strongest, other, market, strongest_name, other_name, strongest_support, other_support, context)
+
+    has_whipsaw = "Whipsaw" in context or "Whipsaw" in other_context
+    if has_whipsaw and "whipsaw" not in sentence.lower() and "reversed" not in sentence.lower():
+        sentence += " The path later reversed, adding Whipsaw risk."
+    if "Late" in context:
+        sentence += " The move first appeared inside the closing window."
+    if "Market Lag" in context:
+        broader = str(strongest.get("broader_market_comparison", "")).strip()
+        sentence += " " + (broader if broader else "The broader market moved while DraftKings remained near open.")
+    keys = _rationale_key_numbers(strongest)
+    if keys:
+        sentence += f" It crossed or touched key number{'s' if len(keys) > 1 else ''} {', '.join(keys)}."
+    if "Price Risk" in context:
+        sentence += " Price risk limits how much weight to place on the move alone."
+    if str(strongest.get("data_badge", "")).upper() == "THIN":
+        sentence += " Only two valid snapshots are available, so the read is preliminary."
+    return _finish_sentence(sentence)
+
+
+def _rationale_context(side):
+    context = {value.strip() for value in str(side.get("context_chips", "")).split("|") if value.strip()}
+    path = str(side.get("path", "")).strip()
+    if path:
+        context.add(path)
+    return context
+
+
+def _rationale_side_rank(side):
+    primary = str(side.get("reaction") or "Watch").strip()
+    primary_rank = {"Contrarian": 0, "Freeze": 1, "Follow": 2, "Watch": 3}.get(primary, 4)
+    context = _rationale_context(side)
+    context_rank = 9
+    for index, label in enumerate(["Market Lag", "Whipsaw", "Juice Move", "Low Bets / High $", "Public Pressure", "Developing Read", "Market Move", "Ticket-led"]):
+        if label in context or str(side.get("path", "")) == label:
+            context_rank = index
+            break
+    return primary_rank, context_rank, -float(side.get("severity_sort") or 0)
+
+
+def _rationale_side_name(side, market):
+    name = str(side.get("flagged_side", "")).strip()
+    if market == "TOTAL":
+        return name or "the total side"
+    return re.sub(r"\s*\([^)]*\)\s*$", "", name) or "the listed side"
+
+
+def _rationale_support(side):
+    return f"{_rationale_pct(side.get('bets_pct'))} bets / {_rationale_pct(side.get('money_pct'))} money"
+
+
+def _rationale_pct(value):
+    number = _num(value)
+    return f"{number:.0f}%" if math.isfinite(number) else "—"
+
+
+def _rationale_line_number(line):
+    text = str(line or "")
+    match = re.search(r"(?:^|\s)[OU]\s*([+-]?\d+(?:\.\d+)?)", text, re.I)
+    if match:
+        return match.group(1)
+    match = re.search(r"([+-]?\d+(?:\.\d+)?)", text)
+    return match.group(1) if match else ""
+
+
+def _rationale_base_line(line):
+    return re.sub(r"\s*\([^)]*\)\s*$", "", str(line or "")).strip()
+
+
+def _rationale_odds(line):
+    match = re.search(r"\(([-+]\d+)\)\s*$", str(line or ""))
+    return match.group(1) if match else ""
+
+
+def _rationale_transition(subject, open_line, current_line):
+    """Describe a line faithfully without claiming a stationary price moved."""
+    open_text, current_text = str(open_line or "").strip(), str(current_line or "").strip()
+    if open_text == current_text:
+        return f"{subject} held at {_rationale_base_line(current_text) or current_text}"
+    return f"{subject} moved {open_text} → {current_text}"
+
+
+def _rationale_contrarian(side, other, market, side_name, other_name, other_support):
+    open_line, current_line = str(side.get("open_line", "")), str(side.get("current_line", ""))
+    base_open, base_current = _rationale_base_line(open_line), _rationale_base_line(current_line)
+    old_odds, new_odds = _rationale_odds(open_line), _rationale_odds(current_line)
+    if str(side.get("path", "")) == "Juice Move" and base_open == base_current:
+        return f"Despite {other_support} on {other_name}, {side_name} held {base_current} while juice moved {old_odds} → {new_odds} in its favor, putting price movement against the heavier-supported side."
+    if market == "TOTAL":
+        start, end = _rationale_line_number(open_line), _rationale_line_number(current_line)
+        try:
+            verb = "fell" if float(end) < float(start) else "rose" if float(end) > float(start) else "held"
+        except (TypeError, ValueError):
+            verb = "moved"
+        return f"Despite {other_support} on {other_name}, the total {verb} {start} → {end} toward {side_name}, putting price movement against the heavier-supported side."
+    return f"Despite {other_support} on {other_name}, {side_name} moved {open_line} → {current_line}, putting price movement against the heavier-supported side."
+
+
+def _rationale_follow(side, market, side_name, support):
+    open_line, current_line = str(side.get("open_line", "")), str(side.get("current_line", ""))
+    base_open, base_current = _rationale_base_line(open_line), _rationale_base_line(current_line)
+    old_odds, new_odds = _rationale_odds(open_line), _rationale_odds(current_line)
+    if open_line == current_line:
+        return f"{side_name} has {support} and held at {_rationale_base_line(current_line) or current_line}; no price movement is implied."
+    if str(side.get("path", "")) == "Juice Move" and base_open == base_current:
+        return f"{side_name} has {support}, while the line stayed {base_current} and juice moved {old_odds} → {new_odds} in the same direction."
+    if market == "TOTAL":
+        start, end = _rationale_line_number(open_line), _rationale_line_number(current_line)
+        try:
+            verb = "rose" if float(end) > float(start) else "fell" if float(end) < float(start) else "held"
+        except (TypeError, ValueError):
+            verb = "moved"
+        return f"{side_name} has {support}, and the total {verb} {start} → {end} in the same direction."
+    return f"{side_name} has {support} and moved {open_line} → {current_line}, confirming the same direction."
+
+
+def _rationale_watch(side, other, market, side_name, other_name, side_support, other_support, context):
+    path = str(side.get("path", "")).strip()
+    open_line, current_line = str(side.get("open_line", "")), str(side.get("current_line", ""))
+    if open_line == current_line and path not in {"Whipsaw", "Juice Move"}:
+        return f"{side_name} has {side_support} versus {other_name} at {other_support}, and held at {_rationale_base_line(current_line) or current_line}."
+    if "Whipsaw" in context or path == "Whipsaw":
+        if market == "TOTAL":
+            end = _rationale_line_number(current_line)
+            return f"The total reversed direction and returned near {end}, leaving neither side with sustained control."
+        return f"{side_name} and {other_name} traded through a reversal, leaving neither side with sustained control."
+    if "Juice Move" in context or path == "Juice Move":
+        base_open, base_current = _rationale_base_line(open_line), _rationale_base_line(current_line)
+        old_odds, new_odds = _rationale_odds(open_line), _rationale_odds(current_line)
+        if base_open == base_current:
+            return f"{side_name} stayed {base_current} while juice moved {old_odds} → {new_odds}."
+        return f"{side_name} moved {open_line} → {current_line}, with the price change doing most of the work."
+    if "Low Bets / High $" in context:
+        return f"Only {_rationale_pct(side.get('bets_pct'))} of tickets are on {side_name}, but {_rationale_pct(side.get('money_pct'))} of money is there; {side_name} moved {open_line} → {current_line}. The split conflict keeps the market on Watch."
+    if "Developing Read" in context:
+        return f"{side_name} has {side_support} and has started to move {open_line} → {current_line}, but remains below the confirmed threshold."
+    if "Ticket-led" in context:
+        return f"{side_name} has {side_support}; ticket support exceeds money support, so the move has not earned a confirmed read."
+    if "Public Pressure" in context:
+        return f"{side_name} has concentrated support at {side_support}, but the market has not produced a meaningful confirming move."
+    if "Market Move" in context:
+        return f"{side_name} moved {open_line} → {current_line}; the change is material, but the current split does not create a confirmed directional read."
+    return f"{side_name} has {side_support} versus {other_name} at {other_support}; the market remains on Watch."
+
+
+def _rationale_key_numbers(side):
+    raw = str(side.get("key_numbers_crossed", "")).strip()
+    if raw:
+        return [value.strip().lstrip("K") for value in raw.split("|") if value.strip()]
+    fallback = str(side.get("context_chips", ""))
+    return re.findall(r"\bK(\d+)\b", fallback)
 
 
 def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
@@ -303,7 +551,8 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     low_bets_high_money = split_alert_eligible and bets_pct <= 35 and money_pct >= 60
 
     move_toward_side = _move_toward_side(points, market, latest_row)
-    key_number = _key_number_chip(sport, market, points)
+    key_numbers_crossed = _key_numbers_crossed(sport, market, points)
+    key_number = key_numbers_crossed[0] if key_numbers_crossed else ""
     broader = _broader_market_context(latest_row, l2_df, market, move_threshold, hold_threshold)
     stale_dk = broader["stale_dk"]
 
@@ -335,8 +584,13 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         context_chips.append("Split Cap")
     if favorite_risk:
         context_chips.append("Heavy Favorite")
-    if key_number:
-        context_chips.append(key_number)
+    # Preserve every key crossed/touched for the board and rationale.  The
+    # first key remains available separately for legacy action gating only.
+    context_chips.extend(key_numbers_crossed)
+    if late_move and path_label != "Late":
+        # A reversal or juice move can still have developed late. Keep both
+        # facts rather than forcing path labels to be mutually exclusive.
+        context_chips.append("Late")
     if stale_dk:
         context_chips.append("Market Lag")
     if reaction == "Watch" and public_support and not split_capped and not favorite_risk:
@@ -448,6 +702,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
             "return_toward_open": return_to_open,
             "broader_market_comparison": broader["summary"],
             "key_number_note": key_number,
+            "key_numbers_crossed": " | ".join(key_numbers_crossed),
         })
 
     return {
@@ -479,6 +734,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         "return_toward_open": return_to_open,
         "broader_market_comparison": broader["summary"],
         "key_number_note": key_number,
+        "key_numbers_crossed": " | ".join(key_numbers_crossed),
         "open_line_value": round(open_value, 3),
         "current_line_value": round(current_value, 3),
         "move_abs": round(move_abs, 3),
@@ -723,7 +979,11 @@ def _move_toward_side(points, market, latest_row):
 
 def _is_late_move(points, market, move_threshold, hours_to_kickoff, sport):
     """Label a move late only when it occurs in the actual closing window."""
-    if hours_to_kickoff is None or hours_to_kickoff > LATE_WINDOW_HOURS_BY_SPORT.get(sport, 3.0):
+    if (
+        hours_to_kickoff is None
+        or hours_to_kickoff < 0
+        or hours_to_kickoff > LATE_WINDOW_HOURS_BY_SPORT.get(sport, 3.0)
+    ):
         return False
     if len(points) < 3:
         return False
@@ -738,21 +998,30 @@ def _is_late_move(points, market, move_threshold, hours_to_kickoff, sport):
     return (target_index / max(1, len(points) - 1)) >= 0.67
 
 
-def _key_number_chip(sport, market, points):
+def _key_numbers_crossed(sport, market, points):
     if market != "SPREAD":
-        return ""
+        return []
     keys = KEY_NUMBERS_BY_SPORT.get(sport, [])
     if not keys:
-        return ""
+        return []
     values = [abs(point["value"]) for point in points]
+    crossed = []
     for key in keys:
         for left, right in zip(values, values[1:]):
             lo, hi = sorted([left, right])
             if math.isclose(left, key, abs_tol=1e-9) or math.isclose(right, key, abs_tol=1e-9):
-                return f"K{int(key)}"
+                crossed.append(f"K{int(key)}")
+                break
             if lo < key < hi:
-                return f"K{int(key)}"
-    return ""
+                crossed.append(f"K{int(key)}")
+                break
+    return crossed
+
+
+def _key_number_chip(sport, market, points):
+    """Compatibility helper for logic that only needs to know one key exists."""
+    keys = _key_numbers_crossed(sport, market, points)
+    return keys[0] if keys else ""
 
 
 def _broader_market_context(latest_row, l2_df, market, move_threshold, hold_threshold):

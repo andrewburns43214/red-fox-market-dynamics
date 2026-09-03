@@ -4,7 +4,7 @@ import unittest
 
 import pandas as pd
 
-from anomaly_board import build_anomaly_outputs, select_market_leaders
+from anomaly_board import _is_late_move, _key_numbers_crossed, build_anomaly_outputs, select_market_leaders
 
 
 def _ts(hour, minute):
@@ -12,9 +12,19 @@ def _ts(hour, minute):
 
 
 class TestAnomalyBoard(unittest.TestCase):
+    def test_late_requires_an_upcoming_kickoff_inside_its_closing_window(self):
+        points = [
+            {"value": 50.0, "implied_pct": None},
+            {"value": 50.5, "implied_pct": None},
+            {"value": 51.0, "implied_pct": None},
+        ]
+        self.assertTrue(_is_late_move(points, "TOTAL", 1.0, 4.0, "nfl"))
+        self.assertFalse(_is_late_move(points, "TOTAL", 1.0, 7.0, "nfl"))
+        self.assertFalse(_is_late_move(points, "TOTAL", 1.0, -0.1, "nfl"))
+
     def test_board_publishes_one_evidence_leader_per_market(self):
         board = pd.DataFrame([
-            {"sport": "nfl", "game_id": "g1", "market_display": "SPREAD", "flagged_side": "SEA +3", "anomaly_sort": 3, "severity_sort": 80, "recorded_reaction": "Contrarian", "game": "NE @ SEA"},
+            {"sport": "nfl", "game_id": "g1", "market_display": "SPREAD", "flagged_side": "SEA +3", "anomaly_sort": 3, "severity_sort": 80, "reaction": "Contrarian", "recorded_reaction": "Contrarian", "game": "NE @ SEA"},
             {"sport": "nfl", "game_id": "g1", "market_display": "SPREAD", "flagged_side": "NE -3", "anomaly_sort": 1, "severity_sort": 70, "game": "NE @ SEA"},
             {"sport": "nfl", "game_id": "g1", "market_display": "TOTAL", "flagged_side": "Over 44.5", "anomaly_sort": 2, "severity_sort": 60, "game": "NE @ SEA"},
         ])
@@ -37,6 +47,108 @@ class TestAnomalyBoard(unittest.TestCase):
         sides = json.loads(leaders.iloc[0]["market_sides"])
         self.assertEqual([side["flagged_side"] for side in sides], ["NE +3", "PIT -3"])
         self.assertEqual(sides[1]["current_line"], "PIT -3.5 (-102)")
+
+    def test_canonical_market_rationale_matrix(self):
+        """Every public read/context family gets a factual paired explanation."""
+        cases = [
+            (
+                "contrarian total", "TOTAL",
+                [
+                    {"flagged_side": "Over 56.5", "bets_pct": 70, "money_pct": 82, "open_line": "O 56.5 (-105)", "current_line": "O 55.5 (-115)", "reaction": "Watch", "context_chips": "Public Pressure"},
+                    {"flagged_side": "Under 56.5", "bets_pct": 30, "money_pct": 18, "open_line": "U 56.5 (-115)", "current_line": "U 55.5 (-105)", "reaction": "Contrarian", "context_chips": "Whipsaw"},
+                ], ["Despite 70% bets / 82% money", "total fell 56.5 → 55.5", "Whipsaw risk"],
+            ),
+            (
+                "follow moneyline", "MONEYLINE",
+                [
+                    {"flagged_side": "CHI Bears", "bets_pct": 79, "money_pct": 71, "open_line": "-142", "current_line": "-162", "reaction": "Follow"},
+                    {"flagged_side": "CAR Panthers", "bets_pct": 21, "money_pct": 29, "open_line": "+120", "current_line": "+136", "reaction": "Watch"},
+                ], ["CHI Bears has 79% bets / 71% money", "-142 → -162", "confirming the same direction"],
+            ),
+            (
+                "freeze", "SPREAD",
+                [
+                    {"flagged_side": "Team A -3", "bets_pct": 86, "money_pct": 78, "open_line": "-3 (-110)", "current_line": "-3 (-110)", "reaction": "Freeze"},
+                    {"flagged_side": "Team B +3", "bets_pct": 14, "money_pct": 22, "open_line": "+3 (-110)", "current_line": "+3 (-110)", "reaction": "Watch"},
+                ], ["86% bets / 78% money", "near its opening number", "meaningful response"],
+            ),
+            (
+                "juice move", "SPREAD",
+                [
+                    {"flagged_side": "Dodgers -1.5", "bets_pct": 74, "money_pct": 68, "open_line": "-1.5 (-105)", "current_line": "-1.5 (-135)", "reaction": "Follow", "path": "Juice Move"},
+                    {"flagged_side": "Opponents +1.5", "bets_pct": 46, "money_pct": 48, "open_line": "+1.5 (-115)", "current_line": "+1.5 (+115)", "reaction": "Watch"},
+                ], ["stayed -1.5", "juice moved -105 → -135"],
+            ),
+            (
+                "watch whipsaw", "TOTAL",
+                [
+                    {"flagged_side": "Over 59.5", "bets_pct": 51, "money_pct": 49, "open_line": "O 59.5 (-110)", "current_line": "O 59.5 (-110)", "reaction": "Watch", "path": "Whipsaw"},
+                    {"flagged_side": "Under 59.5", "bets_pct": 49, "money_pct": 51, "open_line": "U 59.5 (-110)", "current_line": "U 59.5 (-110)", "reaction": "Watch"},
+                ], ["reversed direction", "neither side with sustained control"],
+            ),
+            (
+                "low bets high money and keys", "SPREAD",
+                [
+                    {"flagged_side": "Albany +18.5", "bets_pct": 31, "money_pct": 81, "open_line": "+24.5 (-110)", "current_line": "+18.5 (-110)", "reaction": "Watch", "context_chips": "Low Bets / High $ | K10", "key_numbers_crossed": "K10 | K14"},
+                    {"flagged_side": "Favorite -18.5", "bets_pct": 69, "money_pct": 19, "open_line": "-24.5 (-110)", "current_line": "-18.5 (-110)", "reaction": "Watch"},
+                ], ["Only 31% of tickets", "+24.5 (-110) → +18.5 (-110)", "key numbers 10, 14"],
+            ),
+        ]
+        for name, market, sides, expected in cases:
+            rows = []
+            for index, side in enumerate(sides):
+                rows.append({"sport": "nfl", "game_id": name, "market_display": market, "game": "Away @ Home", "anomaly_sort": index + 1, "severity_sort": 20 - index, **side})
+            rationale = select_market_leaders(pd.DataFrame(rows)).iloc[0]["market_rationale"]
+            for fragment in expected:
+                self.assertIn(fragment, rationale, msg=f"{name}: {rationale}")
+
+    def test_all_crossed_key_numbers_are_preserved(self):
+        points = [{"value": -9.5}, {"value": -14.5}]
+        self.assertEqual(_key_numbers_crossed("nfl", "SPREAD", points), ["K10", "K14"])
+
+    def test_all_crossed_key_numbers_flow_to_board_context(self):
+        latest = pd.DataFrame([
+            {"sport": "nfl", "game_id": "keys", "market_display": "SPREAD", "side_key": "Away", "side": "Away +9.5", "game": "Away @ Home", "bets_pct": 30, "money_pct": 20, "open_line": "Away +9.5 (-110)", "current_line": "Away +14.5 (-110)", "_sort_time": _ts(17, 0)},
+            {"sport": "nfl", "game_id": "keys", "market_display": "SPREAD", "side_key": "Home", "side": "Home -9.5", "game": "Away @ Home", "bets_pct": 70, "money_pct": 80, "open_line": "Home -9.5 (-110)", "current_line": "Home -14.5 (-110)", "_sort_time": _ts(17, 0)},
+        ])
+        history = pd.DataFrame([
+            {"timestamp": _ts(15, 0), "sport": "nfl", "game_id": "keys", "market_display": "SPREAD", "side_key": "Away", "current_line": "Away +9.5 (-110)", "bets_pct": 30, "money_pct": 20},
+            {"timestamp": _ts(16, 0), "sport": "nfl", "game_id": "keys", "market_display": "SPREAD", "side_key": "Away", "current_line": "Away +14.5 (-110)", "bets_pct": 30, "money_pct": 20},
+            {"timestamp": _ts(15, 0), "sport": "nfl", "game_id": "keys", "market_display": "SPREAD", "side_key": "Home", "current_line": "Home -9.5 (-110)", "bets_pct": 70, "money_pct": 80},
+            {"timestamp": _ts(16, 0), "sport": "nfl", "game_id": "keys", "market_display": "SPREAD", "side_key": "Home", "current_line": "Home -14.5 (-110)", "bets_pct": 70, "money_pct": 80},
+        ])
+        board, _ = build_anomaly_outputs(latest, history, pd.DataFrame(), as_of=_ts(17, 0))
+        self.assertIn("K10", board.iloc[0]["context_chips"])
+        self.assertIn("K14", board.iloc[0]["context_chips"])
+
+    def test_canonical_rationale_keeps_path_context_and_never_claims_a_held_line_moved(self):
+        board = pd.DataFrame([
+            {"sport": "nfl", "game_id": "g-path", "market_display": "MONEYLINE", "game": "Away @ Home", "flagged_side": "Away", "bets_pct": 79, "money_pct": 71, "open_line": "+295", "current_line": "+295", "reaction": "Follow", "path": "Late", "anomaly_sort": 1, "severity_sort": 80},
+            {"sport": "nfl", "game_id": "g-path", "market_display": "MONEYLINE", "game": "Away @ Home", "flagged_side": "Home", "bets_pct": 21, "money_pct": 29, "open_line": "-350", "current_line": "-350", "reaction": "Watch", "anomaly_sort": 2, "severity_sort": 10},
+        ])
+        rationale = select_market_leaders(board).iloc[0]["market_rationale"]
+        self.assertIn("held at +295", rationale)
+        self.assertIn("no price movement is implied", rationale)
+        self.assertIn("closing window", rationale)
+        self.assertNotIn("+295 → +295", rationale)
+
+    def test_follow_whipsaw_mentions_the_reversal_in_canonical_rationale(self):
+        board = pd.DataFrame([
+            {"sport": "nfl", "game_id": "g-whip", "market_display": "SPREAD", "game": "Away @ Home", "flagged_side": "Away +3", "bets_pct": 78, "money_pct": 68, "open_line": "+3 (-110)", "current_line": "+2.5 (-110)", "reaction": "Follow", "path": "Whipsaw", "anomaly_sort": 1, "severity_sort": 80},
+            {"sport": "nfl", "game_id": "g-whip", "market_display": "SPREAD", "game": "Away @ Home", "flagged_side": "Home -3", "bets_pct": 22, "money_pct": 32, "open_line": "-3 (-110)", "current_line": "-2.5 (-110)", "reaction": "Watch", "anomaly_sort": 2, "severity_sort": 10},
+        ])
+        rationale = select_market_leaders(board).iloc[0]["market_rationale"]
+        self.assertIn("path later reversed", rationale)
+        self.assertIn("Whipsaw risk", rationale)
+
+    def test_read_anchor_and_directional_lean_are_distinct_for_freeze(self):
+        board = pd.DataFrame([
+            {"sport": "nfl", "game_id": "freeze", "market_display": "SPREAD", "game": "Away @ Home", "flagged_side": "Away +3", "bets_pct": 80, "money_pct": 70, "open_line": "+3 (-110)", "current_line": "+3 (-110)", "reaction": "Freeze", "action_type": "OBSERVE ONLY", "action_side": "", "kpi_eligible": False, "anomaly_sort": 1, "severity_sort": 80},
+            {"sport": "nfl", "game_id": "freeze", "market_display": "SPREAD", "game": "Away @ Home", "flagged_side": "Home -3", "bets_pct": 20, "money_pct": 30, "open_line": "-3 (-110)", "current_line": "-3 (-110)", "reaction": "Watch", "anomaly_sort": 2, "severity_sort": 10},
+        ])
+        row = select_market_leaders(board).iloc[0]
+        self.assertEqual(row["read_anchor_side"], "Away +3")
+        self.assertEqual(row["directional_lean_side"], "")
 
     def test_board_rank_keeps_more_severe_like_signals_ahead_of_alphabetical_order(self):
         board = pd.DataFrame([

@@ -65,6 +65,72 @@ def market_for(row):
     return infer_market_type(row.get("side", ""), row.get("current_line", ""))
 
 
+def latest_synchronized_market_rows(active):
+    """Return only the latest complete, same-timestamp two-side market states.
+
+    Selecting the latest row separately for each side can combine an Over from
+    one scrape with an Under from a later scrape.  That is not a real market
+    state and can create impossible board rows.  The public board therefore
+    advances a market only when both opposing sides were observed in the same
+    source snapshot timestamp.
+    """
+    if active is None or active.empty:
+        return pd.DataFrame() if active is None else active.copy()
+
+    keys = ["sport", "game_id", "market_display"]
+    required = [*keys, "side_key", "timestamp"]
+    if any(column not in active.columns for column in required):
+        return active.iloc[0:0].copy()
+
+    work = active.dropna(subset=["timestamp"]).copy()
+    work["side_key"] = work["side_key"].fillna("").astype(str).str.strip()
+    work = work[work["side_key"] != ""].copy()
+    if work.empty:
+        return work
+
+    # A snapshot must contain both distinct market sides.  Keep the newest
+    # complete timestamp per market, then retain one final capture per side in
+    # the unlikely event a scraper retry duplicated a row within that snapshot.
+    counts = (
+        work.groupby([*keys, "timestamp"], dropna=False)["side_key"]
+        .nunique()
+        .reset_index(name="side_count")
+    )
+    complete = counts[counts["side_count"] >= 2]
+    if complete.empty:
+        return work.iloc[0:0].copy()
+    latest = (
+        complete.sort_values("timestamp", kind="mergesort")
+        .groupby(keys, as_index=False, sort=False)
+        .tail(1)
+        .loc[:, [*keys, "timestamp"]]
+    )
+    aligned = work.merge(latest, on=[*keys, "timestamp"], how="inner")
+    return aligned.drop_duplicates([*keys, "side_key"], keep="last").copy()
+
+
+def complete_public_market_rows(dashboard):
+    """Keep only paired markets with the essentials a customer can inspect."""
+    if dashboard is None or dashboard.empty:
+        return pd.DataFrame() if dashboard is None else dashboard.copy()
+    keys = ["sport", "game_id", "market_display"]
+    required = [*keys, "side_key", "side", "bets_pct", "money_pct", "open_line", "current_line", "dk_start_iso"]
+    if any(column not in dashboard.columns for column in required):
+        return dashboard.iloc[0:0].copy()
+    work = dashboard.copy()
+    complete_row = pd.Series(True, index=work.index)
+    for column in ["side_key", "side", "bets_pct", "money_pct", "open_line", "current_line", "dk_start_iso"]:
+        complete_row &= work[column].fillna("").astype(str).str.strip().ne("")
+    summary = (
+        work.assign(_complete=complete_row)
+        .groupby(keys, dropna=False)
+        .agg(side_count=("side_key", "nunique"), complete_count=("_complete", "sum"))
+        .reset_index()
+    )
+    eligible = summary[(summary["side_count"] == 2) & (summary["complete_count"] == 2)][keys]
+    return work.merge(eligible, on=keys, how="inner")
+
+
 def main():
     DATA.mkdir(parents=True, exist_ok=True)
     # Capture any just-started games from the prior pregame export before this
@@ -82,22 +148,28 @@ def main():
     snapshots["timestamp"] = pd.to_datetime(snapshots["timestamp"], utc=True, errors="coerce")
     newest_snapshot = snapshots["timestamp"].max()
     active = snapshots[snapshots["timestamp"] >= newest_snapshot - pd.Timedelta(hours=2)].copy()
-    latest_keys = ["sport", "game_id", "market_display", "side_key"]
-    dashboard = active.sort_values("timestamp").groupby(latest_keys, as_index=False).tail(1).copy()
+    dashboard = latest_synchronized_market_rows(active)
+    dashboard = complete_public_market_rows(dashboard)
+    complete_market_count = dashboard[["sport", "game_id", "market_display"]].drop_duplicates().shape[0]
+    print(f"[ok] kept {complete_market_count} complete customer-inspectable same-snapshot markets")
     dashboard["canonical_key"] = dashboard["sport"] + "|" + dashboard["game_id"]
     dashboard["_sort_time"] = dashboard.get("dk_start_iso", "")
 
-    # This is a pregame board. Once a scheduled game has been underway for five
-    # minutes, its market observations stay in history but leave the live board.
+    # This is a customer-facing pregame board. A market must have a scheduled
+    # kickoff, and once it has been underway for five minutes its observations
+    # stay in history but leave the live board.
     kickoff = pd.to_datetime(dashboard.get("dk_start_iso", ""), utc=True, errors="coerce")
     cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=5)
     before_expiry = len(dashboard)
-    dashboard = dashboard.loc[kickoff.isna() | (kickoff > cutoff)].copy()
+    dashboard = dashboard.loc[kickoff.notna() & (kickoff > cutoff)].copy()
     print(f"[ok] kept {len(dashboard)}/{before_expiry} pregame markets after kickoff expiry")
 
     l2_path = DATA / "l2_consensus.csv"
     l2 = pd.read_csv(l2_path, dtype=str, keep_default_na=False) if l2_path.exists() else pd.DataFrame()
-    board, events = build_anomaly_outputs(dashboard, history, l2)
+    # Evaluate timing against the latest source capture, not the web server's
+    # wall clock. This keeps Late deterministic and prevents historical data
+    # or a delayed refresh from being mislabeled as a closing-window move.
+    board, events = build_anomaly_outputs(dashboard, history, l2, as_of=newest_snapshot.to_pydatetime())
     action_count = update_action_ledger(board, DATA, newest_snapshot.to_pydatetime())
     board = apply_recorded_signals(board, DATA)
     board = select_market_leaders(board)

@@ -1099,7 +1099,7 @@ td { padding: 11px 10px; border: 0; }
 td:first-child { border-radius: 8px 0 0 8px; }
 td:last-child { border-radius: 0 8px 8px 0; }
 .td-rank { color: #93a0a9; font-size: 10px; padding-top: 13px; }
-.td-game { width: 280px; max-width: 280px; }
+.td-game { width:270px; max-width:270px; padding:0 10px!important; }
 .game-name { font-size: 13px; font-weight: 800; letter-spacing: -.025em; }
 .game-row2 { margin-top: 2px; }
 .sport-chip { border-radius: 999px; }
@@ -1124,20 +1124,51 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .td-total { width: 205px; text-align:left; white-space:normal; }
 .td-pat { width: 110px; text-align:left; }
 .td-dec { width: 300px; text-align:left; }
-.td-market-read { width:220px; padding:6px 8px; text-align:left; white-space:normal; vertical-align:middle; }
-.two-side-cell { display:grid; gap:4px; min-width:0; }
-.two-side-row { display:grid; align-items:center; min-width:0; }
-.two-side-splits .two-side-row { grid-template-columns:29px minmax(0,1fr) 28px 28px; column-gap:5px; }
-.two-side-lines .two-side-row { grid-template-columns:29px minmax(0,1fr); column-gap:4px; }
-.two-side-read .two-side-row { grid-template-columns:minmax(0,1fr); gap:2px; }
+.td-split { width:265px; }
+.td-line { width:116px; }
+.td-market-read { width:300px; padding:6px 9px; text-align:left; white-space:normal; vertical-align:middle; overflow:hidden!important; }
+.td-dec { width:480px; padding:6px 10px!important; }
+.two-side-cell { display:grid; gap:0; min-width:0; }
+.two-side-row { display:grid; align-items:center; min-width:0; height:38px; min-height:38px; }
+.two-side-row + .two-side-row { border-top:1px solid #f0efeb; }
+.two-side-splits.is-total .two-side-row { grid-template-columns:14px 24px minmax(32px,1fr) 27px 19px minmax(32px,1fr) 27px; column-gap:5px; }
+.two-side-splits.is-team .two-side-row { grid-template-columns:24px minmax(32px,1fr) 27px 19px minmax(32px,1fr) 27px; column-gap:5px; }
+.two-side-lines .two-side-row { grid-template-columns:minmax(0,1fr); }
+.two-side-read { width:100%; max-width:100%; overflow:hidden; }
+.two-side-read .two-side-row { display:flex; align-items:center; align-content:center; flex-wrap:wrap; gap:3px; padding:2px 0; white-space:normal; overflow:hidden; max-width:100%; }
+.two-side-read .two-side-row.is-strongest { background:linear-gradient(90deg,rgba(227,72,64,.07),rgba(227,72,64,0)); box-shadow:inset 2px 0 0 var(--red); padding-left:6px; }
+.two-side-read .two-side-row.is-strongest .mr:first-of-type { font-weight:800; }
+.two-side-game .two-side-row { grid-template-columns:minmax(0,1fr); padding-left:64px; }
+.two-side-game .two-side-row:first-child { padding-top:1px; }
+.two-side-game { position:relative; }
+.game-lane { display:flex; align-items:center; min-width:0; gap:6px; }
+.game-away { align-items:flex-end; padding-bottom:1px; }
+.game-lane-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); font-size:13px; font-weight:800; letter-spacing:-.02em; }
+.game-lane-mark { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; flex:0 0 auto; border-radius:50%; color:#fff; font:700 8px var(--mono); }
+.game-lane-mark.away { background:#e34840; }
+.game-lane-mark.home { background:#20282c; }
+.game-lane-stack { display:grid; min-width:0; gap:4px; padding-top:2px; }
+.game-lane-time { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text3); font-size:10px; font-weight:700; line-height:1.1; }
+.game-sport { position:absolute; top:2px; left:0; z-index:1; }
+.game-sport .sport-tag,.game-sport .spchip { margin:0!important; }
+.th-game { padding-left:74px!important; }
+.th-market-read { text-align:left!important; padding-left:9px!important; }
 .two-side-label { overflow:hidden; text-overflow:ellipsis; color:var(--text2); font:700 8px var(--mono); white-space:nowrap; text-transform:uppercase; }
-.two-side-value { color:var(--text); font:600 10px var(--mono); white-space:nowrap; }
-.two-side-splits .two-side-value { text-align:right; }
-.two-side-track { height:2px; overflow:hidden; border-radius:2px; background:#f7d8d4; }
-.two-side-fill { height:100%; border-radius:2px; background:var(--red); }
-.two-side-line { min-width:0; color:var(--text); font:600 10px var(--mono); white-space:nowrap; }
-.two-side-read .two-side-label { color:var(--text); font-size:9px; }
-.two-side-read .mr { display:inline-flex; align-items:center; margin:0 3px 0 0!important; padding:2px 5px; font-size:8px; line-height:1.1; }
+.two-side-metric { color:var(--text3); font:700 9px var(--mono); text-transform:uppercase; white-space:nowrap; }
+.two-side-value { color:var(--text); font:700 10px var(--mono); white-space:nowrap; text-align:right; margin-right:6px; }
+.two-side-track { height:4px; overflow:hidden; border-radius:99px; background:#f8d8d4; }
+.two-side-fill { display:block; height:100%; border-radius:99px; background:#e34840; }
+.two-side-line { min-width:0; color:var(--text); font:600 11px var(--mono); white-space:nowrap; }
+.two-side-read .mr { display:inline-flex; flex:0 0 auto; align-items:center; margin:0!important; padding:2px 5px; font-size:8px; line-height:1.1; }
+.two-side-rationale .two-side-row { height:auto; min-height:76px; align-content:center; padding:6px 0; color:var(--text2); font-size:11px; line-height:1.32; }
+.two-side-rationale .two-side-row + .two-side-row { border-top:1px solid #f0efeb; }
+.td-dec,.td-dec .two-side-rationale,.td-dec .two-side-rationale .two-side-row { white-space:normal!important; overflow-wrap:anywhere; }
+.td-rank { position:relative; width:46px; padding:0!important; text-align:center!important; vertical-align:middle!important; }
+.rank-center { height:68px; display:flex; align-items:center; justify-content:center; padding-right:11px; }
+.rank-number { color:var(--text3); font:500 10px var(--mono); }
+.td-rank .sandbox-star { position:absolute; top:50%; left:50%; margin:0!important; transform:translate(6px,-50%); }
+.game-sport .sport-tag,.game-sport .spchip { margin:0!important; }
+.sandbox-rail .saved-item>span:first-child { color:var(--red)!important; }
 .two-side-missing { color:var(--text3); font:600 9px var(--mono); }
 .td-pick { width: 72px; text-align:center; }
 .mr { border-radius: 999px; padding: 4px 8px; font-size: 9px; letter-spacing: .02em; }
@@ -1448,7 +1479,6 @@ td:last-child { border-radius: 0 8px 8px 0; }
           <th class="th-line" title="Most recent observed line" onclick="sortBy('current_line',this)">Current</th>
           <th class="th-market-read" title="Side-specific market signals and context across the full market" onclick="sortBy('reaction',this)">Market Read</th>
           <th class="th-dec" title="A concise explanation of both sides of the market">Signal Rationale</th>
-          <th class="th-pat" title="Data quality: Clean has 3 or more valid observations; Thin has 2" onclick="sortBy('data_badge',this)">Data Quality</th>
               </tr>
             </thead>
             <tbody id="tbody"></tbody>
@@ -1740,6 +1770,9 @@ let allDash=[], allLedger=[], allEvents=[], allResults=[], allKPI=[], allLiveRec
 let sport='ALL', market='ALL', filter='all', tabId='board';
 let sortCol='board_rank', sortAsc=true;
 let _bookLines=null, _selectedBook='dk';
+// Captured with the board payload so exports carry the same freshness context
+// a customer sees on the board, rather than inventing a client-side timestamp.
+let _boardFreshness=null;
 
 const SPORT_ALIASES = {
   cfb: 'ncaaf',
@@ -2017,7 +2050,8 @@ function marketSides(r){
   if(!Array.isArray(sides)||!sides.length) sides=[r];
   const mkt=String(r.market_display||'').toUpperCase();
   const game=String(r.game||'');
-  const [away='',home='']=game.split(' @ ');
+  const teamOrder=game.includes(' @ ')?game.split(' @ '):game.split(/\s+vs\s+/i);
+  const [away='',home='']=teamOrder;
   const score=side=>{
     const label=String(side.flagged_side||'').toLowerCase();
     if(mkt==='TOTAL') return label.includes('over')?0:label.includes('under')?1:2;
@@ -2030,44 +2064,71 @@ function marketSides(r){
 }
 function sideLabel(side,r){
   const text=String(side.flagged_side||'').trim();
-  if(String(r.market_display||'').toUpperCase()==='TOTAL') return /^under/i.test(text)?'U':'O';
-  return text.replace(/\s[+-]\d+(?:\.\d+)?(?:\s*\([^)]*\))?\s*$/,'').split(/\s+/).pop()||text;
+  if(String(r.market_display||'').toUpperCase()==='TOTAL') return /^under/i.test(text)?'UNDER':'OVER';
+  return text.replace(/\s[+-]\d+(?:\.\d+)?(?:\s*\([^)]*\))?\s*$/,'')||text;
 }
 function sideSignals(side){
   const values=[side.reaction,side.path,...String(side.context_chips||'').split('|')].map(value=>String(value||'').trim()).filter(Boolean);
   return [...new Set(values)];
 }
+function gameLanes(r){
+  const game=String(r.game||'');
+  const separator=game.includes(' @ ')?' @ ':game.match(/\s+vs\s+/i)?.[0]||' @ ';
+  const parts=game.split(separator);
+  const away=parts[0]||game||'—', home=parts[1]||'';
+  const marker=/vs/i.test(separator)?'vs':'@';
+  return '<div class="two-side-cell two-side-game">'
+    +'<span class="game-name" style="display:none">'+escHtml(game)+'</span>'
+    +'<div class="two-side-row"><div class="game-lane game-away"><span class="game-sport">'+spChip(r.sport)+'</span><span class="game-lane-mark away">A</span><span class="game-lane-name">'+escHtml(away)+'</span></div></div>'
+    +'<div class="two-side-row"><div class="game-lane"><span class="game-lane-mark home">H</span><span class="game-lane-stack"><span class="game-lane-name">'+escHtml(home||'—')+'</span><span class="game-lane-time">'+escHtml(r.kickoff_time||'')+'</span></span></div></div>'
+    +'</div>';
+}
 function twoSideSplitCell(r){
   const sides=marketSides(r);
   if(sides.length<2) return '<div class="two-side-missing">Paired side data unavailable</div>';
-  return '<div class="two-side-cell two-side-splits">'+sides.slice(0,2).map(side=>{
+  const isTotal=String(r.market_display||'').toUpperCase()==='TOTAL';
+  return '<div class="two-side-cell two-side-splits '+(isTotal?'is-total':'is-team')+'">'+sides.slice(0,2).map(side=>{
     const bets=Number(side.bets_pct), money=Number(side.money_pct);
     const betsText=Number.isFinite(bets)?bets.toFixed(0)+'%':'—', moneyText=Number.isFinite(money)?money.toFixed(0)+'%':'—';
-    return '<div class="two-side-row"><span class="two-side-label">'+escHtml(sideLabel(side,r))+'</span><span class="two-side-track"><span class="two-side-fill" style="width:'+Math.max(0,Math.min(100,bets||0))+'%"></span></span><span class="two-side-value">'+betsText+'</span><span class="two-side-value">'+moneyText+'</span></div>';
+    const sideMark=isTotal?'<span class="two-side-label">'+(sideLabel(side,r)==='UNDER'?'U':'O')+'</span>':'';
+    return '<div class="two-side-row">'+sideMark+'<span class="two-side-metric">Bets</span><span class="two-side-track" title="'+betsText+' bets"><span class="two-side-fill" style="width:'+Math.max(0,Math.min(100,bets||0))+'%"></span></span><span class="two-side-value">'+betsText+'</span><span class="two-side-metric">$$$</span><span class="two-side-track" title="'+moneyText+' money"><span class="two-side-fill" style="width:'+Math.max(0,Math.min(100,money||0))+'%"></span></span><span class="two-side-value">'+moneyText+'</span></div>';
   }).join('')+'</div>';
 }
 function twoSideLineCell(r,field){
   const sides=marketSides(r);
   if(sides.length<2) return '<div class="two-side-missing">—</div>';
-  return '<div class="two-side-cell two-side-lines">'+sides.slice(0,2).map(side=>'<div class="two-side-row"><span class="two-side-label">'+escHtml(sideLabel(side,r))+'</span><span class="two-side-line">'+escHtml(side[field]||'—')+'</span></div>').join('')+'</div>';
+  return '<div class="two-side-cell two-side-lines">'+sides.slice(0,2).map(side=>'<div class="two-side-row"><span class="two-side-line">'+escHtml(side[field]||'—')+'</span></div>').join('')+'</div>';
 }
 function twoSideReadCell(r){
   const sides=marketSides(r);
   if(sides.length<2) return '<div class="two-side-missing">Market read loading</div>';
-  return '<div class="two-side-cell two-side-read">'+sides.slice(0,2).map(side=>{
+  const strongest=strongestSideIndex(sides,r);
+  return '<div class="two-side-cell two-side-read">'+sides.slice(0,2).map((side,index)=>{
     const chips=sideSignals(side).map(value=>anomalyBadge(value)).join('');
-    return '<div class="two-side-row"><span><span class="two-side-label">'+escHtml(side.flagged_side||sideLabel(side,r))+'</span>'+chips+'</span></div>';
+    const isStrongest=index===strongest;
+    return '<div class="two-side-row'+(isStrongest?' is-strongest':'')+'">'+(chips||'<span class="two-side-missing">No active signal</span>')+'</div>';
   }).join('')+'</div>';
 }
+function primaryReadRank(side){
+  const read=String(side.recorded_reaction||side.reaction||'Watch').trim();
+  return ({Contrarian:0,Freeze:1,Follow:2,Watch:3})[read] ?? 4;
+}
+function strongestSideIndex(sides,r){
+  return sides.slice(0,2).reduce((best,side,index)=>{
+    const rank=primaryReadRank(side), bestRank=primaryReadRank(sides[best]);
+    if(rank<bestRank) return index;
+    if(rank>bestRank) return best;
+    const signalCount=sideSignals(side).length, bestSignalCount=sideSignals(sides[best]).length;
+    if(signalCount>bestSignalCount) return index;
+    return best;
+  },0);
+}
 function twoSideRationale(r){
-  const sides=marketSides(r);
-  if(sides.length<2) return displayRationale(r);
-  const [first,second]=sides;
-  const firstBets=Number(first.bets_pct), firstMoney=Number(first.money_pct), secondBets=Number(second.bets_pct), secondMoney=Number(second.money_pct);
-  const firstSplit=Number.isFinite(firstBets)&&Number.isFinite(firstMoney)?firstBets.toFixed(0)+'% bets / '+firstMoney.toFixed(0)+'% money':'split unavailable';
-  const secondSplit=Number.isFinite(secondBets)&&Number.isFinite(secondMoney)?secondBets.toFixed(0)+'% bets / '+secondMoney.toFixed(0)+'% money':'split unavailable';
-  const movement=(first.open_line&&first.current_line&&first.open_line!==first.current_line)?' '+escHtml(first.flagged_side||sideLabel(first,r))+' moved from '+escHtml(first.open_line)+' to '+escHtml(first.current_line)+'.':'';
-  return escHtml(first.flagged_side||sideLabel(first,r))+' has '+firstSplit+', while '+escHtml(second.flagged_side||sideLabel(second,r))+' has '+secondSplit+'.'+movement;
+  const canonical=String(r.market_rationale||'').trim();
+  if(canonical) return '<div class="two-side-cell two-side-rationale"><div class="two-side-row">'+escHtml(canonical)+'</div></div>';
+  // Older cached board data may not yet carry the canonical paired narrative.
+  // Never invent one in the browser; display the engine reason until refresh.
+  return '<div class="two-side-cell two-side-rationale"><div class="two-side-row">'+escHtml(displayRationale(r))+'</div></div>';
 }
 function splitSummary(r){
   if(!hasSplitRead(r)) return '<span style="color:var(--text3)">Split data unavailable</span>';
@@ -2131,24 +2192,99 @@ function scrollToTop(){
   const ts=document.querySelector('.tscroll'); if(ts) ts.scrollTo({top:0,behavior:'smooth'});
 }
 function exportCSV(){
-  const data=filtered();
-  if(!data.length) return;
-  const cols=['game','sport','market_display','flagged_side','focus_basis','action_side','action_line','action_type','action_basis','kpi_eligible','reaction','path','context_chips','bets_pct','money_pct','open_line','current_line','price_move_pct','path_summary','reason','rank_reason','data_badge','kickoff_time','kickoff_iso'];
-  const headers=['Game','Sport','Market','Observed Signal Side','Signal Basis','Action Side','Action Line','Action Type','Action Basis','KPI Eligible','Reaction','Path','Context','Bets%','Money%','Open Line','Current Line','Price Move (pts)','Path Summary','Reason','Rank Reason','Data','Kickoff','Kickoff ISO'];
-  let csv=headers.join(',')+'\n';
-  data.forEach(r=>{
-    csv+=cols.map(c=>{
-      let v=String(r[c]||'').replace(/"/g,'""');
-      if(v.includes(',')) v='"'+v+'"';
-      return v;
-    }).join(',')+'\n';
+  const headers=[
+    'Board Rank','Game','Sport','Kickoff (ET)','Market',
+    'Side A','Side A Bets','Side A Money','Side A Open','Side A Current','Side A Market Read',
+    'Side B','Side B Bets','Side B Money','Side B Open','Side B Current','Side B Market Read',
+    'Market Rationale','Data Quality','Snapshot Time (ET)'
+  ];
+  const source=filtered();
+  const exported=[];
+  let omitted=0;
+  source.forEach(r=>{
+    const sides=customerExportSides(r);
+    const kickoff=String(r.kickoff_time||r.kickoff_iso||'').trim();
+    const rationale=String(r.market_rationale||'').trim();
+    // A customer export must never silently turn an incomplete, one-sided
+    // source record into a two-sided market story.  Those rows remain visible
+    // on the board with their quality state, but are withheld from this export.
+    if(!kickoff || !rationale || sides.length!==2 || sides.some(side=>!hasCustomerSideFields(side))){ omitted++; return; }
+    const market=String(r.market_display||'').toUpperCase();
+    const sideValues=sides.flatMap(side=>[
+      customerSideLabel(side,r),
+      customerPercent(side.bets_pct),
+      customerPercent(side.money_pct),
+      customerLine(side.open_line,market),
+      customerLine(side.current_line,market),
+      customerMarketRead(side)
+    ]);
+    exported.push([
+      '', r.game||'', String(r.sport||'').toUpperCase(), customerKickoff(r), market,
+      ...sideValues,
+      rationale, r.data_badge||'Unknown', customerSnapshotTime(_boardFreshness?.dk_ts||'')
+    ]);
   });
+  if(!exported.length){
+    const note=document.getElementById('board-update-note');
+    if(note) note.textContent='No complete two-sided markets are available to export.';
+    return;
+  }
+  // The exported sequence is intentionally contiguous.  Incomplete upstream
+  // markets are withheld from both the public board pipeline and this file,
+  // so a customer never has to interpret a mysterious rank gap.
+  exported.forEach((row,index)=>{ row[0]=index+1; });
+  const quote=value=>'"'+String(value??'').replace(/"/g,'""')+'"';
+  let csv=headers.map(quote).join(',')+'\r\n';
+  exported.forEach(row=>{ csv+=row.map(quote).join(',')+'\r\n'; });
   const blob=new Blob([csv],{type:'text/csv'});
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
+  const url=URL.createObjectURL(blob);
+  a.href=url;
   const d=new Date();
-  a.download='redfox_'+filter+'_'+d.toISOString().slice(0,10)+'.csv';
+  a.download='redfox-market-board_'+d.toISOString().slice(0,10)+'.csv';
   a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),0);
+  const note=document.getElementById('board-update-note');
+  if(note) note.textContent=`Exported ${exported.length} complete two-sided markets${omitted?`; ${omitted} incomplete markets omitted`:''}.`;
+}
+
+function customerExportSides(r){
+  let sides=[];
+  try { sides=JSON.parse(r.market_sides||'[]'); } catch(error) { sides=[]; }
+  return Array.isArray(sides)&&sides.length===2 ? marketSides(r).slice(0,2) : [];
+}
+function hasCustomerSideFields(side){
+  return ['flagged_side','bets_pct','money_pct','open_line','current_line']
+    .every(field=>String(side[field]??'').trim()!=='');
+}
+function customerPercent(value){
+  const number=Number(value);
+  return Number.isFinite(number) ? number.toFixed(0)+'%' : '';
+}
+function customerLine(value,market){
+  const line=String(value??'').trim();
+  // Preserve the meaning of a positive American price in spreadsheet tools.
+  // Excel coerces +100 to 100 when it opens a CSV.  The controlled formula
+  // text form displays +100 in Excel and retains the sign in the raw export.
+  const positive=market==='MONEYLINE' && /^\+?\d+(?:\.0+)?$/.test(line) && Number(line)>=100;
+  if(positive) return '="'+(line.startsWith('+')?line:'+'+line)+'"';
+  return line;
+}
+function customerSideLabel(side,r){ return sideLabel(side,r); }
+function customerMarketRead(side){ return sideSignals(side).join(' · '); }
+function customerKickoff(row){
+  const raw=String(row.kickoff_iso||'').trim();
+  const date=raw?new Date(raw):null;
+  if(date && !Number.isNaN(date.getTime())){
+    return date.toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true,timeZone:'America/New_York',timeZoneName:'short'});
+  }
+  const fallback=String(row.kickoff_time||'').trim();
+  return fallback ? fallback+' ET' : '';
+}
+function customerSnapshotTime(raw){
+  const date=raw?new Date(raw):null;
+  if(!date || Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true,timeZone:'America/New_York',timeZoneName:'short'});
 }
 
 async function loadLiveRecent(){
@@ -2263,18 +2399,14 @@ function renderBoard(resetPage=true){
     if(r._grpSub) tr.classList.add('row-grp-sub');
     if(r._grpFirst) tr.classList.add('row-grp-first');
     tr.innerHTML=`
-      <td class="td-rank" title="${rankReason}">${i+1}<br><span class="info-btn" onclick="event.stopPropagation();openGameDetail(window._boardRows[${i}])" title="Game detail">i</span></td>
-      <td class="td-game">
-        <div class="game-row1">${spChip(r.sport)}<span class="game-name">${r.game||'-'}</span></div>
-        <div class="game-row2"><span class="game-row2-time">${r.kickoff_time||'-'}</span></div>
-      </td>
+      <td class="td-rank" title="${rankReason}"><span class="rank-center"><span class="rank-number">${i+1}</span></span><span class="info-btn" onclick="event.stopPropagation();openGameDetail(window._boardRows[${i}])" title="Game detail">i</span></td>
+      <td class="td-game">${gameLanes(r)}</td>
       <td class="td-mkt">${r.market_display||'-'}</td>
       <td class="td-split">${twoSideSplitCell(r)}</td>
       <td class="td-line td-open">${twoSideLineCell(r,'open_line')}</td>
       <td class="td-line td-current">${twoSideLineCell(r,'current_line')}</td>
       <td class="td-market-read">${twoSideReadCell(r)}</td>
-      <td class="td-dec"><span style="font-size:11px;color:var(--text2);white-space:normal;display:block;line-height:1.35">${twoSideRationale(r)}</span></td>
-      <td class="td-pat">${dataBadge(r.data_badge)}</td>
+      <td class="td-dec">${twoSideRationale(r)}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -3651,6 +3783,7 @@ async function ensureEvents(){
 async function loadAll({forceRender=false}={}){
   let freshJson=null;
   try{ const r=await fetch('/data/freshness.json?_='+Date.now()); if(r.ok) freshJson=await r.json(); } catch(e){}
+  _boardFreshness=freshJson;
   const[dash,results,kpi]=await Promise.all([
     loadCSV(DASH_URL),
     loadCSV(RESULTS_URL),
