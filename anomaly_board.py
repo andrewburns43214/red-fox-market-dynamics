@@ -193,7 +193,22 @@ def select_market_leaders(board_df):
         ascending=[True, True, True, False, True, False, True],
         kind="mergesort",
     )
+    # A published board row remains one ranked market, but carries an exact
+    # two-side snapshot so the UI never has to invent the opposing price,
+    # split, or signal context from a single-side leader.
+    side_fields = [
+        "flagged_side", "bets_pct", "money_pct", "open_line", "current_line",
+        "reaction", "path", "context_chips", "anomaly_chips", "data_badge",
+    ]
+    available_side_fields = [field for field in side_fields if field in work.columns]
+    side_payload = (
+        work.groupby(keys, dropna=False, sort=False)[available_side_fields]
+        .apply(lambda group: json.dumps(group.fillna("").to_dict("records"), separators=(",", ":")))
+        .rename("market_sides")
+        .reset_index()
+    )
     leaders = work.drop_duplicates(keys, keep="first").copy()
+    leaders = leaders.merge(side_payload, on=keys, how="left", validate="one_to_one")
     leaders = leaders.sort_values(
         ["_signal_rank", "_anomaly_sort", "_maturity_sort", "_severity_sort", "_kickoff_sort", "_has_recorded_signal", "game", "market_display"],
         ascending=[True, True, True, False, True, False, True, True],
