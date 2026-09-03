@@ -40,6 +40,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(502, 'Unable to load current board data: ' + str(error))
             return
         if self.path.split('?', 1)[0] == '/board-sandbox.html':
+            # The production board now owns the approved application shell.
+            # Sandbox differs only in its explicitly local data adapter; do not
+            # inject a second sidebar or visual shell around the board.
+            with open(os.path.join(os.path.dirname(__file__), 'site', 'board.html'), encoding='utf-8') as f:
+                page = f.read().replace("'/data/", "'/sandbox-data/")
+            body = page.encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store, max-age=0')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
             with open(os.path.join(os.path.dirname(__file__), 'site', 'board.html'), encoding='utf-8') as f:
                 page = f.read()
             style = '''<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet"><style id="sandbox-style">

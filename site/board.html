@@ -1379,12 +1379,53 @@ td:last-child { border-radius: 0 8px 8px 0; }
   .td-game { width:220px; max-width:220px; }
   .statusbar { display:none; }
 }
+/* Production sidebar shell — shared-grid counts prevent clipping or drift. */
+.app-sidebar{position:fixed;inset:0 auto 0 0;z-index:120;width:280px;display:flex;flex-direction:column;overflow-y:auto;background:#050707;color:#fff;padding:18px 9px 18px;border-right:1px solid #202629;font-family:var(--sans)}
+.app-lockup{display:block;color:#fff;text-decoration:none;margin:0 0 0 1px;line-height:1}.app-lockup-main{display:block;color:#f04c46;font-size:22px;font-weight:800;letter-spacing:-.06em}.app-lockup-sub{display:block;margin-top:5px;color:#fff;font-size:8px;font-weight:700;letter-spacing:.21em}.app-live{position:absolute;top:22px;right:15px;font-size:10px;font-weight:700;letter-spacing:.08em}.app-live i{display:inline-block;width:4px;height:4px;margin:0 8px 2px 0;border-radius:50%;background:#f04c46}.app-side-label{margin:36px 12px 10px;color:#e7d6c1;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.app-side-nav{display:grid;gap:4px}.app-side-row,.app-side-group-toggle{width:100%;border:0;background:transparent;color:#fff;cursor:pointer;text-align:left;font:600 15px var(--sans);letter-spacing:-.02em}.app-side-row{display:grid;grid-template-columns:minmax(0,1fr) 44px 20px;align-items:center;min-height:48px;padding:0 10px;border-radius:9px}.app-side-row:hover,.app-side-row.active{background:#232a2d}.app-side-main{display:flex;min-width:0;align-items:center;gap:11px;white-space:nowrap}.app-side-icon{width:20px;color:#f1e6d7;font-size:20px;line-height:1;text-align:center}.app-side-count{width:44px;justify-self:end;text-align:right;color:#f0d8bd;font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}.app-side-chevron-slot{width:20px}.app-side-group{margin-top:23px}.app-side-group-toggle{display:grid;grid-template-columns:minmax(0,1fr) 44px 20px;align-items:center;min-height:26px;padding:0 12px;color:#f1ddc6;font-size:11px;letter-spacing:.07em;text-transform:uppercase}.app-side-chevron{width:16px;height:16px;justify-self:end;transition:transform .15s ease}.app-side-group-toggle[aria-expanded="true"] .app-side-chevron{transform:rotate(90deg)}.app-side-panel{padding:7px 10px 0}.app-saved-games{display:grid;gap:2px}.app-saved-empty{padding:5px 0;color:#fff;font-size:11px;line-height:1.4}.app-saved-item{display:grid;grid-template-columns:18px minmax(0,1fr) 18px;align-items:start;gap:5px;padding:6px 1px;color:#fff;font-size:11px;line-height:1.35}.app-saved-item .star{color:#f04c46}.app-saved-item button{border:0;background:transparent;color:inherit;cursor:pointer;padding:0;text-align:left;font:inherit}.app-saved-item .remove{text-align:right;color:#f1e6d7;font-size:15px;line-height:1}.app-side-link,.app-research a{display:flex;align-items:center;justify-content:space-between;width:100%;border:0;background:transparent;color:#fff;text-decoration:none;cursor:pointer;padding:8px 1px;font:600 14px var(--sans)}.app-research p{margin:1px 0 6px;color:#fff;font-size:11px;line-height:1.35}.app-research a{font-size:12px;font-weight:600}.app-research b{font-size:14px;font-weight:500;color:#f1ddc6}.app-side-footer{margin-top:auto;padding:24px 12px 2px;border-top:1px solid #252c2e;color:#fff;font-size:14px;font-weight:700;line-height:1.3}.app-side-footer strong{color:#f04c46}
+body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none!important}.content{min-height:100vh;background:#faf9f6}.board{padding:76px 28px 0}.lpane{border:0;box-shadow:none;border-radius:0;background:transparent}.pane-hdr{padding:0 0 13px;background:transparent;border:0}.pane-title,.mfilters{display:none!important}.tscroll{border-top:1px solid var(--border)}.signal-guide-btn{display:inline-flex}.board-tools input{background:#fff}.statusbar{display:none}
+.app-board-controls{position:fixed;top:0;left:280px;right:0;z-index:110;display:flex;align-items:center;gap:8px;min-height:62px;padding:13px 28px;background:#fffdfb;border-bottom:1px solid var(--border);font:700 10px var(--sans);letter-spacing:.06em}.app-board-controls>span{color:#20272a}.app-board-controls button{border:1px solid var(--border);border-radius:999px;background:#fff;color:var(--text2);padding:7px 12px;font:500 12px var(--sans);letter-spacing:0;cursor:pointer}.app-board-controls button.active{background:#ed5149;border-color:#ed5149;color:#fff;font-weight:700}.app-board-controls .app-sport-label{margin-left:10px}.app-board-controls label{display:flex;align-items:center;gap:6px;margin-left:auto;border:1px solid var(--border);border-radius:5px;background:#fff;padding:7px 9px;color:var(--text3);font-size:12px;letter-spacing:0}.app-board-controls input{width:180px;border:0;outline:0;background:transparent;color:var(--text);font:500 12px var(--sans)}
+@media(max-width:850px){body{padding-left:0}.app-sidebar{display:none}.app-board-controls{position:static;left:auto;right:auto;overflow-x:auto;min-height:0;padding:12px 10px;white-space:nowrap}.app-board-controls label{display:none}.board{padding:14px 10px 0}.topbar,.tabs{display:flex!important}.metricbar{display:none!important}}
 </style>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 </head>
 <body>
+
+<!-- Production application shell.  This is deliberately part of board.html so
+     the public board never depends on the local sandbox response rewriter. -->
+<aside class="app-sidebar" aria-label="Red Fox navigation">
+  <a class="app-lockup" href="/index.html" aria-label="Red Fox Market Intelligence home">
+    <span class="app-lockup-main">Red Fox</span><span class="app-lockup-sub">MARKET INTELLIGENCE</span>
+  </a>
+  <span class="app-live"><i></i>LIVE</span>
+
+  <div class="app-side-label">Workspace</div>
+  <nav class="app-side-nav" aria-label="Workspace">
+    <button class="app-side-row active" type="button" data-side-tab="all" onclick="openSidebarTab('all',this)"><span class="app-side-main"><span class="app-side-icon">▦</span>Market board</span><span class="app-side-count" id="rail-market-count">0</span><span class="app-side-chevron-slot"></span></button>
+    <button class="app-side-row" type="button" data-side-tab="today" onclick="openSidebarTab('today',this)"><span class="app-side-main"><span class="app-side-icon">□</span>Today's games</span><span class="app-side-count" id="rail-today">0</span><span class="app-side-chevron-slot"></span></button>
+    <button class="app-side-row" type="button" data-side-tab="live-recent" onclick="openSidebarTab('live-recent',this)"><span class="app-side-main"><span class="app-side-icon">⌁</span>Live &amp; recent</span><span class="app-side-count" id="rail-live-count">0</span><span class="app-side-chevron-slot"></span></button>
+  </nav>
+
+  <section class="app-side-group">
+    <button class="app-side-group-toggle" type="button" aria-expanded="true" onclick="toggleSidebarGroup('saved')"><span>Saved Games</span><span class="app-side-count" id="saved-count">0</span><svg class="app-side-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg></button>
+    <div id="side-saved" class="app-side-panel"><div id="saved-games" class="app-saved-games"></div></div>
+  </section>
+  <section class="app-side-group">
+    <button class="app-side-group-toggle" type="button" aria-expanded="false" onclick="toggleSidebarGroup('library')"><span>Library</span><span class="app-side-count"></span><svg class="app-side-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg></button>
+    <div id="side-library" class="app-side-panel" hidden><button class="app-side-link" type="button" onclick="openSignalGuide()">▧ <span>Market Guide</span></button></div>
+  </section>
+  <section class="app-side-group">
+    <button class="app-side-group-toggle" type="button" aria-expanded="false" onclick="toggleSidebarGroup('research')"><span>External Research</span><span class="app-side-count"></span><svg class="app-side-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg></button>
+    <div id="side-research" class="app-side-panel app-research" hidden><p>Trusted qualitative sources to pair with the board.</p><a href="https://www.covers.com/sport" target="_blank" rel="noopener">Covers analysis <b>↗</b></a><a href="https://www.espn.com/" target="_blank" rel="noopener">ESPN reporting <b>↗</b></a><a href="https://www.rotowire.com/" target="_blank" rel="noopener">RotoWire news &amp; lineups <b>↗</b></a><a href="https://www.weather.gov/" target="_blank" rel="noopener">National Weather Service <b>↗</b></a></div>
+  </section>
+  <div class="app-side-footer">The market tells a story.<br><strong>Read it with proof.</strong></div>
+</aside>
+<div class="app-board-controls" aria-label="Board filters">
+  <span>MARKET</span><button class="active" data-production-market="ALL" onclick="setProductionMarket('ALL',this)">All</button><button data-production-market="SPREAD" onclick="setProductionMarket('SPREAD',this)">Spread</button><button data-production-market="MONEYLINE" onclick="setProductionMarket('MONEYLINE',this)">Moneyline</button><button data-production-market="TOTAL" onclick="setProductionMarket('TOTAL',this)">Total</button>
+  <span class="app-sport-label">SPORT</span><button class="active" data-production-sport="ALL" onclick="setProductionSport('ALL',this)">All</button><button data-production-sport="MLB" onclick="setProductionSport('MLB',this)">MLB</button><button data-production-sport="NBA" onclick="setProductionSport('NBA',this)">NBA</button><button data-production-sport="NCAAB" onclick="setProductionSport('NCAAB',this)">NCAAB</button><button data-production-sport="CFB" onclick="setProductionSport('CFB',this)">CFB</button><button data-production-sport="NFL" onclick="setProductionSport('NFL',this)">NFL</button><button data-production-sport="NHL" onclick="setProductionSport('NHL',this)">NHL</button><button data-production-sport="UFC" onclick="setProductionSport('UFC',this)">UFC</button>
+  <label><span aria-hidden="true">⌕</span><input id="production-search" type="search" placeholder="Search games or signals" oninput="setProductionSearch(this.value)"></label>
+</div>
 
 <!-- â”€â”€â”€ TOPBAR â”€â”€â”€ -->
 <header class="topbar">
@@ -1541,7 +1582,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
           <th class="th-line" title="First observed line in the available snapshot history" onclick="sortBy('open_line',this)">Open</th>
           <th class="th-line" title="Movement is relative to each side: TOWARD means the market moved toward that row; AGAINST means it moved against it. JUICE or PRICE indicates odds movement rather than the primary spread or total number." onclick="sortBy('current_line',this)">Current</th>
           <th class="th-market-read" title="Side-specific market signals and context across the full market" onclick="sortBy('reaction',this)">Market Read</th>
-          <th class="th-dec" title="A concise explanation of the positioning, movement, and context behind the Market Read">Market Explanation</th>
+          <th class="th-dec" title="A concise explanation of the positioning, movement, and context behind the Market Read">MARKET EXPLANATION</th>
               </tr>
             </thead>
             <tbody id="tbody"></tbody>
@@ -4512,6 +4553,85 @@ loadAll();
 setInterval(updateStats, 1000);
 setInterval(loadAll, 60000);
 
+</script>
+<script>
+/* Sidebar state uses application events and localStorage only; it never watches
+   the DOM, avoiding the self-observing render loop that sandbox tooling had. */
+(function(){
+  const savedKey='redfox-saved-markets-v1';
+  let saved=[];
+  let savedSignature=null;
+  try { saved=JSON.parse(localStorage.getItem(savedKey)||'[]'); } catch (_) { saved=[]; }
+  if(!Array.isArray(saved)) saved=[];
+  const keyFor=row=>String(row.game||'').trim()+' | '+String(row.market_display||'').trim();
+  const labelFor=row=>String(row.game||'').trim()+' · '+String(row.market_display||'').trim();
+  function persist(){ localStorage.setItem(savedKey,JSON.stringify(saved)); }
+  function renderSaved(){
+    const host=document.getElementById('saved-games'),count=document.getElementById('saved-count');
+    if(!host||!count)return;
+    const signature=JSON.stringify(saved);
+    if(signature===savedSignature)return;
+    savedSignature=signature;
+    count.textContent=saved.length;
+    host.innerHTML='';
+    if(!saved.length){host.innerHTML='<div class="app-saved-empty">Save a market to return to its evidence.</div>';return;}
+    saved.forEach(item=>{
+      const row=document.createElement('div');row.className='app-saved-item';
+      row.innerHTML='<span class="star" aria-hidden="true">★</span><button type="button" class="saved-open"></button><button type="button" class="remove" aria-label="Remove saved market">×</button>';
+      const open=row.querySelector('.saved-open');open.textContent=item.label;open.onclick=()=>{const market=(window._boardRows||[]).find(r=>keyFor(r)===item.id);if(market)openGameDetail(market)};
+      row.querySelector('.remove').onclick=()=>{saved=saved.filter(x=>x.id!==item.id);persist();renderSaved();decorateRows();};
+      host.append(row);
+    });
+  }
+  function decorateRows(){
+    document.querySelectorAll('#tbody tr').forEach((tr,index)=>{
+      const market=(window._boardRows||[])[index],cell=tr.querySelector('td');
+      if(!market||!cell||cell.querySelector('.production-save'))return;
+      const id=keyFor(market),button=document.createElement('button');
+      button.type='button';button.className='production-save';button.title='Save '+labelFor(market);button.textContent=saved.some(x=>x.id===id)?'★':'☆';
+      button.style.cssText='border:0;background:transparent;color:#e34d45;cursor:pointer;margin-left:7px;font-size:14px;vertical-align:middle';
+      button.onclick=event=>{event.stopPropagation();const present=saved.some(x=>x.id===id);saved=present?saved.filter(x=>x.id!==id):[{id,label:labelFor(market)},...saved];persist();renderSaved();document.querySelectorAll('.production-save').forEach(node=>{if(node.title===button.title)node.textContent=present?'☆':'★'});};
+      cell.append(button);
+    });
+  }
+  function syncSidebar(){
+    const write=(id,value)=>{const el=document.getElementById(id);if(el&&el.textContent!==String(value))el.textContent=value;};
+    write('rail-market-count',(window._boardRows||[]).length);
+    write('rail-today',document.getElementById('b-today')?.textContent||0);
+    write('rail-live-count',document.getElementById('b-live')?.textContent||0);
+    renderSaved();decorateRows();
+  }
+  window.setProductionMarket=function(value,button){
+    document.querySelectorAll('[data-production-market]').forEach(node=>node.classList.toggle('active',node===button));
+    const nativeButton=[...document.querySelectorAll('#market-filters .mchip')].find(node=>node.textContent.trim().toUpperCase()===value)||document.querySelector('#market-filters .mchip');
+    setMarket(value,nativeButton);
+  };
+  window.setProductionSport=function(value,button){
+    document.querySelectorAll('[data-production-sport]').forEach(node=>node.classList.toggle('active',node===button));
+    const nativeButton=[...document.querySelectorAll('.sfilters .schip')].find(node=>node.textContent.trim().toUpperCase()===value)||document.querySelector('.sfilters .schip');
+    setSport(value,nativeButton);
+  };
+  window.setProductionSearch=function(value){
+    const search=document.getElementById('board-search');
+    if(search){search.value=value;renderBoard();}
+  };
+  window.openSidebarTab=function(name,button){
+    document.querySelectorAll('.app-side-row').forEach(node=>node.classList.toggle('active',node===button));
+    const tab=name==='live-recent'?document.querySelector('.tab[data-tab="live-recent"]'):document.querySelector('.tab[data-filter="'+name+'"]');
+    if(tab)setTab(tab);
+    syncSidebar();
+  };
+  window.toggleSidebarGroup=function(name){
+    const panel=document.getElementById('side-'+name);if(!panel)return;
+    const toggle=panel.parentElement.querySelector('.app-side-group-toggle'),opening=panel.hidden;
+    panel.hidden=!opening;toggle?.setAttribute('aria-expanded',String(opening));
+  };
+  const baseRender=window.renderBoard;
+  if(typeof baseRender==='function')window.renderBoard=function(){const result=baseRender.apply(this,arguments);syncSidebar();return result;};
+  const baseStats=window.updateStats;
+  if(typeof baseStats==='function')window.updateStats=function(){const result=baseStats.apply(this,arguments);syncSidebar();return result;};
+  document.addEventListener('DOMContentLoaded',syncSidebar,{once:true});
+})();
 </script>
 </body>
 </html>

@@ -8,6 +8,23 @@ BOARD = (Path(__file__).resolve().parents[1] / "site" / "board.html").read_text(
 SANDBOX_BOARD = Path(__file__).resolve().parents[1] / "data" / "two_side_staging" / "anomaly_board.csv"
 
 
+def test_tracked_production_board_contains_the_approved_application_shell():
+    """The public board must not rely on the local sandbox response rewriter."""
+    required = (
+        'class="app-sidebar"',
+        'Market Guide',
+        'Saved Games',
+        'External Research',
+        'MARKET EXPLANATION',
+        'app-side-footer',
+        'redfox-saved-markets-v1',
+    )
+    for text in required:
+        assert text in BOARD
+    assert 'sandbox-data/' not in BOARD
+    assert 'board-sandbox.html' not in BOARD
+
+
 def _sandbox_side(game, market, name):
     board = pd.read_csv(SANDBOX_BOARD, dtype=str, keep_default_na=False)
     row = board[(board.game == game) & (board.market_display == market)].iloc[0]

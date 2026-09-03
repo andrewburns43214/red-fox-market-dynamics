@@ -1,7 +1,16 @@
+from pathlib import Path
+
 import pandas as pd
 
 from anomaly_board import build_anomaly_outputs
 from refresh_anomaly_board import complete_public_market_rows, filter_publication_eligible_markets, latest_synchronized_market_rows
+
+
+def test_refresh_watchdog_keeps_atomic_failure_protection_with_measured_headroom():
+    script = (Path(__file__).resolve().parents[1] / "run_all_sports.sh").read_text(encoding="utf-8")
+    assert 'REFRESH_TIMEOUT_SECONDS="${REDFOX_REFRESH_TIMEOUT_SECONDS:-300}"' in script
+    assert 'if timeout "$REFRESH_TIMEOUT_SECONDS" "$PY" refresh_anomaly_board.py' in script
+    assert 'refresh anomaly board ERROR' in script
 
 
 def test_rolling_football_publication_window_keeps_board_and_csv_market_sets_in_parity():
