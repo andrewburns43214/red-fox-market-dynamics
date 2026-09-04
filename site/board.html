@@ -1419,6 +1419,13 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .lpane>.tscroll tbody tr>.td-current{font-weight:700!important}
   .lpane>.tscroll tbody tr>.td-market-read{width:300px!important}
   .lpane>.tscroll tbody tr>.td-dec{width:480px!important;color:#050708!important;white-space:normal!important}
+  /* Desktop keeps the compact evidence table: side names are reserved for the
+     game column, while mobile retains the explicit per-side labels. */
+  .lpane>.tscroll .two-side-label{display:none!important}
+  .lpane>.tscroll .two-side-splits.is-total .two-side-row,
+  .lpane>.tscroll .two-side-splits.is-team .two-side-row{grid-template-columns:24px minmax(32px,1fr) 27px 19px minmax(32px,1fr) 27px!important;column-gap:5px!important}
+  .lpane>.tscroll .two-side-lines .two-side-row{grid-template-columns:minmax(0,1fr)!important;column-gap:0!important}
+  .lpane>.tscroll .two-side-current .market-move{grid-column:auto!important}
   .lpane>.tscroll .game-name{color:#050708!important;font:600 13px var(--sans)!important;letter-spacing:-.025em!important}
   .lpane>.tscroll .game-row2{color:#829097!important;font:500 10px var(--sans)!important}
   .lpane>.tscroll .td-dec span{color:#607078!important;font-size:11px!important;line-height:1.32!important}
