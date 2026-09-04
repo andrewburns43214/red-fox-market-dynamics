@@ -1165,6 +1165,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .game-sport .sport-tag,.game-sport .spchip { margin:0!important; }
 .sandbox-rail .saved-item>span:first-child { color:var(--red)!important; }
 .two-side-missing { color:var(--text3); font:600 9px var(--mono); }
+.game-market-selector{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:7px 0 1px}.game-market-selector button{position:relative;display:inline-flex;align-items:center;gap:3px;min-height:24px;border:1px solid var(--border2);border-radius:999px;background:#fff;color:var(--text2);padding:3px 7px;font:700 8px var(--sans);cursor:pointer;text-transform:uppercase}.game-market-selector button small{font:500 8px var(--mono);color:inherit}.game-market-selector button.on{background:#20282c;border-color:#20282c;color:#fff}.game-market-selector button i{width:5px;height:5px;border-radius:50%;background:var(--red);display:block}.game-market-selector button:hover{border-color:var(--red);color:var(--red)}
 .td-pick { width: 72px; text-align:center; }
 .mr { border-radius: 999px; padding: 4px 8px; font-size: 9px; letter-spacing: .02em; }
 .signal-chip { cursor:pointer; border:1px solid transparent; font-family:var(--sans); }
@@ -1456,7 +1457,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .topbar{height:calc(58px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 12px 0!important;background:#050708!important;border-color:#20272a!important;box-shadow:none!important}.tl{min-width:0}.logo-wrap{margin:0!important;padding:0!important;border:0!important}.wm-main,.wm-main span{color:#ed4c43!important;font-size:18px!important;letter-spacing:-.055em}.wm-sup{margin-left:2px!important;color:#fff!important;font-size:7px!important;letter-spacing:.2em}.live-badge{display:none!important}.mobile-header-search{display:flex;align-items:center;gap:5px;width:112px;margin-left:auto;padding:7px 8px;border:1px solid #343b3f;border-radius:7px;background:#161b1e;color:#aab3b7}.mobile-header-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#fff;font:500 11px var(--sans)}.mobile-header-search input::placeholder{color:#aab3b7}.tabs{top:calc(58px + env(safe-area-inset-top));border-color:var(--border2);background:#fff}.app-board-controls{position:fixed!important;top:calc(152px + env(safe-area-inset-top));left:0;right:0;margin:0!important;background:#fff;border-color:var(--border2)}.board{padding-top:108px!important}
   .mobile-nav{background:#050708!important;border-color:#20272a!important}.mobile-nav button{color:#fff!important}.mobile-nav button.active{color:#ed4c43!important}.mobile-nav button span{color:currentColor}.mobile-nav button:not(.active){opacity:.78}
   .app-board-controls::before{background:#fff;color:#111827}.app-board-controls button{border-color:#d8dadd;background:#fff;color:#4f5b62}.app-board-controls button.active{border-color:#050708;background:#050708;color:#fff}.sfilters{background:#fff;border-color:var(--border2)}.schip{border-color:#d8dadd;background:#fff;color:#59656c}.schip.on{background:#050708!important;border-color:#050708!important;color:#fff!important}
-  .lpane>.tscroll>table>tbody>tr{border-color:#dfe3e3!important;box-shadow:0 2px 8px rgba(5,7,8,.06)!important}.lpane>.tscroll>table>tbody>tr>.td-game{padding-top:11px!important}.td-rank .info-btn,.td-rank .rank-center{display:none!important}.td-rank .production-save{right:7px!important;left:auto!important;font-size:24px!important;color:#dd4a40!important}.td-rank{background:transparent!important}.game-sport{margin:0!important}.two-side-game .two-side-row:first-child{padding-top:0!important}.two-side-game .two-side-row{min-height:33px!important}.game-lane{gap:7px}.game-lane.game-away{display:grid;grid-template-columns:19px minmax(0,1fr);column-gap:7px;align-items:center}.game-lane.game-away .game-sport{grid-column:1/-1;margin-bottom:2px!important}.game-lane.game-away .game-lane-mark{grid-column:1}.game-lane.game-away .game-lane-name{grid-column:2}.game-lane-mark{width:19px;height:19px;font-size:9px}.game-lane-name{font-size:15px!important;color:#11181d!important}.game-lane-time{font-family:var(--sans)!important;font-size:11px!important;color:#758088!important}.td-split::before,.td-open::before,.td-current::before,.td-market-read::before,.td-dec::before{color:#68747b!important}.two-side-rationale .two-side-row{color:#556169!important}
+  .lpane>.tscroll>table>tbody>tr{border-color:#dfe3e3!important;box-shadow:0 2px 8px rgba(5,7,8,.06)!important}.lpane>.tscroll>table>tbody>tr>.td-game{padding-top:11px!important}.td-rank .info-btn,.td-rank .rank-center{display:none!important}.td-rank .production-save{right:7px!important;left:auto!important;font-size:24px!important;color:#dd4a40!important}.td-rank{background:transparent!important}.game-sport{margin:0!important}.two-side-game .two-side-row:first-child{padding-top:0!important}.two-side-game .two-side-row{min-height:33px!important}.game-lane{gap:7px}.game-lane.game-away{display:grid;grid-template-columns:19px minmax(0,1fr);column-gap:7px;align-items:center}.game-lane.game-away .game-sport{grid-column:1/-1;margin-bottom:2px!important}.game-lane.game-away .game-lane-mark{grid-column:1}.game-lane.game-away .game-lane-name{grid-column:2}.game-lane-mark{width:19px;height:19px;font-size:9px}.game-lane-name{font-size:15px!important;color:#11181d!important}.game-lane-time{font-family:var(--sans)!important;font-size:11px!important;color:#758088!important}.game-market-selector{margin:9px 0 0;padding-top:8px;border-top:1px solid var(--border)}.game-market-selector button{min-height:29px;padding:4px 8px;font-size:9px}.game-market-selector button.on{background:#dd4a40;border-color:#dd4a40}.td-split::before,.td-open::before,.td-current::before,.td-market-read::before,.td-dec::before{color:#68747b!important}.two-side-rationale .two-side-row{color:#556169!important}
   .movement-chart{border-color:#d9dfe0!important;background:#fff!important}.movement-chart svg polyline{stroke:#dd4a40!important}.movement-chart svg path[fill^="url"]{fill:#f8e4e0!important}.movement-svg text{font-family:var(--sans)!important}.movement-inspector{background:#f7f1ef!important;color:#5d3430!important;border-left:3px solid #dd4a40}.movement-scrub-point.is-active{fill:#dd4a40!important;stroke:#dd4a40!important}.detail-quality-clean{border:1px solid #a8dcca!important;background:#f0fbf5!important}.detail-quality-clean .tim{border-color:#9bd5b8!important;background:#e8f8ef!important;color:#157a5a!important}.detail-quality-label{color:#157a5a!important}
   .detail-observations{overflow:visible!important;max-height:none!important;overscroll-behavior:auto!important}.detail-proof.is-open .detail-observations{display:block!important}.detail-observation-table{margin-bottom:8px}.detail-observation-table tbody{max-height:none!important}.detail-observations-toggle{position:relative;z-index:1}.board-empty td{grid-column:1/-1!important;padding:28px 16px!important;text-align:center!important}.board-empty strong{display:block;font-size:15px}.board-empty span{display:block;margin:6px 0 14px;color:var(--text3);font-size:12px}.board-empty button{min-height:40px;border:1px solid var(--accent);border-radius:99px;background:#fff;color:var(--accent);padding:0 14px;font:700 11px var(--sans)}
 }
@@ -2676,6 +2677,24 @@ function filtered(){
 window._boardRows=[];
 let _visibleBoardRows=0;
 let _boardHasRendered=false;
+// Game-first board state is presentation-only.  It stores a selected existing
+// market per game; source rows, scores, reads, and data contracts are unchanged.
+const boardGameSelections=new Map();
+function boardGameKey(row){ return String(row.game_id||row.game||''); }
+function boardRank(row){ const rank=Number(row?.board_rank); return Number.isFinite(rank)?rank:999999; }
+function gameMarketSelector(group,selected){
+  const id=boardGameKey(selected), selectedMarket=String(selected.market_display||'').toUpperCase();
+  return '<div class="game-market-selector" role="group" aria-label="Available markets for '+escHtml(selected.game||'game')+'">'+group.map(row=>{
+    const market=String(row.market_display||'').toUpperCase(), active=market===selectedMarket;
+    const meaningful=orderedSignalValues(anomalyParts(row)).length>0;
+    const marketArg=JSON.stringify(market).replace(/"/g,'&quot;');
+    return '<button type="button" class="'+(active?'on':'')+'" aria-pressed="'+active+'" onclick="event.stopPropagation();selectBoardGameMarket('+JSON.stringify(id).replace(/"/g,'&quot;')+','+marketArg+')">'+escHtml(row.market_display||'Market')+' <small>#'+escHtml(String(row.board_rank||'--'))+'</small>'+(meaningful&&!active?'<i aria-label="Market intelligence available"></i>':'')+'</button>';
+  }).join('')+'</div>';
+}
+function selectBoardGameMarket(gameId,marketName){
+  boardGameSelections.set(String(gameId),String(marketName).toUpperCase());
+  renderBoard(false);
+}
 // Keep initial board rendering fast and predictable on every viewport. More
 // markets remain available in equal, explicit batches through the footer.
 function boardPageSize(){ return 40; }
@@ -2684,53 +2703,42 @@ function showMoreBoardRows(){
   renderBoard(false);
 }
 function renderBoard(resetPage=true){
-  let data=filtered();
-  data.forEach(r=>{ r._grpSub=false; r._grpFirst=false; });
-  // Group mode: group by game_id, sort groups by best total_score
-  if(groupMode){
-    const gMap=new Map();
-    data.forEach(r=>{
-      const gid=r.game_id||r.game||'?';
-      if(!gMap.has(gid)) gMap.set(gid,[]);
-      gMap.get(gid).push(r);
-    });
-    const mktOrd={MONEYLINE:0,SPREAD:1,TOTAL:2};
-    const groups=[...gMap.values()].map(rows=>{
-      rows.sort((a,b)=>(mktOrd[(a.market_display||'').toUpperCase()]||9)-(mktOrd[(b.market_display||'').toUpperCase()]||9));
-      const best=Math.max(...rows.map(r=>Number(r.total_score)||0));
-      return {rows,best};
-    });
-    groups.sort((a,b)=>b.best-a.best);
-    data=[];
-    groups.forEach(g=>{ g.rows.forEach((r,j)=>{ r._grpSub=j>0; r._grpFirst=j===0&&g.rows.length>1; data.push(r); }); });
-  }
+  const marketRows=filtered();
+  const grouped=new Map();
+  marketRows.forEach(row=>{ const id=boardGameKey(row)||'?'; if(!grouped.has(id))grouped.set(id,[]); grouped.get(id).push(row); });
+  const games=[...grouped.values()].map(rows=>{
+    rows.sort((a,b)=>boardRank(a)-boardRank(b)||String(a.market_display||'').localeCompare(String(b.market_display||'')));
+    const id=boardGameKey(rows[0]), requested=boardGameSelections.get(id);
+    const selected=rows.find(row=>String(row.market_display||'').toUpperCase()===requested)||rows[0];
+    return {id,rows,selected,bestRank:boardRank(rows[0])};
+  }).sort((a,b)=>a.bestRank-b.bestRank||String(a.selected.game||'').localeCompare(String(b.selected.game||'')));
+  const data=games.map(game=>game.selected);
   window._boardRows=data;
-  if(resetPage || !_visibleBoardRows) _visibleBoardRows=Math.min(data.length,boardPageSize());
-  _visibleBoardRows=Math.min(_visibleBoardRows,data.length);
-  const visibleData=data.slice(0,_visibleBoardRows);
+  if(resetPage || !_visibleBoardRows) _visibleBoardRows=Math.min(games.length,boardPageSize());
+  _visibleBoardRows=Math.min(_visibleBoardRows,games.length);
+  const visibleGames=games.slice(0,_visibleBoardRows);
   const titles={all:'Board',highconf:'Priority Signals',today:'Board'};
   document.getElementById('board-title').textContent=titles[filter]||'Board';
   document.getElementById('locked-jump').style.display='none';
-  const _nGames=new Set(data.map(r=>r.game_id||r.game||'?')).size;
+  const _nGames=games.length;
   const _marketLabel=market==='ALL'?'all markets':market.toLowerCase();
-  document.getElementById('board-meta').textContent=`${_nGames} games | showing ${visibleData.length} of ${data.length} markets | ${_marketLabel} | sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' | grouped':''}`;
+  document.getElementById('board-meta').textContent=`${_nGames} games | ${marketRows.length} markets | showing ${visibleGames.length} games | ${_marketLabel}`;
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
-  if(!data.length){
+  if(!games.length){
     const tr=document.createElement('tr'); tr.className='board-empty';
     tr.innerHTML='<td colspan="8"><strong>No markets are currently available for this view.</strong><span>Try another sport, view all markets, or review Live &amp; Recent.</span><button type="button" onclick="resetMobileBoardView()">View all markets</button></td>';
     tbody.appendChild(tr);
   }
-  visibleData.forEach((r,i)=>{
+  visibleGames.forEach((game,i)=>{
+    const r=game.selected;
     const rankReason=String(r.rank_reason||'Board priority reflects verified signal strength and market maturity.').replace(/"/g,'&quot;');
     const tr=document.createElement('tr');
     tr.title='Open Market Journey and evidence';
     tr.onclick=()=>openGameDetail(window._boardRows[i]);
     if((r.recorded_reaction||r.reaction)==='Contrarian'||(r.recorded_reaction||r.reaction)==='Freeze') tr.classList.add('row-hi');
-    if(r._grpSub) tr.classList.add('row-grp-sub');
-    if(r._grpFirst) tr.classList.add('row-grp-first');
     tr.innerHTML=`
       <td class="td-rank" title="${rankReason}"><span class="rank-center"><span class="rank-number">${i+1}</span></span><span class="info-btn" onclick="event.stopPropagation();openGameDetail(window._boardRows[${i}])" title="Game detail">i</span></td>
-      <td class="td-game">${gameLanes(r)}</td>
+      <td class="td-game">${gameLanes(r)}${gameMarketSelector(game.rows,r)}</td>
       <td class="td-mkt">${r.market_display||'-'}</td>
       <td class="td-split">${twoSideSplitCell(r)}</td>
       <td class="td-line td-open">${twoSideLineCell(r,'open_line')}</td>
@@ -2751,8 +2759,8 @@ function renderBoard(resetPage=true){
   const more=document.getElementById('board-more');
   if(more){
     const button=more.querySelector('button');
-    more.hidden=!data.length || _visibleBoardRows>=data.length;
-    if(button && !more.hidden) button.textContent=`Load ${Math.min(boardPageSize(),data.length-_visibleBoardRows)} more markets`;
+    more.hidden=!games.length || _visibleBoardRows>=games.length;
+    if(button && !more.hidden) button.textContent=`Load ${Math.min(boardPageSize(),games.length-_visibleBoardRows)} more games`;
   }
   _boardHasRendered=true;
 }
