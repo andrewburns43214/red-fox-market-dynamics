@@ -6,23 +6,41 @@ import pandas as pd
 
 BOARD = (Path(__file__).resolve().parents[1] / "site" / "board.html").read_text(encoding="utf-8")
 SANDBOX_BOARD = Path(__file__).resolve().parents[1] / "data" / "two_side_staging" / "anomaly_board.csv"
+SERVER = (Path(__file__).resolve().parents[1] / "serve.py").read_text(encoding="utf-8")
 
 
 def test_tracked_production_board_contains_the_approved_application_shell():
     """The public board must not rely on the local sandbox response rewriter."""
     required = (
-        'class="app-sidebar"',
+        'class="sandbox-rail"',
         'Market Guide',
         'Saved Games',
         'External Research',
         'MARKET EXPLANATION',
-        'app-side-footer',
+        'rail-foot',
+        'sandbox-static-controls',
+        'sandbox-action-widgets',
         'redfox-saved-markets-v1',
     )
     for text in required:
         assert text in BOARD
     assert 'sandbox-data/' not in BOARD
     assert 'board-sandbox.html' not in BOARD
+
+
+def test_sandbox_server_adapts_data_only_not_the_sidebar_shell():
+    """Sandbox and production must share the tracked visual component."""
+    assert "replace(\"'/data/\", \"'/sandbox-data/\")" in SERVER
+    assert "<aside" not in SERVER
+    assert "<style" not in SERVER
+
+
+def test_tracked_board_owns_the_approved_toolbar_and_hides_legacy_surfaces():
+    assert '.app-board-controls{display:none!important}' in BOARD
+    assert '.pane-hdr{display:none!important}' in BOARD
+    assert '.board-tools{display:none!important}' in BOARD
+    assert '.info-btn,.td-rank br{display:none!important}' in BOARD
+    assert 'background:#050708;color:#fff' in BOARD
 
 
 def _sandbox_side(game, market, name):
