@@ -1,8 +1,28 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@17.7.0';
 
+type RedFoxDatabase = {
+  public: {
+    Tables: {
+      profiles: { Row: { id: string; stripe_customer_id: string | null }; Insert: never; Update: never; Relationships: [] };
+    };
+    Views: Record<string, never>;
+    Functions: {
+      apply_stripe_checkout_event: { Args: Record<string, string | null>; Returns: string };
+      apply_stripe_subscription_event: { Args: Record<string, string | boolean | null>; Returns: string };
+      revoke_stripe_paid_access: { Args: Record<string, string | null>; Returns: string };
+    };
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
+  };
+};
+type ServiceClient = ReturnType<typeof createClient<RedFoxDatabase>>;
+// Stripe 17 accepts the existing webhook API version at runtime, while its
+// latest typings intentionally expose only its newest literal version.
+type LegacyStripeApiVersion = '2023-10-16';
+
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, {
-  apiVersion: '2023-10-16',
+  apiVersion: '2023-10-16' as Stripe.LatestApiVersion as LegacyStripeApiVersion,
   httpClient: Stripe.createFetchHttpClient(),
 });
 
@@ -20,7 +40,7 @@ function periodDate(seconds: number | null | undefined) {
 }
 
 async function subscriptionOwner(
-  supabase: ReturnType<typeof createClient>, subscription: Stripe.Subscription,
+  supabase: ServiceClient, subscription: Stripe.Subscription,
 ) {
   const metadataUser = subscription.metadata?.supabase_uid;
   if (metadataUser) return { userId: metadataUser, plan: subscription.metadata?.plan || null };
@@ -36,7 +56,7 @@ async function subscriptionOwner(
 }
 
 async function applySubscription(
-  supabase: ReturnType<typeof createClient>, event: Stripe.Event, subscription: Stripe.Subscription,
+  supabase: ServiceClient, event: Stripe.Event, subscription: Stripe.Subscription,
 ) {
   const owner = await subscriptionOwner(supabase, subscription);
   if (!owner) throw new Error(`Unable to resolve Red Fox user for subscription ${subscription.id}`);
@@ -72,11 +92,11 @@ Deno.serve(async (req) => {
       Deno.env.get('STRIPE_WEBHOOK_SECRET')!
     );
   } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
+    console.error('Webhook signature verification failed:', err instanceof Error ? err.message : 'unknown error');
     return new Response('Invalid signature', { status: 400 });
   }
 
-  const supabase = createClient(
+  const supabase = createClient<RedFoxDatabase>(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   );
