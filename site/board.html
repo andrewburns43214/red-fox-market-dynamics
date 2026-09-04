@@ -1490,6 +1490,41 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .tab .tbadge{background:transparent!important;border-color:var(--border)!important;color:#050708!important}
   .tab.active .tbadge{background:#fbe4e1!important;border-color:#efb5ae!important;color:var(--red)!important}
   .board{padding-top:10px!important}
+
+  /* Mobile card polish: retain the full side names while giving every card
+     section the same 12px content rail and a denser evidence layout. */
+  .game-market-selector button.on,
+  .game-market-selector button.on:hover,
+  .detail-market-switcher .movement-tab.on,
+  .detail-market-switcher .movement-tab.on:hover{background:var(--red)!important;border-color:var(--red)!important;color:#fff!important}
+  .lpane>.tscroll>table>tbody>tr>.td-game,
+  .lpane>.tscroll>table>tbody>tr>.td-split,
+  .lpane>.tscroll>table>tbody>tr>.td-open,
+  .lpane>.tscroll>table>tbody>tr>.td-current,
+  .lpane>.tscroll>table>tbody>tr>.td-market-read,
+  .lpane>.tscroll>table>tbody>tr>.td-dec{padding-left:var(--mobile-gutter)!important;padding-right:var(--mobile-gutter)!important}
+  .lpane>.tscroll>table>tbody>tr>.td-split{padding-top:8px!important;padding-bottom:8px!important}
+  .two-side-splits.is-total .two-side-row,
+  .two-side-splits.is-team .two-side-row{grid-template-columns:minmax(84px,32%) 23px minmax(30px,1fr) 25px 17px minmax(30px,1fr) 25px!important;column-gap:4px!important;min-height:34px;height:34px}
+  .two-side-label{font-size:9px!important;color:var(--text)!important}
+  .two-side-metric{font-size:7px!important}.two-side-value{font-size:8px!important;margin-right:0!important}.two-side-track{height:3px!important}
+  .lpane>.tscroll>table>tbody>tr>.td-open,.lpane>.tscroll>table>tbody>tr>.td-current{min-height:66px;padding-top:8px!important;padding-bottom:8px!important}
+  .two-side-lines .two-side-row{grid-template-columns:84px minmax(0,1fr)!important;column-gap:5px!important;min-height:25px!important}
+  .two-side-current .market-move{grid-column:2!important;margin-top:-2px}.two-side-line{font-size:10px!important}
+  .lpane>.tscroll>table>tbody>tr>.td-market-read{padding-top:8px!important;padding-bottom:8px!important}
+  .two-side-read .two-side-row{gap:3px 4px!important;min-height:29px!important;padding:2px 0!important}.two-side-read .two-side-label{flex:0 0 84px!important;align-self:flex-start;padding-top:3px}.two-side-read .mr{padding:3px 6px!important;font-size:8px!important}
+  .lpane>.tscroll>table>tbody>tr>.td-dec{padding-top:8px!important;padding-bottom:8px!important}.two-side-rationale .two-side-row{padding:4px 0!important;font-size:11px!important;line-height:1.38!important}
+
+  /* The drilldown stays evidence-first, with a shorter chart and timeline
+     rhythm. Interaction remains on the chart itself; no instruction panel. */
+  #drill-overlay .game-detail-modal .game-detail-content{padding:10px 12px calc(20px + env(safe-area-inset-bottom))!important}
+  #drill-overlay .game-detail-modal .game-detail-content>section:first-of-type{padding:10px 12px!important;margin-bottom:8px!important}
+  #drill-overlay .game-detail-modal .detail-side-picker{margin-bottom:9px!important}.detail-side-toggle button{padding:6px 8px!important}
+  #drill-overlay .game-detail-modal .movement-chart{margin:8px 0 10px!important;padding:8px!important}.movement-chart-title{font-size:10px!important}.movement-chart-note{font-size:8px!important;line-height:1.25!important}.movement-chart svg{height:150px!important}.movement-facts{margin-top:6px!important;gap:4px!important}.movement-fact{padding:5px 6px!important}.movement-fact span{font-size:7px!important}.movement-fact b{margin-top:2px!important;font-size:11px!important}
+  #drill-overlay .game-detail-modal .market-journey{margin:8px 0!important;padding:8px!important}.market-journey-toggle{padding:8px 9px!important}.market-journey-body{padding:9px!important}.journey-track{padding-left:18px!important}.journey-event{padding:0 0 9px 28px!important}.journey-event:not(:last-child)::after{left:6px!important}.journey-dot{width:13px!important;height:13px!important}.journey-event-line{margin-top:3px!important}.journey-event-meta{margin-top:2px!important;font-size:8px!important}.journey-event-detail{margin-top:7px!important;padding:7px 8px!important}
+  #drill-overlay .game-detail-modal .market-story{margin:8px 0!important;padding:10px!important}.market-story-grid{margin-top:8px!important;gap:7px!important}.market-story-item b{font-size:10px!important}
+  #drill-overlay .game-detail-modal .detail-proof{margin:8px 0!important;padding:0!important}.detail-proof-head{padding:10px!important}.detail-proof-body{padding:0 10px 10px!important}.detail-proof-metrics{gap:6px!important;margin-bottom:8px!important}.detail-observations-toggle{min-height:36px!important;margin-top:8px!important;font-size:10px!important}
+  #drill-overlay .game-detail-modal .detail-observation-table tr{gap:3px 10px!important;padding:5px 0!important}.detail-observation-table td{font-size:9px!important}.detail-observation-table td::before{font-size:7px!important}.detail-quality{margin:8px 0!important}
 }
 </style>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
