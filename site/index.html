@@ -677,6 +677,18 @@ section { padding: 100px 40px; }
 .oauth-note { color: var(--text3); font-size: 12px; line-height: 1.5; margin: 20px 0 0; text-align: center; }
 
 /* ─── RESPONSIVE ─── */
+@media (min-width: 769px) {
+  .nav-brand { flex-direction:column; align-items:flex-start; gap:0; }
+  .mobile-app { position:absolute; z-index:20; top:112px; left:38px; width:360px; padding:0; border:0; background:transparent; }
+  .mobile-app-card { display:block; width:100%; padding:19px 21px 18px; border-radius:12px; }
+  .mobile-app .mobile-qr { display:none; }
+  .mobile-app h2 { margin:7px 0 6px; font-size:19px; letter-spacing:-.55px; }
+  .mobile-app p { font-size:12px; line-height:1.45; }
+  .mobile-install { width:196px; margin-top:15px; }
+  .mobile-install > .btn { min-height:40px; font-size:12px; }
+  .mobile-platforms { margin-top:8px; font-size:9px; }
+}
+
 @media (max-width: 768px) {
   .nav { padding: 0 16px; }
   .nav-sub { display: none; }
