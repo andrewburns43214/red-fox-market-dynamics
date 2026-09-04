@@ -37,6 +37,19 @@ SUPABASE_URL = configured_value("SUPABASE_URL").rstrip("/")
 SUPABASE_ANON_KEY = configured_value("SUPABASE_ANON_KEY")
 LISTEN_HOST = os.environ.get("ACCESS_VERIFIER_HOST", "127.0.0.1")
 LISTEN_PORT = int(os.environ.get("ACCESS_VERIFIER_PORT", "5051"))
+# These are the same explicitly granted owner and controlled guest accounts
+# recorded in the production grant migration. This narrowly scoped fallback
+# keeps their grant effective while the database migration is being verified.
+# It still requires a valid Supabase session; an email supplied by the browser
+# is never trusted.
+COMPLIMENTARY_EMAILS = frozenset(
+    email.strip().lower()
+    for email in os.environ.get(
+        "REDFOX_COMPLIMENTARY_EMAILS",
+        "andrewburns43214@gmail.com,andrewburns43214+redfoxguests@gmail.com",
+    ).split(",")
+    if email.strip()
+)
 
 
 def access_token(cookie_header: str | None) -> str | None:
@@ -70,6 +83,26 @@ def has_active_access(token: str) -> bool:
         return False
 
 
+def has_explicit_complimentary_access(token: str) -> bool:
+    """Allow only a verified session for an explicitly granted account."""
+    request = Request(
+        f"{SUPABASE_URL}/auth/v1/user",
+        method="GET",
+        headers={
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urlopen(request, timeout=4) as response:
+            user = json.loads(response.read())
+        email = user.get("email")
+        return response.status == 200 and isinstance(email, str) and email.lower() in COMPLIMENTARY_EMAILS
+    except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError):
+        return False
+
+
 class AccessHandler(BaseHTTPRequestHandler):
     server_version = "RedFoxAccessVerifier/1"
 
@@ -79,7 +112,7 @@ class AccessHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         token = access_token(self.headers.get("Cookie"))
-        if token and has_active_access(token):
+        if token and (has_active_access(token) or has_explicit_complimentary_access(token)):
             self.send_response(204)
             self.end_headers()
             return
