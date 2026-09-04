@@ -14,10 +14,27 @@ from urllib.parse import unquote
 from urllib.request import Request, urlopen
 import json
 import os
+import re
 
 
-SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
-SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
+def configured_value(name: str) -> str:
+    value = os.environ.get(name)
+    if value:
+        return value
+    # The anon key is intentionally public and already shipped to the browser.
+    # Reading it from the deployed public config avoids duplicating credentials
+    # in a systemd unit or an unmanaged server-side file.
+    with open("/opt/red-fox-market-dynamics/site/config.js", encoding="utf-8") as config:
+        source = config.read()
+    script_name = "SUPABASE_URL" if name == "SUPABASE_URL" else "SUPABASE_ANON_KEY"
+    match = re.search(rf"const {script_name} = '([^']+)'", source)
+    if not match:
+        raise RuntimeError(f"{name} is not configured")
+    return match.group(1)
+
+
+SUPABASE_URL = configured_value("SUPABASE_URL").rstrip("/")
+SUPABASE_ANON_KEY = configured_value("SUPABASE_ANON_KEY")
 LISTEN_HOST = os.environ.get("ACCESS_VERIFIER_HOST", "127.0.0.1")
 LISTEN_PORT = int(os.environ.get("ACCESS_VERIFIER_PORT", "5051"))
 

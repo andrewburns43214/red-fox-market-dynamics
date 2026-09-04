@@ -6,7 +6,6 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/red-fox-market-dynamics
-EnvironmentFile=/etc/redfox-access-verifier.env
 ExecStart=/usr/bin/python3 /opt/red-fox-market-dynamics/access_verifier.py
 Restart=always
 RestartSec=2
