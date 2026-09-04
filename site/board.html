@@ -904,8 +904,8 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 }
 .fresh-src .fs-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
 .fresh-src .fs-dot.ok { background: #00c853; }
-.fresh-src .fs-dot.warn { background: #f59e0b; }
-.fresh-src .fs-dot.bad { background: #e05c2a; }
+.fresh-src .fs-dot.warn { background: #00c853; }
+.fresh-src .fs-dot.bad { background: #c83e32; }
 .fresh-src .fs-name { font-weight: 700; color: var(--text2); }
 .fresh-src .fs-age { color: var(--text4); }
 
@@ -1070,8 +1070,9 @@ body { background: radial-gradient(circle at 88% -10%, #dceff0 0, transparent 30
 .board-tools input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(15,95,115,.1); }
 .board-footer { position:relative; min-height:28px; padding:4px 20px 8px; }
 .board-more { display:flex; justify-content:center; padding:0; }
-.board-more button { border:1px solid var(--acc-brd); border-radius:999px; padding:8px 14px; background:#fff; color:var(--accent); font:700 11px var(--sans); cursor:pointer; }
-.board-more button:hover { background:var(--acc-bg); }
+.board-more[hidden] { display:none; }
+.board-more button { border:1px solid var(--border); border-radius:999px; padding:8px 14px; background:#fff; color:var(--text3); font:700 11px var(--sans); cursor:pointer; }
+.board-more button:hover { background:var(--surface2); color:var(--text2); }
 .board-freshness { position:absolute; right:20px; bottom:12px; display:flex; align-items:center; gap:8px; color:var(--text3); font:500 8px/1 var(--mono); white-space:nowrap; }
 .board-freshness .fresh-src { display:inline-flex; align-items:center; gap:3px; padding:0; border:0; border-radius:0; background:transparent; color:inherit; font-size:inherit; }
 .board-freshness .fresh-src .fs-dot { width:5px; height:5px; }
@@ -4186,8 +4187,8 @@ function updateFreshness(f){
     // The board source is deliberately the oldest visible paired capture,
     // not the time the runner happened to finish. This keeps a green status
     // from masking one slow or failed sport scrape.
-    {name:'DK', label:'Board source', ts:f.board_oldest_ts||f.dk_ts, fresh:5, warn:10},
-    {name:'Engine', label:'Board publish', ts:f.board_published_at||f.engine_ts, fresh:5, warn:10}
+    {name:'DK', label:'Board source', ts:f.board_oldest_ts||f.dk_ts, fresh:10, warn:10},
+    {name:'Engine', label:'Board publish', ts:f.board_published_at||f.engine_ts, fresh:10, warn:10}
   ];
   if(boardFresh){
     boardFresh.innerHTML=sources.map(s=>{
