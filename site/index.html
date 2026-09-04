@@ -12,6 +12,7 @@
 <link rel="apple-touch-icon" href="/app-icon.png">
 <title>Red Fox Market Intelligence</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,1,0" rel="stylesheet">
 <style>
 :root {
   --bg:      #ffffff;
@@ -208,9 +209,13 @@ section { padding: 100px 40px; }
 .mobile-install { display:inline-flex; width:232px; flex-direction:column; align-items:stretch; margin-top:21px; }
 .mobile-install > .btn { width:100%; min-width:0; margin:0; border:1px solid rgba(255,255,255,.32); border-radius:9px; background:#fff; color:#27333a; box-shadow:0 5px 14px rgba(0,0,0,.18); font-family:var(--sans)!important; font-size:14px; font-weight:800; letter-spacing:-.01em; justify-content:center; text-align:center; text-decoration:none!important; }
 .mobile-app .btn:hover,.mobile-app .btn:focus-visible { background:#fff; color:#050708; text-decoration:none!important; }
-.mobile-platforms { width:100%; margin-top:10px; color:#aeb8c0; font:700 10px var(--mono); letter-spacing:.8px; text-align:center; }
-.mobile-qr { display:grid; justify-items:center; gap:9px; padding:10px; border-radius:10px; background:#fff; color:var(--text3); font-size:10px; text-align:center; }
+.mobile-platforms { display:flex; width:100%; align-items:center; justify-content:center; gap:13px; margin-top:10px; color:#aeb8c0; font:700 10px var(--mono); letter-spacing:.35px; }
+.mobile-platform { display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
+.mobile-platform svg { width:12px; height:12px; fill:currentColor; }
+.mobile-platform .material-symbols-rounded { font-size:14px; line-height:1; }
+.mobile-qr { display:grid; justify-items:center; gap:7px; padding:10px; border-radius:10px; background:#fff; color:var(--text3); font-size:9px; line-height:1.3; text-align:center; }
 .mobile-qr img { display:block; width:108px; height:108px; }
+@media (display-mode: standalone) { .mobile-app { display:none; } }
 .feat-card {
   padding: 36px 28px;
   border-radius: var(--radius3);
@@ -684,14 +689,14 @@ section { padding: 100px 40px; }
   .mobile-app { position:absolute; z-index:20; top:84px; right:62px; left:auto; width:468px; padding:0; border:0; background:transparent; }
   .mobile-app-card { display:grid; grid-template-columns:minmax(0,1fr) 88px; gap:12px; width:100%; min-height:190px; padding:17px 19px 15px; border-radius:10px; }
   .mobile-app-card > div:first-child { display:flex; min-height:158px; flex-direction:column; }
-  .mobile-app .mobile-qr { display:grid; align-self:center; padding:5px; border-radius:8px; }
+  .mobile-app .mobile-qr { display:grid; align-self:center; gap:5px; padding:5px; border-radius:8px; }
   .mobile-app .mobile-qr img { width:78px; height:78px; }
   .mobile-app-kicker { display:block; font-size:9px; }
   .mobile-app h2 { display:block; margin:6px 0 5px; font-size:18px; letter-spacing:-.45px; }
   .mobile-app p { display:block; font-size:11px; line-height:1.42; }
   .mobile-install { width:174px; margin:auto auto 0; }
   .mobile-install > .btn { min-height:34px; font-size:11px; }
-  .mobile-platforms { margin-top:6px; font-size:8.5px; }
+  .mobile-platforms { gap:10px; margin-top:6px; font-size:8.5px; }
 }
 
 @media (min-width: 769px) and (max-width: 1180px) {
@@ -834,10 +839,18 @@ section { padding: 100px 40px; }
       <div class="mobile-app-kicker">Red Fox MI for Mobile</div>
       <h2 id="mobile-app-title">Market intelligence, wherever you bet.</h2>
       <p>Install Red Fox MI on your iPhone or Android for one-tap access to the live board, saved games, Market Reads and drilldowns.</p>
-      <div class="mobile-install"><a class="btn btn-primary" href="/app">Install Red Fox App</a><div class="mobile-platforms">iPhone &middot; Android</div></div>
+      <div class="mobile-install">
+        <a class="btn btn-primary" id="mobile-app-cta" href="/app">Get the Mobile App</a>
+        <div class="mobile-platforms" aria-label="Available for iPhone and Android">
+          <!-- Apple mark: Bootstrap Icons (MIT). Android mark: Material Symbols (Apache-2.0). -->
+          <span class="mobile-platform"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.3 2.99-2.54 4.09l.01-.01ZM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25Z"/></svg>iPhone</span>
+          <span class="mobile-platform"><span class="material-symbols-rounded" aria-hidden="true">android</span>Android</span>
+        </div>
+      </div>
     </div>
     <aside class="mobile-qr" aria-label="Install Red Fox MI on your phone">
       <img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&amp;format=svg&amp;data=https%3A%2F%2Fredfoxmi.com%2Fapp" alt="QR code linking to Red Fox MI mobile installation">
+      <span>Scan with your phone to install</span>
     </aside>
   </div>
 </section>
@@ -1258,6 +1271,19 @@ async function startFreeTrial() {
   }
   alert('Your free day has already been used. Choose a plan to continue access.');
 }
+
+(function configureMobileAppPromotion() {
+  const promotion = document.querySelector('.mobile-app');
+  const cta = document.getElementById('mobile-app-cta');
+  if (!promotion || !cta) return;
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (standalone) { promotion.hidden = true; return; }
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
+  if (isIOS) cta.textContent = 'Add to iPhone';
+  if (isAndroid) cta.textContent = 'Install on Android';
+}());
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 </script>
