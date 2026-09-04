@@ -965,6 +965,14 @@ section { padding: 100px 40px; }
     <div id="form-error" class="form-error"></div>
     <div id="form-success" class="form-success"></div>
     <form id="auth-form" onsubmit="handleAuth(event)">
+      <div class="form-group signup-only" hidden>
+        <label class="form-label" for="auth-first-name">First Name</label>
+        <input class="form-input" id="auth-first-name" type="text" autocomplete="given-name" maxlength="100">
+      </div>
+      <div class="form-group signup-only" hidden>
+        <label class="form-label" for="auth-last-name">Last Name</label>
+        <input class="form-input" id="auth-last-name" type="text" autocomplete="family-name" maxlength="100">
+      </div>
       <div class="form-group">
         <label class="form-label" for="auth-email">Email</label>
         <input class="form-input" id="auth-email" type="email" placeholder="you@example.com" required>
@@ -1070,6 +1078,10 @@ function switchTab(mode) {
   document.getElementById('auth-submit').textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
   document.getElementById('forgot-link').style.display = mode === 'signin' ? '' : 'none';
   document.querySelector('.auth-consent').style.display = mode === 'signup' ? '' : 'none';
+  document.querySelectorAll('.signup-only').forEach(function (field) {
+    field.hidden = mode !== 'signup';
+    field.querySelector('input').required = mode === 'signup';
+  });
 }
 
 async function handleAuth(event) {
@@ -1085,10 +1097,19 @@ async function handleAuth(event) {
 
   try {
     if (_authMode === 'signup') {
+      const firstName = document.getElementById('auth-first-name').value.trim();
+      const lastName = document.getElementById('auth-last-name').value.trim();
+      if (!firstName || !lastName) {
+        throw new Error('Enter your first and last name to create an account.');
+      }
       if (!document.getElementById('auth-consent').checked) {
         throw new Error('Please accept the Terms and Privacy Policy to create an account.');
       }
-      const { data, error } = await _supabase.auth.signUp({ email, password });
+      const { data, error } = await _supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { first_name: firstName, last_name: lastName } },
+      });
       if (error) throw error;
       if (data.session) {
         syncAccessCookie(data.session);
@@ -1103,6 +1124,7 @@ async function handleAuth(event) {
       const { error } = await _supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       const { data: { session } } = await _supabase.auth.getSession();
+      await _supabase.rpc('touch_last_login');
       syncAccessCookie(session);
       renderSignedInNav(false);
       closeModal();

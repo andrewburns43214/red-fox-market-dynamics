@@ -19,6 +19,7 @@
 // Keep the server-side access cookie aligned with the signed-in Supabase session.
 (function () {
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  window.redfoxSupabase = client;
   const cookieName = 'redfox_access_token';
   function syncAccessCookie(session) {
     if (session && session.access_token) {
@@ -2624,6 +2625,7 @@ function openMobileDestination(destination,button){
     body.querySelectorAll('[data-saved-index]').forEach(node=>node.onclick=()=>{ const source=items[Number(node.dataset.savedIndex)]?.querySelector('.saved-label'); if(source)source.click(); closeMobileSheet(); });
   } else {
     title.textContent='More'; body.innerHTML='<div class="mobile-sheet-list"><a class="mobile-sheet-action" href="/app">Install Red Fox App</a><a class="mobile-sheet-action" href="/">Open account</a></div>';
+    window.redfoxSupabase?.rpc('is_admin').then(result=>{ if(result.data===true&&title.textContent==='More') body.querySelector('.mobile-sheet-list')?.insertAdjacentHTML('beforeend','<a class="mobile-sheet-action" href="/admin-users.html">Admin / Users</a>'); });
   }
   sheet.hidden=false;
 }

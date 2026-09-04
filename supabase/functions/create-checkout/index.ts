@@ -101,6 +101,9 @@ Deno.serve(async (req) => {
       line_items: [{ price: priceId, quantity: 1 }],
       mode: plan === 'day_pass' ? 'payment' : 'subscription',
       client_reference_id: user.id,
+      ...(plan === 'day_pass' ? {} : {
+        subscription_data: { metadata: { supabase_uid: user.id, plan } },
+      }),
       custom_text: {
         submit: {
           message: 'You are purchasing Red Fox Market Intelligence access through secure Stripe Checkout. Stripe processes your payment; Red Fox never receives or stores your card details.',
