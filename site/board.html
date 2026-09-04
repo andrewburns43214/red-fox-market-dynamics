@@ -1418,6 +1418,33 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .lpane>.tscroll .sbar{background:#f7d8d4!important}.lpane>.tscroll .sfill.b,.lpane>.tscroll .sfill.m{background:#dd4a40!important}
   .info-btn{font-family:var(--sans)!important}
 }
+
+/* Phone board: the same rows become information-dense market cards.  No
+   market fields are removed; the desktop table remains the source layout. */
+@media (max-width:850px){
+  :root{--mobile-gutter:12px}
+  html{background:var(--bg)}
+  body{padding-bottom:calc(76px + env(safe-area-inset-bottom));overflow-x:hidden}
+  .topbar{position:sticky;top:0;z-index:90;height:56px;padding:0 var(--mobile-gutter);background:rgba(255,255,255,.96);backdrop-filter:blur(16px)}
+  .logo-wrap{padding-right:8px}.wordmark .wm-main{font-size:17px}.wordmark .wm-sup{font-size:7px}
+  .live-badge{font-size:9px}.tabs{position:sticky;top:56px;z-index:80;height:46px;overflow-x:auto;scrollbar-width:none;background:#fff}.tabs::-webkit-scrollbar{display:none}.tab{min-width:max-content;padding:0 12px;font-size:11px}
+  .app-board-controls{display:flex;position:sticky;top:102px;z-index:70;gap:6px;padding:8px var(--mobile-gutter);border-bottom:1px solid var(--border);background:rgba(250,249,246,.96);backdrop-filter:blur(16px);scrollbar-width:none}
+  .app-board-controls::-webkit-scrollbar{display:none}.app-board-controls>span,.app-board-controls .app-sport-label{display:none}.app-board-controls button{min-height:34px;padding:6px 10px;font-size:11px}
+  .content{min-height:0}.board{padding:10px var(--mobile-gutter) 0}.lpane>.pane-hdr{display:none!important}.sandbox-static-controls,.sandbox-action-widgets{display:none!important}
+  .lpane>.tscroll{overflow:visible!important;padding:0!important;border:0!important}.lpane>.tscroll>table{display:block;width:100%!important;min-width:0!important;table-layout:auto!important;border-spacing:0!important}.lpane>.tscroll>table>thead{display:none}.lpane>.tscroll>table>tbody{display:grid;gap:10px}
+  .lpane>.tscroll>table>tbody>tr,.lpane>.tscroll>table>tbody>tr.row-hi,.lpane>.tscroll>table>tbody>tr.row-mid{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--border)!important;border-radius:12px!important;background:#fff!important;box-shadow:0 2px 10px rgba(25,37,42,.05)!important;overflow:hidden}
+  .lpane>.tscroll>table>tbody>tr:hover{transform:none;box-shadow:0 2px 10px rgba(25,37,42,.05)!important}.lpane>.tscroll>table>tbody>tr>td{display:block!important;width:auto!important;max-width:none!important;min-width:0!important;padding:10px!important;border:0!important;white-space:normal!important}
+  .lpane>.tscroll>table>tbody>tr>.td-rank{position:absolute;right:8px;top:8px;width:30px!important;height:30px!important;padding:0!important;border-radius:50%!important;background:var(--bg2);z-index:2}.rank-center{font-size:10px}.td-rank .production-save{left:auto!important;right:30px;transform:translateY(-50%)}
+  .lpane>.tscroll>table>tbody>tr>.td-game{grid-column:1/-1;padding:13px 48px 9px 12px!important;border-bottom:1px solid var(--border)!important}.two-side-game .two-side-row{padding-left:0!important;min-height:30px;height:auto}.game-sport{position:static!important;margin-bottom:5px}.game-lane-name{font-size:14px!important}.game-lane-time{font-size:10px!important}
+  .lpane>.tscroll>table>tbody>tr>.td-mkt{position:absolute;left:12px;top:10px;width:auto!important;padding:0!important;color:var(--accent)!important;font-size:9px!important;transform:translateY(-100%);display:none!important}
+  .lpane>.tscroll>table>tbody>tr>.td-split{grid-column:1/-1;padding:9px 12px!important;border-bottom:1px solid var(--border)!important}.lpane>.tscroll>table>tbody>tr>.td-split::before,.lpane>.tscroll>table>tbody>tr>.td-open::before,.lpane>.tscroll>table>tbody>tr>.td-current::before,.lpane>.tscroll>table>tbody>tr>.td-market-read::before,.lpane>.tscroll>table>tbody>tr>.td-dec::before{display:block;margin-bottom:6px;color:var(--text3);font:700 8px var(--mono);letter-spacing:.08em;text-transform:uppercase}.lpane>.tscroll>table>tbody>tr>.td-split::before{content:'Positioning'}.lpane>.tscroll>table>tbody>tr>.td-open::before{content:'Open'}.lpane>.tscroll>table>tbody>tr>.td-current::before{content:'Current'}.lpane>.tscroll>table>tbody>tr>.td-market-read::before{content:'Market Read'}.lpane>.tscroll>table>tbody>tr>.td-dec::before{content:'Rationale'}
+  .lpane>.tscroll>table>tbody>tr>.td-open,.lpane>.tscroll>table>tbody>tr>.td-current{min-height:72px;padding:10px 12px!important}.lpane>.tscroll>table>tbody>tr>.td-open{border-right:1px solid var(--border)!important}.two-side-lines .two-side-row{min-height:27px;height:auto}.two-side-line{font-size:11px!important}
+  .lpane>.tscroll>table>tbody>tr>.td-market-read{grid-column:1/-1;padding:10px 12px!important;border-top:1px solid var(--border)!important}.two-side-read .two-side-row{min-height:31px;height:auto;padding:3px 0!important}.two-side-read .mr{font-size:9px!important;padding:4px 7px!important}
+  .lpane>.tscroll>table>tbody>tr>.td-dec{grid-column:1/-1;padding:10px 12px!important;border-top:1px solid var(--border)!important}.two-side-rationale .two-side-row{min-height:0!important;padding:6px 0!important;font-size:12px!important;line-height:1.42!important}.two-side-rationale .two-side-row:nth-child(n+2){display:none!important}.two-side-rationale.is-expanded .two-side-row:nth-child(n+2){display:grid!important}.mobile-rationale-toggle{display:inline-flex;margin-top:7px;border:0;background:transparent;padding:0;color:var(--accent);font:700 11px var(--sans);cursor:pointer}
+  .board-footer{padding:12px 0 18px}.board-freshness{font-size:8px}.board-more button{min-height:42px}
+  .signal-guide-sheet{max-height:calc(100dvh - env(safe-area-inset-top));padding-bottom:env(safe-area-inset-bottom)}
+  .drill-overlay .game-detail-modal .drill-body{padding-bottom:env(safe-area-inset-bottom)}.movement-tabs{overflow-x:auto;scrollbar-width:none}.movement-tabs::-webkit-scrollbar{display:none}.movement-tab{min-height:38px;white-space:nowrap}.journey-event-select{min-height:44px}.signal-chip,.mr,.detail-side-toggle button{min-height:32px}
+}
 </style>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -2658,6 +2685,14 @@ function renderBoard(resetPage=true){
       <td class="td-market-read">${twoSideReadCell(r)}</td>
       <td class="td-dec">${twoSideRationale(r)}</td>
     `;
+    const rationale=tr.querySelector('.two-side-rationale');
+    if(rationale && rationale.querySelectorAll('.two-side-row').length>1){
+      const toggle=document.createElement('button');
+      toggle.type='button'; toggle.className='mobile-rationale-toggle'; toggle.textContent='Show both sides';
+      toggle.setAttribute('aria-expanded','false');
+      toggle.onclick=(event)=>{ event.stopPropagation(); const expanded=rationale.classList.toggle('is-expanded'); toggle.textContent=expanded?'Show less':'Show both sides'; toggle.setAttribute('aria-expanded',String(expanded)); };
+      tr.querySelector('.td-dec').appendChild(toggle);
+    }
     tbody.appendChild(tr);
   });
   const more=document.getElementById('board-more');

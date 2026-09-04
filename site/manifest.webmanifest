@@ -1,9 +1,9 @@
 {
   "name": "Red Fox Market Intelligence",
-  "short_name": "Red Fox",
+  "short_name": "Red Fox MI",
   "description": "Live sports market intelligence and line movement history.",
   "id": "/",
-  "start_url": "/",
+  "start_url": "/board.html",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f4f6f8",

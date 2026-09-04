@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#c0392b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/app-icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/app-icon.png">
+  <script src="/pwa.js" defer></script>
+  <title>Red Fox MI for Mobile</title>
+  <style>
+    :root{--ink:#172126;--muted:#66737b;--line:#e8e5df;--paper:#faf9f6;--red:#dd4a40;--dark:#080b0d}*{box-sizing:border-box}body{margin:0;min-height:100dvh;background:var(--paper);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.page{max-width:980px;margin:auto;padding:calc(28px + env(safe-area-inset-top)) 24px calc(32px + env(safe-area-inset-bottom))}.brand{color:var(--red);font-weight:800;font-size:19px;letter-spacing:-.06em}.brand small{display:block;margin:3px 0 0 1px;color:var(--muted);font-size:8px;letter-spacing:.18em}.hero{display:grid;grid-template-columns:1.25fr .75fr;gap:44px;align-items:center;margin:70px 0}.eyebrow{color:var(--red);font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.hero h1{max-width:580px;margin:12px 0;font-size:clamp(38px,6vw,66px);line-height:.98;letter-spacing:-.07em}.hero p{max-width:540px;margin:0;color:var(--muted);font-size:17px;line-height:1.55}.actions{display:flex;gap:10px;margin-top:26px}.button{display:inline-flex;align-items:center;justify-content:center;min-height:48px;border-radius:8px;padding:0 18px;text-decoration:none;font-size:14px;font-weight:750}.button.primary{background:var(--dark);color:#fff}.button.secondary{border:1px solid var(--line);color:var(--ink);background:#fff}.install-card{padding:20px;border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:0 8px 30px rgba(25,35,38,.06)}.install-card img{display:block;width:100%;max-width:178px;margin:auto;border-radius:8px}.install-card p{margin:14px 0 0;text-align:center;font-size:12px}.device{border-top:1px solid var(--line);padding:24px 0}.device h2{margin:0 0 8px;font-size:17px;letter-spacing:-.03em}.device p{max-width:670px;margin:0;color:var(--muted);font-size:14px;line-height:1.55}.device ol{margin:12px 0 0;padding-left:20px;color:var(--ink);font-size:14px;line-height:1.8}.native-install{display:none;margin-top:14px}.note{display:none;margin-top:14px;padding:12px;border-radius:8px;background:#fff2ed;color:#983a33;font-size:13px;line-height:1.4}@media(max-width:680px){.page{padding-left:20px;padding-right:20px}.hero{grid-template-columns:1fr;margin:50px 0 38px;gap:26px}.install-card{max-width:260px}.hero h1{font-size:42px}.hero p{font-size:16px}.actions{flex-direction:column}.button{width:100%}}@media(display-mode:standalone){.install-card,.device,.eyebrow{display:none}.hero{display:block;margin:20vh 0 0}.hero h1{font-size:48px}.hero p{margin-top:18px}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="brand">Red Fox<small>MARKET INTELLIGENCE</small></div>
+    <section class="hero">
+      <div><div class="eyebrow">Red Fox MI for Mobile</div><h1>Market intelligence, wherever you bet.</h1><p>The complete Red Fox board, market reads, proof and game trajectories—purpose-built for your phone.</p><div class="actions"><a class="button primary" href="/board.html">Open Red Fox MI</a><a class="button secondary" href="/">Explore Red Fox</a></div><div class="note" id="installed-note">Red Fox MI is already installed. Open the board to continue.</div></div>
+      <aside class="install-card" id="qr-card"><img src="https://api.qrserver.com/v1/create-qr-code/?size=360x360&amp;format=svg&amp;data=https%3A%2F%2Fwww.redfoxmi.com%2Fapp" alt="QR code for Red Fox MI mobile install page"><p>Open this page on your phone to install Red Fox MI.</p></aside>
+    </section>
+    <section class="device"><h2>iPhone &amp; iPad</h2><p>Safari keeps Red Fox MI close at hand without an app-store download.</p><ol><li>Open this page in Safari.</li><li>Tap Share, then <strong>Add to Home Screen</strong>.</li><li>Name it Red Fox MI and tap Add.</li></ol></section>
+    <section class="device"><h2>Android</h2><p>Install Red Fox MI from Chrome for a full-screen, app-like workspace.</p><button class="button primary native-install" id="install-button" type="button">Install Red Fox MI</button><ol id="android-fallback"><li>Open this page in Chrome.</li><li>Choose <strong>Install app</strong> or <strong>Add to Home screen</strong> from the browser menu.</li></ol></section>
+  </main>
+  <script>
+    let deferredPrompt;const install=document.getElementById('install-button');
+    const standalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
+    if(standalone){document.getElementById('installed-note').style.display='block';}
+    window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();deferredPrompt=event;install.style.display='inline-flex';document.getElementById('android-fallback').style.display='none';});
+    install.addEventListener('click',async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;install.style.display='none';});
+    window.addEventListener('appinstalled',()=>{install.style.display='none';document.getElementById('installed-note').style.display='block';});
+  </script>
+</body>
+</html>

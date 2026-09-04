@@ -1,5 +1,5 @@
-const CACHE_NAME = 'redfox-shell-v1';
-const APP_SHELL = ['/index.html', '/manifest.webmanifest', '/app-icon.svg', '/pwa.js'];
+const CACHE_NAME = 'redfox-shell-v2';
+const APP_SHELL = ['/index.html', '/app.html', '/manifest.webmanifest', '/app-icon.png', '/app-icon.svg', '/pwa.js'];
 
 self.addEventListener('install', function (event) {
   event.waitUntil(caches.open(CACHE_NAME).then(function (cache) {
@@ -23,7 +23,7 @@ self.addEventListener('fetch', function (event) {
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
   // Never persist authenticated board data or the board document in the app cache.
-  if (url.pathname === '/board.html' || url.pathname.startsWith('/data/')) return;
+  if (url.pathname === '/board.html' || url.pathname.startsWith('/data/') || url.pathname.startsWith('/auth/') || url.pathname.startsWith('/functions/')) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).catch(function () {
