@@ -395,7 +395,8 @@ section { padding: 100px 40px; }
 .journey-eyebrow { color:#7cc6cf; font:700 10px var(--mono); letter-spacing:1.4px; text-transform:uppercase; }
 .journey-teaser h3 { max-width:430px; margin:8px 0; color:#fff; font-size:23px; line-height:1.15; letter-spacing:-.7px; }
 .journey-teaser p { max-width:470px; margin:0; color:#98a5b3; font-size:13px; line-height:1.6; }
-.journey-visual { padding:16px; border:1px solid #2a3744; border-radius:12px; background:#0d141d; }
+.journey-visual { overflow:hidden; padding:0; border:1px solid #2a3744; border-radius:12px; background:#fff; }
+.journey-screenshot { display:block; width:100%; height:auto; }
 .journey-visual-head { display:flex; justify-content:space-between; align-items:center; gap:12px; color:#d7e0e6; font:700 10px var(--mono); letter-spacing:.7px; text-transform:uppercase; }
 .journey-chip { padding:3px 7px; border-radius:999px; background:#173642; color:#8bd4dc; font:700 9px var(--sans); letter-spacing:0; text-transform:none; }
 .journey-chart { width:100%; height:96px; margin:14px 0 12px; display:block; }
@@ -854,7 +855,7 @@ section { padding: 100px 40px; }
     <h2>See the Market Story Unfold</h2>
     <p class="preview-sub">Follow the real-time journey from open to current price, then look back through the exact path, split changes, and timestamped market evidence.</p>
     <div class="preview-wrap">
-      <img src="preview.png?v=20260901" alt="Red Fox live market board showing signals, market evidence, and timelines" class="preview-screenshot">
+      <img src="home-board.png?v=20260904" alt="Red Fox live market board showing signals, market evidence, and timelines" class="preview-screenshot">
       <div class="preview-overlay">
         <div class="preview-lock">&#128274;</div>
         <div class="preview-overlay-text">The Full Market Journey, In One Board</div>
@@ -868,11 +869,7 @@ section { padding: 100px 40px; }
           <h3>See the evidence behind the market move.</h3>
           <p>Open any market to trace the price or line from first observation to current state, compare ticket and money-share changes, and review the timestamped proof layer.</p>
         </div>
-        <div class="journey-visual" aria-hidden="true">
-          <div class="journey-visual-head"><span>Market trajectory</span><span class="journey-chip">Locked preview</span></div>
-          <svg class="journey-chart" viewBox="0 0 360 96" preserveAspectRatio="none"><path d="M10 18 H112 L145 23 L166 70 L238 72 L270 66 L350 67" fill="none" stroke="#5dc4cc" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 18 H112 L145 23 L166 70 L238 72 L270 66 L350 67 V89 H10Z" fill="url(#journey-fill)" opacity=".32"/><defs><linearGradient id="journey-fill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#5dc4cc"/><stop offset="1" stop-color="#5dc4cc" stop-opacity="0"/></linearGradient></defs><circle cx="10" cy="18" r="4" fill="#0d141d" stroke="#5dc4cc" stroke-width="2"/><circle cx="350" cy="67" r="4" fill="#5dc4cc"/></svg>
-          <div class="journey-facts"><div class="journey-fact"><span>Start</span><b>Open</b></div><div class="journey-fact"><span>Current</span><b>Live</b></div><div class="journey-fact"><span>Evidence</span><b>Timed</b></div></div>
-        </div>
+        <div class="journey-visual"><img src="home-journey.png?v=20260904" alt="Red Fox Market Journey with price trajectory and milestone evidence" class="journey-screenshot"></div>
       </div>
       <div class="journey-gate"><span>Unlock the full proof layer</span></div>
     </div>
