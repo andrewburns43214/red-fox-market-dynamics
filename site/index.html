@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#c0392b">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Red Fox MI">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/app-icon.png" type="image/png">
 <link rel="apple-touch-icon" href="/app-icon.png">
@@ -199,6 +200,15 @@ section { padding: 100px 40px; }
 .coverage-label { color:var(--text2); font-size:12px; font-weight:700; margin-right:2px; }
 .coverage-chip { padding:5px 9px; border:1px solid var(--border2); border-radius:999px; background:#fff; color:var(--text2); font:700 10px var(--mono); }
 .coverage-note { flex-basis:100%; color:var(--text3); font-size:12px; }
+.mobile-app { padding:58px 40px; background:var(--bg); border-bottom:1px solid var(--border); }
+.mobile-app-card { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:34px; align-items:center; max-width:900px; margin:0 auto; padding:30px 34px; border:1px solid var(--border); border-radius:var(--radius3); background:linear-gradient(135deg,#171b20 0%,#232933 100%); box-shadow:0 12px 34px rgba(18,25,31,.12); }
+.mobile-app-kicker { color:#f07a71; font:700 10px var(--mono); letter-spacing:1.4px; text-transform:uppercase; }
+.mobile-app h2 { margin:9px 0 7px; color:#fff; font-size:26px; line-height:1.1; letter-spacing:-.8px; }
+.mobile-app p { max-width:620px; color:#c4ccd3; font-size:14px; line-height:1.6; }
+.mobile-app .btn { margin-top:18px; }
+.mobile-platforms { margin-top:13px; color:#98a4ae; font:700 10px var(--mono); letter-spacing:.8px; }
+.mobile-qr { display:grid; justify-items:center; gap:9px; padding:10px; border-radius:10px; background:#fff; color:var(--text3); font-size:10px; text-align:center; }
+.mobile-qr img { display:block; width:108px; height:108px; }
 .feat-card {
   padding: 36px 28px;
   border-radius: var(--radius3);
@@ -682,6 +692,12 @@ section { padding: 100px 40px; }
   .coverage-inner { display:block; }
   .coverage-group { margin-top:12px; }
   .coverage-note { margin-top:12px; }
+  .mobile-app { padding:38px 16px; }
+  .mobile-app-card { display:block; padding:25px 22px; }
+  .mobile-app h2 { font-size:22px; }
+  .mobile-app p { font-size:13px; }
+  .mobile-app .btn { width:100%; }
+  .mobile-qr { display:none; }
   .feat-card { padding: 28px 22px; }
   .not-grid { grid-template-columns: 1fr; }
   .not-section h2 { font-size: 24px; margin-bottom: 32px; }
@@ -781,6 +797,23 @@ section { padding: 100px 40px; }
       <span class="coverage-chip">Total</span>
     </div>
     <p class="coverage-note">UFC coverage is currently Moneyline only. Available games and markets change with the live schedule and source availability.</p>
+  </div>
+</section>
+
+<!-- â”€â”€â”€ MOBILE APP â”€â”€â”€ -->
+<section class="mobile-app" aria-labelledby="mobile-app-title">
+  <div class="mobile-app-card">
+    <div>
+      <div class="mobile-app-kicker">Red Fox MI for Mobile</div>
+      <h2 id="mobile-app-title">Market intelligence, wherever you bet.</h2>
+      <p>Install Red Fox MI on your iPhone or Android for one-tap access to the live board, saved games, Market Reads and drilldowns.</p>
+      <a class="btn btn-primary" href="/app">Install Red Fox MI</a>
+      <div class="mobile-platforms">iPhone &middot; Android &middot; Web</div>
+    </div>
+    <aside class="mobile-qr" aria-label="Install Red Fox MI on your phone">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&amp;format=svg&amp;data=https%3A%2F%2Fredfoxmi.com%2Fapp" alt="QR code linking to Red Fox MI mobile installation">
+      <span>Scan to install Red Fox MI<br>on your phone</span>
+    </aside>
   </div>
 </section>
 
