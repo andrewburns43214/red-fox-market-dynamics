@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import Stripe from 'npm:stripe@17.7.0';
+import Stripe from 'npm:stripe@14.25.0';
 
 type RedFoxDatabase = {
   public: {
@@ -17,12 +17,8 @@ type RedFoxDatabase = {
   };
 };
 type ServiceClient = ReturnType<typeof createClient<RedFoxDatabase>>;
-// Stripe 17 accepts the existing webhook API version at runtime, while its
-// latest typings intentionally expose only its newest literal version.
-type LegacyStripeApiVersion = '2023-10-16';
-
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, {
-  apiVersion: '2023-10-16' as Stripe.LatestApiVersion as LegacyStripeApiVersion,
+  apiVersion: '2023-10-16',
   httpClient: Stripe.createFetchHttpClient(),
 });
 
