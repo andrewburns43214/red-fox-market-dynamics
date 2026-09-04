@@ -1,4 +1,4 @@
-const CACHE_NAME = 'redfox-shell-v7';
+const CACHE_NAME = 'redfox-shell-v8';
 const APP_SHELL = ['/index.html', '/app.html', '/manifest.webmanifest', '/app-icon.png', '/app-icon.svg', '/pwa.js'];
 
 self.addEventListener('install', function (event) {
