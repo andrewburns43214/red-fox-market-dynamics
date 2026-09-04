@@ -1,5 +1,6 @@
 """Build the public anomaly board without rerunning the legacy report pipeline."""
 
+import json
 import os
 from pathlib import Path
 from urllib.parse import quote
@@ -37,6 +38,65 @@ PUBLIC_EXPORT_COLUMNS = {
         "key_number_note", "key_numbers_crossed",
     ],
 }
+
+
+def filter_fresh_market_rows(dashboard, now=None, max_age_minutes=None):
+    """Do not publish an old split state as if it were a live market.
+
+    A failed sport scrape can leave otherwise valid paired rows in the two-hour
+    working history.  Keeping those rows on the public board is worse than
+    omitting them: customers cannot distinguish them from a current capture.
+    The threshold is configurable for operational incidents, while the normal
+    value leaves ample room for a complete sequential multi-sport pass.
+    """
+    if dashboard is None or dashboard.empty or "timestamp" not in dashboard.columns:
+        return pd.DataFrame() if dashboard is None else dashboard.copy()
+    if max_age_minutes is None:
+        max_age_minutes = int(os.environ.get("REDFOX_PUBLIC_MAX_MARKET_AGE_MINUTES", "10"))
+    current = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    if current.tzinfo is None:
+        current = current.tz_localize("UTC")
+    else:
+        current = current.tz_convert("UTC")
+    captured = pd.to_datetime(dashboard["timestamp"], utc=True, errors="coerce")
+    return dashboard.loc[captured >= current - pd.Timedelta(minutes=max_age_minutes)].copy()
+
+
+def write_board_freshness(dashboard, data_dir=DATA, now=None):
+    """Atomically record the real source age of the just-published board."""
+    if dashboard is None or dashboard.empty or "timestamp" not in dashboard.columns:
+        return None
+    captured = pd.to_datetime(dashboard["timestamp"], utc=True, errors="coerce").dropna()
+    if captured.empty:
+        return None
+    oldest, newest = captured.min(), captured.max()
+    current = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    if current.tzinfo is None:
+        current = current.tz_localize("UTC")
+    else:
+        current = current.tz_convert("UTC")
+    path = data_dir / "freshness.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, ValueError, TypeError):
+        payload = {}
+    market_count = 0
+    keys = [column for column in ("sport", "game_id", "market_display") if column in dashboard.columns]
+    if keys:
+        market_count = int(dashboard.loc[:, keys].drop_duplicates().shape[0])
+    payload.update({
+        # dk_ts remains for backward compatibility, but now means the oldest
+        # source capture a customer can see, never the runner wall clock.
+        "dk_ts": oldest.isoformat(),
+        "board_oldest_ts": oldest.isoformat(),
+        "board_newest_ts": newest.isoformat(),
+        "board_market_count": market_count,
+        "board_published_at": current.isoformat(),
+    })
+    temporary = data_dir / ".freshness.json.tmp"
+    temporary.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    temporary.replace(path)
+    return oldest, newest, market_count
 
 
 def filter_publication_eligible_markets(dashboard, now=None):
@@ -199,6 +259,9 @@ def main():
     dashboard = complete_public_market_rows(dashboard)
     complete_market_count = dashboard[["sport", "game_id", "market_display"]].drop_duplicates().shape[0]
     print(f"[ok] kept {complete_market_count} complete customer-inspectable same-snapshot markets")
+    before_freshness = len(dashboard)
+    dashboard = filter_fresh_market_rows(dashboard)
+    print(f"[ok] kept {len(dashboard)}/{before_freshness} rows within the public source-freshness window")
     dashboard["canonical_key"] = dashboard["sport"] + "|" + dashboard["game_id"]
     dashboard["_sort_time"] = dashboard.get("dk_start_iso", "")
 
@@ -233,8 +296,12 @@ def main():
         output = frame if len(frame.columns) else pd.DataFrame(columns=PUBLIC_EXPORT_COLUMNS[name])
         output.to_csv(temporary, index=False)
         temporary.replace(DATA / name)
+    freshness = write_board_freshness(dashboard)
     resolved_count = rebuild_action_results(DATA)
-    print(f"[ok] wrote {len(board)} board rows, {len(events)} timeline events across {detail_count} fast detail payloads, captured {action_count} KPI candidates, and reconciled {resolved_count} results")
+    freshness_summary = "no current source rows" if freshness is None else (
+        f"source range {freshness[0].isoformat()} to {freshness[1].isoformat()} across {freshness[2]} markets"
+    )
+    print(f"[ok] wrote {len(board)} board rows, {len(events)} timeline events across {detail_count} fast detail payloads, captured {action_count} KPI candidates, reconciled {resolved_count} results, and published {freshness_summary}")
 
 
 if __name__ == "__main__":

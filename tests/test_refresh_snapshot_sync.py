@@ -3,7 +3,13 @@ from pathlib import Path
 import pandas as pd
 
 from anomaly_board import build_anomaly_outputs
-from refresh_anomaly_board import complete_public_market_rows, filter_publication_eligible_markets, latest_synchronized_market_rows
+from refresh_anomaly_board import (
+    complete_public_market_rows,
+    filter_fresh_market_rows,
+    filter_publication_eligible_markets,
+    latest_synchronized_market_rows,
+    write_board_freshness,
+)
 
 
 def test_refresh_watchdog_keeps_atomic_failure_protection_with_measured_headroom():
@@ -11,6 +17,39 @@ def test_refresh_watchdog_keeps_atomic_failure_protection_with_measured_headroom
     assert 'REFRESH_TIMEOUT_SECONDS="${REDFOX_REFRESH_TIMEOUT_SECONDS:-300}"' in script
     assert 'if timeout "$REFRESH_TIMEOUT_SECONDS" "$PY" refresh_anomaly_board.py' in script
     assert 'refresh anomaly board ERROR' in script
+
+
+def test_snapshot_watchdog_is_bounded_and_runner_does_not_stamp_dk_wall_clock():
+    script = (Path(__file__).resolve().parents[1] / "run_all_sports.sh").read_text(encoding="utf-8")
+    assert 'SNAPSHOT_TIMEOUT_SECONDS="${REDFOX_SNAPSHOT_TIMEOUT_SECONDS:-120}"' in script
+    assert 'timeout "$SNAPSHOT_TIMEOUT_SECONDS" "$PY" main.py snapshot' in script
+    assert "f['dk_ts'] = datetime.now" not in script
+
+
+def test_stale_paired_market_is_omitted_instead_of_republished_as_current():
+    dashboard = pd.DataFrame([
+        {"sport": "mlb", "game_id": "fresh", "market_display": "MONEYLINE", "timestamp": "2026-09-04T15:50:00Z"},
+        {"sport": "mlb", "game_id": "fresh", "market_display": "MONEYLINE", "timestamp": "2026-09-04T15:50:00Z"},
+        {"sport": "mlb", "game_id": "stale", "market_display": "MONEYLINE", "timestamp": "2026-09-04T15:39:00Z"},
+        {"sport": "mlb", "game_id": "stale", "market_display": "MONEYLINE", "timestamp": "2026-09-04T15:39:00Z"},
+    ])
+    published = filter_fresh_market_rows(dashboard, now="2026-09-04T15:55:00Z", max_age_minutes=10)
+    assert published.game_id.unique().tolist() == ["fresh"]
+
+
+def test_freshness_reports_oldest_customer_visible_source_not_publish_clock(tmp_path):
+    dashboard = pd.DataFrame([
+        {"sport": "mlb", "game_id": "a", "market_display": "MONEYLINE", "timestamp": "2026-09-04T15:48:00Z"},
+        {"sport": "mlb", "game_id": "a", "market_display": "MONEYLINE", "timestamp": "2026-09-04T15:48:00Z"},
+        {"sport": "ufc", "game_id": "b", "market_display": "TOTAL", "timestamp": "2026-09-04T15:52:00Z"},
+        {"sport": "ufc", "game_id": "b", "market_display": "TOTAL", "timestamp": "2026-09-04T15:52:00Z"},
+    ])
+    oldest, newest, count = write_board_freshness(dashboard, data_dir=tmp_path, now="2026-09-04T15:55:00Z")
+    payload = __import__("json").loads((tmp_path / "freshness.json").read_text(encoding="utf-8"))
+    assert oldest.isoformat() == payload["dk_ts"] == payload["board_oldest_ts"]
+    assert newest.isoformat() == payload["board_newest_ts"]
+    assert payload["board_published_at"] == "2026-09-04T15:55:00+00:00"
+    assert count == payload["board_market_count"] == 2
 
 
 def test_rolling_football_publication_window_keeps_board_and_csv_market_sets_in_parity():

@@ -3,16 +3,12 @@ import re
 import shutil
 from typing import Any, Dict, List, Optional
 
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support.ui import Select
-from selenium.webdriver.support import expected_conditions as EC
 import time
 
 import os
 import tempfile
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+from urllib.request import Request, urlopen
 import logging
 
 # Pylance/static: ensure this constant exists even if patterns are built later
@@ -36,6 +32,8 @@ def _select_sport_option(select_el, requested_labels: list[str]) -> str:
     Supports cases where DK splits preseason/postseason into different labels.
     Returns the visible text that was selected.
     """
+    from selenium.webdriver.support.ui import Select
+
     sel = Select(select_el)
     options = [o.text.strip() for o in sel.options if (o.text or "").strip()]
     option_map = {opt.lower(): opt for opt in options}
@@ -88,6 +86,10 @@ def _load_filtered_splits_page(driver, url: str, sport_filter_labels: list[str])
     This is more reliable on the server, where direct deep links can still
     render a mixed all-sports slate.
     """
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.ui import Select, WebDriverWait
+
     parsed = urlparse(url)
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
     target_page = int(query.get("tb_page") or "1")
@@ -186,6 +188,27 @@ def fetch_rendered_html(url: str, timeout: int = 180, sport_filter_labels: Optio
             # swallow quit errors (driver may already be dead)
             pass
 
+def fetch_server_rendered_html(url: str, timeout: int = 20) -> str:
+    """Fetch the server-rendered DK splits page without starting Chrome.
+
+    DK currently includes the split table in its response HTML.  Using that
+    fast path avoids a browser launch for every sport and pagination page.
+    Selenium remains the compatibility fallback when the response does not
+    contain parseable market rows.
+    """
+    try:
+        request = Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; RedFoxMarketData/1.0)",
+            "Accept": "text/html,application/xhtml+xml",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        })
+        with urlopen(request, timeout=timeout) as response:
+            return response.read().decode("utf-8", "replace")
+    except Exception as exc:
+        logger.warning("[dk] fast HTML fetch failed url=%s err=%r", url, exc)
+        return ""
+
 def _try_load_json(text: str) -> Optional[Any]:
     text = text.strip()
     if not text:
@@ -246,10 +269,6 @@ def find_splits_records_in_json(obj: Any) -> List[Dict[str, Any]]:
 # Option 2: DOM scrape (fallback)
 # -------------------------
 
-from bs4 import BeautifulSoup
-import re
-
-from bs4 import BeautifulSoup
 import re
 
 def parse_dk_start_text_to_utc_iso(start_text: str) -> str:
@@ -481,9 +500,17 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
         else:
             page_url = _set_tb_page(url, page)
 
-        html = None
+        html = fetch_server_rendered_html(page_url)
+        page_records = dom_scrape_splits(html, sport) if html else []
         last_err = None
-        for attempt in (1, 2):
+        # The direct response is normally complete.  If DK changes to a
+        # client-rendered response or returns an incomplete page, retain the
+        # established Selenium path rather than publishing partial data.
+        if page_records:
+            last_err = None
+        else:
+            html = None
+        for attempt in (() if html else (1, 2)):
             try:
                 html = fetch_rendered_html(page_url, sport_filter_labels=sport_filter_labels)
                 if attempt == 2:
@@ -506,7 +533,8 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
             with open(debug_dump_path, "w", encoding="utf-8") as f:
                 f.write(html)
 
-        page_records = dom_scrape_splits(html, sport)
+        if not page_records:
+            page_records = dom_scrape_splits(html, sport)
 
         if not page_records:
             logger.info("[dk] page %d empty, stopping paging", page)

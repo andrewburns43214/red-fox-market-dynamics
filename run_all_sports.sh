@@ -56,9 +56,10 @@ if in_season 920 715; then SPORTS="nhl $SPORTS"; fi
 if in_season 1001 415; then SPORTS="ncaab $SPORTS"; fi
 
 echo "--- active sports: $SPORTS ---" >> "$LOG"
+SNAPSHOT_TIMEOUT_SECONDS="${REDFOX_SNAPSHOT_TIMEOUT_SECONDS:-120}"
 for SPORT in $SPORTS; do
   echo "--- $(date) snapshot --sport $SPORT ---" >> "$LOG"
-  if timeout 600 "$PY" main.py snapshot --sport "$SPORT" >> "$LOG" 2>&1;
+  if timeout "$SNAPSHOT_TIMEOUT_SECONDS" "$PY" main.py snapshot --sport "$SPORT" >> "$LOG" 2>&1;
   then
   echo "--- $(date) snapshot DONE --sport $SPORT ---" >> "$LOG"
   else
@@ -66,17 +67,6 @@ for SPORT in $SPORTS; do
   fi
   sleep 3
 done
-
-
-# Update dk_ts in freshness.json so dashboard shows fresh DK timestamp
-"$PY" -c "
-import json, os
-from datetime import datetime, timezone
-fp = 'data/freshness.json'
-f = json.load(open(fp)) if os.path.exists(fp) else {}
-f['dk_ts'] = datetime.now(timezone.utc).isoformat()
-json.dump(f, open(fp, 'w'))
-" >> "$LOG" 2>&1
 
 echo "--- $(date) refresh anomaly board ---" >> "$LOG"
 # Production reached the former 120-second watchdog while publishing a valid

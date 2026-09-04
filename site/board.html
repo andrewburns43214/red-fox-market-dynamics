@@ -4180,8 +4180,11 @@ function updateFreshness(f){
   function fmtTime(ts){ if(!ts) return '--'; const d=new Date(ts); if(isNaN(d)) return '--'; return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
   // Per-source: {name, ts, freshThresh, warnThresh}
   const sources=[
-    {name:'DK', label:'Last snapshot', ts:f.dk_ts, fresh:15, warn:30},
-    {name:'Engine', label:'Engine run', ts:f.engine_ts, fresh:15, warn:30}
+    // The board source is deliberately the oldest visible paired capture,
+    // not the time the runner happened to finish. This keeps a green status
+    // from masking one slow or failed sport scrape.
+    {name:'DK', label:'Board source', ts:f.board_oldest_ts||f.dk_ts, fresh:5, warn:10},
+    {name:'Engine', label:'Board publish', ts:f.board_published_at||f.engine_ts, fresh:5, warn:10}
   ];
   if(boardFresh){
     boardFresh.innerHTML=sources.map(s=>{
