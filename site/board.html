@@ -1396,9 +1396,11 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .sandbox-static-search svg{width:13px;height:13px;stroke-width:1.8}
   .sandbox-static-search input{width:160px;border:0;outline:0;background:transparent;color:var(--text);font:500 10px var(--sans)}
   .sandbox-action-widgets{display:flex;align-items:center;gap:4px;padding:0 0 7px;border-bottom:1px solid var(--border)}
-  .sandbox-action-widgets button{display:inline-flex;align-items:center;gap:4px;border:1px solid #050708;border-radius:7px;background:#050708;color:#fff;padding:4px 6px;font:500 8px/1 var(--sans);cursor:pointer}
+  .sandbox-action-widgets{position:relative}.sandbox-action-widgets button{display:inline-flex;align-items:center;gap:4px;border:1px solid #050708;border-radius:7px;background:#050708;color:#fff;padding:4px 6px;font:500 8px/1 var(--sans);cursor:pointer}
   .sandbox-action-widgets button svg{width:10px;height:10px;stroke-width:1.9}
   .sandbox-action-widgets button:hover{background:#252d30;border-color:#252d30;color:#fff}
+  .board-sort-menu{position:absolute;z-index:130;top:calc(100% - 4px);left:0;min-width:178px;padding:5px;background:#fff;border:1px solid var(--border2);border-radius:8px;box-shadow:0 12px 30px rgba(5,7,8,.16)}
+  .board-sort-menu[hidden]{display:none}.board-sort-menu button{display:flex;width:100%;justify-content:space-between;border:0!important;border-radius:5px!important;background:#fff!important;color:var(--text)!important;padding:8px 9px!important;font:600 10px var(--sans)!important;text-align:left}.board-sort-menu button:hover,.board-sort-menu button.active{background:#fbe4e1!important;color:var(--red)!important}.board-sort-menu .sort-check{visibility:hidden;color:var(--red);font-size:12px}.board-sort-menu button.active .sort-check{visibility:visible}
   .tscroll{border-top:1px solid var(--border)!important;overflow:auto!important}
   .tscroll table{font-size:11px!important}
   .lpane>.tscroll>table{width:100%!important;min-width:1450px!important;max-width:none!important;table-layout:auto!important}
@@ -1471,7 +1473,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .app-filter-row::-webkit-scrollbar{display:none}
   .app-filter-label{flex:0 0 39px;color:#111827;font:700 8px var(--mono);letter-spacing:.08em;text-transform:uppercase}
   .app-filter-row button{flex:0 0 auto;min-height:27px!important;padding:3px 8px!important;font-size:9px!important;line-height:1!important}
-  .app-board-controls button.active{background:var(--red)!important;border-color:var(--red)!important;color:#fff!important}
+  .app-board-controls button.active{background:var(--red)!important;border-color:var(--red)!important;color:#fff!important}.app-sort-trigger{display:inline-flex!important;align-items:center!important;gap:3px!important;margin-left:2px!important;border-color:#cfd4d5!important;background:#fff!important;color:#111827!important}.app-sort-trigger svg{width:11px;height:11px}.app-sort-trigger.is-active{border-color:var(--red)!important;color:var(--red)!important}.board-sort-sheet .sort-check{visibility:hidden}.board-sort-sheet button.active{border-color:var(--red)!important;background:var(--red)!important;color:#fff!important}.board-sort-sheet button.active .sort-check{visibility:visible;color:#fff}
   .tabs{height:46px!important;background:#fff!important;border-bottom:1px solid var(--border2)!important}
   .tab{height:46px!important;padding:0 9px!important;color:#050708!important;font-size:10px!important}
   .tab.active{color:var(--red)!important;border-bottom-color:var(--red)!important}
@@ -1586,7 +1588,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
 </nav>
 
 <div class="app-board-controls" aria-label="Board filters">
-  <div class="app-filter-row" aria-label="Market filter"><span class="app-filter-label">Market</span><button class="active" data-production-market="ALL" onclick="setProductionMarket('ALL',this)">All</button><button data-production-market="SPREAD" onclick="setProductionMarket('SPREAD',this)">Spread</button><button data-production-market="MONEYLINE" onclick="setProductionMarket('MONEYLINE',this)">Moneyline</button><button data-production-market="TOTAL" onclick="setProductionMarket('TOTAL',this)">Total</button></div>
+  <div class="app-filter-row" aria-label="Market filter"><span class="app-filter-label">Market</span><button class="active" data-production-market="ALL" onclick="setProductionMarket('ALL',this)">All</button><button data-production-market="SPREAD" onclick="setProductionMarket('SPREAD',this)">Spread</button><button data-production-market="MONEYLINE" onclick="setProductionMarket('MONEYLINE',this)">Moneyline</button><button data-production-market="TOTAL" onclick="setProductionMarket('TOTAL',this)">Total</button><button class="app-sort-trigger" type="button" onclick="openBoardSort(event)" aria-haspopup="dialog" aria-controls="mobile-sheet"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="M3 4h10M5 8h6M7 12h2" stroke-width="1.6" stroke-linecap="round"/></svg><span id="mobile-sort-label">Sort</span></button></div>
   <div class="app-filter-row" aria-label="Sport filter"><span class="app-filter-label">Sport</span><button class="active" data-production-sport="ALL" onclick="setProductionSport('ALL',this)">All</button><button data-production-sport="MLB" onclick="setProductionSport('MLB',this)">MLB</button><button data-production-sport="NBA" onclick="setProductionSport('NBA',this)">NBA</button><button data-production-sport="NCAAB" onclick="setProductionSport('NCAAB',this)">NCAAB</button><button data-production-sport="CFB" onclick="setProductionSport('CFB',this)">CFB</button><button data-production-sport="NFL" onclick="setProductionSport('NFL',this)">NFL</button><button data-production-sport="NHL" onclick="setProductionSport('NHL',this)">NHL</button><button data-production-sport="UFC" onclick="setProductionSport('UFC',this)">UFC</button></div>
   <label><span aria-hidden="true">⌕</span><input id="production-search" type="search" placeholder="Search games or reads" oninput="setProductionSearch(this.value)"></label>
 </div>
@@ -1686,6 +1688,8 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
           <button type="button" onclick="scrollToTop()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 20V5M6.5 10.5 12 5l5.5 5.5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Top</span></button>
           <button type="button" onclick="refreshBoardNow()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.9-4M5 4v5h5M4 13a8 8 0 0 0 14.9 4M19 20v-5h-5"/></svg><span>Refresh</span></button>
           <button type="button" onclick="exportCSV()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></svg><span>CSV</span></button>
+          <button type="button" onclick="openBoardSort(event)" aria-haspopup="menu" aria-expanded="false" id="desktop-sort-trigger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M5 6h14M8 12h8M11 18h2"/></svg><span id="desktop-sort-label">Sort</span></button>
+          <div class="board-sort-menu" id="desktop-sort-menu" role="menu" hidden></div>
         </div>
         <div class="tscroll">
           <table>
@@ -2628,7 +2632,16 @@ async function loadLiveRecent(){
   allLiveRecent.forEach(row=>{ const key=[row.sport,row.game_id,row.game].join('|'); if(!games.has(key)) games.set(key,[]); games.get(key).push(row); });
   const badge=document.getElementById('b-live'); if(badge) badge.textContent=games.size;
   if(!games.size){ grid.innerHTML='<div class="live-empty">No started games are currently in the Live &amp; Recent window.</div>'; return; }
-  grid.innerHTML=[...games.values()].map(markets=>{
+  const liveGames=[...games.values()];
+  if(boardSortMode!=='RANK') liveGames.sort((a,b)=>{
+    const firstA=a[0]||{},firstB=b[0]||{};
+    let result=0;
+    if(boardSortMode==='DATE') result=new Date(firstA.kickoff_iso||firstA._game_time||0)-new Date(firstB.kickoff_iso||firstB._game_time||0);
+    else if(boardSortMode==='MARKET'){ const order={MONEYLINE:0,SPREAD:1,TOTAL:2}; result=(order[String(firstA.market_display||'').toUpperCase()]??99)-(order[String(firstB.market_display||'').toUpperCase()]??99); }
+    else if(boardSortMode==='SAVED') result=Number(typeof window.isSavedGame==='function'&&window.isSavedGame(b))-Number(typeof window.isSavedGame==='function'&&window.isSavedGame(a));
+    return result||String(firstA.game||'').localeCompare(String(firstB.game||''));
+  });
+  grid.innerHTML=liveGames.map(markets=>{
     const first=markets[0], score=(first.score_away&&first.score_home&&first.score_away!=='-')?`${first.score_away} - ${first.score_home}`:'--';
     const status=first.score_status||'Live score updating';
     return `<article class="live-game-card"><div class="live-game-top"><div><div>${spChip(first.sport)}</div><div class="live-game-name">${first.game||'--'}</div><div class="live-status">${status==='Live score unavailable'?'Score pending':status}</div></div><div class="live-score">${score}</div></div><div class="live-freeze">Frozen pregame record</div>${liveMarketSections(markets).map(function(section){return `<section class="live-market-section"><div class="live-market-type">${escHtml(section.market)}</div>${section.sides.map(function(item){const sideArg=JSON.stringify(item.side.flagged_side||'').replace(/"/g,'&quot;');return `<button class="live-market-side-row" type="button" onclick="openGameDetail(allLiveRecent[${item.index}],${sideArg})" aria-label="Open frozen pregame ${escHtml(section.market)} market for ${escHtml(item.side.flagged_side||'side')}"><span class="live-market-side">${escHtml(item.side.flagged_side||'--')}</span><span class="live-market-meta">${escHtml(item.side.open_line||'--')} → ${escHtml(item.side.current_line||'--')} · ${escHtml(detailPercent(item.side.bets_pct))} Bets / ${escHtml(detailPercent(item.side.money_pct))} Money</span></button>`;}).join('')}</section>`;}).join('')}</article>`;
@@ -2708,6 +2721,52 @@ let _boardHasRendered=false;
 const boardGameSelections=new Map();
 function boardGameKey(row){ return String(row.game_id||row.game||''); }
 function boardRank(row){ const rank=Number(row?.board_rank); return Number.isFinite(rank)?rank:999999; }
+const BOARD_SORTS={RANK:'Market Read Rank',DATE:'Date & Time',MARKET:'Market',SAVED:'Saved First'};
+let boardSortMode='RANK';
+function boardSortLabel(){ return BOARD_SORTS[boardSortMode]||BOARD_SORTS.RANK; }
+function boardSortOptions(){ return Object.entries(BOARD_SORTS).map(([key,label])=>'<button type="button" role="menuitemradio" aria-checked="'+(boardSortMode===key)+'" class="'+(boardSortMode===key?'active':'')+'" onclick="setBoardSort(\''+key+'\')"><span>'+label+'</span><span class="sort-check" aria-hidden="true">✓</span></button>').join(''); }
+function syncBoardSortControls(){
+  const nonDefault=boardSortMode!=='RANK', label=boardSortLabel();
+  const desktop=document.getElementById('desktop-sort-label'), mobile=document.getElementById('mobile-sort-label'), trigger=document.getElementById('desktop-sort-trigger'), mobileTrigger=document.querySelector('.app-sort-trigger');
+  if(desktop) desktop.textContent=nonDefault?'Sort: '+label:'Sort';
+  if(mobile) mobile.textContent=nonDefault?'Sort: '+label:'Sort';
+  if(trigger) trigger.setAttribute('aria-expanded',String(!(document.getElementById('desktop-sort-menu')||{}).hidden));
+  if(mobileTrigger) mobileTrigger.classList.toggle('is-active',nonDefault);
+}
+function closeBoardSortMenu(){ const menu=document.getElementById('desktop-sort-menu'); if(menu) menu.hidden=true; syncBoardSortControls(); }
+function openBoardSort(event){
+  event?.stopPropagation();
+  if(window.matchMedia?.('(max-width:850px)').matches){ openBoardSortSheet(); return; }
+  const menu=document.getElementById('desktop-sort-menu'); if(!menu)return;
+  const opening=menu.hidden; menu.innerHTML=boardSortOptions(); menu.hidden=!opening; syncBoardSortControls();
+}
+function openBoardSortSheet(){
+  const sheet=document.getElementById('mobile-sheet'), title=document.getElementById('mobile-sheet-title'), body=document.getElementById('mobile-sheet-body'); if(!sheet||!title||!body)return;
+  title.textContent='Sort games';
+  body.innerHTML='<div class="mobile-sheet-list board-sort-sheet">'+boardSortOptions()+'</div>';
+  sheet.hidden=false;
+}
+function setBoardSort(mode){
+  if(!BOARD_SORTS[mode])return;
+  boardSortMode=mode; closeBoardSortMenu(); closeMobileSheet(); syncBoardSortControls(); if(tabId==='live-recent')loadLiveRecent();else renderBoard();
+}
+document.addEventListener('click',closeBoardSortMenu);
+function gameKickoffTime(game){
+  const source=game.rows.find(row=>row.kickoff_iso||row._game_time)||game.selected||{};
+  const value=new Date(source.kickoff_iso||source._game_time||'').getTime(); return Number.isFinite(value)?value:Number.POSITIVE_INFINITY;
+}
+function gameMarketOrder(game){ const order={MONEYLINE:0,SPREAD:1,TOTAL:2}; return order[String(game.rows[0]?.market_display||'').toUpperCase()]??99; }
+function gameSaved(game){ return typeof window.isSavedGame==='function'&&window.isSavedGame(game.rows); }
+function sortBoardGames(games){
+  return games.sort((a,b)=>{
+    let result=0;
+    if(boardSortMode==='DATE') result=gameKickoffTime(a)-gameKickoffTime(b);
+    else if(boardSortMode==='MARKET') result=gameMarketOrder(a)-gameMarketOrder(b);
+    else if(boardSortMode==='SAVED') result=Number(gameSaved(b))-Number(gameSaved(a));
+    if(result) return result;
+    return a.bestRank-b.bestRank||String(a.selected.game||'').localeCompare(String(b.selected.game||''));
+  });
+}
 function gameMarketSelector(group,selected){
   const id=boardGameKey(selected), selectedMarket=String(selected.market_display||'').toUpperCase();
   return '<div class="game-market-selector" role="group" aria-label="Available markets for '+escHtml(selected.game||'game')+'">'+group.map(row=>{
@@ -2737,7 +2796,8 @@ function renderBoard(resetPage=true){
     const id=boardGameKey(rows[0]), requested=boardGameSelections.get(id);
     const selected=rows.find(row=>String(row.market_display||'').toUpperCase()===requested)||rows[0];
     return {id,rows,selected,bestRank:boardRank(rows[0])};
-  }).sort((a,b)=>a.bestRank-b.bestRank||String(a.selected.game||'').localeCompare(String(b.selected.game||'')));
+  });
+  sortBoardGames(games);
   const data=games.map(game=>game.selected);
   window._boardRows=data;
   if(resetPage || !_visibleBoardRows) _visibleBoardRows=Math.min(games.length,boardPageSize());
@@ -4756,6 +4816,7 @@ setInterval(loadAll, 60000);
   if(!Array.isArray(saved)) saved=[];
   const keyFor=row=>String(row.game||'').trim()+' | '+String(row.market_display||'').trim();
   const labelFor=row=>String(row.game||'').trim()+' · '+String(row.market_display||'').trim();
+  window.isSavedGame=function(rows){ return (rows||[]).some(row=>saved.some(item=>item.id===keyFor(row))); };
   function persist(){ localStorage.setItem(savedKey,JSON.stringify(saved)); }
   function renderSaved(){
     const host=document.getElementById('saved-games'),count=document.getElementById('saved-count');
@@ -4770,7 +4831,7 @@ setInterval(loadAll, 60000);
       const row=document.createElement('div');row.className='saved-item';
       row.innerHTML='<span class="star" aria-hidden="true">★</span><button type="button" class="saved-label"></button><button type="button" class="saved-remove" aria-label="Remove saved market">×</button>';
       const open=row.querySelector('.saved-label');open.textContent=item.label;open.onclick=()=>{const market=(window._boardRows||[]).find(r=>keyFor(r)===item.id);if(market)openGameDetail(market)};
-      row.querySelector('.saved-remove').onclick=()=>{saved=saved.filter(x=>x.id!==item.id);persist();renderSaved();decorateRows();};
+      row.querySelector('.saved-remove').onclick=()=>{saved=saved.filter(x=>x.id!==item.id);persist();renderSaved();if(boardSortMode==='SAVED')renderBoard(false);else decorateRows();};
       host.append(row);
     });
   }
@@ -4781,7 +4842,7 @@ setInterval(loadAll, 60000);
       const id=keyFor(market),button=document.createElement('button');
       button.type='button';button.className='production-save';button.title='Save '+labelFor(market);button.textContent=saved.some(x=>x.id===id)?'★':'☆';
       button.style.cssText='border:0;background:transparent;color:#e34d45;cursor:pointer;font-size:14px';
-      button.onclick=event=>{event.stopPropagation();const present=saved.some(x=>x.id===id);saved=present?saved.filter(x=>x.id!==id):[{id,label:labelFor(market)},...saved];persist();renderSaved();document.querySelectorAll('.production-save').forEach(node=>{if(node.title===button.title)node.textContent=present?'☆':'★'});};
+      button.onclick=event=>{event.stopPropagation();const present=saved.some(x=>x.id===id);saved=present?saved.filter(x=>x.id!==id):[{id,label:labelFor(market)},...saved];persist();renderSaved();if(boardSortMode==='SAVED')renderBoard(false);else document.querySelectorAll('.production-save').forEach(node=>{if(node.title===button.title)node.textContent=present?'☆':'★'});};
       cell.append(button);
     });
   }
@@ -4824,7 +4885,7 @@ setInterval(loadAll, 60000);
     if(activeMarket)document.querySelectorAll('[data-production-market]').forEach(node=>node.classList.toggle('active',node.dataset.productionMarket===activeMarket));
     if(activeSport)document.querySelectorAll('[data-production-sport]').forEach(node=>node.classList.toggle('active',node.dataset.productionSport===activeSport));
   }
-  if(typeof baseRender==='function')window.renderBoard=function(){const result=baseRender.apply(this,arguments);syncSidebar();syncApprovedBoardControls();return result;};
+  if(typeof baseRender==='function')window.renderBoard=function(){const result=baseRender.apply(this,arguments);syncSidebar();syncApprovedBoardControls();syncBoardSortControls();return result;};
   const baseStats=window.updateStats;
   if(typeof baseStats==='function')window.updateStats=function(){const result=baseStats.apply(this,arguments);syncSidebar();return result;};
   document.addEventListener('DOMContentLoaded',()=>{syncSidebar();syncApprovedBoardControls();},{once:true});
