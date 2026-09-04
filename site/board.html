@@ -1122,12 +1122,12 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .two-side-cell { display:grid; gap:0; min-width:0; }
 .two-side-row { display:grid; align-items:center; min-width:0; height:38px; min-height:38px; }
 .two-side-row + .two-side-row { border-top:1px solid #f0efeb; }
-.two-side-splits.is-total .two-side-row { grid-template-columns:14px 24px minmax(32px,1fr) 27px 19px minmax(32px,1fr) 27px; column-gap:5px; }
-.two-side-splits.is-team .two-side-row { grid-template-columns:24px minmax(32px,1fr) 27px 19px minmax(32px,1fr) 27px; column-gap:5px; }
-.two-side-lines .two-side-row { grid-template-columns:minmax(0,1fr); }
-.two-side-current .two-side-row { align-content:center; gap:4px; }
+.two-side-splits.is-total .two-side-row { grid-template-columns:42px 24px minmax(32px,1fr) 27px 19px minmax(32px,1fr) 27px; column-gap:5px; }
+.two-side-splits.is-team .two-side-row { grid-template-columns:76px 24px minmax(32px,1fr) 27px 19px minmax(32px,1fr) 27px; column-gap:5px; }
+.two-side-lines .two-side-row { grid-template-columns:minmax(76px,94px) minmax(0,1fr); column-gap:7px; }
+.two-side-current .two-side-row { align-content:center; gap:4px; }.two-side-current .market-move{grid-column:2;}
 .two-side-read { width:100%; max-width:100%; overflow:hidden; }
-.two-side-read .two-side-row { display:flex; align-items:center; align-content:center; flex-wrap:wrap; gap:3px; padding:2px 0; white-space:normal; overflow:hidden; max-width:100%; }
+.two-side-read .two-side-row { display:flex; align-items:center; align-content:center; flex-wrap:wrap; gap:3px; padding:2px 0; white-space:normal; overflow:hidden; max-width:100%; }.two-side-read .two-side-label{flex:0 0 76px}
 .two-side-read .two-side-row.is-strongest { background:linear-gradient(90deg,rgba(21,134,106,.10),rgba(21,134,106,0)); box-shadow:inset 2px 0 0 var(--green); padding-left:6px; }
 .two-side-read .two-side-row.is-strongest .mr:first-of-type { font-weight:800; }
 .two-side-game .two-side-row { grid-template-columns:minmax(0,1fr); padding-left:64px; }
@@ -1145,7 +1145,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .game-sport .sport-tag,.game-sport .spchip { margin:0!important; }
 .th-game { padding-left:74px!important; }
 .th-market-read { text-align:left!important; padding-left:9px!important; }
-.two-side-label { overflow:hidden; text-overflow:ellipsis; color:var(--text); font:700 8px var(--sans); white-space:nowrap; text-transform:uppercase; }
+.two-side-label { overflow:hidden; text-overflow:ellipsis; color:var(--text2); font:700 9px var(--sans); white-space:nowrap; }
 .two-side-metric { color:var(--text); font:700 8px var(--sans); text-transform:uppercase; white-space:nowrap; }
 .two-side-value { color:var(--text); font:700 9px var(--sans); white-space:nowrap; text-align:right; margin-right:6px; }
 .two-side-track { height:4px; overflow:hidden; border-radius:99px; background:#f8d8d4; }
@@ -1350,18 +1350,21 @@ td:last-child { border-radius: 0 8px 8px 0; }
   #drill-overlay .game-detail-modal .detail-side-toggle { width:100%; }
   #drill-overlay .game-detail-modal .detail-side-toggle button { min-width:0; }
   #drill-overlay .game-detail-modal .journey-track { display:block; overflow:visible; padding:0 0 0 20px; }
-  #drill-overlay .game-detail-modal .journey-event { max-width:none; min-width:0; padding:0 0 12px 14px; }
+  #drill-overlay .game-detail-modal .journey-event { max-width:none; min-width:0; padding:0 0 12px 30px; }
   #drill-overlay .game-detail-modal .journey-event:not(:last-child)::after { top:15px; right:auto; left:6px; width:2px; height:calc(100% - 10px); }
   #drill-overlay .game-detail-modal .journey-dot { position:absolute; top:0; left:0; }
   #drill-overlay .game-detail-modal .journey-event-name { margin-top:0; }
   #drill-overlay .game-detail-modal .market-story-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   #drill-overlay .game-detail-modal .detail-observations { overflow:visible !important; }
-  #drill-overlay .game-detail-modal .detail-observation-table { display:block; width:100% !important; font-size:10px !important; }
+  #drill-overlay .game-detail-modal .detail-observation-table { display:block; width:100% !important; font:600 10px var(--sans) !important; }
   #drill-overlay .game-detail-modal .detail-observation-table thead { display:none; }
-  #drill-overlay .game-detail-modal .detail-observation-table tbody { display:grid; gap:7px; }
-  #drill-overlay .game-detail-modal .detail-observation-table tr { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:7px 10px; padding:8px; border:1px solid var(--border) !important; border-radius:7px; background:#fff; }
+  #drill-overlay .game-detail-modal .detail-observation-table tbody { display:block; }
+  #drill-overlay .game-detail-modal .detail-observation-table tr { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:4px 12px; padding:7px 0; border:0 !important; border-bottom:1px solid var(--border) !important; border-radius:0; background:transparent; }
+  #drill-overlay .game-detail-modal .detail-observation-table tr:last-child { border-bottom:0 !important; }
   #drill-overlay .game-detail-modal .detail-observation-table td { display:block; min-width:0; padding:0 !important; border:0 !important; white-space:normal !important; line-height:1.2; overflow-wrap:anywhere; }
-  #drill-overlay .game-detail-modal .detail-observation-table td::before { content:attr(data-label); display:block; margin-bottom:3px; color:var(--text3); font:700 7px var(--mono); letter-spacing:.06em; text-transform:uppercase; }
+  #drill-overlay .game-detail-modal .detail-observation-table td::before { content:attr(data-label); display:block; margin-bottom:2px; color:var(--text3); font:700 7px var(--sans); letter-spacing:.06em; text-transform:uppercase; }
+  #drill-overlay .game-detail-modal .detail-observation-table td { font-family:var(--sans) !important; }
+  #drill-overlay .game-detail-modal .detail-observation-table td:nth-child(1),#drill-overlay .game-detail-modal .detail-observation-table td:nth-child(2),#drill-overlay .game-detail-modal .detail-observation-table td:nth-child(3),#drill-overlay .game-detail-modal .detail-observation-table td:nth-child(4) { font-family:var(--mono) !important; font-variant-numeric:tabular-nums; }
   .lpane { min-width:0; }
   .lpane > .tscroll > table { min-width:1360px; }
   .td-game { width:220px; max-width:220px; }
@@ -2295,6 +2298,7 @@ function sideLabel(side,r){
   if(String(r.market_display||'').toUpperCase()==='TOTAL') return /^under/i.test(text)?'UNDER':'OVER';
   return text.replace(/\s[+-]\d+(?:\.\d+)?(?:\s*\([^)]*\))?\s*$/,'')||text;
 }
+function displaySideLabel(side,r){ const label=sideLabel(side,r); return String(r.market_display||'').toUpperCase()==='TOTAL'?(label==='UNDER'?'Under':'Over'):label; }
 function marketSideIdentity(side,r){
   const market=String(r?.market_display||'').toUpperCase();
   const label=String(side?.flagged_side||'').trim();
@@ -2334,7 +2338,7 @@ function twoSideSplitCell(r){
   return '<div class="two-side-cell two-side-splits '+(isTotal?'is-total':'is-team')+'">'+sides.slice(0,2).map(side=>{
     const bets=Number(side.bets_pct), money=Number(side.money_pct);
     const betsText=Number.isFinite(bets)?bets.toFixed(0)+'%':'—', moneyText=Number.isFinite(money)?money.toFixed(0)+'%':'—';
-    const sideMark=isTotal?'<span class="two-side-label">'+(sideLabel(side,r)==='UNDER'?'U':'O')+'</span>':'';
+    const sideMark='<span class="two-side-label" title="'+escHtml(displaySideLabel(side,r))+'">'+escHtml(displaySideLabel(side,r))+'</span>';
     return '<div class="two-side-row">'+sideMark+'<span class="two-side-metric">Bets</span><span class="two-side-track" title="'+betsText+' bets"><span class="two-side-fill" style="width:'+Math.max(0,Math.min(100,bets||0))+'%"></span></span><span class="two-side-value">'+betsText+'</span><span class="two-side-metric">$$$</span><span class="two-side-track" title="'+moneyText+' money"><span class="two-side-fill" style="width:'+Math.max(0,Math.min(100,money||0))+'%"></span></span><span class="two-side-value">'+moneyText+'</span></div>';
   }).join('')+'</div>';
 }
@@ -2342,7 +2346,7 @@ function twoSideLineCell(r,field){
   const sides=marketSides(r);
   if(sides.length<2) return '<div class="two-side-missing">—</div>';
   const current=field==='current_line';
-  return '<div class="two-side-cell two-side-lines '+(current?'two-side-current':'')+'">'+sides.slice(0,2).map(side=>'<div class="two-side-row"><span class="two-side-line">'+escHtml(side[field]||'—')+'</span>'+(current?sideMovementHtml(side,r):'')+'</div>').join('')+'</div>';
+  return '<div class="two-side-cell two-side-lines '+(current?'two-side-current':'')+'">'+sides.slice(0,2).map(side=>'<div class="two-side-row"><span class="two-side-label" title="'+escHtml(displaySideLabel(side,r))+'">'+escHtml(displaySideLabel(side,r))+'</span><span class="two-side-line">'+escHtml(side[field]||'—')+'</span>'+(current?sideMovementHtml(side,r):'')+'</div>').join('')+'</div>';
 }
 function sideLineParts(line){
   const text=String(line||'');
@@ -2405,7 +2409,7 @@ function twoSideReadCell(r){
   return '<div class="two-side-cell two-side-read">'+sides.slice(0,2).map((side,index)=>{
     const chips=[...new Set(sideSignals(side))].map(value=>anomalyBadge(value)).join('');
     const isStrongest=index===strongest;
-    return '<div class="two-side-row'+(isStrongest?' is-strongest':'')+'">'+(chips||'<span class="two-side-missing">No active signal</span>')+'</div>';
+    return '<div class="two-side-row'+(isStrongest?' is-strongest':'')+'"><span class="two-side-label" title="'+escHtml(displaySideLabel(side,r))+'">'+escHtml(displaySideLabel(side,r))+'</span>'+(chips||'<span class="two-side-missing">No active signal</span>')+'</div>';
   }).join('')+'</div>';
 }
 function primaryReadRank(side){
@@ -3052,7 +3056,7 @@ function movementChart(rows, market, selectedTimestamp='', selectedSide=''){
     const first=rows[0], last=rows[rows.length-1];
     const xLabels=`<text x="${padLeft}" y="${height-3}" fill="#74808a" font-size="8" font-family="var(--mono)">${timeLabel(first)}</text><text x="${width-padRight}" y="${height-3}" text-anchor="end" fill="#74808a" font-size="8" font-family="var(--mono)">${timeLabel(last)}</text>`;
     const scrubPoints=points.map((point,index)=>`<circle class="movement-scrub-point" data-index="${index}" data-time="${escHtml(timeLabel(rows[index]))}" data-value="${escHtml(view.pointLabel(rows[index]))}" data-bets="${escHtml(compact(number(rows[index].bets_pct))+'%')}" data-money="${escHtml(compact(number(rows[index].money_pct))+'%')}" cx="${point[0]}" cy="${point[1]}" r="12" fill="transparent"/>`).join('');
-    return `<div class="movement-panel" data-movement-view="${view.key}" style="display:${view.key==='market'?'block':'none'}"><div class="movement-chart-note">${view.note}</div><svg class="movement-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${view.title} trajectory"><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#dd4a40" stop-opacity=".25"/><stop offset="1" stop-color="#dd4a40" stop-opacity=".02"/></linearGradient></defs>${ticks}<path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${polyline}" fill="none" stroke="#dd4a40" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#dd4a40" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#dd4a40"/>${selectedMarker}${scrubPoints}${xLabels}</svg><div class="movement-inspector" aria-live="polite">Touch the chart to inspect an observation.</div><div class="movement-facts"><div class="movement-fact"><span>Start</span><b>${view.pointLabel(first)}</b></div><div class="movement-fact"><span>Current</span><b>${view.pointLabel(last)}</b></div><div class="movement-fact"><span>High</span><b>${view.axisLabel(max)}</b></div><div class="movement-fact"><span>Low</span><b>${view.axisLabel(min)}</b></div></div></div>`;
+    return `<div class="movement-panel" data-movement-view="${view.key}" style="display:${view.key==='market'?'block':'none'}"><div class="movement-chart-note">${view.note}</div><svg class="movement-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${view.title} trajectory"><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#dd4a40" stop-opacity=".25"/><stop offset="1" stop-color="#dd4a40" stop-opacity=".02"/></linearGradient></defs>${ticks}<path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${polyline}" fill="none" stroke="#dd4a40" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#dd4a40" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#dd4a40"/>${selectedMarker}${scrubPoints}${xLabels}</svg><div class="movement-facts"><div class="movement-fact"><span>Start</span><b>${view.pointLabel(first)}</b></div><div class="movement-fact"><span>Current</span><b>${view.pointLabel(last)}</b></div><div class="movement-fact"><span>High</span><b>${view.axisLabel(max)}</b></div><div class="movement-fact"><span>Low</span><b>${view.axisLabel(min)}</b></div></div></div>`;
   };
   const tabs=views.map(view=>`<button type="button" class="movement-tab ${view.key==='market'?'on':''}" onclick="setMovementView(this,'${view.key}')">${view.label}</button>`).join('');
   return `<div class="movement-chart" data-movement-chart><div class="movement-chart-head"><div><div class="movement-chart-title">Market trajectory</div><div class="movement-chart-note">${rows.length} timestamped observations for ${escHtml(selectedSideText)}.</div></div><div class="movement-tabs">${tabs}</div></div>${views.map(panel).join('')}</div>`;
@@ -4476,7 +4480,7 @@ function renderGameDetail(){
   html+='<div class="detail-current-read"><div><div class="detail-current-line">'+escHtml(selected.current_line||'--')+'</div>'+(currentMovement?'<div class="detail-current-movement">'+currentMovement+'</div>':'')+'<div class="detail-current-splits"><span>'+escHtml(detailPct(selected.bets_pct,'Bets'))+'</span><span>'+escHtml(detailPct(selected.money_pct,'Money'))+'</span></div></div><div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">'+signals.map(anomalyBadge).join('')+'</div></div>';
   html+=movementChart(detailRows,r.market_display,state.selectedJourneyTimestamp,selected.flagged_side||sideLabel(selected,r));
   html+=detailJourneyHtml(detailRows,selected,state.selectedJourneyTimestamp);
-  html+='<section class="market-story"><h3>Market Story</h3><div class="market-story-grid"><div class="market-story-item"><span>Since Open</span><b>'+escHtml((detailRows[0]?.line_display||selected.open_line||'--')+' → '+(detailRows[detailRows.length-1]?.line_display||selected.current_line||'--'))+'</b></div><div class="market-story-item"><span>Positioning</span><b>'+escHtml(detailPct(selected.bets_pct,'Bets')+' / '+detailPct(selected.money_pct,'Money'))+'</b></div><div class="market-story-item"><span>First Signal</span><b>'+escHtml(firstSignal)+'</b></div><div class="market-story-item"><span>Latest Development</span><b>'+escHtml(detailLatestDevelopment(detailRows,selected))+'</b></div></div><p class="market-story-copy">'+escHtml(detailStoryCopy(selected,detailRows))+'</p></section>';
+  html+='<section class="market-story"><h3>Market Story</h3><div class="market-story-grid"><div class="market-story-item"><span>Since Open</span><b>'+escHtml((detailRows[0]?.line_display||selected.open_line||'--')+' → '+(detailRows[detailRows.length-1]?.line_display||selected.current_line||'--'))+'</b></div><div class="market-story-item"><span>Positioning</span><b>'+escHtml(detailPct(selected.bets_pct,'Bets')+' / '+detailPct(selected.money_pct,'Money'))+'</b></div><div class="market-story-item"><span>First Signal</span><b>'+escHtml(firstSignal)+'</b></div><div class="market-story-item"><span>Latest Development</span><b>'+escHtml(detailLatestDevelopment(detailRows,selected))+'</b></div></div></section>';
   html+='<section class="detail-proof"><div class="detail-proof-head"><div><h3>Proof / Observation History</h3><small>'+escHtml(proofSummary)+'</small></div></div><div class="detail-proof-body"><div class="detail-proof-metrics" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px"><div class="movement-fact"><span>'+escHtml(hasClassifiedSignal?'First Signal':'First Observed')+'</span><b>'+escHtml(hasClassifiedSignal?et(frozenSignal):(detailRows.length?et(detailRows[0].timestamp):'--'))+'</b></div><div class="movement-fact"><span>Max Excursion</span><b>'+escHtml(maxExcursion)+'</b></div><div class="movement-fact"><span title="Counts every raw line-direction change across timestamped observations; Market Journey shows only meaningful reversal milestones.">Raw Reversals</span><b>'+escHtml(String(journeyStats.reversals))+'</b></div><div class="movement-fact"><span>Observations</span><b>'+escHtml(String(detailRows.length||selected.observation_count||'--'))+'</b></div></div>';
   if(detailRows.length){ html+='<button type="button" class="detail-observations-toggle" onclick="toggleDetailObservations(this)">View '+escHtml(String(detailRows.length))+' observations</button><div class="detail-observations" style="overflow:auto"><table class="detail-observation-table" style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px"><thead><tr style="background:var(--bg4)"><th style="padding:5px 8px;text-align:left">Time</th><th style="padding:5px 8px;text-align:left">Line</th><th style="padding:5px 8px;text-align:left">Bets</th><th style="padding:5px 8px;text-align:left">Money</th></tr></thead><tbody>'+detailRows.map(row=>'<tr class="detail-observation-row '+(String(row.timestamp||'')===String(state.selectedJourneyTimestamp||'')?'is-selected':'')+'" style="border-bottom:1px solid var(--border)"><td data-label="Time" style="padding:4px 8px">'+escHtml(et(row.timestamp))+'</td><td data-label="Line" style="padding:4px 8px">'+escHtml(row.line_display||'--')+'</td><td data-label="Bets" style="padding:4px 8px">'+escHtml(detailPercent(row.bets_pct))+'</td><td data-label="Money" style="padding:4px 8px">'+escHtml(detailPercent(row.money_pct))+'</td></tr>').join('')+'</tbody></table></div>'; } else { html+='<div style="color:var(--text3);font-size:12px;padding:10px">No event history yet</div>'; }
   html+='</div></section>'+(isClean?'<footer class="detail-quality detail-quality-clean"><span class="detail-quality-label">Data Quality</span>'+dataBadge(r.data_badge)+'</footer>':'<section class="detail-quality detail-quality-warning"><h3>Data Quality</h3>'+dataBadge(r.data_badge)+'</section>')+'</div>';
