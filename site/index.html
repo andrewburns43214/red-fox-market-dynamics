@@ -205,8 +205,10 @@ section { padding: 100px 40px; }
 .mobile-app-kicker { color:#f07a71; font:700 10px var(--mono); letter-spacing:1.4px; text-transform:uppercase; }
 .mobile-app h2 { margin:9px 0 7px; color:#fff; font-size:26px; line-height:1.1; letter-spacing:-.8px; }
 .mobile-app p { max-width:620px; color:#c4ccd3; font-size:14px; line-height:1.6; }
-.mobile-app .btn { margin-top:18px; }
-.mobile-platforms { margin-top:13px; color:#98a4ae; font:700 10px var(--mono); letter-spacing:.8px; }
+.mobile-install { display:inline-flex; flex-direction:column; align-items:center; margin-top:27px; }
+.mobile-app .btn { min-width:188px; margin:0; border:1px solid rgba(255,255,255,.25); border-radius:8px; background:#f5f6f6; color:#182126; box-shadow:0 3px 10px rgba(0,0,0,.16); text-decoration:none!important; }
+.mobile-app .btn:hover,.mobile-app .btn:focus-visible { background:#fff; color:#050708; text-decoration:none!important; }
+.mobile-platforms { margin-top:10px; color:#aeb8c0; font:700 10px var(--mono); letter-spacing:.8px; text-align:center; }
 .mobile-qr { display:grid; justify-items:center; gap:9px; padding:10px; border-radius:10px; background:#fff; color:var(--text3); font-size:10px; text-align:center; }
 .mobile-qr img { display:block; width:108px; height:108px; }
 .feat-card {
@@ -696,6 +698,7 @@ section { padding: 100px 40px; }
   .mobile-app-card { display:block; padding:25px 22px; }
   .mobile-app h2 { font-size:22px; }
   .mobile-app p { font-size:13px; }
+  .mobile-install { display:flex; width:100%; }
   .mobile-app .btn { width:100%; }
   .mobile-qr { display:none; }
   .feat-card { padding: 28px 22px; }
@@ -807,8 +810,7 @@ section { padding: 100px 40px; }
       <div class="mobile-app-kicker">Red Fox MI for Mobile</div>
       <h2 id="mobile-app-title">Market intelligence, wherever you bet.</h2>
       <p>Install Red Fox MI on your iPhone or Android for one-tap access to the live board, saved games, Market Reads and drilldowns.</p>
-      <a class="btn btn-primary" href="/app">Install Red Fox MI</a>
-      <div class="mobile-platforms">iPhone &middot; Android &middot; Web</div>
+      <div class="mobile-install"><a class="btn btn-primary" href="/app">Install Red Fox MI</a><div class="mobile-platforms">iPhone &middot; Android</div></div>
     </div>
     <aside class="mobile-qr" aria-label="Install Red Fox MI on your phone">
       <img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&amp;format=svg&amp;data=https%3A%2F%2Fredfoxmi.com%2Fapp" alt="QR code linking to Red Fox MI mobile installation">
