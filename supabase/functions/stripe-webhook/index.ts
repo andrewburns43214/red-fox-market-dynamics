@@ -17,6 +17,23 @@ type RedFoxDatabase = {
   };
 };
 type ServiceClient = ReturnType<typeof createClient<RedFoxDatabase>>;
+
+function configuredApiKey(legacyName: string, platformName: string): string {
+  const legacy = Deno.env.get(legacyName);
+  if (legacy) return legacy;
+  const encoded = Deno.env.get(platformName);
+  if (encoded) {
+    try {
+      const keys: unknown = JSON.parse(encoded);
+      if (typeof keys === 'object' && keys !== null && 'default' in keys) {
+        const defaultKey = (keys as { default?: unknown }).default;
+        if (typeof defaultKey === 'string' && defaultKey) return defaultKey;
+      }
+    } catch { /* fall through to the explicit configuration error */ }
+  }
+  throw new Error(`Missing ${legacyName} or ${platformName} default key`);
+}
+
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, {
   apiVersion: '2023-10-16',
   httpClient: Stripe.createFetchHttpClient(),
@@ -94,7 +111,7 @@ Deno.serve(async (req) => {
 
   const supabase = createClient<RedFoxDatabase>(
     Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    configuredApiKey('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEYS')
   );
 
   switch (event.type) {

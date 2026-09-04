@@ -1,5 +1,21 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
+function configuredApiKey(legacyName: string, platformName: string): string {
+  const legacy = Deno.env.get(legacyName);
+  if (legacy) return legacy;
+  const encoded = Deno.env.get(platformName);
+  if (encoded) {
+    try {
+      const keys: unknown = JSON.parse(encoded);
+      if (typeof keys === 'object' && keys !== null && 'default' in keys) {
+        const defaultKey = (keys as { default?: unknown }).default;
+        if (typeof defaultKey === 'string' && defaultKey) return defaultKey;
+      }
+    } catch { /* fall through to the explicit configuration error */ }
+  }
+  throw new Error(`Missing ${legacyName} or ${platformName} default key`);
+}
+
 const allowedOrigins = new Set(['https://redfoxmi.com', 'https://www.redfoxmi.com']);
 
 function cors(req: Request) {
@@ -19,7 +35,7 @@ Deno.serve(async (req) => {
   if (!authorization) return new Response('Unauthorized', { status: 401, headers: cors(req) });
   const userClient = createClient(
     Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_ANON_KEY')!,
+    configuredApiKey('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEYS'),
     { global: { headers: { Authorization: authorization } } },
   );
   const { data: authData, error: authError } = await userClient.auth.getUser();
