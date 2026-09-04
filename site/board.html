@@ -1154,13 +1154,13 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .game-sport .sport-tag,.game-sport .spchip { margin:0!important; }
 .th-game { padding-left:74px!important; }
 .th-market-read { text-align:left!important; padding-left:9px!important; }
-.two-side-label { overflow:hidden; text-overflow:ellipsis; color:var(--text2); font:700 8px var(--mono); white-space:nowrap; text-transform:uppercase; }
-.two-side-metric { color:var(--text3); font:700 9px var(--mono); text-transform:uppercase; white-space:nowrap; }
-.two-side-value { color:var(--text); font:700 10px var(--mono); white-space:nowrap; text-align:right; margin-right:6px; }
+.two-side-label { overflow:hidden; text-overflow:ellipsis; color:var(--text); font:700 8px var(--sans); white-space:nowrap; text-transform:uppercase; }
+.two-side-metric { color:var(--text3); font:700 8px var(--sans); text-transform:uppercase; white-space:nowrap; }
+.two-side-value { color:var(--text); font:700 9px var(--sans); white-space:nowrap; text-align:right; margin-right:6px; }
 .two-side-track { height:4px; overflow:hidden; border-radius:99px; background:#f8d8d4; }
 .two-side-fill { display:block; height:100%; border-radius:99px; background:#e34840; }
-.two-side-line { min-width:0; color:var(--text); font:600 11px var(--mono); white-space:nowrap; }
-.market-move { display:block; font:600 7.5px/1.15 var(--sans); letter-spacing:.03em; white-space:nowrap; }
+.two-side-line { min-width:0; color:var(--text); font:600 10px var(--sans); white-space:nowrap; }
+.market-move { display:block; font:600 7px/1.15 var(--sans); letter-spacing:.03em; white-space:nowrap; }
 .market-move.toward { color:#15866a; }.market-move.against { color:#c74138; }.market-move.held { color:var(--text3); }.market-move.mixed { color:#66747a; }
 .two-side-read .mr { display:inline-flex; flex:0 0 auto; align-items:center; margin:0!important; padding:2px 5px; font-size:8px; line-height:1.1; }
 .two-side-rationale .two-side-row { height:auto; min-height:76px; align-content:center; padding:6px 0; color:var(--text2); font-size:11px; line-height:1.32; }
@@ -1460,7 +1460,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
 <div class="app-board-controls" aria-label="Board filters">
   <span>MARKET</span><button class="active" data-production-market="ALL" onclick="setProductionMarket('ALL',this)">All</button><button data-production-market="SPREAD" onclick="setProductionMarket('SPREAD',this)">Spread</button><button data-production-market="MONEYLINE" onclick="setProductionMarket('MONEYLINE',this)">Moneyline</button><button data-production-market="TOTAL" onclick="setProductionMarket('TOTAL',this)">Total</button>
   <span class="app-sport-label">SPORT</span><button class="active" data-production-sport="ALL" onclick="setProductionSport('ALL',this)">All</button><button data-production-sport="MLB" onclick="setProductionSport('MLB',this)">MLB</button><button data-production-sport="NBA" onclick="setProductionSport('NBA',this)">NBA</button><button data-production-sport="NCAAB" onclick="setProductionSport('NCAAB',this)">NCAAB</button><button data-production-sport="CFB" onclick="setProductionSport('CFB',this)">CFB</button><button data-production-sport="NFL" onclick="setProductionSport('NFL',this)">NFL</button><button data-production-sport="NHL" onclick="setProductionSport('NHL',this)">NHL</button><button data-production-sport="UFC" onclick="setProductionSport('UFC',this)">UFC</button>
-  <label><span aria-hidden="true">⌕</span><input id="production-search" type="search" placeholder="Search games or signals" oninput="setProductionSearch(this.value)"></label>
+  <label><span aria-hidden="true">⌕</span><input id="production-search" type="search" placeholder="Search games or reads" oninput="setProductionSearch(this.value)"></label>
 </div>
 
 <!-- â”€â”€â”€ TOPBAR â”€â”€â”€ -->
@@ -1603,7 +1603,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
             </button>
           </div>
           <div class="board-tools">
-            <input type="text" id="board-search" placeholder="Search games or signals" oninput="renderBoard()">
+            <input type="text" id="board-search" placeholder="Search games or reads" oninput="renderBoard()">
             <span class="pane-meta" id="board-meta">-</span><span class="board-update-note" id="board-update-note"></span>
           </div>
         </div>
@@ -1622,7 +1622,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
           <button type="button" data-production-sport="NFL" onclick="setProductionSport('NFL',this)">NFL</button>
           <button type="button" data-production-sport="NHL" onclick="setProductionSport('NHL',this)">NHL</button>
           <button type="button" data-production-sport="UFC" onclick="setProductionSport('UFC',this)">UFC</button>
-          <label class="sandbox-static-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg><input type="search" placeholder="Search games or signals" oninput="setProductionSearch(this.value)"></label>
+          <label class="sandbox-static-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg><input type="search" placeholder="Search games or reads" oninput="setProductionSearch(this.value)"></label>
         </div>
         <div class="sandbox-action-widgets" aria-label="Board actions">
           <button type="button" onclick="toggleGroup(document.getElementById('grp-toggle'))"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/></svg><span>Group</span></button>
