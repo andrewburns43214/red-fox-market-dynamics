@@ -1122,12 +1122,12 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .two-side-cell { display:grid; gap:0; min-width:0; }
 .two-side-row { display:grid; align-items:center; min-width:0; height:38px; min-height:38px; }
 .two-side-row + .two-side-row { border-top:1px solid #f0efeb; }
-.two-side-splits.is-total .two-side-row { grid-template-columns:14px 24px minmax(32px,1fr) 27px 19px minmax(32px,1fr) 27px; column-gap:5px; }
-.two-side-splits.is-team .two-side-row { grid-template-columns:24px minmax(32px,1fr) 27px 19px minmax(32px,1fr) 27px; column-gap:5px; }
-.two-side-lines .two-side-row { grid-template-columns:minmax(0,1fr); }
-.two-side-current .two-side-row { align-content:center; gap:4px; }
+.two-side-splits.is-total .two-side-row { grid-template-columns:32px 24px minmax(32px,1fr) 27px 19px minmax(32px,1fr) 27px; column-gap:5px; }
+.two-side-splits.is-team .two-side-row { grid-template-columns:38px 24px minmax(32px,1fr) 27px 19px minmax(32px,1fr) 27px; column-gap:5px; }
+.two-side-lines .two-side-row { grid-template-columns:minmax(38px,48px) minmax(0,1fr); column-gap:6px; }
+.two-side-current .two-side-row { align-content:center; gap:4px; }.two-side-current .market-move{grid-column:2;}
 .two-side-read { width:100%; max-width:100%; overflow:hidden; }
-.two-side-read .two-side-row { display:flex; align-items:center; align-content:center; flex-wrap:wrap; gap:3px; padding:2px 0; white-space:normal; overflow:hidden; max-width:100%; }
+.two-side-read .two-side-row { display:flex; align-items:center; align-content:center; flex-wrap:wrap; gap:3px; padding:2px 0; white-space:normal; overflow:hidden; max-width:100%; }.two-side-read .two-side-label{flex:0 0 38px}
 .two-side-read .two-side-row.is-strongest { background:linear-gradient(90deg,rgba(21,134,106,.10),rgba(21,134,106,0)); box-shadow:inset 2px 0 0 var(--green); padding-left:6px; }
 .two-side-read .two-side-row.is-strongest .mr:first-of-type { font-weight:800; }
 .two-side-game .two-side-row { grid-template-columns:minmax(0,1fr); padding-left:64px; }
@@ -1464,14 +1464,20 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .detail-observations{overflow:visible!important;max-height:none!important;overscroll-behavior:auto!important}.detail-proof.is-open .detail-observations{display:block!important}.detail-observation-table{margin-bottom:8px}.detail-observation-table tbody{max-height:none!important}.detail-observations-toggle{position:relative;z-index:1}.board-empty td{grid-column:1/-1!important;padding:28px 16px!important;text-align:center!important}.board-empty strong{display:block;font-size:15px}.board-empty span{display:block;margin:6px 0 14px;color:var(--text3);font-size:12px}.board-empty button{min-height:40px;border:1px solid var(--accent);border-radius:99px;background:#fff;color:var(--accent);padding:0 14px;font:700 11px var(--sans)}
   /* One fixed, ordered filter stack: Market first, then Sport, directly below the board tabs. */
   .sfilters{display:none!important}
-  .app-board-controls{position:fixed!important;top:calc(104px + env(safe-area-inset-top))!important;left:0;right:0;z-index:85;display:flex!important;flex-direction:column;align-items:stretch;gap:6px;margin:0!important;padding:7px var(--mobile-gutter) 8px!important;overflow:hidden!important;background:#fff!important;border-bottom:1px solid var(--border2)!important}
+  .app-board-controls{position:sticky!important;top:calc(104px + env(safe-area-inset-top))!important;left:auto!important;right:auto!important;z-index:85;display:flex!important;flex-direction:column;align-items:stretch;gap:4px;margin:0!important;padding:5px var(--mobile-gutter) 6px!important;overflow:hidden!important;background:#fff!important;border-bottom:1px solid var(--border2)!important}
   .app-board-controls::before{display:none!important}
   .app-board-controls>label{display:none!important}
-  .app-filter-row{display:flex;align-items:center;gap:6px;min-width:0;overflow-x:auto;scrollbar-width:none}
+  .app-filter-row{display:flex;align-items:center;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none}
   .app-filter-row::-webkit-scrollbar{display:none}
-  .app-filter-label{flex:0 0 43px;color:#111827;font:700 9px var(--mono);letter-spacing:.08em;text-transform:uppercase}
-  .app-filter-row button{flex:0 0 auto;min-height:31px!important;padding:5px 10px!important}
-  .board{padding-top:104px!important}
+  .app-filter-label{flex:0 0 39px;color:#111827;font:700 8px var(--mono);letter-spacing:.08em;text-transform:uppercase}
+  .app-filter-row button{flex:0 0 auto;min-height:27px!important;padding:3px 8px!important;font-size:9px!important;line-height:1!important}
+  .app-board-controls button.active{background:var(--red)!important;border-color:var(--red)!important;color:#fff!important}
+  .tabs{height:46px!important;background:#fff!important;border-bottom:1px solid var(--border2)!important}
+  .tab{height:46px!important;padding:0 9px!important;color:#050708!important;font-size:10px!important}
+  .tab.active{color:var(--red)!important;border-bottom-color:var(--red)!important}
+  .tab .tbadge{background:transparent!important;border-color:var(--border)!important;color:#050708!important}
+  .tab.active .tbadge{background:#fbe4e1!important;border-color:#efb5ae!important;color:var(--red)!important}
+  .board{padding-top:10px!important}
 }
 </style>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -1496,11 +1502,6 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   <section class="rail-group"><button class="rail-section-toggle" type="button" aria-expanded="false" onclick="toggleSidebarGroup('research')"><span>External Research</span><span class="rail-count rail-count-placeholder" aria-hidden="true"></span><svg class="rail-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg></button><div class="rail-section-panel" id="rail-research" hidden><div class="rail-research-note">Trusted qualitative sources to pair with the board.</div><a href="https://www.covers.com/sport" target="_blank" rel="noopener">Covers analysis <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="M6 3h7v7M13 3 6 10M3 6v7h7"/></svg></a><a href="https://www.espn.com/" target="_blank" rel="noopener">ESPN reporting <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="M6 3h7v7M13 3 6 10M3 6v7h7"/></svg></a><a href="https://www.rotowire.com/" target="_blank" rel="noopener">RotoWire news &amp; lineups <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="M6 3h7v7M13 3 6 10M3 6v7h7"/></svg></a><a href="https://www.weather.gov/" target="_blank" rel="noopener">National Weather Service <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="M6 3h7v7M13 3 6 10M3 6v7h7"/></svg></a></div></section>
   <div class="rail-foot">The market tells a story.<br><strong>Read it with proof.</strong></div>
 </aside>
-<div class="app-board-controls" aria-label="Board filters">
-  <div class="app-filter-row" aria-label="Market filter"><span class="app-filter-label">Market</span><button class="active" data-production-market="ALL" onclick="setProductionMarket('ALL',this)">All</button><button data-production-market="SPREAD" onclick="setProductionMarket('SPREAD',this)">Spread</button><button data-production-market="MONEYLINE" onclick="setProductionMarket('MONEYLINE',this)">Moneyline</button><button data-production-market="TOTAL" onclick="setProductionMarket('TOTAL',this)">Total</button></div>
-  <div class="app-filter-row" aria-label="Sport filter"><span class="app-filter-label">Sport</span><button class="active" data-production-sport="ALL" onclick="setProductionSport('ALL',this)">All</button><button data-production-sport="MLB" onclick="setProductionSport('MLB',this)">MLB</button><button data-production-sport="NBA" onclick="setProductionSport('NBA',this)">NBA</button><button data-production-sport="NCAAB" onclick="setProductionSport('NCAAB',this)">NCAAB</button><button data-production-sport="CFB" onclick="setProductionSport('CFB',this)">CFB</button><button data-production-sport="NFL" onclick="setProductionSport('NFL',this)">NFL</button><button data-production-sport="NHL" onclick="setProductionSport('NHL',this)">NHL</button><button data-production-sport="UFC" onclick="setProductionSport('UFC',this)">UFC</button></div>
-  <label><span aria-hidden="true">⌕</span><input id="production-search" type="search" placeholder="Search games or reads" oninput="setProductionSearch(this.value)"></label>
-</div>
 <nav class="mobile-nav" aria-label="Mobile app navigation">
   <button class="active" type="button" data-mobile-destination="board" onclick="openMobileDestination('board',this)"><span aria-hidden="true">▦</span>Board</button>
   <button type="button" data-mobile-destination="saved" onclick="openMobileDestination('saved',this)"><span aria-hidden="true">☆</span>Saved</button>
@@ -1569,7 +1570,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
 
 <!-- â”€â”€â”€ TABS â”€â”€â”€ -->
 <nav class="tabs">
-  <div class="tab active" data-tab="board" data-filter="all" onclick="setTab(this)">All Markets <span class="tbadge" id="b-all">0</span></div>
+  <div class="tab active" data-tab="board" data-filter="all" onclick="setTab(this)">Market Board <span class="tbadge" id="b-all">0</span></div>
   <div class="tab" data-tab="board" data-filter="today" onclick="setTab(this)">Today <span class="tbadge" id="b-today">0</span></div>
   <div class="tab" data-tab="live-recent" onclick="setTab(this)">Live &amp; Recent <span class="tbadge" id="b-live">0</span></div>
   <div class="sfilters">
@@ -1583,6 +1584,12 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
     <div class="schip" onclick="setSport('UFC',this)">UFC</div>
   </div>
 </nav>
+
+<div class="app-board-controls" aria-label="Board filters">
+  <div class="app-filter-row" aria-label="Market filter"><span class="app-filter-label">Market</span><button class="active" data-production-market="ALL" onclick="setProductionMarket('ALL',this)">All</button><button data-production-market="SPREAD" onclick="setProductionMarket('SPREAD',this)">Spread</button><button data-production-market="MONEYLINE" onclick="setProductionMarket('MONEYLINE',this)">Moneyline</button><button data-production-market="TOTAL" onclick="setProductionMarket('TOTAL',this)">Total</button></div>
+  <div class="app-filter-row" aria-label="Sport filter"><span class="app-filter-label">Sport</span><button class="active" data-production-sport="ALL" onclick="setProductionSport('ALL',this)">All</button><button data-production-sport="MLB" onclick="setProductionSport('MLB',this)">MLB</button><button data-production-sport="NBA" onclick="setProductionSport('NBA',this)">NBA</button><button data-production-sport="NCAAB" onclick="setProductionSport('NCAAB',this)">NCAAB</button><button data-production-sport="CFB" onclick="setProductionSport('CFB',this)">CFB</button><button data-production-sport="NFL" onclick="setProductionSport('NFL',this)">NFL</button><button data-production-sport="NHL" onclick="setProductionSport('NHL',this)">NHL</button><button data-production-sport="UFC" onclick="setProductionSport('UFC',this)">UFC</button></div>
+  <label><span aria-hidden="true">⌕</span><input id="production-search" type="search" placeholder="Search games or reads" oninput="setProductionSearch(this.value)"></label>
+</div>
 
 <!-- â”€â”€â”€ METRIC BAR â”€â”€â”€ -->
 <div class="metricbar">
@@ -2284,6 +2291,13 @@ function sideLabel(side,r){
   if(String(r.market_display||'').toUpperCase()==='TOTAL') return /^under/i.test(text)?'UNDER':'OVER';
   return text.replace(/\s[+-]\d+(?:\.\d+)?(?:\s*\([^)]*\))?\s*$/,'')||text;
 }
+function compactSideLabel(side,r){
+  const label=sideLabel(side,r);
+  if(String(r.market_display||'').toUpperCase()==='TOTAL') return label==='UNDER'?'Under':'Over';
+  if(label.length<=4) return label.toUpperCase();
+  const words=label.split(/\s+/).filter(Boolean);
+  return words.length>1?words.map(word=>word[0]).join('').slice(0,4).toUpperCase():label.slice(0,3).toUpperCase();
+}
 function marketSideIdentity(side,r){
   const market=String(r?.market_display||'').toUpperCase();
   const label=String(side?.flagged_side||'').trim();
@@ -2323,7 +2337,7 @@ function twoSideSplitCell(r){
   return '<div class="two-side-cell two-side-splits '+(isTotal?'is-total':'is-team')+'">'+sides.slice(0,2).map(side=>{
     const bets=Number(side.bets_pct), money=Number(side.money_pct);
     const betsText=Number.isFinite(bets)?bets.toFixed(0)+'%':'—', moneyText=Number.isFinite(money)?money.toFixed(0)+'%':'—';
-    const sideMark=isTotal?'<span class="two-side-label">'+(sideLabel(side,r)==='UNDER'?'U':'O')+'</span>':'';
+    const sideMark='<span class="two-side-label" title="'+escHtml(sideLabel(side,r))+'">'+escHtml(compactSideLabel(side,r))+'</span>';
     return '<div class="two-side-row">'+sideMark+'<span class="two-side-metric">Bets</span><span class="two-side-track" title="'+betsText+' bets"><span class="two-side-fill" style="width:'+Math.max(0,Math.min(100,bets||0))+'%"></span></span><span class="two-side-value">'+betsText+'</span><span class="two-side-metric">$$$</span><span class="two-side-track" title="'+moneyText+' money"><span class="two-side-fill" style="width:'+Math.max(0,Math.min(100,money||0))+'%"></span></span><span class="two-side-value">'+moneyText+'</span></div>';
   }).join('')+'</div>';
 }
@@ -2331,7 +2345,7 @@ function twoSideLineCell(r,field){
   const sides=marketSides(r);
   if(sides.length<2) return '<div class="two-side-missing">—</div>';
   const current=field==='current_line';
-  return '<div class="two-side-cell two-side-lines '+(current?'two-side-current':'')+'">'+sides.slice(0,2).map(side=>'<div class="two-side-row"><span class="two-side-line">'+escHtml(side[field]||'—')+'</span>'+(current?sideMovementHtml(side,r):'')+'</div>').join('')+'</div>';
+  return '<div class="two-side-cell two-side-lines '+(current?'two-side-current':'')+'">'+sides.slice(0,2).map(side=>'<div class="two-side-row"><span class="two-side-label" title="'+escHtml(sideLabel(side,r))+'">'+escHtml(compactSideLabel(side,r))+'</span><span class="two-side-line">'+escHtml(side[field]||'—')+'</span>'+(current?sideMovementHtml(side,r):'')+'</div>').join('')+'</div>';
 }
 function sideLineParts(line){
   const text=String(line||'');
@@ -2394,7 +2408,7 @@ function twoSideReadCell(r){
   return '<div class="two-side-cell two-side-read">'+sides.slice(0,2).map((side,index)=>{
     const chips=[...new Set(sideSignals(side))].map(value=>anomalyBadge(value)).join('');
     const isStrongest=index===strongest;
-    return '<div class="two-side-row'+(isStrongest?' is-strongest':'')+'">'+(chips||'<span class="two-side-missing">No active signal</span>')+'</div>';
+    return '<div class="two-side-row'+(isStrongest?' is-strongest':'')+'"><span class="two-side-label" title="'+escHtml(sideLabel(side,r))+'">'+escHtml(compactSideLabel(side,r))+'</span>'+(chips||'<span class="two-side-missing">No active signal</span>')+'</div>';
   }).join('')+'</div>';
 }
 function primaryReadRank(side){
