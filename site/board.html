@@ -2623,7 +2623,7 @@ function openMobileDestination(destination,button){
     body.innerHTML=items.length?'<div class="mobile-sheet-list">'+items.map((item,index)=>'<button type="button" data-saved-index="'+index+'">'+(item.querySelector('.saved-label')?.textContent||'Saved market')+'</button>').join('')+'</div>':'<p class="mobile-sheet-empty">Save a market from the board to keep its drilldown close at hand.</p>';
     body.querySelectorAll('[data-saved-index]').forEach(node=>node.onclick=()=>{ const source=items[Number(node.dataset.savedIndex)]?.querySelector('.saved-label'); if(source)source.click(); closeMobileSheet(); });
   } else {
-    title.textContent='Account'; body.innerHTML='<p class="mobile-sheet-empty">Manage your Red Fox account, subscription, and session from the account page.</p><a class="mobile-sheet-action primary" href="/">Open account</a>';
+    title.textContent='More'; body.innerHTML='<div class="mobile-sheet-list"><a class="mobile-sheet-action" href="/app">Install Red Fox App</a><a class="mobile-sheet-action" href="/">Open account</a></div>';
   }
   sheet.hidden=false;
 }

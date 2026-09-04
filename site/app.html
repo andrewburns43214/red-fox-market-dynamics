@@ -3,48 +3,59 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#dd4a40">
+  <meta name="theme-color" content="#050708">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Red Fox MI">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/app-icon.png" type="image/png">
   <link rel="apple-touch-icon" href="/app-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
   <script src="/pwa.js" defer></script>
   <title>Install Red Fox MI</title>
   <style>
-    :root{--ink:#182228;--muted:#69767e;--line:#e3e6e7;--paper:#f8f8f6;--red:#dd4a40;--dark:#050708}*{box-sizing:border-box}body{margin:0;min-height:100dvh;background:var(--paper);color:var(--ink);font-family:"DM Sans",Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.page{max-width:1030px;margin:auto;padding:calc(26px + env(safe-area-inset-top)) 24px calc(42px + env(safe-area-inset-bottom))}.brand{color:var(--red);font-weight:800;font-size:21px;letter-spacing:-.06em}.brand small{display:block;margin:3px 0 0 1px;color:var(--muted);font-size:8px;letter-spacing:.19em}.hero{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:52px;align-items:center;margin:58px 0 46px}.eyebrow{color:var(--red);font:800 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.13em;text-transform:uppercase}.hero h1{max-width:620px;margin:12px 0;font-size:clamp(38px,6vw,62px);line-height:.98;letter-spacing:-.07em}.hero p{max-width:575px;margin:0;color:var(--muted);font-size:17px;line-height:1.55}.actions{display:flex;gap:10px;margin-top:25px}.button{display:inline-flex;align-items:center;justify-content:center;min-height:46px;border:1px solid transparent;border-radius:8px;padding:0 17px;text-decoration:none;font-size:14px;font-weight:750;cursor:pointer}.button.primary{background:var(--red);color:#fff}.button.primary:hover{background:#c63d34}.button.secondary{border-color:var(--line);color:var(--ink);background:#fff}.qr-card{padding:16px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:0 10px 26px rgba(25,35,38,.06);text-align:center}.qr-card img{display:block;width:164px;height:164px;margin:auto}.qr-card p{margin:10px 0 0;color:var(--muted);font-size:11px;line-height:1.4}.install-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.device{min-height:264px;padding:24px;border:1px solid var(--line);border-radius:14px;background:#fff}.device-kicker{color:var(--red);font:800 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase}.device h2{margin:9px 0 8px;font-size:20px;letter-spacing:-.035em}.device p{margin:0;color:var(--muted);font-size:14px;line-height:1.55}.device ol{margin:15px 0 0;padding-left:20px;color:var(--ink);font-size:14px;line-height:1.75}.device li+li{margin-top:4px}.native-install{display:none;margin-top:16px}.fallback{margin-top:13px}.status{display:none;margin-top:18px;padding:11px 12px;border-radius:8px;background:#eef7f3;color:#167957;font-size:13px;line-height:1.4}.platform-note{margin-top:18px;color:var(--muted);font-size:12px;text-align:center}.is-ios .android-only,.is-android .ios-only{display:none}.is-ios .install-grid,.is-android .install-grid{grid-template-columns:minmax(0,620px)}.is-ios #qr-card,.is-android #qr-card{display:none}@media(max-width:680px){.page{padding-left:20px;padding-right:20px}.hero{grid-template-columns:1fr;margin:48px 0 34px;gap:22px}.hero h1{font-size:42px}.hero p{font-size:16px}.actions{flex-direction:column}.button{width:100%}.qr-card{display:none}.install-grid{grid-template-columns:1fr}.device{min-height:0;padding:22px}.platform-note{text-align:left}}@media(display-mode:standalone){.page{display:none}}
+    :root{--ink:#182228;--muted:#69767e;--line:#dfe4e6;--paper:#f8f8f6;--red:#dd4a40;--dark:#050708;--sans:"Plus Jakarta Sans",Inter,ui-sans-serif,system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace}*{box-sizing:border-box}body{margin:0;min-height:100dvh;background:var(--paper);color:var(--ink);font-family:var(--sans)}.page{max-width:1030px;margin:auto;padding:calc(26px + env(safe-area-inset-top)) 24px calc(42px + env(safe-area-inset-bottom))}.brand{display:inline-flex;flex-direction:column;align-items:flex-start;color:#c0392b;font:800 20px var(--sans);letter-spacing:-.5px}.brand small{margin-top:-6px;color:#8c96a3;font:500 11px var(--sans);letter-spacing:2px;text-transform:uppercase}.hero{max-width:720px;margin:60px auto 38px;text-align:center}.hero h1{margin:0;font-size:clamp(39px,6vw,62px);line-height:1;letter-spacing:-.07em}.hero p{max-width:590px;margin:17px auto 0;color:var(--muted);font-size:17px;line-height:1.55}.install-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.device{padding:25px 26px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:0 10px 26px rgba(25,35,38,.04)}.device-kicker{color:var(--red);font:700 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase}.device h2{margin:10px 0 7px;font-size:20px;letter-spacing:-.04em}.device>p{margin:0;color:var(--muted);font-size:14px;line-height:1.55}.steps{display:grid;gap:9px;margin:19px 0 0;padding:0;list-style:none}.steps li{display:grid;grid-template-columns:27px minmax(0,1fr);gap:9px;align-items:start;color:var(--ink);font-size:14px;line-height:1.45}.step-number{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#f8e7e4;color:#bd3b32;font:700 11px/1 var(--mono)}.step-label{font-weight:700}.step-hint{display:block;margin-top:2px;color:var(--muted);font-size:12px}.native-install{display:none;margin-top:17px}.button{display:inline-flex;align-items:center;justify-content:center;min-height:46px;border:1px solid transparent;border-radius:8px;padding:0 18px;text-decoration:none;font:700 14px var(--sans);cursor:pointer}.button.primary{background:var(--red);color:#fff}.button.primary:hover{background:#c63d34}.status{display:none;margin-top:16px;padding:11px 12px;border-radius:8px;background:#eef7f3;color:#167957;font-size:13px;line-height:1.4}.access{max-width:670px;margin:32px auto 0;padding:25px 28px;border:1px solid var(--line);border-radius:14px;background:#fff;text-align:center}.access h2{margin:0;font-size:20px;letter-spacing:-.04em}.access p{max-width:520px;margin:9px auto 17px;color:var(--muted);font-size:13px;line-height:1.55}.platform-note{margin:20px 0 0;color:var(--muted);font-size:12px;text-align:center}.is-ios .android-only,.is-android .ios-only{display:none}.is-ios .install-grid,.is-android .install-grid{grid-template-columns:minmax(0,620px);justify-content:center}@media(max-width:680px){.page{padding-left:20px;padding-right:20px}.hero{margin:43px 0 31px;text-align:left}.hero h1{font-size:42px}.hero p{margin-left:0;font-size:16px}.install-grid{grid-template-columns:1fr}.device{padding:22px 20px}.access{margin-top:22px;padding:23px 20px}.access .button{width:100%}.platform-note{text-align:left}}@media(display-mode:standalone){.page{display:none}}
   </style>
 </head>
 <body>
   <main class="page">
     <div class="brand">Red Fox<small>MARKET INTELLIGENCE</small></div>
     <section class="hero">
-      <div>
-        <div class="eyebrow">Red Fox MI for Mobile</div>
-        <h1>Market intelligence, wherever you bet.</h1>
-        <p>Install Red Fox MI for one-tap access to the live board, saved games, Market Reads and drilldowns.</p>
-        <div class="actions"><a class="button primary" href="/board.html">Open Red Fox MI</a><a class="button secondary" href="/">Explore Red Fox</a></div>
-        <div class="status" id="install-status" role="status"></div>
-      </div>
-      <aside class="qr-card" id="qr-card"><img src="https://api.qrserver.com/v1/create-qr-code/?size=360x360&amp;format=svg&amp;data=https%3A%2F%2Fredfoxmi.com%2Fapp" alt="QR code for Red Fox MI installation"><p>Scan to install Red Fox MI<br>on your phone.</p></aside>
+      <h1>Market intelligence, wherever you bet.</h1>
+      <p>Add Red Fox MI to your Home Screen for one-tap access to the live board, saved games, Market Reads and drilldowns.</p>
     </section>
     <section class="install-grid" aria-label="Mobile installation instructions">
       <article class="device ios-only">
         <div class="device-kicker">iPhone &amp; iPad</div>
         <h2>Install Red Fox MI</h2>
         <p>Add Red Fox MI to your Home Screen for one-tap access.</p>
-        <ol><li>Tap <strong>Share</strong>.</li><li>Choose <strong>Add to Home Screen</strong>.</li><li>Enable <strong>Open as Web App</strong>.</li><li>Tap <strong>Add</strong>.</li></ol>
+        <ol class="steps">
+          <li><span class="step-number">1</span><span>Tap <span class="step-label">Share</span><span class="step-hint">Use the Share button in your browser toolbar.</span></span></li>
+          <li><span class="step-number">2</span><span>Choose <span class="step-label">Add to Home Screen</span>.</span></li>
+          <li><span class="step-number">3</span><span>Enable <span class="step-label">Open as Web App</span>.</span></li>
+          <li><span class="step-number">4</span><span>Tap <span class="step-label">Add</span>.</span></li>
+        </ol>
       </article>
       <article class="device android-only">
         <div class="device-kicker">Android</div>
         <h2>Install Red Fox MI</h2>
         <p>Add Red Fox MI to your Home Screen for one-tap access.</p>
         <button class="button primary native-install" id="install-button" type="button">Install Red Fox MI</button>
-        <ol class="fallback" id="android-fallback"><li>Open this page in Chrome.</li><li>Choose <strong>Install app</strong> or <strong>Add to Home screen</strong> from the browser menu.</li></ol>
+        <ol class="steps" id="android-fallback">
+          <li><span class="step-number">1</span><span>Open this page in <span class="step-label">Chrome</span>.</span></li>
+          <li><span class="step-number">2</span><span>Choose <span class="step-label">Install app</span> or <span class="step-label">Add to Home screen</span><span class="step-hint">Find it in the browser menu.</span></span></li>
+        </ol>
       </article>
     </section>
-    <p class="platform-note">Available on iPhone and Android. Your Red Fox account and live board stay ready when you open it.</p>
+    <div class="status" id="install-status" role="status"></div>
+    <section class="access" aria-labelledby="open-board-title">
+      <h2 id="open-board-title">Ready to open Red Fox MI?</h2>
+      <p>If you are not signed in, you will be prompted to sign in or create an account before accessing the full board.</p>
+      <a class="button primary" href="/board.html">Open Red Fox MI</a>
+    </section>
+    <p class="platform-note">Available on iPhone and Android.</p>
   </main>
   <script>
     (function(){
@@ -58,9 +69,9 @@
       const fallback=document.getElementById('android-fallback');
       const status=document.getElementById('install-status');
       let deferredPrompt=null;
-      window.addEventListener('beforeinstallprompt',function(event){event.preventDefault();deferredPrompt=event;if(install){install.style.display='inline-flex';}if(fallback){fallback.style.display='none';}});
-      if(install){install.addEventListener('click',async function(){if(!deferredPrompt){if(fallback){fallback.style.display='block';}return;}deferredPrompt.prompt();const choice=await deferredPrompt.userChoice;deferredPrompt=null;install.style.display='none';if(choice&&choice.outcome==='accepted'){status.textContent='Red Fox MI is being added to your Home Screen.';status.style.display='block';}});}
-      window.addEventListener('appinstalled',function(){if(install){install.style.display='none';}status.textContent='Red Fox MI is installed and ready on your Home Screen.';status.style.display='block';});
+      window.addEventListener('beforeinstallprompt',function(event){event.preventDefault();deferredPrompt=event;if(install)install.style.display='inline-flex';if(fallback)fallback.style.display='none';});
+      if(install)install.addEventListener('click',async function(){if(!deferredPrompt){if(fallback)fallback.style.display='grid';return;}deferredPrompt.prompt();const choice=await deferredPrompt.userChoice;deferredPrompt=null;install.style.display='none';if(choice&&choice.outcome==='accepted'){status.textContent='Red Fox MI is being added to your Home Screen.';status.style.display='block';}});
+      window.addEventListener('appinstalled',function(){if(install)install.style.display='none';status.textContent='Red Fox MI is installed and ready on your Home Screen.';status.style.display='block';});
     }());
   </script>
 </body>

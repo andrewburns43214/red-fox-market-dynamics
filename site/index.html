@@ -681,10 +681,11 @@ section { padding: 100px 40px; }
 @media (min-width: 769px) {
   .nav-brand { flex-direction:column; align-items:flex-start; gap:0; }
   .nav-sub { margin-top:-6px; }
-  .mobile-app { position:absolute; z-index:20; top:84px; right:62px; left:auto; width:370px; padding:0; border:0; background:transparent; }
-  .mobile-app-card { display:block; width:100%; min-height:190px; padding:17px 19px 15px; border-radius:10px; }
+  .mobile-app { position:absolute; z-index:20; top:84px; right:62px; left:auto; width:498px; padding:0; border:0; background:transparent; }
+  .mobile-app-card { display:grid; grid-template-columns:minmax(0,1fr) 100px; gap:14px; width:100%; min-height:190px; padding:17px 19px 15px; border-radius:10px; }
   .mobile-app-card > div:first-child { display:flex; min-height:158px; flex-direction:column; }
-  .mobile-app .mobile-qr { display:none; }
+  .mobile-app .mobile-qr { display:grid; align-self:center; gap:5px; padding:6px; border-radius:8px; font-size:8px; line-height:1.25; }
+  .mobile-app .mobile-qr img { width:88px; height:88px; }
   .mobile-app-kicker { display:block; font-size:9px; }
   .mobile-app h2 { display:block; margin:6px 0 5px; font-size:18px; letter-spacing:-.45px; }
   .mobile-app p { display:block; font-size:11px; line-height:1.42; }
