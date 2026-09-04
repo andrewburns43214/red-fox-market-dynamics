@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f5f73">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -1417,6 +1417,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .lpane>.tscroll .mr,.lpane>.tscroll .tim{font-size:9px!important}
   .lpane>.tscroll .sbar{background:#f7d8d4!important}.lpane>.tscroll .sfill.b,.lpane>.tscroll .sfill.m{background:#dd4a40!important}
   .info-btn{font-family:var(--sans)!important}
+  .mobile-nav,.mobile-sheet,.detail-observations-toggle{display:none!important}
 }
 
 /* Phone board: the same rows become information-dense market cards.  No
@@ -1444,6 +1445,14 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .board-footer{padding:12px 0 18px}.board-freshness{font-size:8px}.board-more button{min-height:42px}
   .signal-guide-sheet{max-height:calc(100dvh - env(safe-area-inset-top));padding-bottom:env(safe-area-inset-bottom)}
   .drill-overlay .game-detail-modal .drill-body{padding-bottom:env(safe-area-inset-bottom)}.movement-tabs{overflow-x:auto;scrollbar-width:none}.movement-tabs::-webkit-scrollbar{display:none}.movement-tab{min-height:38px;white-space:nowrap}.journey-event-select{min-height:44px}.signal-chip,.mr,.detail-side-toggle button{min-height:32px}
+  /* App shell: compact browser and standalone headers, with persistent destinations. */
+  html,body{height:auto;min-height:100%;overflow-x:hidden!important;overflow-y:auto!important}body{padding-top:0!important;padding-bottom:calc(68px + env(safe-area-inset-bottom))!important}.topbar{padding-top:env(safe-area-inset-top);height:calc(54px + env(safe-area-inset-top));align-items:center}.tabs{top:calc(54px + env(safe-area-inset-top))}.app-board-controls{top:calc(100px + env(safe-area-inset-top));box-shadow:0 1px 0 rgba(20,33,39,.06)}
+  .mobile-nav{position:fixed;z-index:300;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(4,1fr);min-height:62px;padding:7px 10px calc(7px + env(safe-area-inset-bottom));background:rgba(255,255,255,.96);border-top:1px solid var(--border);backdrop-filter:blur(16px)}.mobile-nav button{display:grid;place-items:center;gap:2px;min-height:42px;border:0;background:transparent;color:var(--text3);font:700 10px var(--sans);cursor:pointer}.mobile-nav button span{font:700 17px/1 var(--sans)}.mobile-nav button.active{color:var(--red)}
+  .mobile-sheet[hidden]{display:none}.mobile-sheet{position:fixed;z-index:500;inset:0;background:rgba(8,14,18,.38);display:flex;align-items:flex-end}.mobile-sheet-panel{width:100%;max-height:min(72dvh,600px);overflow:auto;border-radius:18px 18px 0 0;background:#fff;padding:0 16px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -12px 36px rgba(8,14,18,.16)}.mobile-sheet-panel header{position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;padding:14px 0 12px;background:#fff;border-bottom:1px solid var(--border)}.mobile-sheet-panel header strong{font-size:16px}.mobile-sheet-panel header button{width:34px;height:34px;border:0;border-radius:50%;background:var(--bg2);font-size:24px;color:var(--text2)}.mobile-sheet-list{display:grid;gap:8px;padding:14px 0}.mobile-sheet-list button,.mobile-sheet-action{width:100%;min-height:48px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);text-align:left;font:600 14px var(--sans)}.mobile-sheet-empty{padding:24px 0;color:var(--text3);font-size:14px;line-height:1.5}.mobile-sheet-action{display:block;margin-top:10px;text-decoration:none}.mobile-sheet-action.primary{border-color:var(--red);background:var(--red);color:#fff;text-align:center}
+  .tabs{padding-left:12px;padding-right:12px;gap:4px}.tab{font-size:11px;padding:0 10px}.tab .tbadge{min-width:22px;padding:2px 6px}.sfilters{position:absolute;left:0;right:0;top:100%;display:flex;overflow-x:auto;gap:6px;padding:8px 12px;background:#fff;border-bottom:1px solid var(--border);scrollbar-width:none}.sfilters::-webkit-scrollbar{display:none}.schip{flex:0 0 auto;min-height:32px;padding:6px 12px}.app-board-controls{margin-top:48px}.app-board-controls::before{content:'Market';position:sticky;left:-12px;display:flex;align-items:center;padding-right:7px;background:rgba(250,249,246,.96);color:var(--text3);font:700 9px var(--mono);letter-spacing:.08em;text-transform:uppercase}
+  .live-recent{padding:16px 12px 24px}.live-recent-head h2{font-size:20px}.live-game-card{border-radius:12px;padding:14px}.live-market-side-row{grid-template-columns:minmax(116px,42%) minmax(0,1fr);padding:8px 6px}.live-market-meta{font-family:var(--sans);font-size:11px;line-height:1.38}
+  #drill-overlay .game-detail-modal .game-detail-content{padding:12px 12px 24px!important}#drill-overlay .game-detail-modal .game-detail-content>div:first-child{margin:0 0 10px!important;padding:0!important;border:0!important}#drill-overlay .game-detail-modal .game-detail-content>div:first-child>.sport-chip,#drill-overlay .game-detail-modal .game-detail-content>div:first-child>.spchip,#drill-overlay .game-detail-modal .detail-game-heading,#drill-overlay .game-detail-modal .detail-game-meta,#drill-overlay .game-detail-modal .detail-frozen-status{display:none!important}#drill-overlay .game-detail-modal .detail-market-switcher{margin-top:0}.movement-chart{padding:10px;margin:10px 0}.movement-chart-note{font-size:9px;line-height:1.3}.movement-svg{touch-action:none}.movement-scrub-point{pointer-events:none}.movement-scrub-point.is-active{fill:#0f6f7f;fill-opacity:.18;stroke:#0f6f7f;stroke-width:2}.movement-inspector{min-height:30px;margin:6px 0 2px;padding:7px 8px;border-radius:6px;background:#eef5f5;color:var(--text2);font:600 9px/1.3 var(--sans)}.movement-facts{gap:5px}.movement-fact{padding:7px}.market-journey{margin:10px 0;padding:10px}.journey-event{padding-bottom:9px!important}.market-story{padding:11px;margin:10px 0}.detail-proof{padding:11px}.detail-observations{display:none!important}.detail-proof.is-open .detail-observations{display:block!important}.detail-observations-toggle{display:inline-flex;align-items:center;justify-content:center;width:100%;min-height:42px;margin-top:10px;border:1px solid var(--border2);border-radius:8px;background:#fff;color:var(--accent);font:700 11px var(--sans);cursor:pointer}
+  .board-empty td{grid-column:1/-1!important;padding:28px 16px!important;text-align:center!important}.board-empty strong{display:block;font-size:15px}.board-empty span{display:block;margin:6px 0 14px;color:var(--text3);font-size:12px}.board-empty button{min-height:40px;border:1px solid var(--accent);border-radius:99px;background:#fff;color:var(--accent);padding:0 14px;font:700 11px var(--sans)}
 }
 </style>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -1472,6 +1481,15 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   <span>MARKET</span><button class="active" data-production-market="ALL" onclick="setProductionMarket('ALL',this)">All</button><button data-production-market="SPREAD" onclick="setProductionMarket('SPREAD',this)">Spread</button><button data-production-market="MONEYLINE" onclick="setProductionMarket('MONEYLINE',this)">Moneyline</button><button data-production-market="TOTAL" onclick="setProductionMarket('TOTAL',this)">Total</button>
   <span class="app-sport-label">SPORT</span><button class="active" data-production-sport="ALL" onclick="setProductionSport('ALL',this)">All</button><button data-production-sport="MLB" onclick="setProductionSport('MLB',this)">MLB</button><button data-production-sport="NBA" onclick="setProductionSport('NBA',this)">NBA</button><button data-production-sport="NCAAB" onclick="setProductionSport('NCAAB',this)">NCAAB</button><button data-production-sport="CFB" onclick="setProductionSport('CFB',this)">CFB</button><button data-production-sport="NFL" onclick="setProductionSport('NFL',this)">NFL</button><button data-production-sport="NHL" onclick="setProductionSport('NHL',this)">NHL</button><button data-production-sport="UFC" onclick="setProductionSport('UFC',this)">UFC</button>
   <label><span aria-hidden="true">⌕</span><input id="production-search" type="search" placeholder="Search games or reads" oninput="setProductionSearch(this.value)"></label>
+</div>
+<nav class="mobile-nav" aria-label="Mobile app navigation">
+  <button class="active" type="button" data-mobile-destination="board" onclick="openMobileDestination('board',this)"><span aria-hidden="true">▦</span>Board</button>
+  <button type="button" data-mobile-destination="saved" onclick="openMobileDestination('saved',this)"><span aria-hidden="true">☆</span>Saved</button>
+  <button type="button" data-mobile-destination="guide" onclick="openMobileDestination('guide',this)"><span aria-hidden="true">◫</span>Guide</button>
+  <button type="button" data-mobile-destination="more" onclick="openMobileDestination('more',this)"><span aria-hidden="true">•••</span>More</button>
+</nav>
+<div class="mobile-sheet" id="mobile-sheet" role="dialog" aria-modal="true" aria-labelledby="mobile-sheet-title" hidden>
+  <section class="mobile-sheet-panel"><header><strong id="mobile-sheet-title">Red Fox</strong><button type="button" aria-label="Close" onclick="closeMobileSheet()">×</button></header><div id="mobile-sheet-body"></div></section>
 </div>
 
 <!-- â”€â”€â”€ TOPBAR â”€â”€â”€ -->
@@ -1531,8 +1549,8 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
 
 <!-- â”€â”€â”€ TABS â”€â”€â”€ -->
 <nav class="tabs">
-  <div class="tab active" data-tab="board" data-filter="all" onclick="setTab(this)">All Games <span class="tbadge" id="b-all">0</span></div>
-  <div class="tab" data-tab="board" data-filter="today" onclick="setTab(this)">Today's Games <span class="tbadge" id="b-today">0</span></div>
+  <div class="tab active" data-tab="board" data-filter="all" onclick="setTab(this)">All Markets <span class="tbadge" id="b-all">0</span></div>
+  <div class="tab" data-tab="board" data-filter="today" onclick="setTab(this)">Today <span class="tbadge" id="b-today">0</span></div>
   <div class="tab" data-tab="live-recent" onclick="setTab(this)">Live &amp; Recent <span class="tbadge" id="b-live">0</span></div>
   <div class="sfilters">
     <div class="schip on" onclick="setSport('ALL',this)">All</div>
@@ -2497,6 +2515,29 @@ function exportCSV(){
   const note=document.getElementById('board-update-note');
   if(note) note.textContent=`Exported ${exported.length} complete two-sided markets${omitted?`; ${omitted} incomplete markets omitted`:''}.`;
 }
+function resetMobileBoardView(){
+  filter='all'; sport='ALL'; market='ALL'; boardDateFilter='ALL'; boardSignalFilter='ALL';
+  const boardTab=document.querySelector('.tab[data-tab="board"][data-filter="all"]'); if(boardTab) setTab(boardTab);
+  document.querySelectorAll('.sfilters .schip').forEach(node=>node.classList.toggle('on',node.textContent.trim().toUpperCase()==='ALL'));
+  document.querySelectorAll('[data-production-market]').forEach(node=>node.classList.toggle('active',node.dataset.productionMarket==='ALL'));
+  document.querySelectorAll('[data-production-sport]').forEach(node=>node.classList.toggle('active',node.dataset.productionSport==='ALL'));
+  renderBoard();
+}
+function closeMobileSheet(){ const sheet=document.getElementById('mobile-sheet'); if(sheet) sheet.hidden=true; }
+function openMobileDestination(destination,button){
+  document.querySelectorAll('[data-mobile-destination]').forEach(node=>node.classList.toggle('active',node===button));
+  if(destination==='board'){ closeMobileSheet(); const tab=document.querySelector('.tab[data-tab="board"][data-filter="all"]'); if(tab)setTab(tab); return; }
+  if(destination==='guide'){ closeMobileSheet(); openSignalGuide(); return; }
+  const sheet=document.getElementById('mobile-sheet'), title=document.getElementById('mobile-sheet-title'), body=document.getElementById('mobile-sheet-body'); if(!sheet||!title||!body)return;
+  if(destination==='saved'){
+    title.textContent='Saved Games'; const items=[...document.querySelectorAll('#saved-games .saved-item')];
+    body.innerHTML=items.length?'<div class="mobile-sheet-list">'+items.map((item,index)=>'<button type="button" data-saved-index="'+index+'">'+(item.querySelector('.saved-label')?.textContent||'Saved market')+'</button>').join('')+'</div>':'<p class="mobile-sheet-empty">Save a market from the board to keep its drilldown close at hand.</p>';
+    body.querySelectorAll('[data-saved-index]').forEach(node=>node.onclick=()=>{ const source=items[Number(node.dataset.savedIndex)]?.querySelector('.saved-label'); if(source)source.click(); closeMobileSheet(); });
+  } else {
+    title.textContent='Account'; body.innerHTML='<p class="mobile-sheet-empty">Manage your Red Fox account, subscription, and session from the account page.</p><a class="mobile-sheet-action primary" href="/">Open account</a>';
+  }
+  sheet.hidden=false;
+}
 
 function customerExportSides(r){
   let sides=[];
@@ -2667,6 +2708,11 @@ function renderBoard(resetPage=true){
   const _marketLabel=market==='ALL'?'all markets':market.toLowerCase();
   document.getElementById('board-meta').textContent=`${_nGames} games | showing ${visibleData.length} of ${data.length} markets | ${_marketLabel} | sorted by ${sortCol.replace(/_/g,' ')}${groupMode?' | grouped':''}`;
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
+  if(!data.length){
+    const tr=document.createElement('tr'); tr.className='board-empty';
+    tr.innerHTML='<td colspan="8"><strong>No markets are currently available for this view.</strong><span>Try another sport, view all markets, or review Live &amp; Recent.</span><button type="button" onclick="resetMobileBoardView()">View all markets</button></td>';
+    tbody.appendChild(tr);
+  }
   visibleData.forEach((r,i)=>{
     const rankReason=String(r.rank_reason||'Board priority reflects verified signal strength and market maturity.').replace(/"/g,'&quot;');
     const tr=document.createElement('tr');
@@ -2698,8 +2744,8 @@ function renderBoard(resetPage=true){
   const more=document.getElementById('board-more');
   if(more){
     const button=more.querySelector('button');
-    more.hidden=_visibleBoardRows>=data.length;
-    if(button) button.textContent=`Show ${Math.min(boardPageSize(),data.length-_visibleBoardRows)} more markets`;
+    more.hidden=!data.length || _visibleBoardRows>=data.length;
+    if(button && !more.hidden) button.textContent=`Load ${Math.min(boardPageSize(),data.length-_visibleBoardRows)} more markets`;
   }
   _boardHasRendered=true;
 }
@@ -2912,7 +2958,8 @@ function movementChart(rows, market, selectedTimestamp='', selectedSide=''){
     }).join('');
     const first=rows[0], last=rows[rows.length-1];
     const xLabels=`<text x="${padLeft}" y="${height-3}" fill="#74808a" font-size="8" font-family="var(--mono)">${timeLabel(first)}</text><text x="${width-padRight}" y="${height-3}" text-anchor="end" fill="#74808a" font-size="8" font-family="var(--mono)">${timeLabel(last)}</text>`;
-    return `<div class="movement-panel" data-movement-view="${view.key}" style="display:${view.key==='market'?'block':'none'}"><div class="movement-chart-note">${view.note}</div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${view.title} trajectory"><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#5bb6bf" stop-opacity=".32"/><stop offset="1" stop-color="#5bb6bf" stop-opacity=".02"/></linearGradient></defs>${ticks}<path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${polyline}" fill="none" stroke="#0f6f7f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#0f6f7f" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#0f6f7f"/>${selectedMarker}${xLabels}</svg><div class="movement-facts"><div class="movement-fact"><span>Start</span><b>${view.pointLabel(first)}</b></div><div class="movement-fact"><span>Current</span><b>${view.pointLabel(last)}</b></div><div class="movement-fact"><span>High</span><b>${view.axisLabel(max)}</b></div><div class="movement-fact"><span>Low</span><b>${view.axisLabel(min)}</b></div></div></div>`;
+    const scrubPoints=points.map((point,index)=>`<circle class="movement-scrub-point" data-index="${index}" data-time="${escHtml(timeLabel(rows[index]))}" data-value="${escHtml(view.pointLabel(rows[index]))}" data-bets="${escHtml(compact(number(rows[index].bets_pct))+'%')}" data-money="${escHtml(compact(number(rows[index].money_pct))+'%')}" cx="${point[0]}" cy="${point[1]}" r="12" fill="transparent"/>`).join('');
+    return `<div class="movement-panel" data-movement-view="${view.key}" style="display:${view.key==='market'?'block':'none'}"><div class="movement-chart-note">${view.note}</div><svg class="movement-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${view.title} trajectory"><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#5bb6bf" stop-opacity=".32"/><stop offset="1" stop-color="#5bb6bf" stop-opacity=".02"/></linearGradient></defs>${ticks}<path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${polyline}" fill="none" stroke="#0f6f7f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#0f6f7f" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#0f6f7f"/>${selectedMarker}${scrubPoints}${xLabels}</svg><div class="movement-inspector" aria-live="polite">Touch the chart to inspect an observation.</div><div class="movement-facts"><div class="movement-fact"><span>Start</span><b>${view.pointLabel(first)}</b></div><div class="movement-fact"><span>Current</span><b>${view.pointLabel(last)}</b></div><div class="movement-fact"><span>High</span><b>${view.axisLabel(max)}</b></div><div class="movement-fact"><span>Low</span><b>${view.axisLabel(min)}</b></div></div></div>`;
   };
   const tabs=views.map(view=>`<button type="button" class="movement-tab ${view.key==='market'?'on':''}" onclick="setMovementView(this,'${view.key}')">${view.label}</button>`).join('');
   return `<div class="movement-chart" data-movement-chart><div class="movement-chart-head"><div><div class="movement-chart-title">Market trajectory</div><div class="movement-chart-note">${rows.length} timestamped observations for ${escHtml(selectedSideText)}.</div></div><div class="movement-tabs">${tabs}</div></div>${views.map(panel).join('')}</div>`;
@@ -2922,6 +2969,23 @@ function setMovementView(button, view){
   if(!chart) return;
   chart.querySelectorAll('.movement-tab').forEach(tab=>tab.classList.toggle('on',tab===button));
   chart.querySelectorAll('[data-movement-view]').forEach(panel=>{ panel.style.display=panel.dataset.movementView===view?'block':'none'; });
+  wireMovementScrub(chart);
+}
+function wireMovementScrub(chart){
+  if(chart.dataset.scrubWired==='true') return;
+  chart.dataset.scrubWired='true';
+  chart.querySelectorAll('.movement-svg').forEach(svg=>{
+    const inspect=event=>{
+      const rect=svg.getBoundingClientRect(), ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width));
+      const points=[...svg.querySelectorAll('.movement-scrub-point')]; if(!points.length)return;
+      const targetX=ratio*640; let nearest=points[0], distance=Infinity;
+      points.forEach(point=>{const d=Math.abs(Number(point.getAttribute('cx'))-targetX);if(d<distance){distance=d;nearest=point;}});
+      svg.querySelectorAll('.movement-scrub-point').forEach(point=>point.classList.toggle('is-active',point===nearest));
+      const panel=svg.closest('.movement-panel'), output=panel?.querySelector('.movement-inspector');
+      if(output) output.textContent=nearest.dataset.time+' · '+nearest.dataset.value+' · '+nearest.dataset.bets+' Bets · '+nearest.dataset.money+' Money';
+    };
+    svg.addEventListener('pointerdown',inspect); svg.addEventListener('pointermove',event=>{if(event.buttons)inspect(event);});
+  });
 }
 
 async function openGameDetail(r,selectedSideLabel){
@@ -3196,6 +3260,7 @@ async function openGameDetail(r,selectedSideLabel){
 
   document.getElementById('drill-title').textContent=(r.game||'Game Detail');
   document.getElementById('drill-tbl').innerHTML='<tr><td style="padding:0">'+html+'</td></tr>';
+  document.querySelectorAll('[data-movement-chart]').forEach(wireMovementScrub);
   document.getElementById('drill-export').style.display='none';
   document.querySelector('#drill-overlay .drill-modal').classList.add('game-detail-modal');
   document.body.classList.add('game-detail-open');
@@ -4246,6 +4311,12 @@ function toggleMarketJourney(button){
   body.style.display=open?'none':''; button.setAttribute('aria-expanded',String(!open));
   button.querySelector('.market-journey-chevron').textContent=open?'⌄':'⌃';
 }
+function toggleDetailObservations(button){
+  const proof=button.closest('.detail-proof'); if(!proof)return;
+  const open=proof.classList.toggle('is-open');
+  const count=proof.querySelectorAll('.detail-observation-row').length;
+  button.textContent=open?'Hide observations':'View '+count+' observations';
+}
 function setDetailSide(index){
   if(!window._gameDetailState) return;
   window._gameDetailState.sideIndex=index;
@@ -4314,7 +4385,7 @@ function renderGameDetail(){
   html+=detailJourneyHtml(detailRows,selected,state.selectedJourneyTimestamp);
   html+='<section class="market-story"><h3>Market Story</h3><div class="market-story-grid"><div class="market-story-item"><span>Since Open</span><b>'+escHtml((detailRows[0]?.line_display||selected.open_line||'--')+' → '+(detailRows[detailRows.length-1]?.line_display||selected.current_line||'--'))+'</b></div><div class="market-story-item"><span>Positioning</span><b>'+escHtml(detailPct(selected.bets_pct,'Bets')+' / '+detailPct(selected.money_pct,'Money'))+'</b></div><div class="market-story-item"><span>First Signal</span><b>'+escHtml(firstSignal)+'</b></div><div class="market-story-item"><span>Latest Development</span><b>'+escHtml(detailLatestDevelopment(detailRows,selected))+'</b></div></div><p class="market-story-copy">'+escHtml(detailStoryCopy(selected,detailRows))+'</p></section>';
   html+='<section class="detail-proof"><div class="detail-proof-head"><div><h3>Proof / Observation History</h3><small>'+escHtml(proofSummary)+'</small></div></div><div class="detail-proof-body"><div class="detail-proof-metrics" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px"><div class="movement-fact"><span>'+escHtml(hasClassifiedSignal?'First Signal':'First Observed')+'</span><b>'+escHtml(hasClassifiedSignal?et(frozenSignal):(detailRows.length?et(detailRows[0].timestamp):'--'))+'</b></div><div class="movement-fact"><span>Max Excursion</span><b>'+escHtml(maxExcursion)+'</b></div><div class="movement-fact"><span title="Counts every raw line-direction change across timestamped observations; Market Journey shows only meaningful reversal milestones.">Raw Reversals</span><b>'+escHtml(String(journeyStats.reversals))+'</b></div><div class="movement-fact"><span>Observations</span><b>'+escHtml(String(detailRows.length||selected.observation_count||'--'))+'</b></div></div>';
-  if(detailRows.length){ html+='<div class="detail-observations" style="overflow:auto"><table class="detail-observation-table" style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px"><thead><tr style="background:var(--bg4)"><th style="padding:5px 8px;text-align:left">Time</th><th style="padding:5px 8px;text-align:left">Line</th><th style="padding:5px 8px;text-align:left">Bets</th><th style="padding:5px 8px;text-align:left">Money</th></tr></thead><tbody>'+detailRows.map(row=>'<tr class="detail-observation-row '+(String(row.timestamp||'')===String(state.selectedJourneyTimestamp||'')?'is-selected':'')+'" style="border-bottom:1px solid var(--border)"><td data-label="Time" style="padding:4px 8px">'+escHtml(et(row.timestamp))+'</td><td data-label="Line" style="padding:4px 8px">'+escHtml(row.line_display||'--')+'</td><td data-label="Bets" style="padding:4px 8px">'+escHtml(detailPercent(row.bets_pct))+'</td><td data-label="Money" style="padding:4px 8px">'+escHtml(detailPercent(row.money_pct))+'</td></tr>').join('')+'</tbody></table></div>'; } else { html+='<div style="color:var(--text3);font-size:12px;padding:10px">No event history yet</div>'; }
+  if(detailRows.length){ html+='<button type="button" class="detail-observations-toggle" onclick="toggleDetailObservations(this)">View '+escHtml(String(detailRows.length))+' observations</button><div class="detail-observations" style="overflow:auto"><table class="detail-observation-table" style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px"><thead><tr style="background:var(--bg4)"><th style="padding:5px 8px;text-align:left">Time</th><th style="padding:5px 8px;text-align:left">Line</th><th style="padding:5px 8px;text-align:left">Bets</th><th style="padding:5px 8px;text-align:left">Money</th></tr></thead><tbody>'+detailRows.map(row=>'<tr class="detail-observation-row '+(String(row.timestamp||'')===String(state.selectedJourneyTimestamp||'')?'is-selected':'')+'" style="border-bottom:1px solid var(--border)"><td data-label="Time" style="padding:4px 8px">'+escHtml(et(row.timestamp))+'</td><td data-label="Line" style="padding:4px 8px">'+escHtml(row.line_display||'--')+'</td><td data-label="Bets" style="padding:4px 8px">'+escHtml(detailPercent(row.bets_pct))+'</td><td data-label="Money" style="padding:4px 8px">'+escHtml(detailPercent(row.money_pct))+'</td></tr>').join('')+'</tbody></table></div>'; } else { html+='<div style="color:var(--text3);font-size:12px;padding:10px">No event history yet</div>'; }
   html+='</div></section>'+(isClean?'<footer class="detail-quality detail-quality-clean"><span class="detail-quality-label">Data Quality</span>'+dataBadge(r.data_badge)+'</footer>':'<section class="detail-quality detail-quality-warning"><h3>Data Quality</h3>'+dataBadge(r.data_badge)+'</section>')+'</div>';
   document.getElementById('drill-title').textContent=r.game||'Game Detail';
   document.getElementById('drill-tbl').innerHTML='<tr><td style="padding:0">'+html+'</td></tr>';
