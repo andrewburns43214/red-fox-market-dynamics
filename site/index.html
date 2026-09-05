@@ -174,6 +174,7 @@ section { padding: 100px 40px; }
   margin: 0 auto 48px;
   line-height: 1.7;
 }
+    .hero-trial-note { margin:-30px auto 18px; color:var(--text2); font-size:13px; font-weight:600; }
 .hero-positioning {
   margin: -24px auto 34px;
   font-family: var(--mono);
@@ -776,8 +777,9 @@ section { padding: 100px 40px; }
     <div class="hero-badge">Bloomberg-style market intelligence for sports bettors</div>
     <h1>Make More Informed <em>Wagering Decisions.</em></h1>
     <p class="hero-sub">Red Fox Market Intelligence gives sports bettors the data and market signals they need to make more informed wagering decisions. Instead of blindly following picks, see what the betting market is telling you and decide for yourself.</p>
-    <div class="hero-ctas">
-      <button class="btn btn-primary btn-lg" onclick="startFreeTrial()">Start Free Day</button>
+      <p class="hero-trial-note">Get 24 hours of free access from the time you start.</p>
+      <div class="hero-ctas">
+      <button class="btn btn-primary btn-lg" onclick="startFreeTrial()">Try Free for 24 Hours</button>
       <button class="btn btn-dark btn-lg" onclick="beginAccess('professional')">Go Unlimited - $29.99/mo</button>
     </div>
   </div>
@@ -897,7 +899,7 @@ section { padding: 100px 40px; }
           <li>Market journey and timeline</li>
           <li>Real-time updates</li>
         </ul>
-        <button class="btn btn-primary btn-lg" onclick="startFreeTrial()">Start Free Day</button>
+        <button class="btn btn-primary btn-lg" onclick="startFreeTrial()">Try Free for 24 Hours</button>
         <button class="btn btn-ghost" style="margin-top:10px;width:100%" onclick="handleCheckout('day_pass')">Buy Day Access - $3.99</button>
       </div>
       <div class="price-card featured">
@@ -1208,7 +1210,7 @@ async function beginAccess(_plan) {
   }
   syncAccessCookie(session);
   // Paid-plan calls must always lead to plan selection, even if a customer is
-  // currently using the free day. Only the free-day CTA itself opens the board.
+  // currently using the free trial. Only the trial CTA itself opens the board.
   document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -1272,14 +1274,14 @@ async function startFreeTrial() {
   }
   const { data, error } = await _supabase.rpc('claim_free_day');
   if (error) {
-    alert('Unable to start the free day right now. Please try again.');
+    alert('Unable to start your free trial right now. Please try again.');
     return;
   }
   if (data === true) {
     window.location.href = '/board.html?trial=started';
     return;
   }
-  alert('Your free day has already been used. Choose a plan to continue access.');
+  alert('Your one-time free trial has already been used. Choose a plan to continue access.');
 }
 
 (function configureMobileAppPromotion() {
