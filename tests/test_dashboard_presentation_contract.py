@@ -83,7 +83,8 @@ def test_same_side_signal_chips_deduplicate_by_displayed_label():
 
 
 def test_current_movement_copy_uses_row_relative_descriptors_without_arrows():
-    assert "if(!['One-Way','Whipsaw','Juice Move'].includes(path)) return '';" in BOARD
+    assert "A Watch, Held," in BOARD
+    assert "if(!['One-Way','Whipsaw','Juice Move'].includes(path)) return '';" not in BOARD
     assert "descriptor=points+' '+(Math.abs(primary)===1?'pt':'pts')" in BOARD
     assert "if(market==='MONEYLINE') descriptor='PRICE'" in BOARD
     assert "else descriptor='JUICE'" in BOARD

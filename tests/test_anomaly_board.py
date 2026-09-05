@@ -132,6 +132,17 @@ class TestAnomalyBoard(unittest.TestCase):
         self.assertIn("closing window", rationale)
         self.assertNotIn("+295 → +295", rationale)
 
+    def test_watch_rationale_anchors_the_toward_side_without_promoting_follow(self):
+        board = pd.DataFrame([
+            {"sport": "ncaaf", "game_id": "temple", "market_display": "SPREAD", "game": "Rhode Island @ Temple", "flagged_side": "Rhode Island +14.5", "bets_pct": 45, "money_pct": 25, "open_line": "+9.5 (-118)", "current_line": "+14.5 (-110)", "reaction": "Watch", "path": "One-Way", "anomaly_sort": 1, "severity_sort": 20},
+            {"sport": "ncaaf", "game_id": "temple", "market_display": "SPREAD", "game": "Rhode Island @ Temple", "flagged_side": "Temple -14.5", "bets_pct": 55, "money_pct": 75, "open_line": "-9.5 (-102)", "current_line": "-14.5 (-110)", "reaction": "Watch", "path": "One-Way", "anomaly_sort": 2, "severity_sort": 10},
+        ])
+        row = select_market_leaders(board).iloc[0]
+        self.assertEqual(row["directional_lean_side"], "")
+        self.assertIn("Temple -14.5 moved 5.0 points from -9.5 to -14.5", row["market_rationale"])
+        self.assertIn("55% bets / 75% money", row["market_rationale"])
+        self.assertIn("does not meet the confirmation threshold for Follow", row["market_rationale"])
+
     def test_follow_whipsaw_mentions_the_reversal_in_canonical_rationale(self):
         board = pd.DataFrame([
             {"sport": "nfl", "game_id": "g-whip", "market_display": "SPREAD", "game": "Away @ Home", "flagged_side": "Away +3", "bets_pct": 78, "money_pct": 68, "open_line": "+3 (-110)", "current_line": "+2.5 (-110)", "reaction": "Follow", "path": "Whipsaw", "anomaly_sort": 1, "severity_sort": 80},
