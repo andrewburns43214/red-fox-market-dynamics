@@ -1,5 +1,5 @@
-const CACHE_NAME = 'redfox-shell-v11';
-const APP_SHELL = ['/index.html', '/app.html', '/manifest.webmanifest?v=20260905', '/app-icon-192.png?v=20260905', '/app-icon-512.png?v=20260905', '/apple-touch-icon.png?v=20260905', '/favicon-32.png?v=20260905', '/mobile-install-banner.png?v=20260905', '/mobile-install-qr.png?v=20260905', '/pwa.js'];
+const CACHE_NAME = 'redfox-shell-v12';
+const APP_SHELL = ['/index.html', '/app.html', '/manifest.webmanifest?v=20260906-flat', '/favicon-flat-v2.ico', '/favicon-flat-v2.png', '/apple-touch-icon-flat-v2.png', '/app-icon-flat-v2-192.png', '/app-icon-flat-v2-512.png', '/mobile-install-banner.png?v=20260905', '/mobile-install-qr.png?v=20260905', '/pwa.js'];
 
 self.addEventListener('install', function (event) {
   event.waitUntil(caches.open(CACHE_NAME).then(function (cache) {
