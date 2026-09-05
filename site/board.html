@@ -2418,11 +2418,8 @@ function sideLineParts(line){
 function impliedProbability(odds){ return odds<0?(-odds)/(-odds+100):100/(odds+100); }
 const MOVEMENT_TOOLTIP='Movement is relative to each side: TOWARD means the market moved toward that row; AGAINST means it moved against it. JUICE or PRICE indicates odds movement rather than the primary spread or total number.';
 function sideMovementHtml(side,row){
-  // The engine's Held path already applies the authoritative line/price
-  // thresholds. Keep that state visually quiet beneath Current while leaving
-  // its Held/Freeze chips intact in Market Read.
-  const path=String(side.path||'').trim();
-  if(!['One-Way','Whipsaw','Juice Move'].includes(path)) return '';
+  // This is a factual Open -> Current display, not a signal. A Watch, Held,
+  // or Late classification must not hide a measurable current movement.
   const market=String(row.market_display||'').toUpperCase(), open=sideLineParts(side.open_line), current=sideLineParts(side.current_line);
   const label=String(side.flagged_side||sideLabel(side,row)).toLowerCase();
   let primary=0, juice=0, delta='', direction='HELD', cls='held';
@@ -2435,7 +2432,7 @@ function sideMovementHtml(side,row){
   }
   const isToward=market==='TOTAL'?(label.includes('over')?primary>0:primary<0):market==='SPREAD'?primary<0:primary>0;
   const juiceToward=juice>0;
-  const lineChanged=Math.abs(primary)>0.0001, juiceChanged=Math.abs(juice)>0.005;
+  const lineChanged=Math.abs(primary)>0.0001, juiceChanged=Math.abs(juice)>0.0000001;
   // For spreads and totals the number is the primary market signal. Attached
   // juice only decides direction when that number has held. Moneylines use
   // their price/implied-probability direction above.

@@ -289,6 +289,11 @@ def _market_rationale(leader):
     market = str(leader.get("market_display", "")).upper()
     sides = sides[:2]
     strongest = min(sides, key=_rationale_side_rank)
+    # Watch is explicitly non-directional. Its explanation should still lead
+    # with the most informative factual movement, rather than whichever paired
+    # side happened to sort first in the source payload.
+    if str(strongest.get("reaction") or "Watch").strip() == "Watch":
+        strongest = _watch_rationale_side(sides, market, strongest)
     other = next((side for side in sides if side is not strongest), sides[1])
     primary = str(strongest.get("reaction") or "Watch").strip()
     context = _rationale_context(strongest)
@@ -299,12 +304,18 @@ def _market_rationale(leader):
     other_support = _rationale_support(other)
 
     if "Split Cap" in context or "Split Cap" in other_context:
-        sentence = "The source returned a capped 0%/100% split, so this market is shown for price context only."
+        sentence = (
+            f"{_rationale_transition(strongest_name, strongest.get('open_line'), strongest.get('current_line'))}, "
+            "but the source returned a capped 0%/100% split, so this market is shown for price context only."
+        )
         if "Whipsaw" in context or "Whipsaw" in other_context:
             sentence += " Its price path also reversed, adding Whipsaw risk."
         return sentence
     if "Heavy Favorite" in context or "Heavy Favorite" in other_context:
-        return "A heavy moneyline favorite has concentrated tickets; that may be parlay-driven, so the split remains context only."
+        return (
+            f"{_rationale_transition(strongest_name, strongest.get('open_line'), strongest.get('current_line'))}. "
+            "A heavy moneyline favorite has concentrated tickets; that may be parlay-driven, so the split remains context only."
+        )
 
     if primary == "Contrarian":
         sentence = _rationale_contrarian(strongest, other, market, strongest_name, other_name, other_support)
@@ -351,6 +362,55 @@ def _rationale_side_rank(side):
             context_rank = index
             break
     return primary_rank, context_rank, -float(side.get("severity_sort") or 0)
+
+
+def _watch_rationale_side(sides, market, fallback):
+    """Select the most informative factual movement for neutral Watch copy.
+
+    This affects prose only. It neither assigns a signal nor changes the
+    read-anchor/directional-lean fields used by the board.
+    """
+    def rank(side):
+        moved, toward, magnitude = _rationale_movement(side, market)
+        support = _num(side.get("bets_pct")) + _num(side.get("money_pct"))
+        return (int(moved), int(toward), magnitude, support)
+
+    return max(sides, key=rank, default=fallback)
+
+
+def _rationale_movement(side, market):
+    """Return (measurable, toward_this_side, magnitude) for display prose."""
+    open_line = str(side.get("open_line", "")).strip()
+    current_line = str(side.get("current_line", "")).strip()
+    open_number = _num(_rationale_line_number(open_line))
+    current_number = _num(_rationale_line_number(current_line))
+    open_odds = _num(_rationale_odds(open_line))
+    current_odds = _num(_rationale_odds(current_line))
+
+    # Standalone moneyline prices are not parenthesized.
+    if market == "MONEYLINE":
+        open_odds = _num(open_line)
+        current_odds = _num(current_line)
+        if not (math.isfinite(open_odds) and math.isfinite(current_odds)):
+            return False, False, 0.0
+        delta = _implied_probability(current_odds) - _implied_probability(open_odds)
+        return not math.isclose(delta, 0.0, abs_tol=1e-9), delta > 0, abs(delta)
+
+    if math.isfinite(open_number) and math.isfinite(current_number) and not math.isclose(open_number, current_number, abs_tol=1e-9):
+        delta = current_number - open_number
+        if market == "TOTAL":
+            toward = delta > 0 if "over" in str(side.get("flagged_side", "")).lower() else delta < 0
+        else:
+            toward = delta < 0
+        return True, toward, abs(delta)
+    if math.isfinite(open_odds) and math.isfinite(current_odds):
+        delta = _implied_probability(current_odds) - _implied_probability(open_odds)
+        return not math.isclose(delta, 0.0, abs_tol=1e-9), delta > 0, abs(delta)
+    return False, False, 0.0
+
+
+def _implied_probability(odds):
+    return -odds / (-odds + 100) if odds < 0 else 100 / (odds + 100)
 
 
 def _rationale_side_name(side, market):
@@ -436,6 +496,18 @@ def _rationale_follow(side, market, side_name, support):
 def _rationale_watch(side, other, market, side_name, other_name, side_support, other_support, context):
     path = str(side.get("path", "")).strip()
     open_line, current_line = str(side.get("open_line", "")), str(side.get("current_line", ""))
+    moved, toward, magnitude = _rationale_movement(side, market)
+    bets_pct, money_pct = _num(side.get("bets_pct")), _num(side.get("money_pct"))
+    if (
+        market in {"SPREAD", "TOTAL"}
+        and moved and toward and magnitude > 0
+        and 35 < bets_pct < 70 and money_pct >= 55
+    ):
+        start, end = _rationale_line_number(open_line), _rationale_line_number(current_line)
+        return (
+            f"{side_name} moved {magnitude:.1f} points from {start} to {end} with {side_support}, "
+            "but ticket share does not meet the confirmation threshold for Follow."
+        )
     if open_line == current_line and path not in {"Whipsaw", "Juice Move"}:
         return f"{side_name} has {side_support} versus {other_name} at {other_support}, and held at {_rationale_base_line(current_line) or current_line}."
     if "Whipsaw" in context or path == "Whipsaw":
@@ -448,7 +520,7 @@ def _rationale_watch(side, other, market, side_name, other_name, side_support, o
         old_odds, new_odds = _rationale_odds(open_line), _rationale_odds(current_line)
         if base_open == base_current:
             return f"{side_name} stayed {base_current} while price/juice moved {old_odds} → {new_odds}."
-        return f"The market moved {open_line} → {current_line}, with price/juice doing most of the work."
+        return f"{side_name} moved {open_line} → {current_line}, with price/juice doing most of the work."
     if "Low Bets / High $" in context:
         return f"Only {_rationale_pct(side.get('bets_pct'))} of tickets are on {side_name}, but {_rationale_pct(side.get('money_pct'))} of money is there; the market moved {open_line} → {current_line}. The split conflict keeps the market on Watch."
     if "Developing Read" in context:
@@ -460,7 +532,7 @@ def _rationale_watch(side, other, market, side_name, other_name, side_support, o
     if "Market Move" in context:
         return f"{side_name} moved {open_line} → {current_line}; the change is material, but the current split does not create a confirmed directional read."
     if open_line != current_line:
-        return f"The market moved {open_line} → {current_line}, but the available split and movement do not yet establish a confirmed direction."
+        return f"{side_name} moved {open_line} → {current_line}, but the available split and movement do not yet establish a confirmed direction."
     return f"{side_name} has {side_support} versus {other_name} at {other_support}, but the market remains near the opener without a meaningful response."
 
 
