@@ -6,11 +6,21 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS last_name TEXT,
   ADD COLUMN IF NOT EXISTS normalized_email TEXT,
   ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS trial_started_at TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS trial_started_at TIMESTAMPTZ,
+  -- Some legacy projects recorded migration 003 without materializing this
+  -- column. Keep the established owner and guest bypass intact either way.
+  ADD COLUMN IF NOT EXISTS complimentary_access BOOLEAN NOT NULL DEFAULT FALSE;
 
 UPDATE public.profiles
 SET normalized_email = LOWER(BTRIM(email))
 WHERE normalized_email IS NULL;
+
+UPDATE public.profiles
+SET complimentary_access = TRUE
+WHERE LOWER(BTRIM(email)) IN (
+  'andrewburns43214@gmail.com',
+  'andrewburns43214+redfoxguests@gmail.com'
+);
 
 ALTER TABLE public.subscriptions
   ADD COLUMN IF NOT EXISTS stripe_payment_intent_id TEXT,
