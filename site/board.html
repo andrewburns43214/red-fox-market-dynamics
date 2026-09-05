@@ -19,6 +19,8 @@
 <script>
 // Keep the server-side access cookie aligned with the signed-in Supabase session.
 (function () {
+  // A successful server-authorized board load completes any homepage recovery.
+  try { sessionStorage.removeItem('redfox_board_recovery_attempt'); } catch (_error) {}
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   window.redfoxSupabase = client;
   const cookieName = 'redfox_access_token';

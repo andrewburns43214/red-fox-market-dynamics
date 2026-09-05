@@ -982,6 +982,11 @@ section { padding: 100px 40px; }
 // ── Supabase client ──
 const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const ACCESS_COOKIE = 'redfox_access_token';
+// The server protects /board.html with the short-lived access cookie.  A
+// persisted Supabase session can renew that cookie from this public page.
+const BOARD_RECOVERY_GUARD = 'redfox_board_recovery_attempt';
+const BOARD_RECOVERY_GUARD_TTL_MS = 10000;
+const BOARD_RECOVERY_DESTINATION = '/board.html';
 const COMPLIMENTARY_ACCESS_EMAILS = new Set([
   'andrewburns43214@gmail.com',
   'andrewburns43214+redfoxguests@gmail.com',
@@ -1003,6 +1008,57 @@ function syncAccessCookie(session) {
   } else {
     document.cookie = ACCESS_COOKIE + '=; Path=/; Secure; SameSite=Lax; Max-Age=0';
   }
+}
+
+function hasRecentBoardRecoveryAttempt() {
+  try {
+    const attemptedAt = Number(sessionStorage.getItem(BOARD_RECOVERY_GUARD));
+    if (!Number.isFinite(attemptedAt) || Date.now() - attemptedAt >= BOARD_RECOVERY_GUARD_TTL_MS) {
+      sessionStorage.removeItem(BOARD_RECOVERY_GUARD);
+      return false;
+    }
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function markBoardRecoveryAttempt() {
+  try {
+    sessionStorage.setItem(BOARD_RECOVERY_GUARD, String(Date.now()));
+  } catch (_error) {
+    // Storage may be disabled; the cookie handoff remains safe without a guard.
+  }
+}
+
+function clearBoardRecoveryAttempt() {
+  try {
+    sessionStorage.removeItem(BOARD_RECOVERY_GUARD);
+  } catch (_error) {
+    // Nothing else is required when browser storage is unavailable.
+  }
+}
+
+async function recoverBoardAfterAuthRequired(session) {
+  // getSession() restores or refreshes the persisted Supabase session before
+  // this point. Never send a visitor without that session back to the board.
+  if (!session) {
+    openModal();
+    return;
+  }
+
+  syncAccessCookie(session);
+  if (!(await hasBoardAccess(session))) {
+    clearBoardRecoveryAttempt();
+    document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+
+  // If a just-written cookie did not pass the server gate, remain on the
+  // public page rather than creating a redirect loop. A later visit can retry.
+  if (hasRecentBoardRecoveryAttempt()) return;
+  markBoardRecoveryAttempt();
+  window.location.replace(BOARD_RECOVERY_DESTINATION);
 }
 
 _supabase.auth.onAuthStateChange(function (_event, session) {
@@ -1223,14 +1279,7 @@ async function beginAccess(_plan) {
   }
   const params = new URLSearchParams(window.location.search);
   if (params.get('auth') === 'required') {
-    // A signed-in visitor without access reaches this state when the protected
-    // board is requested. Keep their session and take them to checkout rather
-    // than showing a redundant sign-in prompt.
-    if (session) {
-      document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
-    } else {
-      openModal();
-    }
+    await recoverBoardAfterAuthRequired(session);
   } else if (params.get('payment') === 'required') {
     if (session) {
       document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
@@ -1243,6 +1292,7 @@ async function beginAccess(_plan) {
 async function handleSignOut() {
   await _supabase.auth.signOut();
   syncAccessCookie(null);
+  clearBoardRecoveryAttempt();
   window.location.href = '/';
 }
 
