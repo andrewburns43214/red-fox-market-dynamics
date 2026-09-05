@@ -52,23 +52,40 @@ def test_freshness_reports_oldest_customer_visible_source_not_publish_clock(tmp_
     assert count == payload["board_market_count"] == 2
 
 
-def test_rolling_football_publication_window_keeps_board_and_csv_market_sets_in_parity():
-    now = "2026-09-03T12:00:00-04:00"
+def test_nfl_opening_week_exception_publishes_only_sep_9_through_14():
+    now = "2026-09-05T12:00:00-04:00"
     rows = pd.DataFrame([
-        {"sport": "nfl", "game_id": "today", "market_display": "TOTAL", "dk_start_iso": "2026-09-03T23:00:00Z"},
-        {"sport": "ncaaf", "game_id": "day-seven", "market_display": "TOTAL", "dk_start_iso": "2026-09-10T23:00:00Z"},
-        {"sport": "nfl", "game_id": "day-eight", "market_display": "TOTAL", "dk_start_iso": "2026-09-11T00:00:00-04:00"},
-        {"sport": "nfl", "game_id": "past", "market_display": "TOTAL", "dk_start_iso": "2026-09-03T09:00:00-04:00"},
+        {"sport": "nfl", "game_id": "sep-9", "market_display": "TOTAL", "dk_start_iso": "2026-09-09T20:15:00-04:00"},
+        {"sport": "nfl", "game_id": "sep-13", "market_display": "TOTAL", "dk_start_iso": "2026-09-13T13:00:00-04:00"},
+        {"sport": "nfl", "game_id": "sep-14", "market_display": "TOTAL", "dk_start_iso": "2026-09-14T20:15:00-04:00"},
+        {"sport": "nfl", "game_id": "sep-17", "market_display": "TOTAL", "dk_start_iso": "2026-09-17T20:15:00-04:00"},
+        {"sport": "ncaaf", "game_id": "cfb-unchanged", "market_display": "TOTAL", "dk_start_iso": "2026-09-11T23:00:00Z"},
         {"sport": "mlb", "game_id": "unaffected", "market_display": "TOTAL", "dk_start_iso": "2026-09-20T23:00:00Z"},
     ])
     published = filter_publication_eligible_markets(rows, now=now)
     keys = set(published.game_id)
-    assert {"today", "day-seven", "unaffected"}.issubset(keys)
-    assert "day-eight" not in keys
-    # Existing kickoff expiry owns removal of already-started rows; the rolling
-    # calendar window itself intentionally does not redefine that gate.
-    assert "past" in keys
+    assert {"sep-9", "sep-13", "sep-14", "cfb-unchanged", "unaffected"}.issubset(keys)
+    assert "sep-17" not in keys
     assert keys == set(published.loc[:, "game_id"])
+
+
+def test_nfl_publication_window_keeps_monday_current_week_and_rolls_on_tuesday():
+    rows = pd.DataFrame([
+        {"sport": "nfl", "game_id": "current-thursday", "market_display": "TOTAL", "dk_start_iso": "2026-09-17T20:15:00-04:00", "signal": "same"},
+        {"sport": "nfl", "game_id": "current-sunday", "market_display": "TOTAL", "dk_start_iso": "2026-09-20T13:00:00-04:00", "signal": "same"},
+        {"sport": "nfl", "game_id": "current-monday", "market_display": "TOTAL", "dk_start_iso": "2026-09-21T20:15:00-04:00", "signal": "same"},
+        {"sport": "nfl", "game_id": "next-thursday", "market_display": "TOTAL", "dk_start_iso": "2026-09-24T20:15:00-04:00", "signal": "same"},
+        {"sport": "nfl", "game_id": "next-sunday", "market_display": "TOTAL", "dk_start_iso": "2026-09-27T13:00:00-04:00", "signal": "same"},
+        {"sport": "nfl", "game_id": "next-monday", "market_display": "TOTAL", "dk_start_iso": "2026-09-28T20:15:00-04:00", "signal": "same"},
+    ])
+
+    monday = filter_publication_eligible_markets(rows, now="2026-09-21T12:00:00-04:00")
+    assert set(monday.game_id) == {"current-thursday", "current-sunday", "current-monday"}
+
+    tuesday = filter_publication_eligible_markets(rows, now="2026-09-22T12:00:00-04:00")
+    assert set(tuesday.game_id) == {"next-thursday", "next-sunday", "next-monday"}
+    # The gate only selects rows; it never alters eligible-game signal data.
+    assert set(tuesday.signal) == {"same"}
 
 
 def test_board_uses_latest_shared_snapshot_for_both_market_sides():

@@ -18,6 +18,12 @@ from main import infer_market_type, normalize_side_key
 DATA = Path(os.environ.get("REDFOX_DATA_DIR", "data"))
 PUBLIC_TIMEZONE = ZoneInfo("America/New_York")
 FOOTBALL_SPORTS = {"nfl", "ncaaf", "cfb"}
+# The 2026 opening slate is available in the source before the first Tuesday
+# board rollover.  This bounded exception publishes only that slate; after
+# Sep. 14 the normal Tuesday-to-Monday NFL window applies without exception.
+NFL_OPENING_WEEK_EXCEPTION_ACTIVE_START = pd.Timestamp("2026-09-01", tz=PUBLIC_TIMEZONE)
+NFL_OPENING_WEEK_START = pd.Timestamp("2026-09-09", tz=PUBLIC_TIMEZONE)
+NFL_OPENING_WEEK_END_EXCLUSIVE = pd.Timestamp("2026-09-15", tz=PUBLIC_TIMEZONE)
 PUBLIC_EXPORT_COLUMNS = {
     "anomaly_board.csv": [
         "sport", "game_id", "canonical_key", "kickoff_time", "kickoff_sort", "kickoff_iso", "game", "market_display",
@@ -123,11 +129,12 @@ def load_current_l2(data_dir, as_of):
 
 
 def filter_publication_eligible_markets(dashboard, now=None):
-    """Apply the rolling public football window before board ranking/export.
+    """Apply public football windows before board ranking/export.
 
-    Non-football rows retain their existing publication behavior.  Football
-    rows are eligible from the local calendar day through the end of the
-    seventh following calendar day, inclusive.
+    Non-football rows retain their existing publication behavior.  CFB keeps
+    its existing rolling eight-calendar-day window.  NFL uses a Tuesday-to-
+    Monday board week so the current week remains visible through Monday Night
+    Football and Week +2 source data is never published early.
     """
     if dashboard is None or dashboard.empty:
         return pd.DataFrame() if dashboard is None else dashboard.copy()
@@ -142,8 +149,22 @@ def filter_publication_eligible_markets(dashboard, now=None):
     kickoff = pd.to_datetime(work.get("dk_start_iso", ""), errors="coerce", utc=True).dt.tz_convert(PUBLIC_TIMEZONE)
     sport = work.get("sport", "").fillna("").astype(str).str.strip().str.lower()
     football = sport.isin(FOOTBALL_SPORTS)
-    eligible_football = kickoff.notna() & (kickoff >= start) & (kickoff < end_exclusive)
-    return work.loc[~football | eligible_football].copy()
+    nfl = sport.eq("nfl")
+
+    # Opening-week exception: publish exactly Sep. 9 through Sep. 14 before
+    # the first regular Tuesday rollover, never the following NFL week.
+    if NFL_OPENING_WEEK_EXCEPTION_ACTIVE_START <= now < NFL_OPENING_WEEK_END_EXCLUSIVE:
+        nfl_start = NFL_OPENING_WEEK_START
+        nfl_end_exclusive = NFL_OPENING_WEEK_END_EXCLUSIVE
+    else:
+        # pandas weekday is Monday=0; Tuesday is the first day of this window.
+        nfl_start = start - pd.Timedelta(days=(now.weekday() - 1) % 7)
+        nfl_end_exclusive = nfl_start + pd.Timedelta(days=7)
+
+    eligible_other_football = kickoff.notna() & (kickoff >= start) & (kickoff < end_exclusive)
+    eligible_nfl = kickoff.notna() & (kickoff >= nfl_start) & (kickoff < nfl_end_exclusive)
+    eligible = ~football | ((~nfl) & eligible_other_football) | (nfl & eligible_nfl)
+    return work.loc[eligible].copy()
 
 
 def _event_detail_filename(sport, game_id):
