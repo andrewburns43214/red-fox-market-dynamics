@@ -87,6 +87,8 @@ body {
 .nav-actions {
   display: flex; gap: 12px; align-items: center;
 }
+.nav-install-link { display:none; color:var(--text2); font-size:12px; font-weight:700; text-decoration:none; white-space:nowrap; }
+.nav-install-link:hover { color:var(--red); }
 .btn {
   font-family: var(--sans);
   font-weight: 600;
@@ -207,7 +209,6 @@ section { padding: 100px 40px; }
 .mobile-app h2 { margin:9px 0 7px; color:#fff; font-size:26px; line-height:1.1; letter-spacing:-.8px; }
 .mobile-app p { max-width:620px; color:#c4ccd3; font-size:14px; line-height:1.6; }
 .mobile-install { display:inline-flex; width:232px; flex-direction:column; align-items:stretch; margin-top:21px; }
-.mobile-install-note { display:none; }
 .mobile-install > .btn { width:100%; min-width:0; margin:0; border:1px solid rgba(255,255,255,.32); border-radius:9px; background:#fff; color:#27333a; box-shadow:0 5px 14px rgba(0,0,0,.18); font-family:var(--sans)!important; font-size:14px; font-weight:800; letter-spacing:-.01em; justify-content:center; text-align:center; text-decoration:none!important; }
 .mobile-app .btn:hover,.mobile-app .btn:focus-visible { background:#fff; color:#050708; text-decoration:none!important; }
 .mobile-platforms { display:flex; width:100%; align-items:center; justify-content:center; gap:13px; margin-top:10px; color:#aeb8c0; font:700 10px var(--mono); letter-spacing:.35px; }
@@ -695,17 +696,22 @@ section { padding: 100px 40px; }
   .mobile-app-kicker { display:block; font-size:9px; }
   .mobile-app h2 { display:block; margin:6px 0 5px; font-size:18px; letter-spacing:-.45px; }
   .mobile-app p { display:block; font-size:11px; line-height:1.42; }
-  .mobile-install { width:174px; margin:auto auto 0; }
+  .mobile-install { width:174px; margin:auto auto 0; padding-top:8px; }
   .mobile-install > .btn { min-height:34px; font-size:11px; }
   .mobile-platforms { gap:10px; margin-top:7px; color:#c4ccd3; font-size:10px; }
 }
 
-@media (min-width: 769px) and (max-width: 1799px) {
-  /* The desktop card lives in the hero's intentional right-side space. When
-     that space disappears at browser zoom/narrow widths, hide it rather than
-     inserting an oversized promotion between unrelated page sections. Phone
-     users receive the compact CTA below. */
+@media (min-width: 1201px) and (max-width: 1799px) {
+  /* Reserve the right desktop column for the anchored card, keeping it wholly
+     independent from the centered hero content at high browser zoom. */
+  .hero { padding-right:550px; }
+}
+
+@media (min-width: 769px) and (max-width: 1200px) {
+  /* At the point a two-column desktop composition can no longer fit, preserve
+     a compact install entry point in the header instead of overlapping hero. */
   .mobile-app { display:none; }
+  .nav-install-link { display:inline-flex; align-items:center; min-height:32px; }
 }
 
 @media (max-width: 768px) {
@@ -732,7 +738,6 @@ section { padding: 100px 40px; }
   .mobile-app p { font-size:12px; line-height:1.45; }
   .mobile-install { display:flex; width:100%; margin-top:12px; }
   .mobile-app .btn { width:100%; min-height:40px; font-size:13px; }
-  .mobile-install-note { display:block; margin:9px 0 0; color:#aeb8c0; font-size:11px; line-height:1.4; }
   .mobile-qr { display:none; }
   .feat-card { padding: 28px 22px; }
   .not-grid { grid-template-columns: 1fr; }
@@ -775,7 +780,8 @@ section { padding: 100px 40px; }
     <span class="nav-sub">Market Intelligence</span>
   </div>
   <div class="nav-actions">
-    <button class="btn btn-ghost" onclick="openModal('signin')">Sign In</button>
+      <a class="nav-install-link" href="/app">Install Red Fox</a>
+      <button class="btn btn-ghost" onclick="openModal('signin')">Sign In</button>
     <button class="btn btn-primary" onclick="openModal('signup')">Create Account</button>
   </div>
 </nav>
@@ -850,7 +856,6 @@ section { padding: 100px 40px; }
           <span class="mobile-platform"><span class="material-symbols-rounded" aria-hidden="true">android</span>Android</span>
         </div>
       </div>
-      <p class="mobile-install-note" id="mobile-install-note">Open the install guide for your device.</p>
     </div>
     <aside class="mobile-qr" aria-label="Install Red Fox MI on your phone">
       <img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&amp;format=svg&amp;data=https%3A%2F%2Fredfoxmi.com%2Fapp" alt="QR code linking to Red Fox MI mobile installation">
@@ -1044,6 +1049,7 @@ function renderSignedInNav(hasAccess, isAdmin) {
     ? "window.location.href='/board.html'"
     : "document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' })";
   actions.innerHTML = '<button class="btn btn-primary" onclick="' + boardAction + '">' + boardButton + '</button>' +
+    '<a class="nav-install-link" href="/app">Install Red Fox</a>' +
     '<button class="btn btn-ghost" onclick="openBillingPortal()">Billing</button>' +
     (isAdmin ? '<a class="btn btn-ghost" href="/admin-users.html">Admin</a>' : '') +
     '<button class="btn btn-ghost" onclick="handleSignOut()">Sign Out</button>';
@@ -1306,7 +1312,6 @@ async function startFreeTrial() {
 (function configureMobileAppPromotion() {
   const promotion = document.querySelector('.mobile-app');
   const cta = document.getElementById('mobile-app-cta');
-  const note = document.getElementById('mobile-install-note');
   if (!promotion || !cta) return;
   const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (standalone) { promotion.hidden = true; return; }
@@ -1316,11 +1321,9 @@ async function startFreeTrial() {
   let deferredPrompt = null;
   if (isIOS) {
     cta.textContent = 'How to add to Home Screen';
-    if (note) note.textContent = 'In Safari: tap Share, then Add to Home Screen.';
   }
   if (isAndroid) {
     cta.textContent = 'Install Red Fox';
-    if (note) note.textContent = 'Use Install app when your browser offers it.';
     window.addEventListener('beforeinstallprompt', function (event) {
       event.preventDefault();
       deferredPrompt = event;
