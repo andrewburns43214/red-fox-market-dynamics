@@ -937,7 +937,7 @@ section { padding: 100px 40px; }
 </footer>
 
 <!-- ─── AUTH MODAL ─── -->
-<div class="modal-overlay" id="auth-modal" onclick="if(event.target===this)closeModal()">
+<div class="modal-overlay" id="auth-modal">
   <div class="modal">
     <button class="modal-close" onclick="closeModal()">&times;</button>
     <h2 id="modal-title">Sign In</h2>
@@ -1310,7 +1310,6 @@ async function startFreeTrial() {
   window.addEventListener('appinstalled', function () { promotion.hidden = true; });
 }());
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 </script>
 </body>
 </html>
