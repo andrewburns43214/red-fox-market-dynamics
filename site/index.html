@@ -1032,7 +1032,7 @@ _supabase.auth.onAuthStateChange(function (_event, session) {
   }
 });
 
-function renderSignedInNav(hasAccess) {
+function renderSignedInNav(hasAccess, isAdmin) {
   const actions = document.querySelector('.nav-actions');
   if (!actions) return;
   const boardButton = hasAccess ? 'Go to Board' : 'Choose Access';
@@ -1041,11 +1041,16 @@ function renderSignedInNav(hasAccess) {
     : "document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' })";
   actions.innerHTML = '<button class="btn btn-primary" onclick="' + boardAction + '">' + boardButton + '</button>' +
     '<button class="btn btn-ghost" onclick="openBillingPortal()">Billing</button>' +
+    (isAdmin ? '<a class="btn btn-ghost" href="/admin-users.html">Admin</a>' : '') +
     '<button class="btn btn-ghost" onclick="handleSignOut()">Sign Out</button>';
 }
 
 async function refreshSignedInNav(session) {
-  if (await hasBoardAccess(session)) renderSignedInNav(true);
+  const [hasAccess, adminResult] = await Promise.all([
+    hasBoardAccess(session),
+    _supabase.rpc('is_admin'),
+  ]);
+  renderSignedInNav(hasAccess, !adminResult.error && adminResult.data === true);
 }
 
 // ── Modal controls ──
