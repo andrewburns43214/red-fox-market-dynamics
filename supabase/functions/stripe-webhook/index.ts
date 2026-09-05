@@ -38,6 +38,13 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, {
   apiVersion: '2023-10-16',
   httpClient: Stripe.createFetchHttpClient(),
 });
+const cryptoProvider = Stripe.createSubtleCryptoProvider();
+
+function requiredSecret(name: string): string {
+  const value = Deno.env.get(name)?.trim();
+  if (!value) throw new Error(`Missing ${name}`);
+  return value;
+}
 
 const stripeStatus = (status: Stripe.Subscription.Status) => {
   if (status === 'active') return 'active';
@@ -99,10 +106,12 @@ Deno.serve(async (req) => {
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(
+    event = await stripe.webhooks.constructEventAsync(
       body,
       sig,
-      Deno.env.get('STRIPE_WEBHOOK_SECRET')!
+      requiredSecret('STRIPE_WEBHOOK_SECRET'),
+      undefined,
+      cryptoProvider,
     );
   } catch (err) {
     console.error('Webhook signature verification failed:', err instanceof Error ? err.message : 'unknown error');
@@ -189,7 +198,10 @@ Deno.serve(async (req) => {
 
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted': {
-      const subscription = event.data.object as Stripe.Subscription;
+      const eventSubscription = event.data.object as Stripe.Subscription;
+      // Snapshot event payloads can omit period fields under newer Stripe API versions.
+      // Read the authoritative subscription before calculating paid-through access.
+      const subscription = await stripe.subscriptions.retrieve(eventSubscription.id);
       await applySubscription(supabase, event, subscription);
       break;
     }
