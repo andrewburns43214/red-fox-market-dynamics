@@ -701,11 +701,11 @@ section { padding: 100px 40px; }
 }
 
 @media (min-width: 769px) and (max-width: 1799px) {
-  /* The desktop card lives in the hero's intentional right-side space. When
-     that space disappears at browser zoom/narrow widths, hide it rather than
-     inserting an oversized promotion between unrelated page sections. Phone
-     users receive the compact CTA below. */
-  .mobile-app { display:none; }
+  /* Keep the desktop composition intact at high zoom. The browser supplies a
+     horizontal scrollbar rather than letting the fixed right-side card collide
+     with or reflow into the hero. */
+  body { min-width:1920px; }
+  .mobile-app { right:auto; left:1370px; }
 }
 
 @media (max-width: 768px) {
