@@ -99,6 +99,29 @@ def write_board_freshness(dashboard, data_dir=DATA, now=None):
     return oldest, newest, market_count
 
 
+def load_current_l2(data_dir, as_of):
+    """Load L2 only while its capture can still describe the current board.
+
+    ``l2_consensus.csv`` is a retained, append-only historical source.  Parsing
+    an old archive on every ten-minute board pass provides no current-market
+    context and previously cost a full CSV parse even when it had no active
+    keys.  Keep the archive intact, but treat a capture older than the
+    configurable window as unavailable for the live board.  This is the same
+    result the downstream active-key filter produced for stale data.
+    """
+    path = Path(data_dir) / "l2_consensus.csv"
+    if not path.exists():
+        return pd.DataFrame()
+    max_age_hours = float(os.environ.get("REDFOX_L2_MAX_AGE_HOURS", "24"))
+    reference = pd.Timestamp(as_of)
+    reference = reference.tz_localize("UTC") if reference.tzinfo is None else reference.tz_convert("UTC")
+    modified = pd.Timestamp(path.stat().st_mtime, unit="s", tz="UTC")
+    if modified < reference - pd.Timedelta(hours=max_age_hours):
+        print(f"[ok] skipped stale L2 raw archive ({modified.isoformat()}); retained for history")
+        return pd.DataFrame()
+    return pd.read_csv(path, dtype=str, keep_default_na=False)
+
+
 def filter_publication_eligible_markets(dashboard, now=None):
     """Apply the rolling public football window before board ranking/export.
 
@@ -277,8 +300,7 @@ def main():
     dashboard = filter_publication_eligible_markets(dashboard)
     print(f"[ok] kept {len(dashboard)}/{before_window} markets after rolling football publication window")
 
-    l2_path = DATA / "l2_consensus.csv"
-    l2 = pd.read_csv(l2_path, dtype=str, keep_default_na=False) if l2_path.exists() else pd.DataFrame()
+    l2 = load_current_l2(DATA, newest_snapshot)
     # Evaluate timing against the latest source capture, not the web server's
     # wall clock. This keeps Late deterministic and prevents historical data
     # or a delayed refresh from being mislabeled as a closing-window move.
