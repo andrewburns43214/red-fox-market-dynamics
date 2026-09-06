@@ -1201,7 +1201,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .signal-freeze { background:#EEF4FF; color:#2F5FA7; border-color:#BFD0F0; }
 .signal-follow { background:#F3EFFF; color:#6B4CC5; border-color:#D1C3F4; }
 .signal-watch { background:#FFF7E0; color:#9A6700; border-color:#E8CF8A; }
-.signal-whipsaw,.signal-held,.signal-late,.signal-one-way,.signal-market-move,.signal-market-lag,.signal-juice-move,.signal-key-number,.signal-ticket-led,.signal-public-pressure,.signal-developing-read,.signal-low-bets-high,.signal-heavy-favorite { background:#F2F4F6; color:#5F6B76; border-color:#D9DEE3; }
+.signal-whipsaw,.signal-held,.signal-late,.signal-one-way,.signal-market-move,.signal-market-lag,.signal-juice-move,.signal-key-number,.signal-ticket-led,.signal-public-pressure,.signal-pressure-side,.signal-resistance-side,.signal-developing-read,.signal-low-bets-high,.signal-heavy-favorite { background:#F2F4F6; color:#5F6B76; border-color:#D9DEE3; }
 .signal-price-risk,.signal-capped-split,.signal-feed-risk,.signal-split-risk,.signal-thin { background:#FDECEC; color:#B42318; border-color:#F0B8B5; }
 .tim.signal-chip.tMID { background:#F2F4F6; color:#5F6B76; border-color:#D9DEE3; }
 .tim.signal-chip.tLATE,.tim.signal-chip.tLIVE { background:#FDECEC; color:#B42318; border-color:#F0B8B5; animation:none; }
@@ -2256,8 +2256,8 @@ const SIGNAL_META={
   'Stale DK':{label:'Market Lag',cls:'mr-contra',tip:'The broader market moved while the displayed price held, indicating a possible market lag.'},
   'Ticket-led':{cls:'mr-reverse',tip:'Tickets are concentrated while money is not strong enough for a Freeze or Follow.'},
   'Public Pressure':{cls:'mr-reverse',tip:'High tickets and money are concentrated on this pressure side. This is adverse context for that side, never a positive vote.'},
-  'Pressure Side':{cls:'mr-reverse',tip:'The side receiving concentrated public pressure. This role describes the evidence and is not a recommendation.'},
-  'Resistance Side':{cls:'mr-aligned',tip:'The opposing side that the market response is resisting toward. This is the evidence anchor, not automatically an actionable lean.'},
+  'Pressure Side':{cls:'mr-neutral',tip:'The side receiving concentrated public pressure. This role describes the evidence and is not a recommendation.'},
+  'Resistance Side':{cls:'mr-neutral',tip:'The opposing side that the market response is resisting toward. This is the evidence anchor, not automatically an actionable lean.'},
   'Whipsaw Recovered':{cls:'mr-neutral',tip:'An earlier reversal was followed by a durable reset under continued split pressure, so it no longer controls the current read.'},
   'Developing Read':{cls:'mr-neutral',tip:'Split support and direction agree, but the move is below the confirmed signal threshold.'},
   'Low Bets / High $':{cls:'mr-aligned',tip:'Low ticket share with high money share on that side.'},

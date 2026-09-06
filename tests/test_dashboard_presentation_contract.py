@@ -145,6 +145,14 @@ def test_strongest_side_uses_backend_anchor_not_raw_chip_count():
     assert "never a positive vote" in BOARD
 
 
+def test_evidence_role_chips_use_neutral_context_color_without_changing_movement_colors():
+    assert "'Pressure Side':{cls:'mr-neutral'" in BOARD
+    assert "'Resistance Side':{cls:'mr-neutral'" in BOARD
+    assert ".signal-pressure-side,.signal-resistance-side" in BOARD
+    assert ".market-move.toward { color:#15866a; }" in BOARD
+    assert ".market-move.against { color:#c74138; }" in BOARD
+
+
 def test_visible_rank_is_selected_market_rank():
     assert 'Selected-market rank: ${boardRank(r)}' in BOARD
     assert '<span class="rank-number">${boardRank(r)}</span><span class="rank-scope">MKT</span>' in BOARD
