@@ -220,6 +220,7 @@ section { padding: 100px 40px; }
 .mobile-install-banner { position:relative; width:100%; max-width:900px; margin:0 auto; line-height:0; }
 .mobile-install-artwork { display:block; width:100%; max-width:100%; height:auto; border-radius:14px; box-shadow:0 14px 36px rgba(18,25,31,.18); }
 .mobile-install-card { display:none; }
+.mobile-install-card-image { display:block; width:100%; max-width:100%; height:auto; }
 .mobile-banner-hit { position:absolute; z-index:3; display:block; border-radius:8px; }
 .mobile-banner-hit:focus-visible { outline:3px solid #fff; outline-offset:3px; }
 .mobile-banner-install { left:6.6%; top:68.1%; width:30.8%; height:9.9%; }
@@ -748,11 +749,8 @@ section { padding: 100px 40px; }
   .coverage-note { margin-top:12px; }
   .mobile-app { padding:16px; background:var(--bg2); }
   .mobile-install-desktop { display:none; }
-  .mobile-install-card { display:flex; width:100%; max-width:560px; margin:0 auto; padding:28px 22px; border:1px solid var(--border); border-radius:var(--radius3); background:#fff; flex-direction:column; align-items:flex-start; line-height:1.5; box-shadow:0 8px 24px rgba(18,25,31,.06); }
-  .mobile-install-eyebrow { color:var(--red); font:700 10px var(--mono); letter-spacing:1.4px; text-transform:uppercase; }
-  .mobile-install-card h2 { margin:7px 0 8px; color:#111; font-size:24px; line-height:1.16; letter-spacing:-.6px; }
-  .mobile-install-card p { margin:0 0 20px; color:var(--text2); font-size:14px; }
-  .mobile-install-card .btn { width:100%; text-align:center; }
+  .mobile-install-card { display:block; width:100%; max-width:100%; margin:0 auto; line-height:0; }
+  .mobile-install-card:focus-visible { outline:3px solid var(--red); outline-offset:3px; }
   .feat-card { padding: 28px 22px; }
   .not-grid { grid-template-columns: 1fr; }
   .not-section h2 { font-size: 24px; margin-bottom: 32px; }
@@ -867,12 +865,9 @@ section { padding: 100px 40px; }
     <a class="mobile-banner-hit mobile-banner-android" id="mobile-app-android" href="/app" aria-label="Install Red Fox MI on Android"></a>
     <a class="mobile-banner-hit mobile-banner-qr" href="/app" aria-label="Open the Red Fox MI installation guide"></a>
   </div>
-  <div class="mobile-install-card">
-    <div class="mobile-install-eyebrow">Red Fox MI for mobile</div>
-    <h2>Market intelligence, wherever you bet.</h2>
-    <p>Install Red Fox on your phone for quick access to the live board and market journey.</p>
-    <a class="btn btn-primary btn-lg" id="mobile-app-cta" href="/app">Install Red Fox</a>
-  </div>
+  <a class="mobile-install-card" id="mobile-app-cta" href="/app" aria-label="Install Red Fox on your phone">
+    <img class="mobile-install-card-image" src="/mobile-install-promo.png?v=20260906" alt="">
+  </a>
 </section>
 
 <section class="not-section">

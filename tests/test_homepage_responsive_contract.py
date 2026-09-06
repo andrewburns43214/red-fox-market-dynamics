@@ -24,7 +24,7 @@ def test_homepage_preserves_normal_mobile_viewport_and_avoids_page_scaling():
     assert "zoom:" not in source.replace(" ", "").lower()
 
 
-def test_install_promotion_has_separate_desktop_artwork_and_mobile_html_card():
+def test_install_promotion_has_separate_desktop_artwork_and_mobile_image_link():
     source = _source()
     soup = BeautifulSoup(source, "html.parser")
 
@@ -33,10 +33,18 @@ def test_install_promotion_has_separate_desktop_artwork_and_mobile_html_card():
     artwork = desktop.select_one("img.mobile-install-artwork")
     assert desktop is not None and mobile is not None and artwork is not None
     assert artwork.get("src", "").startswith("/mobile-install-banner.png")
-    assert mobile.select_one("#mobile-app-cta").get_text(strip=True) == "Install Red Fox"
+    assert mobile.name == "a"
+    assert mobile.get("id") == "mobile-app-cta"
+    assert mobile.get("href") == "/app"
+    assert mobile.get("aria-label") == "Install Red Fox on your phone"
+    mobile_artwork = mobile.select_one("img.mobile-install-card-image")
+    assert mobile_artwork is not None
+    assert mobile_artwork.get("src", "").startswith("/mobile-install-promo.png")
     assert mobile.select_one(".mobile-banner-qr-image") is None
     assert "@media (max-width: 768px)" in source
     assert ".mobile-install-desktop { display:none; }" in source
+    compact = source.replace(" ", "").replace("\n", "")
+    assert ".mobile-install-card-image{display:block;width:100%;max-width:100%;height:auto;}" in compact
 
 
 def test_free_trial_and_pricing_copy_are_explicit_and_annual_is_only_featured_plan():

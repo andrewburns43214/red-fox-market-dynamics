@@ -185,3 +185,16 @@ def test_live_recent_responsive_polish_reuses_board_controls_without_logic_chang
     assert '>Today <span class="tbadge" id="b-today">' in BOARD
     assert '>Live &amp; recent <span class="tbadge" id="b-live">' in BOARD
     assert '<span class="rail-label">Today\'s games</span>' in BOARD
+
+
+def test_mobile_board_refresh_uses_safe_refresh_with_double_trigger_guard():
+    assert 'class="mobile-board-refresh"' in BOARD
+    assert 'aria-label="Refresh board"' in BOARD
+    assert 'onclick="refreshMobileBoard(this)"' in BOARD
+    assert '.mobile-board-refresh { display:none; }' in BOARD
+    assert 'flex:0 0 44px;width:44px;height:44px' in BOARD
+    assert 'if(mobileBoardRefreshPending)return;' in BOARD
+    assert 'await refreshBoardNow();' in BOARD
+    assert "button.setAttribute('aria-busy','true')" in BOARD
+    assert "button.removeAttribute('aria-busy')" in BOARD
+    assert 'overscroll-behavior:none' not in BOARD.replace(' ', '').lower()
