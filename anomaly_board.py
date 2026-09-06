@@ -57,6 +57,8 @@ MIN_CANDIDATE_OBSERVATIONS = 3
 MIN_FREEZE_FADE_OBSERVATIONS = 4
 WHIPSAW_RECOVERY_MIN_OBSERVATIONS = 4
 WHIPSAW_RECOVERY_MIN_HOURS = 2.0
+ROLE_PRESSURE_MIN_BOTH = 55.0
+ROLE_PRESSURE_CONCENTRATION = 70.0
 
 
 def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
@@ -173,33 +175,57 @@ def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
 
 
 def _assign_pair_evidence_roles(board_df):
-    """Describe which side supplied pressure and which side resisted it.
+    """Describe qualifying pressure and any opposing resistance response.
 
-    Roles are explanatory evidence, not picks.  In particular, the opposing
-    side of a descriptive Freeze becomes the evidence anchor without becoming
-    an actionable lean unless the separate action gates qualify it.
+    Role assignment runs after classification and uses only already-observed
+    split/response evidence.  It must not vote in classification, scoring,
+    board rank, or directional-lean decisions.
     """
     work = board_df.copy()
     work["evidence_role"] = ""
     work["evidence_polarity"] = "neutral"
-    context = work.get("context_chips", pd.Series("", index=work.index)).fillna("").astype(str)
-    public_pressure = context.str.contains(r"(?:^|\|)\s*Public Pressure\s*(?:\||$)", regex=True)
-    work.loc[public_pressure, "evidence_role"] = "Pressure Side"
-    work.loc[public_pressure, "evidence_polarity"] = "adverse"
     keys = ["sport", "game_id", "market_display"]
     for _, indices in work.groupby(keys, dropna=False, sort=False).groups.items():
         group_indices = list(indices)
-        freeze_indices = [index for index in group_indices if str(work.at[index, "reaction"]) == "Freeze"]
-        if len(freeze_indices) != 1:
+        pressure_indices = [index for index in group_indices if _qualifies_for_pressure_role(work.loc[index])]
+        if len(pressure_indices) != 1:
             continue
-        pressure_index = freeze_indices[0]
+        pressure_index = pressure_indices[0]
         work.at[pressure_index, "evidence_role"] = "Pressure Side"
         work.at[pressure_index, "evidence_polarity"] = "adverse"
         counterparts = [index for index in group_indices if index != pressure_index]
-        if len(counterparts) == 1:
+        if len(counterparts) == 1 and _qualifies_for_resistance_role(work.loc[pressure_index]):
             work.at[counterparts[0], "evidence_role"] = "Resistance Side"
             work.at[counterparts[0], "evidence_polarity"] = "supportive"
     return work
+
+
+def _qualifies_for_pressure_role(side):
+    """Use symmetric split concentration without creating a new signal."""
+    context = {part.strip() for part in str(side.get("context_chips", "")).split("|") if part.strip()}
+    if "Split Cap" in context or "Heavy Favorite" in context:
+        return False
+    bets_pct = _num(side.get("bets_pct"))
+    money_pct = _num(side.get("money_pct"))
+    return (
+        bets_pct >= ROLE_PRESSURE_MIN_BOTH
+        and money_pct >= ROLE_PRESSURE_MIN_BOTH
+        and max(bets_pct, money_pct) >= ROLE_PRESSURE_CONCENTRATION
+    )
+
+
+def _qualifies_for_resistance_role(pressure_side):
+    """Require adverse or held evidence; pressure alone is insufficient."""
+    response = str(pressure_side.get("response_direction", "")).strip().upper()
+    reaction = str(pressure_side.get("reaction", "")).strip()
+    path = str(pressure_side.get("path", "")).strip()
+    if reaction == "Freeze":
+        return True
+    if response == "AGAINST":
+        return True
+    # An active reversal can finish near open without establishing durable
+    # resistance.  Recovered reversals are relabeled before this role pass.
+    return path == "Held"
 
 
 def select_market_leaders(board_df):
@@ -296,20 +322,23 @@ def _market_read_semantics(leader):
         return "", ""
     pressure = next((side for side in sides if str(side.get("evidence_role", "")) == "Pressure Side"), None)
     resistance = next((side for side in sides if str(side.get("evidence_role", "")) == "Resistance Side"), None)
+    base_anchor = min(sides, key=_rationale_side_rank)
+    base_primary = str(base_anchor.get("reaction") or "Watch").strip()
+    freeze_side = next((side for side in sides if str(side.get("reaction", "")).strip() == "Freeze"), None)
+    directional = ""
+    if freeze_side is not None:
+        eligible = str(freeze_side.get("kpi_eligible", "")).strip().lower() == "true"
+        action_type = str(freeze_side.get("action_type", "")).strip().upper()
+        action_side = str(freeze_side.get("action_side", "")).strip()
+        directional = action_side if eligible and action_type == "FADE CANDIDATE" else ""
+    elif base_primary in {"Contrarian", "Follow"}:
+        directional = str(base_anchor.get("flagged_side", "")).strip()
     if pressure is not None and resistance is not None:
         anchor_side = str(resistance.get("flagged_side", "")).strip()
-        eligible = str(pressure.get("kpi_eligible", "")).strip().lower() == "true"
-        action_type = str(pressure.get("action_type", "")).strip().upper()
-        action_side = str(pressure.get("action_side", "")).strip()
-        directional = action_side if eligible and action_type == "FADE CANDIDATE" else ""
         return anchor_side, directional
 
-    anchor = min(sides, key=_rationale_side_rank)
-    anchor_side = str(anchor.get("flagged_side", "")).strip()
-    primary = str(anchor.get("reaction") or "Watch").strip()
-    if primary in {"Contrarian", "Follow"}:
-        return anchor_side, anchor_side
-    return anchor_side, ""
+    anchor_side = str(base_anchor.get("flagged_side", "")).strip()
+    return anchor_side, directional
 
 
 def _market_rationale(leader):

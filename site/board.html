@@ -1187,6 +1187,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .signal-guide-close { width:30px; height:30px; border:0; border-radius:50%; background:var(--bg2); color:var(--text2); font-size:20px; cursor:pointer; }
 .signal-guide-body { padding:14px 18px 24px; }
 .signal-guide-intro { margin:0 0 14px; color:var(--text2); font-size:12px; line-height:1.5; }
+.signal-guide-section-note { margin:0 0 8px; color:var(--text2); font-size:11px; line-height:1.48; }
 .signal-guide-section { margin-top:20px; }
 .signal-guide-section h3 { margin:0 0 8px; color:var(--text3); font:800 9px var(--mono); letter-spacing:.1em; text-transform:uppercase; }
 .signal-guide-item { padding:11px 0; border-top:1px solid var(--border); }
@@ -2245,19 +2246,19 @@ function displayRationale(r){
 }
 const SIGNAL_META={
   'Contrarian':{cls:'mr-aligned',tip:'Low support on that side while its price or line moved toward it.'},
-  'Freeze':{cls:'mr-freeze',tip:'Heavy ticket and money support failed to earn a meaningful favorable response. A held number or price moving against the pressure strengthens the resistance evidence.'},
+  'Freeze':{cls:'mr-freeze',tip:'Freeze is assigned to the Pressure Side when heavy ticket and money support fails to earn a meaningful favorable response. Resistance evidence points toward the opposing side, but Freeze alone does not create a fade or directional lean.'},
   'Follow':{cls:'mr-aligned',tip:'High tickets and money on that side while its price or line moved with it.'},
   'Whipsaw':{cls:'mr-reverse',tip:'The market moved materially in one direction, then reversed.'},
-  'Held':{cls:'mr-neutral',tip:'The primary spread or total number remained within its hold threshold. Attached price movement is evaluated separately and may strengthen resistance.'},
-  'Late':{cls:'mr-reverse',tip:'A meaningful move first appeared in the closing window before the game starts.'},
+  'Held':{cls:'mr-neutral',tip:'The spread or total number, or the moneyline price, remained within its hold threshold. Attached spread or total juice is evaluated separately and may strengthen resistance.'},
+  'Late':{cls:'mr-reverse',tip:'A meaningful move first appeared late in the observed path while the market was inside its pregame closing window.'},
   'One-Way':{cls:'mr-neutral',tip:'The market made a meaningful move without a qualifying reversal.'},
   'Market Move':{cls:'mr-neutral',tip:'The market moved meaningfully from open in either direction, regardless of the current split. This is evidence, not a directional signal.'},
   'Market Lag':{cls:'mr-contra',tip:'The broader market moved while the displayed price held, indicating a possible market lag.'},
   'Stale DK':{label:'Market Lag',cls:'mr-contra',tip:'The broader market moved while the displayed price held, indicating a possible market lag.'},
   'Ticket-led':{cls:'mr-reverse',tip:'Tickets are concentrated while money is not strong enough for a Freeze or Follow.'},
   'Public Pressure':{cls:'mr-reverse',tip:'High tickets and money are concentrated on this pressure side. This is adverse context for that side, never a positive vote.'},
-  'Pressure Side':{cls:'mr-neutral',tip:'The side receiving concentrated public pressure. This role describes the evidence and is not a recommendation.'},
-  'Resistance Side':{cls:'mr-neutral',tip:'The opposing side that the market response is resisting toward. This is the evidence anchor, not automatically an actionable lean.'},
+  'Pressure Side':{cls:'mr-neutral',tip:'The side receiving qualifying concentrated betting pressure. This role describes the evidence and is not a recommendation.'},
+  'Resistance Side':{cls:'mr-neutral',tip:'The opposing side supported by the market’s resistance to concentrated pressure. It is the evidence anchor, not automatically an actionable lean.'},
   'Whipsaw Recovered':{cls:'mr-neutral',tip:'An earlier reversal was followed by a durable reset under continued split pressure, so it no longer controls the current read.'},
   'Developing Read':{cls:'mr-neutral',tip:'Split support and direction agree, but the move is below the confirmed signal threshold.'},
   'Low Bets / High $':{cls:'mr-aligned',tip:'Low ticket share with high money share on that side.'},
@@ -2272,13 +2273,17 @@ const SIGNAL_META={
   'Price Risk':{cls:'mr-reverse',tip:'An extreme moneyline price, expensive attached juice, or unusually large spread. This is caution context, not a directional signal.'},
   'Heavy Favorite':{cls:'mr-reverse',tip:'A heavily priced or ticket-heavy moneyline favorite. This is risk context, not a directional signal.'},
   'Split Cap':{label:'Capped Split',cls:'mr-contra',tip:'The source reported a capped 0% or 100% split, so directional split signals are disabled.'},
+  'Thin':{cls:'mr-contra',tip:'Only two valid observations are available for this market, so treat the pattern cautiously.'},
+  'Feed Risk':{cls:'mr-contra',tip:'The market does not have enough complete price or line data for a reliable market read.'},
+  'Split Risk':{cls:'mr-contra',tip:'The source reported a capped 0% or 100% split, so the split cannot support a directional read.'},
   'Watch':{cls:'mr-neutral',tip:'Worth monitoring, not a directional call: the market has notable positioning, movement, or context but lacks full confirmation for Contrarian, Freeze, or Follow. Read the accompanying chips and Market Explanation to see what is missing.'}
 };
 const BOARD_FIELD_META = [
   ['Bets / Money', 'The share of tickets and handle on each side. Higher percentages describe positioning, not a prediction.'],
   ['Open / Current', 'Open is the first valid observed market state; Current is the latest valid observation. Movement displayed beneath Current is interpreted relative to that side.'],
   ['Market Read', 'The current Red Fox interpretation for each side, together with supporting market-behavior, positioning, and risk/context labels.'],
-  ['Data Quality', 'Clean has at least three valid observations. Thin has two. Feed Risk or Split Risk means the source data cannot support a reliable split read.'],
+  ['Market Rank (MKT)', 'The rank of the currently selected market on the board. It is not a game-level rank.'],
+  ['Data Quality', 'Clean has at least three valid observations. Thin has two. Feed Risk means incomplete price or line data cannot support a reliable market read; Split Risk means a capped split cannot support a directional split read.'],
   ['Market Explanation', 'The plain-language explanation of the positioning, movement, and context behind the displayed Market Read.'],
   ['Market Trajectory', 'The full timestamped path for the selected side. Use Line, Price, Bets %, and Money % to inspect how the market developed over time.'],
   ['Market Journey', 'A milestone view of the most meaningful events in the market path, such as the open, signal changes, major moves, reversals, and current state.'],
@@ -2287,13 +2292,13 @@ const MARKET_GUIDE_SECTIONS=[
   ['Directional Reads',['Contrarian','Freeze','Follow','Watch']],
   ['Market Behavior',['Whipsaw','Whipsaw Recovered','Held','Late','One-Way','Market Move','Market Lag','Juice Move','Key Number']],
   ['Positioning & Context',['Pressure Side','Resistance Side','Ticket-led','Public Pressure','Developing Read','Low Bets / High $','Heavy Favorite']],
-  ['Risk / Data Limitations',['Price Risk','Capped Split']],
+  ['Risk / Data Limitations',['Price Risk','Capped Split','Thin','Feed Risk','Split Risk']],
 ];
 const MARKET_GUIDE_MOVEMENT=[
   ['Toward / Against','Movement is interpreted relative to each side. TOWARD means the market moved from Open toward that side; AGAINST means it moved against that side. Green/red represents market direction, not whether a wager is good or bad.'],
-  ['Point movement','For spreads and totals, a meaningful change in the primary number may appear beneath Current as 1.0 pt · TOWARD or 1.0 pt · AGAINST.'],
-  ['Juice','When a spread or total number holds but its attached American odds move meaningfully, the board may show JUICE · TOWARD or JUICE · AGAINST.'],
-  ['Price','Moneyline movement may appear as PRICE · TOWARD or PRICE · AGAINST.'],
+  ['Point movement','For spreads and totals, a measurable Open-to-Current change in the primary number appears beneath Current as 1.0 pt · TOWARD or 1.0 pt · AGAINST.'],
+  ['Juice','When a spread or total number holds but its attached American odds change from Open, the board may show JUICE · TOWARD or JUICE · AGAINST.'],
+  ['Price','A measurable moneyline Open-to-Current change may appear as PRICE · TOWARD or PRICE · AGAINST.'],
 ];
 
 function escHtml(value){
@@ -2304,8 +2309,8 @@ function signalMetaFor(label){
   const dataQuality={
     CLEAN:'Three or more valid observations are available for this market.',
     THIN:'Only two valid observations are available, so treat the pattern cautiously.',
-    'SPLIT RISK':'A capped 0% or 100% split cannot qualify for a directional alert.',
-    'FEED RISK':'The market does not have enough complete data for a reliable read.',
+    'SPLIT RISK':'The source reported a capped 0% or 100% split, so the split cannot support a directional read.',
+    'FEED RISK':'The market does not have enough complete price or line data for a reliable market read.',
   };
   if(dataQuality[raw.toUpperCase()]) return {label:raw,tip:dataQuality[raw.toUpperCase()]};
   if(raw==='Capped Split') return SIGNAL_META['Split Cap'];
@@ -2336,8 +2341,8 @@ function openSignalGuide(selected){
   } else {
     title.textContent='Market Guide';
     body.innerHTML='<p class="signal-guide-intro">Use this guide to understand Red Fox market reads, movement, and context. These labels describe market behavior and evidence—not picks or wager recommendations. Tap any signal chip on the board for its definition.</p>'+
-      MARKET_GUIDE_SECTIONS.map(function(section){return '<div class="signal-guide-section"><h3>'+escHtml(section[0])+'</h3>'+section[1].map(function(label){return signalGuideItem(label,signalMetaFor(label).tip);}).join('')+'</div>';}).join('')+
-      '<div class="signal-guide-section"><h3>Market Movement</h3>'+MARKET_GUIDE_MOVEMENT.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'<p class="signal-guide-note">A blank movement indicator beneath Current does not necessarily mean the market never moved. It means there is no qualifying Open-to-Current directional movement being shown. Open the drilldown’s Market Trajectory and Market Journey to review the full intraday path, including reversals.</p></div>'+
+      MARKET_GUIDE_SECTIONS.map(function(section){const note=section[0]==='Directional Reads'?'<p class="signal-guide-section-note">These are primary market-read classifications. Freeze and Watch can remain descriptive without producing an actionable directional lean.</p>':'';return '<div class="signal-guide-section"><h3>'+escHtml(section[0])+'</h3>'+note+section[1].map(function(label){return signalGuideItem(label,signalMetaFor(label).tip);}).join('')+'</div>';}).join('')+
+      '<div class="signal-guide-section"><h3>Market Movement</h3>'+MARKET_GUIDE_MOVEMENT.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'<p class="signal-guide-note">A blank movement indicator beneath Current does not necessarily mean the market never moved. It means the comparable Open and Current values are effectively unchanged or unavailable. Open the drilldown’s Market Trajectory and Market Journey to review the full intraday path, including reversals.</p></div>'+
       '<div class="signal-guide-section"><h3>Board Fields</h3>'+BOARD_FIELD_META.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'</div>';
   }
   overlay.classList.add('open');

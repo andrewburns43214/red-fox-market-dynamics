@@ -153,6 +153,21 @@ def test_evidence_role_chips_use_neutral_context_color_without_changing_movement
     assert ".market-move.against { color:#c74138; }" in BOARD
 
 
+def test_market_guide_matches_role_and_display_semantics():
+    assert "These are primary market-read classifications. Freeze and Watch can remain descriptive" in BOARD
+    assert "Freeze is assigned to the Pressure Side" in BOARD
+    assert "Freeze alone does not create a fade or directional lean" in BOARD
+    assert "The side receiving qualifying concentrated betting pressure" in BOARD
+    assert "The opposing side supported by the market’s resistance to concentrated pressure" in BOARD
+    assert "The spread or total number, or the moneyline price" in BOARD
+    assert "late in the observed path while the market was inside its pregame closing window" in BOARD
+    assert "['Risk / Data Limitations',['Price Risk','Capped Split','Thin','Feed Risk','Split Risk']]" in BOARD
+    assert "incomplete price or line data cannot support a reliable market read" in BOARD
+    assert "['Market Rank (MKT)', 'The rank of the currently selected market on the board. It is not a game-level rank.']" in BOARD
+    assert "a measurable Open-to-Current change" in BOARD
+    assert "no qualifying Open-to-Current directional movement" not in BOARD
+
+
 def test_visible_rank_is_selected_market_rank():
     assert 'Selected-market rank: ${boardRank(r)}' in BOARD
     assert '<span class="rank-number">${boardRank(r)}</span><span class="rank-scope">MKT</span>' in BOARD

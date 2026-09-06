@@ -4,7 +4,13 @@ import unittest
 
 import pandas as pd
 
-from anomaly_board import _is_late_move, _key_numbers_crossed, build_anomaly_outputs, select_market_leaders
+from anomaly_board import (
+    _assign_pair_evidence_roles,
+    _is_late_move,
+    _key_numbers_crossed,
+    build_anomaly_outputs,
+    select_market_leaders,
+)
 
 
 def _ts(hour, minute):
@@ -12,6 +18,73 @@ def _ts(hour, minute):
 
 
 class TestAnomalyBoard(unittest.TestCase):
+    def test_evidence_roles_follow_pressure_response_not_freeze_classification(self):
+        cases = [
+            ("freeze-adverse", "SPREAD", "Freeze", "AGAINST", "Held", True),
+            ("freeze-limited", "TOTAL", "Freeze", "LIMITED", "One-Way", True),
+            ("follow", "MONEYLINE", "Follow", "TOWARD", "One-Way", False),
+            ("contrarian-pair", "SPREAD", "Watch", "AGAINST", "One-Way", True),
+            ("watch-adverse", "TOTAL", "Watch", "AGAINST", "Juice Move", True),
+            ("limited-favorable", "MONEYLINE", "Watch", "LIMITED", "", False),
+            ("active-whipsaw", "TOTAL", "Watch", "LIMITED", "Whipsaw", False),
+        ]
+        rows = []
+        for order, (game_id, market, reaction, response, path, _resists) in enumerate(cases):
+            rows.extend([
+                {
+                    "sport": "nfl", "game_id": game_id, "market_display": market,
+                    "flagged_side": f"Pressure {game_id}", "bets_pct": 62, "money_pct": 90,
+                    "reaction": reaction, "response_direction": response, "path": path,
+                    "anomaly_sort": order + 1, "severity_sort": 50,
+                },
+                {
+                    "sport": "nfl", "game_id": game_id, "market_display": market,
+                    "flagged_side": f"Opposing {game_id}", "bets_pct": 38, "money_pct": 10,
+                    "reaction": "Contrarian" if game_id == "contrarian-pair" else "Watch",
+                    "response_direction": "TOWARD", "path": "Held",
+                    "anomaly_sort": order + 1, "severity_sort": 10,
+                },
+            ])
+        rows.extend([
+            {"sport": "nfl", "game_id": "neither", "market_display": "SPREAD", "flagged_side": "Side A", "bets_pct": 54, "money_pct": 80, "reaction": "Watch", "response_direction": "AGAINST", "anomaly_sort": 20, "severity_sort": 4},
+            {"sport": "nfl", "game_id": "neither", "market_display": "SPREAD", "flagged_side": "Side B", "bets_pct": 46, "money_pct": 20, "reaction": "Watch", "response_direction": "TOWARD", "anomaly_sort": 20, "severity_sort": 3},
+        ])
+        source = pd.DataFrame(rows)
+        classified_before = source[["reaction", "anomaly_sort", "severity_sort"]].copy()
+
+        assigned = _assign_pair_evidence_roles(source)
+
+        pd.testing.assert_frame_equal(
+            classified_before.reset_index(drop=True),
+            assigned[["reaction", "anomaly_sort", "severity_sort"]].reset_index(drop=True),
+        )
+        for game_id, _market, _reaction, _response, _path, resists in cases:
+            pair = assigned[assigned["game_id"] == game_id]
+            self.assertEqual(pair.iloc[0]["evidence_role"], "Pressure Side", msg=game_id)
+            self.assertEqual(pair.iloc[1]["evidence_role"], "Resistance Side" if resists else "", msg=game_id)
+        self.assertTrue((assigned.loc[assigned["game_id"] == "neither", "evidence_role"] == "").all())
+
+    def test_role_assignment_preserves_rank_scoring_and_directional_lean_rules(self):
+        board = pd.DataFrame([
+            {"sport": "nfl", "game_id": "contrarian", "market_display": "SPREAD", "game": "A @ B", "flagged_side": "A +6.5", "bets_pct": 22, "money_pct": 28, "reaction": "Contrarian", "response_direction": "TOWARD", "anomaly_sort": 1, "severity_sort": 40, "score": 71},
+            {"sport": "nfl", "game_id": "contrarian", "market_display": "SPREAD", "game": "A @ B", "flagged_side": "B -6.5", "bets_pct": 78, "money_pct": 72, "reaction": "Watch", "response_direction": "AGAINST", "anomaly_sort": 1, "severity_sort": 20, "score": 52},
+            {"sport": "nfl", "game_id": "follow", "market_display": "MONEYLINE", "game": "C @ D", "flagged_side": "C", "bets_pct": 76, "money_pct": 81, "reaction": "Follow", "response_direction": "TOWARD", "anomaly_sort": 2, "severity_sort": 30, "score": 68},
+            {"sport": "nfl", "game_id": "follow", "market_display": "MONEYLINE", "game": "C @ D", "flagged_side": "D", "bets_pct": 24, "money_pct": 19, "reaction": "Watch", "response_direction": "AGAINST", "anomaly_sort": 2, "severity_sort": 10, "score": 45},
+            {"sport": "nfl", "game_id": "freeze", "market_display": "TOTAL", "game": "E @ F", "flagged_side": "Over 44", "bets_pct": 82, "money_pct": 75, "reaction": "Freeze", "response_direction": "LIMITED", "action_type": "OBSERVE ONLY", "kpi_eligible": False, "anomaly_sort": 3, "severity_sort": 50, "score": 63},
+            {"sport": "nfl", "game_id": "freeze", "market_display": "TOTAL", "game": "E @ F", "flagged_side": "Under 44", "bets_pct": 18, "money_pct": 25, "reaction": "Watch", "response_direction": "LIMITED", "anomaly_sort": 3, "severity_sort": 5, "score": 44},
+        ])
+
+        leaders = select_market_leaders(board)
+
+        self.assertEqual(leaders["game_id"].tolist(), ["contrarian", "freeze", "follow"])
+        self.assertEqual(leaders["board_rank"].tolist(), [1, 2, 3])
+        self.assertEqual(leaders.set_index("game_id")["directional_lean_side"].to_dict(), {
+            "contrarian": "A +6.5", "freeze": "", "follow": "C",
+        })
+        self.assertEqual(leaders.set_index("game_id")["score"].to_dict(), {
+            "contrarian": 71, "freeze": 63, "follow": 68,
+        })
+
     def test_late_requires_an_upcoming_kickoff_inside_its_closing_window(self):
         points = [
             {"value": 50.0, "implied_pct": None},
