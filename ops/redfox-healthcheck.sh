@@ -27,6 +27,10 @@ recent_age=$(age_minutes "$DATA/live_recent.csv")
 (( snapshot_age <= MAX_BOARD_AGE_MINUTES )) || issues+=("snapshot freshness ${snapshot_age}m")
 (( recent_age <= MAX_LIVE_RECENT_AGE_MINUTES )) || issues+=("live/recent freshness ${recent_age}m")
 
+if ! "$ROOT/.venv/bin/python" "$ROOT/coverage_monitor.py" --data-dir "$DATA" > "$STATE_DIR/coverage.json" 2>&1; then
+  issues+=("publication coverage alert (see $STATE_DIR/coverage.json)")
+fi
+
 disk_percent=$(df -P "$ROOT" | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
 (( disk_percent < MAX_DISK_PERCENT )) || issues+=("disk ${disk_percent}%")
 

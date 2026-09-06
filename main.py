@@ -460,180 +460,17 @@ def _espn_kickoff_map_date_range(scoreboard_url_base: str, games: list[str], day
     Returns DK-game-keyed kickoff ISO map by querying ESPN scoreboard across a date range.
     Robust matching across NFL/NBA/NHL/CFB/CBB/MLB.
     """
-    import json
-    import urllib.request
+    from game_identity import match_games
     from datetime import datetime, timedelta
-
-    def _safe(x):
-        return (x or "").strip()
-
-    def _norm_team(x: str) -> str:
-        """
-        Normalize ESPN team strings for matching:
-        - strip
-        - expand a few common leading abbreviations
-        - apply your _normalize_team_name (which handles DK-style quirks too)
-        """
-        s = _safe(x)
-
-        s = _normalize_team_name(s)  # applies TEAM_ALIASES (and any DK quirks)
-        return s
-
-        try:
-            return _normalize_team_name(s)
-        except Exception:
-            return s.strip()
-
-
-
-    def _split_game(g: str):
-        g = _safe(g)
-        if " @ " in g:
-            a, h = g.split(" @ ", 1)
-            return _safe(a), _safe(h)
-        if " vs " in g:
-            h, a = g.split(" vs ", 1)
-            return _safe(a), _safe(h)
-        return "", ""
-
-    # Build ESPN index: many key variants -> iso
-    espn_index: dict[str, str] = {}
-
-
-
-    # Include a small recent-past window plus the current/upcoming window.
-    # `days` here means forward-looking days from today.
+    sport = next((key for key, value in ESPN_SCOREBOARD_BASE.items() if value == scoreboard_url_base), "")
+    events = []
     start = datetime.now() - timedelta(days=2)
-    total_days = days + 2
-    for i in range(total_days + 1):
-        d = start + timedelta(days=i)
-        ymd = d.strftime("%Y%m%d")
-
+    for i in range(days + 3):
+        ymd = (start + timedelta(days=i)).strftime("%Y%m%d")
         url = f"{scoreboard_url_base}?dates={ymd}{_espn_scoreboard_extra_params(scoreboard_url_base)}"
-        data = _fetch_espn_scoreboard_json(url)
+        events.extend(_fetch_espn_scoreboard_json(url).get("events", []))
+    return match_games(games, events, sport)
 
-
-        for ev in data.get("events", []):
-            iso = _safe(ev.get("date", ""))
-            if not iso:
-                continue
-
-            comps = ev.get("competitions", [])
-            if not comps:
-                continue
-
-            competitors = comps[0].get("competitors", [])
-            if len(competitors) != 2:
-                continue
-
-            home = next((c for c in competitors if c.get("homeAway") == "home"), None)
-            away = next((c for c in competitors if c.get("homeAway") == "away"), None)
-            if not home or not away:
-                continue
-
-            ht = (home.get("team") or {})
-            at = (away.get("team") or {})
-            home_name = _norm_team(ht.get("shortDisplayName") or ht.get("displayName") or ht.get("name") or "")
-            away_name = _norm_team(at.get("shortDisplayName") or at.get("displayName") or at.get("name") or "")
-
-            # Canonical ESPN key
-            espn_game = f"{away_name} @ {home_name}".strip()
-
-            # Index multiple variants + normalized version
-            if espn_game:
-                espn_index[espn_game] = iso
-                espn_index[_norm_game_key(espn_game)] = iso
-
-
-
-            # multiple ESPN name fields
-            pairs = [
-                (_safe(at.get("shortDisplayName")), _safe(ht.get("shortDisplayName"))),
-                (_safe(at.get("displayName")), _safe(ht.get("displayName"))),
-                (_safe(at.get("abbreviation")), _safe(ht.get("abbreviation"))),
-            ]
-
-            for a, h in pairs:
-                if not a or not h:
-                    continue
-
-
-
-
-                # raw
-                espn_index.setdefault(f"{a} @ {h}", iso)
-
-                # normalized
-                an = _norm_team(a)
-                hn = _norm_team(h)
-                if an and hn:
-                    espn_index.setdefault(f"{an} @ {hn}", iso)
-                    espn_index.setdefault(_norm_game_key(f"{an} @ {hn}"), iso)
-
-
-    # Resolve DK games -> iso
-    result: dict[str, str] = {}
-    for g in games:
-        g = _safe(g)
-        iso = ""
-
-        candidates: list[str] = []
-
-        # 1) raw DK
-        candidates.append(g)
-
-        # 1b) normalized-away/home DK key (fixes "Albany NY", "Miami FL", etc.)
-        away0, home0 = _split_game(g)
-        if away0 and home0:
-            candidates.append(f"{_normalize_team_name(away0)} @ {_normalize_team_name(home0)}")
-
-        # 2) DK->ESPN (your existing key transform)
-        try:
-            candidates.append(_dk_game_to_espn_key(g))
-        except Exception:
-            pass
-
-        # 3) normalized DK->ESPN split using the local normalizer (kept for safety)
-        a0, h0 = _split_game(g)
-        if a0 and h0:
-            candidates.append(f"{_norm_team(a0)} @ {_norm_team(h0)}")
-
-
-        # Try exact + normalized candidate keys first
-        iso = ""
-        for c in candidates:
-            if not c:
-                continue
-            iso = espn_index.get(c, "") or espn_index.get(_norm_game_key(c), "")
-            if iso:
-                break
-
-        # Fuzzy fallback (LAST RESORT): token overlap against ESPN matchup keys.
-        if not iso:
-            ng = _norm_game_key(g)
-            if "@" in ng:
-                gtoks = set(t for t in ng.replace("@", " ").split() if len(t) >= 3)
-                best_iso = ""
-                best_score = 0
-
-                for k, v in espn_index.items():
-                    if not v:
-                        continue
-                    nk = _norm_game_key(k)
-                    if "@" not in nk:
-                        continue
-                    ktoks = set(t for t in nk.replace("@", " ").split() if len(t) >= 3)
-                    score = len(gtoks & ktoks)
-                    if score > best_score:
-                        best_score = score
-                        best_iso = v
-
-                if best_score >= 2:
-                    iso = best_iso
-
-        result[g] = iso
-
-    return result
 
 import re
 
@@ -2007,35 +1844,46 @@ def validate_snapshot_rows(rows: list[dict], sport: str) -> tuple[list[dict], st
         return [], f"{sport_key}: no parsed game names"
 
     if sport_key in ESPN_SCOREBOARD_BASE:
+        from game_identity import game_identity, team_identity
         try:
             kickoff_map = get_espn_kickoff_map(sport_key, games)
-        except Exception as e:
-            accepted, fallback_note = _accept_team_sport_without_espn(rows, sport_key)
-            if accepted:
-                return rows, f"{sport_key}: ESPN validation failed ({type(e).__name__}); {fallback_note}"
-            return [], f"{sport_key}: ESPN validation failed ({type(e).__name__}); {fallback_note}"
-
-        matched_games = {g for g, iso in (kickoff_map or {}).items() if str(iso or "").strip()}
-        matched_ratio = (len(matched_games) / len(games)) if games else 0.0
-        if not matched_games or matched_ratio < 0.35:
-            accepted, fallback_note = _accept_team_sport_without_espn(rows, sport_key)
-            if accepted:
-                return rows, (
-                    f"{sport_key}: ESPN matched {len(matched_games)}/{len(games)} games; "
-                    f"{fallback_note}"
-                )
-            return [], f"{sport_key}: rejected snapshot, only {len(matched_games)}/{len(games)} games matched ESPN; {fallback_note}"
-
-        if matched_ratio < 0.85:
-            accepted, fallback_note = _accept_team_sport_without_espn(rows, sport_key)
-            if accepted:
-                return rows, (
-                    f"{sport_key}: ESPN matched {len(matched_games)}/{len(games)} games, "
-                    f"keeping full DK slate; {fallback_note}"
-                )
-
-        filtered = [r for r in rows if str(r.get("game", "") or "").strip() in matched_games]
-        return filtered, f"{sport_key}: kept {len(filtered)}/{len(rows)} rows after ESPN validation"
+            states = getattr(kickoff_map, "states", {})
+        except Exception:
+            kickoff_map, states = {}, {g: "ESPN_UNAVAILABLE" for g in games}
+        accepted = []
+        for game in games:
+            group = [r for r in rows if str(r.get("game", "") or "").strip() == game]
+            identity, identity_state = game_identity(game, sport_key)
+            matched = bool((kickoff_map or {}).get(game))
+            validation_state = states.get(game, "ESPN_MATCHED" if matched else "ESPN_UNMATCHED")
+            # ESPN corroboration or a verified DK league form is required. The
+            # legacy fallback no longer treats an unidentified mixed page as proof.
+            league_verified = matched or all(r.get("_source_league_verified") is True for r in group)
+            rejection = ""
+            if identity is None:
+                rejection = identity_state
+            elif not league_verified:
+                rejection = "SPORT_LEAGUE_NOT_VERIFIED"
+            for row in group:
+                row_reason = rejection
+                line = str(row.get("current") or row.get("current_line") or "")
+                side = str(row.get("side") or "").strip()
+                market_type = infer_market_type(side, line)
+                if not row_reason and not str(row.get("game_id") or "").strip():
+                    row_reason = "UNRESOLVED_EVENT_IDENTITY"
+                if not row_reason and not market_type:
+                    row_reason = "NORMALIZATION_FAILED"
+                if not row_reason and market_type in {"MONEYLINE", "SPREAD"}:
+                    team = re.sub(r"\s[+-]\d+(?:\.\d+)?\s*$", "", side)
+                    if team_identity(team, sport_key)[0] not in identity:
+                        row_reason = "SIDE_IDENTITY_MISMATCH"
+                if not row_reason and not _looks_like_iso_datetime(row.get("dk_start_iso") or row.get("start_time_iso") or row.get("game_time_iso") or ""):
+                    row_reason = "KICKOFF_UNKNOWN"
+                row["_validation_state"] = validation_state
+                row["_capture_exclusion_reason"] = row_reason
+                if not row_reason:
+                    accepted.append(row)
+        return accepted, f"{sport_key}: accounted for {len(rows)} rows; accepted {len(accepted)} with explicit ESPN/identity validation states"
 
     if sport_key == "ufc":
         recent = _load_recent_snapshot_games(hours=72)
@@ -2951,7 +2799,8 @@ def infer_market_type(side_txt: str, line_txt: str) -> str:
         return "SPREAD"
 
     # MONEYLINE (odds only)
-    if re.search(r"@\s*[+-]\d{3,4}\b", t):
+    price = re.search(r"@\s*([+-]\d{3,7})\s*$", t.replace("?", "-"))
+    if price and 100 <= abs(int(price.group(1))) <= 1000000:
         return "MONEYLINE"
 
     return ""
@@ -5942,6 +5791,17 @@ def build_dashboard():
 
 
 def cmd_snapshot(args):
+    from publication_coverage import ScrapeCoverage
+    coverage = ScrapeCoverage(Path(SNAPSHOT_CSV).parent, args.sport)
+    try:
+        _cmd_snapshot(args, coverage)
+        coverage.captured()
+    except BaseException as error:
+        coverage.captured("CAPTURE_FAILED", type(error).__name__ + ": " + str(error))
+        raise
+
+
+def _cmd_snapshot(args, coverage):
     # No hard skips here.
     # If a sport has no games, dk_headless/get_splits should return 0 records,
     # and we will print "[snapshot] no games available for <sport>" below.
@@ -5955,7 +5815,8 @@ def cmd_snapshot(args):
     result = get_splits(
     url,
     args.sport,
-    debug_dump_path=f"data/dk_rendered_{args.sport}.html"
+    debug_dump_path=f"data/dk_rendered_{args.sport}.html",
+    coverage=coverage
 
 )
 
@@ -5968,12 +5829,21 @@ def cmd_snapshot(args):
         print(f"[snapshot] no games available for {args.sport}")
         return
 
+    raw_rows = rows
     rows, validation_note = validate_snapshot_rows(rows, args.sport)
+    accepted_ids = {id(row) for row in rows}
+    for row in raw_rows:
+        if id(row) not in accepted_ids:
+            row["_capture_exclusion_reason"] = row.get("_capture_exclusion_reason") or "SNAPSHOT_VALIDATION_REJECTED"
+        if row.get("_source_league_verified") is not True:
+            row["_capture_exclusion_reason"] = "SPORT_LEAGUE_NOT_VERIFIED"
+    rows = [r for r in rows if not r.get("_capture_exclusion_reason")]
+    coverage.validation(raw_rows)
     if validation_note:
         print(f"[snapshot] {validation_note}")
     if not rows:
-        for note in purge_sport_from_live_files(args.sport):
-            print(f"[snapshot] {note}")
+        # Preserve discovery/history evidence. Rejected markets are quarantined
+        # by publication coverage; do not erase an entire sport and its ledgers.
         print(f"[snapshot] rejected {args.sport} snapshot due to failed sport validation")
         return
 

@@ -71,6 +71,17 @@ def filter_fresh_market_rows(dashboard, now=None, max_age_minutes=None):
 def write_board_freshness(dashboard, data_dir=DATA, now=None):
     """Atomically record the real source age of the just-published board."""
     if dashboard is None or dashboard.empty or "timestamp" not in dashboard.columns:
+        path = data_dir / "freshness.json"
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        except (OSError, ValueError):
+            payload = {}
+        payload.update(dk_ts=None, board_oldest_ts=None, board_newest_ts=None,
+                       board_market_count=0, board_published_at=str(now or pd.Timestamp.now(tz="UTC")))
+        data_dir.mkdir(parents=True, exist_ok=True)
+        temporary = data_dir / ".freshness.json.tmp"
+        temporary.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        temporary.replace(path)
         return None
     captured = pd.to_datetime(dashboard["timestamp"], utc=True, errors="coerce").dropna()
     if captured.empty:
@@ -145,7 +156,7 @@ def filter_publication_eligible_markets(dashboard, now=None):
     else:
         now = now.tz_convert(PUBLIC_TIMEZONE)
     start = now.normalize()
-    end_exclusive = start + pd.Timedelta(days=8)
+    end_exclusive = start + pd.DateOffset(days=8)
     kickoff = pd.to_datetime(work.get("dk_start_iso", ""), errors="coerce", utc=True).dt.tz_convert(PUBLIC_TIMEZONE)
     sport = work.get("sport", "").fillna("").astype(str).str.strip().str.lower()
     football = sport.isin(FOOTBALL_SPORTS)
@@ -158,8 +169,8 @@ def filter_publication_eligible_markets(dashboard, now=None):
         nfl_end_exclusive = NFL_OPENING_WEEK_END_EXCLUSIVE
     else:
         # pandas weekday is Monday=0; Tuesday is the first day of this window.
-        nfl_start = start - pd.Timedelta(days=(now.weekday() - 1) % 7)
-        nfl_end_exclusive = nfl_start + pd.Timedelta(days=7)
+        nfl_start = start - pd.DateOffset(days=(now.weekday() - 1) % 7)
+        nfl_end_exclusive = nfl_start + pd.DateOffset(days=7)
 
     eligible_other_football = kickoff.notna() & (kickoff >= start) & (kickoff < end_exclusive)
     eligible_nfl = kickoff.notna() & (kickoff >= nfl_start) & (kickoff < nfl_end_exclusive)
@@ -283,28 +294,53 @@ def complete_public_market_rows(dashboard):
 
 
 def main():
+    from publication_coverage import PublicationCoverage
+    coverage = PublicationCoverage(DATA, pd.Timestamp.now(tz="UTC"))
+    try:
+        _refresh(coverage)
+    except BaseException as error:
+        coverage.store.finish(coverage.run_id, "PUBLICATION_FAILED", type(error).__name__ + ": " + str(error))
+        raise
+
+
+def _refresh(coverage):
     DATA.mkdir(parents=True, exist_ok=True)
     # Capture any just-started games from the prior pregame export before this
     # run replaces it. The separate file is the only source for Live & Recent.
     if DATA == Path("data"):
         build_live_recent()
-    snapshots = pd.read_csv(DATA / "snapshots.csv", dtype=str, keep_default_na=False)
+    snapshot_path = DATA / "snapshots.csv"
+    snapshots = pd.read_csv(snapshot_path, dtype=str, keep_default_na=False) if snapshot_path.exists() else pd.DataFrame(
+        columns=["sport", "game_id", "game", "side", "current_line", "open_line", "bets_pct", "money_pct", "dk_start_iso", "timestamp"])
 
-    snapshots["market_display"] = snapshots.apply(market_for, axis=1)
-    snapshots = snapshots[snapshots["market_display"].isin(["MONEYLINE", "SPREAD", "TOTAL"])].copy()
+    snapshots["market_display"] = snapshots.apply(market_for, axis=1) if len(snapshots) else pd.Series(dtype=str)
+    coverage.seed(snapshots)
+    supported = snapshots[snapshots["market_display"].isin(["MONEYLINE", "SPREAD", "TOTAL"])].copy()
+    coverage.stage(snapshots, supported, "NORMALIZATION_FAILED")
+    snapshots = coverage.validated(supported)
     snapshots["side_key"] = snapshots.apply(
         lambda row: normalize_side_key(row.get("sport", ""), row["market_display"], row.get("side", "")), axis=1
-    )
+    ) if len(snapshots) else pd.Series(dtype=str)
     history = snapshots.copy()
     snapshots["timestamp"] = pd.to_datetime(snapshots["timestamp"], utc=True, errors="coerce")
+    coverage.stage(snapshots, snapshots[snapshots["timestamp"].notna()], "CAPTURE_TIMESTAMP_INVALID")
     newest_snapshot = snapshots["timestamp"].max()
+    if pd.isna(newest_snapshot):
+        newest_snapshot = coverage.now
     active = snapshots[snapshots["timestamp"] >= newest_snapshot - pd.Timedelta(hours=2)].copy()
+    coverage.stage(snapshots, active, "STALE_CAPTURE")
     dashboard = latest_synchronized_market_rows(active)
-    dashboard = complete_public_market_rows(dashboard)
+    coverage.stage(active, dashboard, "AWAITING_COMPLETE_PAIR")
+    coverage.pairs(dashboard)
+    complete = complete_public_market_rows(dashboard)
+    coverage.stage(dashboard, complete, "INCOMPLETE_MARKET_DATA")
+    dashboard = complete
     complete_market_count = dashboard[["sport", "game_id", "market_display"]].drop_duplicates().shape[0]
     print(f"[ok] kept {complete_market_count} complete customer-inspectable same-snapshot markets")
     before_freshness = len(dashboard)
-    dashboard = filter_fresh_market_rows(dashboard)
+    fresh = filter_fresh_market_rows(dashboard, now=coverage.now)
+    coverage.stage(dashboard, fresh, "STALE_CAPTURE")
+    dashboard = fresh
     print(f"[ok] kept {len(dashboard)}/{before_freshness} rows within the public source-freshness window")
     dashboard["canonical_key"] = dashboard["sport"] + "|" + dashboard["game_id"]
     dashboard["_sort_time"] = dashboard.get("dk_start_iso", "")
@@ -313,12 +349,16 @@ def main():
     # kickoff, and once it has been underway for five minutes its observations
     # stay in history but leave the live board.
     kickoff = pd.to_datetime(dashboard.get("dk_start_iso", ""), utc=True, errors="coerce")
-    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=5)
+    cutoff = coverage.now - pd.Timedelta(minutes=5)
     before_expiry = len(dashboard)
-    dashboard = dashboard.loc[kickoff.notna() & (kickoff > cutoff)].copy()
+    pregame = dashboard.loc[kickoff.notna() & (kickoff > cutoff)].copy()
+    coverage.stage(dashboard, pregame, "KICKOFF_GATE")
+    dashboard = pregame
     print(f"[ok] kept {len(dashboard)}/{before_expiry} pregame markets after kickoff expiry")
     before_window = len(dashboard)
-    dashboard = filter_publication_eligible_markets(dashboard)
+    in_window = filter_publication_eligible_markets(dashboard, now=coverage.now)
+    coverage.stage(dashboard, in_window, "OUTSIDE_PUBLICATION_WINDOW")
+    dashboard = in_window
     print(f"[ok] kept {len(dashboard)}/{before_window} markets after rolling football publication window")
 
     l2 = load_current_l2(DATA, newest_snapshot)
@@ -326,10 +366,15 @@ def main():
     # wall clock. This keeps Late deterministic and prevents historical data
     # or a delayed refresh from being mislabeled as a closing-window move.
     board, events = build_anomaly_outputs(dashboard, history, l2, as_of=newest_snapshot.to_pydatetime())
+    # The evaluator's existing history requirement is unchanged. Every input
+    # market omitted by it receives an explicit terminal state.
+    coverage.stage(dashboard, board, "INSUFFICIENT_HISTORY")
+    from publication_coverage import keys as coverage_keys
+    coverage.gate_ready = coverage_keys(board)
     action_count = update_action_ledger(board, DATA, newest_snapshot.to_pydatetime())
     board = apply_recorded_signals(board, DATA)
     board = select_market_leaders(board)
-    detail_count = write_event_detail_files(board, events)
+    detail_count = write_event_detail_files(board, events, details_dir=DATA / "anomaly_event_details")
     # Replace each public file only after its complete export is ready for Nginx.
     for frame, name in ((board, "anomaly_board.csv"), (events, "anomaly_events.csv")):
         temporary = DATA / f".{name}.tmp"
@@ -339,7 +384,9 @@ def main():
         output = frame if len(frame.columns) else pd.DataFrame(columns=PUBLIC_EXPORT_COLUMNS[name])
         output.to_csv(temporary, index=False)
         temporary.replace(DATA / name)
-    freshness = write_board_freshness(dashboard)
+    coverage_summary = coverage.publish(board, DATA / "anomaly_board.csv", filter_publication_eligible_markets)
+    print("[coverage] " + json.dumps(coverage_summary["sports"], sort_keys=True))
+    freshness = write_board_freshness(dashboard, data_dir=DATA, now=coverage.now)
     resolved_count = rebuild_action_results(DATA)
     freshness_summary = "no current source rows" if freshness is None else (
         f"source range {freshness[0].isoformat()} to {freshness[1].isoformat()} across {freshness[2]} markets"

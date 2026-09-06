@@ -392,7 +392,11 @@ def dom_scrape_splits(html, sport):
         game_name = None
         game_id = None
 
-        for a in row.find_all_previous("a", limit=60):
+        # Prefer the enclosing event identity; unrelated earlier anchors must
+        # not relabel a valid side when a page contains many markets.
+        event_anchor = sec.select_one('a[href*="/event/"], a[href*="eventId="]') if sec else None
+        anchors = [event_anchor] if event_anchor is not None else row.find_all_previous("a", limit=60)
+        for a in anchors:
             href = a.get("href") or ""
             txt = a.get_text(" ", strip=True) or ""
 
@@ -478,7 +482,7 @@ def dom_scrape_splits(html, sport):
     )
     return rows
 
-def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> Dict[str, Any]:
+def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None, coverage=None) -> Dict[str, Any]:
     """
     Fetch DraftKings betting splits for a given sport.
     Walks pagination (tb_page=1,2,3,...) until exhausted.
@@ -492,7 +496,8 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
     def rec_key(r):
         return (r.get("sport"), r.get("game_id"), r.get("market"), r.get("side"))
 
-    last_page_had_new = True
+    completion = "PAGE_CAP_REACHED"
+    advertised_last_page = 0
 
     for page in range(1, MAX_PAGES + 1):
         if page == 1:
@@ -501,6 +506,9 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
             page_url = _set_tb_page(url, page)
 
         html = fetch_server_rendered_html(page_url)
+        observed_html = html
+        if coverage is not None and html:
+            coverage.page(page, page_url, html)
         page_records = dom_scrape_splits(html, sport) if html else []
         last_err = None
         # The direct response is normally complete.  If DK changes to a
@@ -516,7 +524,8 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
                 if attempt == 2:
                     logger.info("[dk] fetch_rendered_html succeeded on retry (attempt 2/2) page_url=%s", page_url)
                 last_err = None
-                break
+                if html:
+                    break
             except Exception as e:
                 last_err = e
                 logger.warning("[dk] fetch_rendered_html failed (attempt %s/2) page_url=%s err=%r", attempt, page_url, e)
@@ -527,8 +536,18 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
 
         if not html:
             logger.error("[dk] giving up on page=%s sport=%s url=%s last_err=%r", page, sport, page_url, last_err)
+            completion = "FETCH_FAILED"
             break
 
+        if coverage is not None and html != observed_html:
+            coverage.page(page, page_url, html)
+        from bs4 import BeautifulSoup
+        page_soup = BeautifulSoup(html, "html.parser")
+        selected = page_soup.select_one('select[name="tb_eg"] option[selected]')
+        selected_label = selected.get("value", "") if selected else ""
+        league_verified = selected_label.casefold() in {label.casefold() for label in (sport_filter_labels or [])}
+        page_numbers = [int(n) for link in page_soup.select('a[href*="tb_page="]') for n in re.findall(r'tb_page=(\d+)', link.get("href", ""))]
+        advertised_last_page = max([advertised_last_page, *page_numbers])
         if debug_dump_path and page == 1:
             with open(debug_dump_path, "w", encoding="utf-8") as f:
                 f.write(html)
@@ -538,10 +557,12 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
 
         if not page_records:
             logger.info("[dk] page %d empty, stopping paging", page)
+            completion = "EMPTY_COMPLETE" if "No events match your current selections" in html else "RAW_MARKET_PARSE_FAILED"
             break
 
         new_count = 0
         for r in page_records:
+            r["_source_league_verified"] = league_verified
             k = rec_key(r)
             if k in seen_keys:
                 continue
@@ -553,7 +574,11 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None) -> D
 
         if new_count == 0:
             logger.info("[dk] page %d produced no new rows, stopping paging", page)
+            completion = "COMPLETE" if page > advertised_last_page else "PAGINATION_INCOMPLETE"
             break
+
+    if coverage is not None:
+        coverage.finish(completion)
 
     if (not all_records) and html and ("No events match your current selections" in html):
         logger.info("[dk] no events found across all pages")

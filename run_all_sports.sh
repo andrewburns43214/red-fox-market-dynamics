@@ -91,4 +91,9 @@ fi
 
 # publish (nginx serves directly from project dir)
 
+# Coverage health is independent of ranking/scoring and never changes the board.
+if ! "$PY" coverage_monitor.py >> "$LOG" 2>&1; then
+  echo "--- $(date) COVERAGE ALERT: inspect publication_coverage.json ---" >> "$LOG"
+fi
+
 echo "===== $(date) RUN END =====" >> "$LOG"
