@@ -149,3 +149,16 @@ def test_visible_rank_is_selected_market_rank():
     assert 'Selected-market rank: ${boardRank(r)}' in BOARD
     assert '<span class="rank-number">${boardRank(r)}</span><span class="rank-scope">MKT</span>' in BOARD
     assert '<span class="rank-number">${i+1}</span>' not in BOARD
+
+
+def test_live_recent_responsive_polish_reuses_board_controls_without_logic_changes():
+    assert 'class="live-recent-inner"' in BOARD
+    assert ".live-recent-inner { width:100%; max-width:1440px; margin:0 auto; }" in BOARD
+    assert ".live-sort-control select { width:auto; min-height:30px; max-width:220px; border:1px solid var(--border2);" in BOARD
+    assert ".live-control-group .schip{min-height:25px;padding:5px 9px" in BOARD
+    assert ".live-control-group .schip{min-height:26px!important;padding:3px 7px!important" in BOARD
+    assert ".live-empty{width:min(100%,620px);margin:7px 0 0;padding:12px 14px" in BOARD
+    assert '>Market board <span class="tbadge" id="b-all">' in BOARD
+    assert '>Today <span class="tbadge" id="b-today">' in BOARD
+    assert '>Live &amp; recent <span class="tbadge" id="b-live">' in BOARD
+    assert '<span class="rail-label">Today\'s games</span>' in BOARD
