@@ -155,8 +155,11 @@ def test_evidence_role_chips_use_neutral_context_color_without_changing_movement
 
 def test_mobile_market_read_chips_are_compact_without_changing_global_or_desktop_chips():
     assert "@media (max-width:850px)" in BOARD
-    assert ".two-side-read .two-side-row{gap:2px 3px!important}" in BOARD
-    assert ".two-side-read .mr{min-height:28px!important;padding:1px 4px!important;font-size:7px!important}" in BOARD
+    assert ".two-side-read .two-side-row{display:grid!important;grid-template-columns:84px minmax(0,1fr)!important;column-gap:5px!important;row-gap:0!important" in BOARD
+    assert ".two-side-read-chips{grid-column:2;align-items:flex-start;align-content:flex-start;gap:2px 3px!important;overflow:hidden}" in BOARD
+    assert ".two-side-read .mr{min-height:28px!important;padding:2px 5px!important;font-size:8px!important}" in BOARD
+    assert ".two-side-read .two-side-row.is-strongest{background:rgba(21,134,106,.08)!important;box-shadow:none!important}" in BOARD
+    assert '<span class="two-side-read-chips">' in BOARD
     assert ".mr { border-radius: 999px; padding: 4px 8px; font-size: 9px; letter-spacing: .02em; }" in BOARD
     assert ".signal-chip { cursor:pointer; border:1px solid transparent; font-family:var(--sans); }" in BOARD
 
