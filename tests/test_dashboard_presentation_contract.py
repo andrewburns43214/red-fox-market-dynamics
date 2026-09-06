@@ -153,7 +153,7 @@ def test_visible_rank_is_selected_market_rank():
 
 def test_live_recent_responsive_polish_reuses_board_controls_without_logic_changes():
     assert 'class="live-recent-inner"' in BOARD
-    assert ".live-recent-inner { width:100%; max-width:1440px; margin:0 auto; }" in BOARD
+    assert ".live-recent-inner { width:100%; max-width:1440px; margin:0; }" in BOARD
     assert ".live-sort-control select { width:auto; min-height:30px; max-width:220px; border:1px solid var(--border2);" in BOARD
     assert ".live-control-group .schip{min-height:25px;padding:5px 9px" in BOARD
     assert ".live-control-group .schip{min-height:26px!important;padding:3px 7px!important" in BOARD
