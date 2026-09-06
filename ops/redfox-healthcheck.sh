@@ -30,6 +30,9 @@ recent_age=$(age_minutes "$DATA/live_recent.csv")
 if ! "$ROOT/.venv/bin/python" "$ROOT/coverage_monitor.py" --data-dir "$DATA" > "$STATE_DIR/coverage.json" 2>&1; then
   issues+=("publication coverage alert (see $STATE_DIR/coverage.json)")
 fi
+if ! "$ROOT/.venv/bin/python" "$ROOT/live_score_monitor.py" --data-dir "$DATA" > "$STATE_DIR/live-score-coverage.json" 2>&1; then
+  issues+=("live score coverage alert (see $STATE_DIR/live-score-coverage.json)")
+fi
 
 disk_percent=$(df -P "$ROOT" | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
 (( disk_percent < MAX_DISK_PERCENT )) || issues+=("disk ${disk_percent}%")
@@ -52,7 +55,8 @@ if ((${#issues[@]})); then
   exit 1
 fi
 
-message="OK: board=${board_age}m snapshots=${snapshot_age}m live_recent=${recent_age}m disk=${disk_percent}% upstream_errors=${upstream_errors}"
+score_coverage=$(tr -d '\n' < "$STATE_DIR/live-score-coverage.json" 2>/dev/null || echo unavailable)
+message="OK: board=${board_age}m snapshots=${snapshot_age}m live_recent=${recent_age}m disk=${disk_percent}% upstream_errors=${upstream_errors} live_scores=${score_coverage}"
 printf '%s %s\n' "$(date --iso-8601=seconds)" "$message" > "$status_file"
 logger -p daemon.info -t redfox-health -- "$message"
 echo "$message"

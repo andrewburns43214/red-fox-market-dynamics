@@ -315,8 +315,8 @@ body::before {
 }
 .schip:hover { border-color: var(--accent); color: var(--accent); }
 .schip.on {
-  background: var(--surface2);
-  border-color: var(--border3);
+  background: var(--red);
+  border-color: var(--red);
   color: var(--white);
 }
 .mfilters {
@@ -1286,6 +1286,16 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .live-recent-head { margin:0 0 14px; }
 .live-recent-head h2 { margin:0; font-size:18px; }
 .live-recent-head p { margin:5px 0 0; color:var(--text3); font-size:12px; }
+.live-recent-controls { display:grid; gap:8px; margin:0 0 14px; }
+.live-control-row { display:flex; align-items:center; gap:7px; min-width:0; }
+.live-control-row-secondary { justify-content:space-between; }
+.live-control-group { display:flex; align-items:center; gap:5px; min-width:0; overflow-x:auto; scrollbar-width:none; }
+.live-control-group::-webkit-scrollbar { display:none; }
+.live-control-label { flex:0 0 auto; color:var(--text3); font:800 9px var(--mono); letter-spacing:.08em; text-transform:uppercase; }
+.live-control-group .schip { flex:0 0 auto; background:#fff; }
+.live-control-group .schip.on { background:var(--red); border-color:var(--red); color:#fff; }
+.live-sort-control { flex:0 0 auto; display:flex; align-items:center; gap:6px; color:var(--text3); font:800 9px var(--mono); letter-spacing:.06em; text-transform:uppercase; }
+.live-sort-control select { min-height:30px; max-width:220px; border:1px solid var(--red); border-radius:7px; padding:5px 28px 5px 9px; background:#fff; color:var(--red); font:700 10px var(--sans); cursor:pointer; }
 .live-recent-grid { width:100%; display:grid; grid-template-columns:repeat(auto-fit,minmax(285px,1fr)); gap:10px; align-content:start; }
 .live-game-card { padding:12px; border:1px solid var(--border); border-radius:10px; background:#fff; box-shadow:0 2px 8px rgba(22,53,61,.05); }
 .live-game-top { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
@@ -1303,6 +1313,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .live-market-meta { min-width:0; color:var(--text3); font:600 9px/1.35 var(--mono); text-align:left; overflow-wrap:anywhere; }
 .detail-frozen-status { margin-top:4px; color:var(--red); font:800 9px var(--mono); text-transform:uppercase; letter-spacing:.06em; }
 .live-empty { max-width:620px; margin:30px auto; padding:24px; background:#fff; border:1px solid var(--border); border-radius:10px; text-align:center; color:var(--text3); font-size:13px; }
+.live-more { grid-column:1/-1; min-height:44px; border:1px solid var(--border2); border-radius:8px; background:#fff; color:var(--accent); font:700 11px var(--sans); cursor:pointer; }
 @media (max-width: 900px) {
   html,body { overflow:auto; }
   .topbar { padding:0 14px; } .topbar-kpis,.clock-area,.signal-key { display:none; }
@@ -1323,6 +1334,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
   .movement-chart-head { display:block; } .movement-tabs { justify-content:flex-start; margin-top:8px; }
   .movement-facts { grid-template-columns:1fr 1fr; }
   .live-recent { padding:14px 10px 28px; } .live-recent-grid { grid-template-columns:1fr; gap:10px; } .live-game-card { padding:12px; }
+  .live-control-row-secondary { align-items:flex-start; gap:8px; } .live-sort-control { margin-left:auto; } .live-sort-control span { display:none; } .live-sort-control select { max-width:148px; min-height:32px; }
   /* A selected game is an analysis screen on phones, not a small desktop dialog. */
   body.game-detail-open { overflow:hidden; }
   #drill-overlay:has(.game-detail-modal) { align-items:stretch; justify-content:stretch; background:#fff; backdrop-filter:none; }
@@ -1492,6 +1504,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .app-filter-label{flex:0 0 39px;color:#111827;font:700 8px var(--mono);letter-spacing:.08em;text-transform:uppercase}
   .app-filter-row button{flex:0 0 auto;min-height:27px!important;padding:3px 8px!important;font-size:9px!important;line-height:1!important}
   .app-board-controls button.active{background:var(--red)!important;border-color:var(--red)!important;color:#fff!important}.app-sort-trigger,.app-sort-trigger:hover,.app-sort-trigger:focus-visible,.app-sort-trigger.is-active{display:inline-flex!important;align-items:center!important;gap:3px!important;margin-left:2px!important;border-color:var(--red)!important;background:var(--red)!important;color:#fff!important}.app-sort-trigger svg{width:11px;height:11px}.board-sort-sheet .sort-check{visibility:hidden}.board-sort-sheet button.active{border-color:var(--red)!important;background:var(--red)!important;color:#fff!important}.board-sort-sheet button.active .sort-check{visibility:visible;color:#fff}
+  body.live-recent-active .app-board-controls{display:none!important}
   .tabs{height:46px!important;background:#fff!important;border-bottom:1px solid var(--border2)!important}
   .tab{height:46px!important;padding:0 9px!important;color:#050708!important;font-size:10px!important}
   .tab.active{color:var(--red)!important;border-bottom-color:var(--red)!important}
@@ -1780,7 +1793,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
     </div>
   </div>
 
-  <div class="tab-content" id="tab-live-recent"><div class="live-recent"><div class="live-recent-head"><h2>Live &amp; Recent</h2><p>Live score and the final pregame market record.</p></div><div class="live-recent-grid" id="live-recent-grid"></div></div></div>
+  <div class="tab-content" id="tab-live-recent"><div class="live-recent"><div class="live-recent-head"><h2>Live &amp; Recent</h2><p>Live score and the final pregame market record.</p></div><div class="live-recent-controls" aria-label="Live and recent controls"><div class="live-control-row"><span class="live-control-label">Sport</span><div class="live-control-group" id="live-sport-filters" role="group" aria-label="Filter by sport"><button type="button" class="schip on" aria-pressed="true" onclick="setLiveRecentSport('ALL',this)">All</button></div></div><div class="live-control-row live-control-row-secondary"><div class="live-control-group" id="live-status-filters" role="group" aria-label="Filter by game status"><button type="button" class="schip on" aria-pressed="true" onclick="setLiveRecentStatus('ALL',this)">All</button><button type="button" class="schip" aria-pressed="false" onclick="setLiveRecentStatus('LIVE',this)">Live</button><button type="button" class="schip" aria-pressed="false" onclick="setLiveRecentStatus('RECENT',this)">Recent</button></div><label class="live-sort-control"><span>Sort</span><select id="live-sort" onchange="setLiveRecentSort(this.value)" aria-label="Sort Live and Recent games"><option value="STATUS_TIME">Status &amp; Time</option><option value="GAME_TIME">Game Time</option><option value="RANK">Pregame Market Read Rank</option><option value="SAVED">Saved First</option></select></label></div></div><div class="live-recent-grid" id="live-recent-grid"><div class="live-empty">Choose Live &amp; Recent to load game context.</div></div></div></div>
 
   <!-- PERFORMANCE -->
   <div class="tab-content" id="tab-perf">
@@ -2053,6 +2066,8 @@ const MOCK_RESULTS = [
 ];
 
 let allDash=[], allLedger=[], allEvents=[], allResults=[], allKPI=[], allLiveRecent=[];
+let liveRecentSport='ALL', liveRecentStatus='ALL', liveRecentSort='STATUS_TIME', liveRecentVisible=18;
+let _liveRecentLoaded=false, _liveRecentLoading=null, _liveRecentObserver=null;
 let sport='ALL', market='ALL', filter='all', tabId='board';
 let sortCol='board_rank', sortAsc=true;
 let _bookLines=null, _selectedBook='dk';
@@ -2511,6 +2526,7 @@ function wrClr(p){ return p>=65?'var(--green2)':p>=55?'var(--gold2)':'var(--red2
 
 function setTab(el){
   tabId=el.dataset.tab; filter=el.dataset.filter||'';
+  document.body.classList.toggle('live-recent-active',tabId==='live-recent');
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
@@ -2670,36 +2686,107 @@ function customerSnapshotTime(raw){
   return date.toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true,timeZone:'America/New_York',timeZoneName:'short'});
 }
 
-async function loadLiveRecent(){
-  const grid=document.getElementById('live-recent-grid');
-  if(!grid) return;
-  grid.innerHTML='<div class="live-empty">Loading live game context...</div>';
-  const rows=await loadCSV(LIVE_RECENT_URL+'?_='+Date.now())||[];
-  // A Live & Recent card is a frozen market record. Resolve its compact
-  // summary from the same final pregame observations the detail uses, rather
-  // than mixing a summary export with a historical event payload.
-  allLiveRecent=await Promise.all(rows.map(async function(row){
-    try { return frozenLiveRecord(row,await ensureGameEvents(row)); }
-    catch(error) { return row; }
-  }));
-  const games=new Map();
-  allLiveRecent.forEach(row=>{ const key=[row.sport,row.game_id,row.game].join('|'); if(!games.has(key)) games.set(key,[]); games.get(key).push(row); });
-  const badge=document.getElementById('b-live'); if(badge) badge.textContent=games.size;
-  if(!games.size){ grid.innerHTML='<div class="live-empty">No started games are currently in the Live &amp; Recent window.</div>'; return; }
-  const liveGames=[...games.values()];
-  if(boardSortMode!=='RANK') liveGames.sort((a,b)=>{
-    const firstA=a[0]||{},firstB=b[0]||{};
-    let result=0;
-    if(boardSortMode==='DATE') result=new Date(firstA.kickoff_iso||firstA._game_time||0)-new Date(firstB.kickoff_iso||firstB._game_time||0);
-    else if(boardSortMode==='MARKET'){ const order={MONEYLINE:0,SPREAD:1,TOTAL:2}; result=(order[String(firstA.market_display||'').toUpperCase()]??99)-(order[String(firstB.market_display||'').toUpperCase()]??99); }
-    else if(boardSortMode==='SAVED') result=Number(typeof window.isSavedGame==='function'&&window.isSavedGame(b))-Number(typeof window.isSavedGame==='function'&&window.isSavedGame(a));
-    return result||String(firstA.game||'').localeCompare(String(firstB.game||''));
+// Live & Recent ordering/filtering is presentation-only. Frozen market rows are
+// never recalculated from live outcomes, and drilldown history remains on-demand.
+function liveGameKey(row){ return [row.sport,row.game_id,row.game].join('|'); }
+function liveTimestamp(value,fallback){ const parsed=new Date(value||fallback||'').getTime(); return Number.isFinite(parsed)?parsed:0; }
+function liveState(game){ return String(game.first.score_state||'unknown').trim().toLowerCase(); }
+function liveStateOrder(game){ return liveState(game)==='in'?0:liveState(game)==='post'?1:2; }
+function liveStatusTimeCompare(a,b){
+  const stateDiff=liveStateOrder(a)-liveStateOrder(b); if(stateDiff)return stateDiff;
+  if(liveState(a)==='in') return a.kickoff-b.kickoff||a.label.localeCompare(b.label);
+  if(liveState(a)==='post') return b.completed-a.completed||b.kickoff-a.kickoff||a.label.localeCompare(b.label);
+  return b.kickoff-a.kickoff||a.label.localeCompare(b.label);
+}
+function groupLiveRecentRows(rows){
+  const grouped=new Map();
+  rows.forEach(row=>{const key=liveGameKey(row);if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(row);});
+  return [...grouped.entries()].map(([key,gameRows])=>{
+    const first=gameRows[0]||{}, kickoff=liveTimestamp(first.kickoff_iso,first._game_time);
+    return {key,rows:gameRows,first,kickoff,completed:liveTimestamp(first.score_completed_at_utc,first.kickoff_iso),bestRank:Math.min(...gameRows.map(boardRank)),saved:gameSaved({rows:gameRows}),label:String(first.game||'')};
   });
-  grid.innerHTML=liveGames.map(markets=>{
-    const first=markets[0], score=(first.score_away&&first.score_home&&first.score_away!=='-')?`${first.score_away} - ${first.score_home}`:'--';
-    const status=first.score_status||'Live score updating';
-    return `<article class="live-game-card"><div class="live-game-top"><div><div>${spChip(first.sport)}</div><div class="live-game-name">${first.game||'--'}</div><div class="live-status">${status==='Live score unavailable'?'Score pending':status}</div></div><div class="live-score">${score}</div></div><div class="live-freeze">Frozen pregame record</div>${liveMarketSections(markets).map(function(section){return `<section class="live-market-section"><div class="live-market-type">${escHtml(section.market)}</div>${section.sides.map(function(item){const sideArg=JSON.stringify(item.side.flagged_side||'').replace(/"/g,'&quot;');return `<button class="live-market-side-row" type="button" onclick="openGameDetail(allLiveRecent[${item.index}],${sideArg})" aria-label="Open frozen pregame ${escHtml(section.market)} market for ${escHtml(item.side.flagged_side||'side')}"><span class="live-market-side">${escHtml(item.side.flagged_side||'--')}</span><span class="live-market-meta">${escHtml(item.side.open_line||'--')} → ${escHtml(item.side.current_line||'--')} · ${escHtml(detailPercent(item.side.bets_pct))} Bets / ${escHtml(detailPercent(item.side.money_pct))} Money</span></button>`;}).join('')}</section>`;}).join('')}</article>`;
-  }).join('');
+}
+function filteredLiveRecentGames(rows=allLiveRecent){
+  return groupLiveRecentRows(rows).filter(game=>{
+    const sportMatches=liveRecentSport==='ALL'||sportLabel(game.first.sport)===liveRecentSport;
+    const state=liveState(game), statusMatches=liveRecentStatus==='ALL'||(liveRecentStatus==='LIVE'&&state==='in')||(liveRecentStatus==='RECENT'&&state==='post');
+    return sportMatches&&statusMatches;
+  });
+}
+function sortLiveRecentGames(games){
+  return games.sort((a,b)=>{
+    if(liveRecentSort==='GAME_TIME') return a.kickoff-b.kickoff||a.label.localeCompare(b.label);
+    if(liveRecentSort==='RANK') return a.bestRank-b.bestRank||liveStatusTimeCompare(a,b);
+    if(liveRecentSort==='SAVED') return Number(b.saved)-Number(a.saved)||liveStatusTimeCompare(a,b);
+    return liveStatusTimeCompare(a,b);
+  });
+}
+function liveDisplayStatus(row){
+  const status=String(row.score_status||'').trim(), coverage=String(row.score_match_state||'').toLowerCase();
+  if(coverage==='unsupported'||coverage==='provider_unavailable') return status&&status!=='Live score unavailable'?status:'Score unavailable';
+  return status==='Live score unavailable'?'Score pending':status||'Live score updating';
+}
+function liveScoreText(row){ return row.score_away&&row.score_home&&row.score_away!=='-'?`${row.score_away} - ${row.score_home}`:'--'; }
+function renderLiveRecentSports(){
+  const host=document.getElementById('live-sport-filters'); if(!host)return;
+  const sports=[...new Set(allLiveRecent.map(row=>sportLabel(row.sport)).filter(Boolean))].sort();
+  if(liveRecentSport!=='ALL'&&!sports.includes(liveRecentSport))liveRecentSport='ALL';
+  host.innerHTML=['ALL',...sports].map(value=>`<button type="button" class="schip ${value===liveRecentSport?'on':''}" aria-pressed="${value===liveRecentSport}" onclick="setLiveRecentSport('${value}',this)">${value==='ALL'?'All':escHtml(value)}</button>`).join('');
+}
+function setLiveRecentSport(value){ liveRecentSport=value; liveRecentVisible=18; renderLiveRecentSports(); renderLiveRecent(); }
+function setLiveRecentStatus(value){
+  liveRecentStatus=value; liveRecentVisible=18;
+  document.querySelectorAll('#live-status-filters .schip').forEach(button=>{const on=button.textContent.trim().toUpperCase()===value;button.classList.toggle('on',on);button.setAttribute('aria-pressed',String(on));});
+  renderLiveRecent();
+}
+function setLiveRecentSort(value){ liveRecentSort=value; liveRecentVisible=18; renderLiveRecent(); }
+function showMoreLiveRecent(){ liveRecentVisible+=18; renderLiveRecent(); }
+function observeLiveRecentMore(){
+  if(_liveRecentObserver)_liveRecentObserver.disconnect();
+  const more=document.getElementById('live-recent-more'); if(!more||!('IntersectionObserver' in window))return;
+  _liveRecentObserver=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting))showMoreLiveRecent();},{root:null,rootMargin:'240px'});
+  _liveRecentObserver.observe(more);
+}
+function liveGameCard(game){
+  const first=game.first, markets=game.rows, key=escHtml(game.key), score=liveScoreText(first), status=liveDisplayStatus(first);
+  return `<article class="live-game-card" data-live-game-key="${key}"><div class="live-game-top"><div><div>${spChip(first.sport)}</div><div class="live-game-name">${escHtml(first.game||'--')}</div><div class="live-status">${escHtml(status)}</div></div><div class="live-score">${escHtml(score)}</div></div><div class="live-freeze">Frozen pregame record</div>${liveMarketSections(markets).map(function(section){return `<section class="live-market-section"><div class="live-market-type">${escHtml(section.market)}</div>${section.sides.map(function(item){const sideArg=JSON.stringify(item.side.flagged_side||'').replace(/"/g,'&quot;');return `<button class="live-market-side-row" type="button" onclick="openGameDetail(allLiveRecent[${item.index}],${sideArg})" aria-label="Open frozen pregame ${escHtml(section.market)} market for ${escHtml(item.side.flagged_side||'side')}"><span class="live-market-side">${escHtml(item.side.flagged_side||'--')}</span><span class="live-market-meta">${escHtml(item.side.open_line||'--')} → ${escHtml(item.side.current_line||'--')} · ${escHtml(detailPercent(item.side.bets_pct))} Bets / ${escHtml(detailPercent(item.side.money_pct))} Money</span></button>`;}).join('')}</section>`;}).join('')}</article>`;
+}
+function renderLiveRecent(){
+  const grid=document.getElementById('live-recent-grid'); if(!grid)return;
+  renderLiveRecentSports();
+  const games=sortLiveRecentGames(filteredLiveRecentGames());
+  const badge=document.getElementById('b-live'); if(badge)badge.textContent=groupLiveRecentRows(allLiveRecent).length;
+  if(!games.length){grid.innerHTML='<div class="live-empty">No games match the selected Live &amp; Recent filters.</div>';return;}
+  const visible=games.slice(0,liveRecentVisible), remaining=games.length-visible.length;
+  grid.innerHTML=visible.map(liveGameCard).join('')+(remaining?`<button type="button" class="live-more" id="live-recent-more" onclick="showMoreLiveRecent()">Show ${Math.min(18,remaining)} more games · ${remaining} remaining</button>`:'');
+  observeLiveRecentMore();
+}
+async function loadLiveRecent(force=false){
+  const grid=document.getElementById('live-recent-grid'); if(!grid)return;
+  if(_liveRecentLoading)return _liveRecentLoading;
+  if(_liveRecentLoaded&&!force){renderLiveRecent();return;}
+  if(!_liveRecentLoaded)grid.innerHTML='<div class="live-empty">Loading live game context...</div>';
+  _liveRecentLoading=(async()=>{
+    const rows=await loadCSV(LIVE_RECENT_URL)||[];
+    allLiveRecent=rows; _liveRecentLoaded=true; liveRecentVisible=18; renderLiveRecent();
+  })().finally(()=>{_liveRecentLoading=null;});
+  return _liveRecentLoading;
+}
+async function refreshLiveRecentScores(){
+  if(!_liveRecentLoaded||tabId!=='live-recent')return;
+  const rows=await loadCSV(LIVE_RECENT_URL)||[], oldGames=groupLiveRecentRows(allLiveRecent), newGames=groupLiveRecentRows(rows);
+  const oldKeys=oldGames.map(game=>game.key).join('\n'),newKeys=newGames.map(game=>game.key).join('\n');
+  const oldStates=new Map(oldGames.map(game=>[game.key,liveState(game)]));
+  const structural=oldKeys!==newKeys||newGames.some(game=>oldStates.get(game.key)!==liveState(game));
+  const scores=new Map(newGames.map(game=>[game.key,game.first]));
+  const scoreFields=['score_away','score_home','score_status','score_state','score_match_state','score_provider','score_provider_event_id','score_updated_at_utc','score_completed_at_utc'];
+  allLiveRecent.forEach(row=>{const latest=scores.get(liveGameKey(row));if(latest)scoreFields.forEach(field=>{row[field]=latest[field]||'';});});
+  if(structural){allLiveRecent=rows;renderLiveRecent();return;}
+  newGames.forEach(game=>{
+    const card=[...document.querySelectorAll('.live-game-card')].find(node=>node.dataset.liveGameKey===game.key); if(!card)return;
+    const score=card.querySelector('.live-score'),status=card.querySelector('.live-status');
+    if(score)score.textContent=liveScoreText(game.first); if(status)status.textContent=liveDisplayStatus(game.first);
+  });
 }
 
 function liveMarketSections(rows){
@@ -2725,14 +2812,9 @@ function liveMarketSections(rows){
 }
 
 async function refreshLiveRecentCount(){
-  try{
-    const rows=await loadCSV(LIVE_RECENT_URL+'?_='+Date.now())||[];
-    const games=new Set(rows.map(row=>[row.sport,row.game_id,row.game].join('|')));
-    const badge=document.getElementById('b-live');
-    if(badge) badge.textContent=games.size;
-  }catch(error){
-    // Leave the initial zero when the optional Live & Recent feed is unavailable.
-  }
+  // Avoid downloading the large historical card payload during Market Board
+  // startup. The count is populated when this workspace is first requested.
+  if(_liveRecentLoaded){const badge=document.getElementById('b-live');if(badge)badge.textContent=groupLiveRecentRows(allLiveRecent).length;}
 }
 
 function _decRank(d,r){ const k=(d||'').toUpperCase(); if(k==='BET') return 1; if(k==='LEAN') return (r&&isLocked(r))?3:2; return 4; }
@@ -4867,6 +4949,7 @@ async function loadCSV(url){
 loadAll();
 setInterval(updateStats, 1000);
 setInterval(loadAll, 60000);
+setInterval(refreshLiveRecentScores, 60000);
 
 </script>
 <script>

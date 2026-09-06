@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import argparse
+import json
 import re
 
 import pandas as pd
@@ -14,9 +15,17 @@ from team_aliases import normalize_team_name
 
 DATA = Path("data")
 OUT = DATA / "live_recent.csv"
+SCORE_COVERAGE_OUT = DATA / "live_score_coverage.json"
 BOARD = DATA / "anomaly_board.csv"
 SNAPSHOTS = DATA / "snapshots.csv"
-EMPTY_COLUMNS = ["sport", "game_id", "game", "kickoff_iso", "market_display", "flagged_side", "reaction", "path", "score_away", "score_home", "score_status", "score_state", "frozen_at_utc"]
+FINAL_RETENTION_HOURS = 10
+UNRESOLVED_RETENTION_HOURS = 8
+SCORE_STALE_MINUTES = 3
+EMPTY_COLUMNS = [
+    "sport", "game_id", "game", "kickoff_iso", "market_display", "flagged_side", "reaction", "path",
+    "score_away", "score_home", "score_status", "score_state", "score_provider", "score_provider_event_id",
+    "score_match_state", "score_updated_at_utc", "score_completed_at_utc", "frozen_at_utc",
+]
 SCOREBOARD_URLS = {
     "nfl": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
     "nba": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard",
@@ -34,6 +43,10 @@ SCOREBOARD_TEAM_ALIASES = {
     "la angels": "los angeles angels",
     "ny mets": "new york mets",
     "ny yankees": "new york yankees",
+    # Score-feed-only college identities observed in the live inventory.
+    "mississippi valley": "mississippi valley st",
+    "mvsu": "mississippi valley st",
+    "ulm": "ul monroe",
 }
 COMPOUND_NICKNAMES = (
     "blue jackets", "blue jays", "golden knights", "maple leafs",
@@ -48,17 +61,15 @@ def game_key(value: object, sport: str) -> str:
     away, home = value.split(" @ ", 1)
     away_key = normalize_team_name(away, sport)
     home_key = normalize_team_name(home, sport)
-    if sport.lower() == "mlb":
-        away_key = SCOREBOARD_TEAM_ALIASES.get(away_key, away_key)
-        home_key = SCOREBOARD_TEAM_ALIASES.get(home_key, home_key)
+    away_key = SCOREBOARD_TEAM_ALIASES.get(away_key, away_key)
+    home_key = SCOREBOARD_TEAM_ALIASES.get(home_key, home_key)
     return "@".join((away_key, home_key))
 
 
 def team_signature(value: object, sport: str) -> str:
     """Return a narrow nickname signature for a paired-match fallback only."""
     normalized = normalize_team_name(str(value or ""), sport)
-    if sport.lower() == "mlb":
-        normalized = SCOREBOARD_TEAM_ALIASES.get(normalized, normalized)
+    normalized = SCOREBOARD_TEAM_ALIASES.get(normalized, normalized)
     for nickname in COMPOUND_NICKNAMES:
         if normalized.endswith(nickname):
             return nickname
@@ -73,27 +84,56 @@ def signature_game_key(value: object, sport: str) -> str:
     return "@".join((team_signature(away, sport), team_signature(home, sport)))
 
 
-def scoreboard(sport: str, now: datetime) -> dict[str, list[dict[str, str]]]:
+def provider_team_names(team: dict, sport: str) -> set[str]:
+    """Return only provider-authored team identities for exact paired matching."""
+    names = {
+        str(team.get(field, "")).strip()
+        for field in ("displayName", "location", "shortDisplayName", "abbreviation")
+    }
+    normalized = {normalize_team_name(name, sport) for name in names if name}
+    return {SCOREBOARD_TEAM_ALIASES.get(name, name) for name in normalized}
+
+
+def provider_game_keys(away_team: dict, home_team: dict, sport: str) -> set[str]:
+    return {
+        f"{away}@{home}"
+        for away in provider_team_names(away_team, sport)
+        for home in provider_team_names(home_team, sport)
+        if away and home
+    }
+
+
+def fetch_scoreboard(sport: str, now: datetime) -> tuple[dict[str, list[dict[str, str]]], str]:
     base = SCOREBOARD_URLS.get(sport)
     if not base:
-        return {}
+        return {}, "unsupported"
     extra = "&groups=80&limit=500" if sport == "ncaaf" else "&groups=50&limit=500" if sport == "ncaab" else "&limit=500"
     games: dict[str, list[dict[str, str]]] = {}
+    fetched = False
+    seen_events: set[str] = set()
     for day in (now - timedelta(days=1), now):
         try:
             response = requests.get(f"{base}?dates={day:%Y%m%d}{extra}", timeout=12)
             response.raise_for_status()
             events = response.json().get("events", [])
+            fetched = True
         except Exception as error:
             print(f"[live-recent] {sport} scoreboard unavailable: {type(error).__name__}")
             continue
         for event in events:
+            event_id = str(event.get("id", ""))
+            if event_id and event_id in seen_events:
+                continue
+            if event_id:
+                seen_events.add(event_id)
             competition = (event.get("competitions") or [{}])[0]
             competitors = competition.get("competitors") or []
             away = next((item for item in competitors if item.get("homeAway") == "away"), {})
             home = next((item for item in competitors if item.get("homeAway") == "home"), {})
-            away_name = (away.get("team") or {}).get("displayName", "")
-            home_name = (home.get("team") or {}).get("displayName", "")
+            away_team = away.get("team") or {}
+            home_team = home.get("team") or {}
+            away_name = away_team.get("displayName", "")
+            home_name = home_team.get("displayName", "")
             status = event.get("status") or {}
             status_type = status.get("type") or {}
             detail = status_type.get("shortDetail") or status_type.get("detail") or "In progress"
@@ -103,14 +143,23 @@ def scoreboard(sport: str, now: datetime) -> dict[str, list[dict[str, str]]]:
                 "score_status": detail,
                 "score_state": str(status_type.get("state", "in")),
                 "event_time": str(event.get("date", "")),
+                "score_provider": "espn",
+                "score_provider_event_id": event_id,
             }
             matchup = f"{away_name} @ {home_name}"
-            # Exact canonical names are primary. The paired nickname key is a
-            # fallback for harmless city/abbreviation differences only.
-            for key in {game_key(matchup, sport), signature_game_key(matchup, sport)}:
+            # Exact canonical names are primary. Provider location/short-name/
+            # abbreviation pairs safely cover FBS/FCS mascot and acronym drift.
+            keys = {game_key(matchup, sport), signature_game_key(matchup, sport)}
+            keys.update(provider_game_keys(away_team, home_team, sport))
+            for key in keys:
                 if key:
                     games.setdefault(key, []).append(item)
-    return games
+    return games, "available" if fetched else "unavailable"
+
+
+def scoreboard(sport: str, now: datetime) -> dict[str, list[dict[str, str]]]:
+    """Backward-compatible score map used by existing diagnostics."""
+    return fetch_scoreboard(sport, now)[0]
 
 
 def read_csv_or_empty(path: Path) -> pd.DataFrame:
@@ -150,6 +199,55 @@ def bootstrap_started_records(now: datetime) -> pd.DataFrame:
     return latest
 
 
+def _text(value: object) -> str:
+    return "" if pd.isna(value) else str(value).strip()
+
+
+def write_score_coverage(live: pd.DataFrame, now: datetime) -> dict:
+    games = live.drop_duplicates([column for column in ("sport", "game_id", "game") if column in live]).copy()
+    state = games.get("score_state", pd.Series("", index=games.index)).astype(str).str.lower()
+    active = games[~state.eq("post")].copy()
+    match = active.get("score_match_state", pd.Series("unmatched", index=active.index)).astype(str).str.lower()
+    updated = pd.to_datetime(active.get("score_updated_at_utc", ""), errors="coerce", utc=True)
+    stale = match.eq("matched") & (updated.isna() | (updated < pd.Timestamp(now) - pd.Timedelta(minutes=SCORE_STALE_MINUTES)))
+    has_score = (
+        active.get("score_away", pd.Series("", index=active.index)).astype(str).ne("-")
+        & active.get("score_home", pd.Series("", index=active.index)).astype(str).ne("-")
+    )
+    payload = {
+        "generated_at_utc": now.isoformat(),
+        "retention": {"final_hours": FINAL_RETENTION_HOURS, "unresolved_hours": UNRESOLVED_RETENTION_HOURS},
+        "active_live_games": int(len(active)),
+        "matched": int(match.eq("matched").sum()),
+        "receiving_score": int((match.eq("matched") & has_score & ~stale).sum()),
+        "unmatched": int(match.eq("unmatched").sum()),
+        "stale": int(stale.sum()),
+        "provider_unavailable": int(match.isin(["provider_unavailable", "unsupported"]).sum()),
+        "games": [
+            {
+                "sport": _text(row.get("sport")), "game_id": _text(row.get("game_id")),
+                "game": _text(row.get("game")), "state": _text(row.get("score_state")),
+                "coverage": _text(row.get("score_match_state")),
+                "provider_event_id": _text(row.get("score_provider_event_id")),
+                "updated_at_utc": _text(row.get("score_updated_at_utc")),
+            }
+            for _, row in active.iterrows()
+        ],
+    }
+    SCORE_COVERAGE_OUT.parent.mkdir(parents=True, exist_ok=True)
+    temporary = SCORE_COVERAGE_OUT.with_name("." + SCORE_COVERAGE_OUT.name + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    temporary.replace(SCORE_COVERAGE_OUT)
+    print(
+        "[live-recent] score coverage: "
+        f"{payload['matched']}/{payload['active_live_games']} matched, "
+        f"{payload['receiving_score']}/{payload['active_live_games']} current, "
+        f"{payload['unmatched']} unmatched, {payload['stale']} stale, "
+        f"{payload['provider_unavailable']} provider unavailable"
+    )
+    return payload
+
+
 def main(scores_only: bool = False) -> None:
     now = datetime.now(timezone.utc)
     existing = read_csv_or_empty(OUT)
@@ -169,7 +267,9 @@ def main(scores_only: bool = False) -> None:
     if not rows:
         recovered = bootstrap_started_records(now)
         if recovered.empty:
-            pd.DataFrame(columns=EMPTY_COLUMNS).to_csv(OUT, index=False)
+            empty = pd.DataFrame(columns=EMPTY_COLUMNS)
+            empty.to_csv(OUT, index=False)
+            write_score_coverage(empty, now)
             return
         rows.append(recovered)
     live = pd.concat(rows, ignore_index=True, sort=False)
@@ -182,8 +282,8 @@ def main(scores_only: bool = False) -> None:
     # available for the rest of the day; an unresolved live status gets a small safety window.
     state = live.get("score_state", pd.Series("", index=live.index)).astype(str).str.lower()
     now_naive = pd.Timestamp(now).tz_localize(None)
-    cutoff_final = now_naive - pd.Timedelta(hours=10)
-    cutoff_unresolved = now_naive - pd.Timedelta(hours=8)
+    cutoff_final = now_naive - pd.Timedelta(hours=FINAL_RETENTION_HOURS)
+    cutoff_unresolved = now_naive - pd.Timedelta(hours=UNRESOLVED_RETENTION_HOURS)
     final = state.eq("post")
     live = live[live["_kickoff"].notna() & (((final) & (live["_kickoff"] >= cutoff_final)) | ((~final) & (live["_kickoff"] >= cutoff_unresolved)))].copy()
     key_columns = [column for column in ("sport", "game_id", "market_display", "flagged_side") if column in live]
@@ -191,7 +291,7 @@ def main(scores_only: bool = False) -> None:
         live = live.sort_values("frozen_at_utc", na_position="last").drop_duplicates(key_columns, keep="first")
     if scores_only:
         for sport, indices in live.groupby("sport").groups.items():
-            scores = scoreboard(str(sport).lower(), now)
+            scores, provider_state = fetch_scoreboard(str(sport).lower(), now)
             for index in indices:
                 sport_key = str(sport).lower()
                 matchup = live.at[index, "game"]
@@ -201,17 +301,31 @@ def main(scores_only: bool = False) -> None:
                 kickoff = pd.to_datetime(live.at[index, "kickoff_iso"], errors="coerce", utc=True)
                 score = min(candidates, key=lambda item: abs(pd.to_datetime(item["event_time"], errors="coerce", utc=True) - kickoff)) if candidates and pd.notna(kickoff) else None
                 if score:
+                    previous_state = _text(live.at[index, "score_state"] if "score_state" in live else "").lower()
                     for column, value in score.items():
                         live.at[index, column] = value
+                    live.at[index, "score_match_state"] = "matched"
+                    live.at[index, "score_updated_at_utc"] = now.isoformat()
+                    if str(score.get("score_state", "")).lower() == "post" and previous_state != "post":
+                        live.at[index, "score_completed_at_utc"] = now.isoformat()
                 else:
-                    live.at[index, "score_away"] = "-"
-                    live.at[index, "score_home"] = "-"
-                    live.at[index, "score_status"] = "Live score unavailable"
-                    live.at[index, "score_state"] = "unknown"
+                    if provider_state == "available":
+                        live.at[index, "score_away"] = "-"
+                        live.at[index, "score_home"] = "-"
+                        live.at[index, "score_status"] = "Live score unavailable"
+                        live.at[index, "score_state"] = "unknown"
+                        live.at[index, "score_match_state"] = "unmatched"
+                    else:
+                        # Preserve the last known score through a transient source
+                        # failure. Coverage marks it unavailable/stale explicitly.
+                        live.at[index, "score_match_state"] = "unsupported" if provider_state == "unsupported" else "provider_unavailable"
+                        if not _text(live.at[index, "score_status"] if "score_status" in live else ""):
+                            live.at[index, "score_status"] = "Score unavailable"
     live = live.drop(columns=["_kickoff"], errors="ignore").sort_values("kickoff_iso", ascending=False)
     temp = DATA / ".live_recent.csv.tmp"
     live.to_csv(temp, index=False)
     temp.replace(OUT)
+    write_score_coverage(live, now)
     print(f"[live-recent] wrote {len(live)} frozen pregame records")
 
 
