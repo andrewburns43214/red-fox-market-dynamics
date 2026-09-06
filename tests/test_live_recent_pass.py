@@ -71,6 +71,15 @@ def test_progressive_render_keeps_full_inventory_for_filtering_and_sorting():
     assert "ensureGameEvents(row)" not in BOARD[BOARD.index("async function loadLiveRecent(force=false)"):BOARD.index("async function refreshLiveRecentScores()")]
 
 
+def test_live_recent_count_loads_on_board_startup_and_updates_both_badges():
+    assert "document.addEventListener('DOMContentLoaded',()=>{ applySignalTooltips(); refreshLiveRecentCount();" in BOARD
+    assert "for(const id of ['b-live','rail-live-count'])" in BOARD
+    count_refresh = BOARD[BOARD.index("async function refreshLiveRecentCount()"):BOARD.index("function _decRank")]
+    assert "const rows=await loadCSV(LIVE_RECENT_URL);" in count_refresh
+    assert "allLiveRecent=rows;_liveRecentLoaded=true;" in count_refresh
+    assert "updateLiveRecentBadges(groupLiveRecentRows(allLiveRecent).length);" in count_refresh
+
+
 def test_live_score_refresh_patches_score_fields_without_rebuilding_frozen_rows():
     refresh = BOARD[BOARD.index("async function refreshLiveRecentScores()"):BOARD.index("function liveMarketSections(rows)")]
     assert "const scoreFields=['score_away','score_home','score_status','score_state'" in refresh

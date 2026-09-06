@@ -153,6 +153,14 @@ def test_evidence_role_chips_use_neutral_context_color_without_changing_movement
     assert ".market-move.against { color:#c74138; }" in BOARD
 
 
+def test_mobile_market_read_chips_are_compact_without_changing_global_or_desktop_chips():
+    assert "@media (max-width:850px)" in BOARD
+    assert ".two-side-read .two-side-row{gap:2px 3px!important}" in BOARD
+    assert ".two-side-read .mr{min-height:28px!important;padding:1px 4px!important;font-size:7px!important}" in BOARD
+    assert ".mr { border-radius: 999px; padding: 4px 8px; font-size: 9px; letter-spacing: .02em; }" in BOARD
+    assert ".signal-chip { cursor:pointer; border:1px solid transparent; font-family:var(--sans); }" in BOARD
+
+
 def test_market_guide_matches_role_and_display_semantics():
     assert "These are primary market-read classifications. Freeze and Watch can remain descriptive" in BOARD
     assert "Freeze is assigned to the Pressure Side" in BOARD

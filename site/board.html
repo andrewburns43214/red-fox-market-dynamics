@@ -1575,7 +1575,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .live-sort-control select{width:100%;max-width:none;min-height:28px;padding:4px 24px 4px 8px;border-color:#d8dadd;border-radius:6px;color:#4f5b62;font-size:9px;font-weight:600}
   .live-empty{width:min(100%,620px);margin:7px 0 0;padding:12px 14px;border-radius:8px;font-size:11px;line-height:1.35}
   .lpane>.tscroll>table>tbody>tr>.td-game{padding-top:10px!important;padding-bottom:8px!important}.two-side-game .two-side-row{min-height:30px!important}.game-market-selector{margin-top:7px!important;padding-top:7px!important}.game-market-selector button{min-height:27px!important;padding:3px 7px!important}
-  .two-side-read .two-side-row.is-strongest{background:linear-gradient(90deg,rgba(21,134,106,.055),rgba(21,134,106,0))!important;box-shadow:none!important;padding-left:0!important}.two-side-read .mr{padding:2px 5px!important;font-size:7.5px!important}
+  .two-side-read .two-side-row{gap:2px 3px!important}.two-side-read .two-side-row.is-strongest{background:linear-gradient(90deg,rgba(21,134,106,.055),rgba(21,134,106,0))!important;box-shadow:none!important;padding-left:0!important}.two-side-read .mr{min-height:28px!important;padding:1px 4px!important;font-size:7px!important}
   #drill-overlay .game-detail-modal .movement-chart-note{color:var(--text3)!important;opacity:.82}.movement-tabs{gap:3px!important}.movement-tab{padding:3px 6px!important;font-size:8px!important}
   #drill-overlay .game-detail-modal .detail-observations{margin-top:6px!important;border-top:1px solid var(--border)!important}.detail-observation-table{border-collapse:collapse!important;border-spacing:0!important}.detail-observation-table tr{min-height:0!important;background:transparent!important}.detail-observation-table td{background:transparent!important;line-height:1.15!important}.detail-observation-table td::before{display:inline!important;margin:0 4px 0 0!important}.detail-observation-table td:nth-child(1),.detail-observation-table td:nth-child(2){font-size:9px!important;font-weight:700!important}.detail-observation-table td:nth-child(3),.detail-observation-table td:nth-child(4){font-size:8.5px!important;color:var(--text2)!important}.detail-observation-row[hidden]{display:none!important}.detail-observations-more{display:flex;align-items:center;justify-content:center;width:100%;min-height:34px;margin-top:6px;border:0;border-top:1px solid var(--border);background:transparent;color:var(--accent);font:700 10px var(--sans);cursor:pointer}
 }
@@ -2794,7 +2794,7 @@ function renderLiveRecent(){
   const grid=document.getElementById('live-recent-grid'); if(!grid)return;
   renderLiveRecentSports();
   const games=sortLiveRecentGames(filteredLiveRecentGames());
-  const badge=document.getElementById('b-live'); if(badge)badge.textContent=groupLiveRecentRows(allLiveRecent).length;
+  updateLiveRecentBadges(groupLiveRecentRows(allLiveRecent).length);
   if(!games.length){grid.innerHTML='<div class="live-empty">No games match the selected Live &amp; Recent filters.</div>';return;}
   const visible=games.slice(0,liveRecentVisible), remaining=games.length-visible.length;
   grid.innerHTML=visible.map(liveGameCard).join('')+(remaining?`<button type="button" class="live-more" id="live-recent-more" onclick="showMoreLiveRecent()">Show ${Math.min(18,remaining)} more games · ${remaining} remaining</button>`:'');
@@ -2850,10 +2850,15 @@ function liveMarketSections(rows){
   }).map(function(entry){return {market:entry[0],sides:[...entry[1].values()]};});
 }
 
+function updateLiveRecentBadges(count){
+  for(const id of ['b-live','rail-live-count']){const badge=document.getElementById(id);if(badge)badge.textContent=count;}
+}
 async function refreshLiveRecentCount(){
-  // Avoid downloading the large historical card payload during Market Board
-  // startup. The count is populated when this workspace is first requested.
-  if(_liveRecentLoaded){const badge=document.getElementById('b-live');if(badge)badge.textContent=groupLiveRecentRows(allLiveRecent).length;}
+  if(!_liveRecentLoaded){
+    const rows=await loadCSV(LIVE_RECENT_URL);
+    if(rows){allLiveRecent=rows;_liveRecentLoaded=true;}
+  }
+  updateLiveRecentBadges(groupLiveRecentRows(allLiveRecent).length);
 }
 
 function _decRank(d,r){ const k=(d||'').toUpperCase(); if(k==='BET') return 1; if(k==='LEAN') return (r&&isLocked(r))?3:2; return 4; }
