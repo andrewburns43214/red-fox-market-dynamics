@@ -155,10 +155,83 @@ def test_freeze_focus_identifies_the_high_split_side_not_a_recommendation():
 
     assert row["reaction"] == "Freeze"
     assert row["flagged_side"] == "Home -3.5"
-    assert row["focus_basis"] == "High-split side; market held"
+    assert row["focus_basis"] == "High-split pressure side; market resisted"
     assert row["action_type"] == "OBSERVE ONLY"
     assert not row["kpi_eligible"]
     assert row["reason"].startswith("82% bets and 76% money")
+
+
+def test_freeze_uses_signed_juice_response_around_confirmation_threshold():
+    cases = [
+        (-105, "Freeze", "AGAINST"),
+        (-121, "Freeze", "LIMITED"),
+        (-122, "Follow", "TOWARD"),
+    ]
+    for current_odds, expected_reaction, expected_direction in cases:
+        latest = {
+            "sport": "ncaaf", "game_id": f"juice-{current_odds}", "market_display": "SPREAD", "side_key": "HOME",
+            "side": "Home -3", "game": "Away @ Home", "canonical_key": f"away @ home|ncaaf|{current_odds}",
+            "bets_pct": 78, "money_pct": 78, "open_line": "Home -3 @ -110",
+            "current_line": f"Home -3 @ {current_odds}", "_sort_time": "2026-09-05T16:00:00Z",
+        }
+        history = [
+            {"timestamp": _timestamp(17), "sport": "ncaaf", "game_id": f"juice-{current_odds}", "market_display": "SPREAD", "side_key": "HOME", "current_line": "Home -3 @ -110", "bets_pct": 78, "money_pct": 78},
+            {"timestamp": _timestamp(18), "sport": "ncaaf", "game_id": f"juice-{current_odds}", "market_display": "SPREAD", "side_key": "HOME", "current_line": f"Home -3 @ {current_odds}", "bets_pct": 78, "money_pct": 78},
+        ]
+
+        row = _board(latest, history)
+
+        assert row["reaction"] == expected_reaction
+        assert row["response_direction"] == expected_direction
+
+
+def test_recent_whipsaw_keeps_non_key_freeze_descriptive_not_actionable():
+    latest = pd.DataFrame([
+        {"sport": "ncaaf", "game_id": "recent-whip", "market_display": "SPREAD", "side_key": "HOME", "side": "Home -3.5", "game": "Away @ Home", "canonical_key": "away @ home|ncaaf|recent", "bets_pct": 84, "money_pct": 72, "open_line": "Home -3.5 @ -110", "current_line": "Home -3.5 @ -105", "_sort_time": "2026-09-05T16:00:00Z"},
+        {"sport": "ncaaf", "game_id": "recent-whip", "market_display": "SPREAD", "side_key": "AWAY", "side": "Away +3.5", "game": "Away @ Home", "canonical_key": "away @ home|ncaaf|recent", "bets_pct": 16, "money_pct": 28, "open_line": "Away +3.5 @ -110", "current_line": "Away +3.5 @ -115", "_sort_time": "2026-09-05T16:00:00Z"},
+    ])
+    history = []
+    for hour, minute, home_line, away_line in [
+        (17, 0, "Home -3.5 @ -110", "Away +3.5 @ -110"),
+        (17, 20, "Home -3 @ -120", "Away +3 @ +100"),
+        (17, 40, "Home -3.5 @ -105", "Away +3.5 @ -115"),
+        (18, 0, "Home -3.5 @ -105", "Away +3.5 @ -115"),
+    ]:
+        stamp = datetime(2026, 9, 1, hour, minute, tzinfo=timezone.utc).isoformat()
+        history.extend([
+            {"timestamp": stamp, "sport": "ncaaf", "game_id": "recent-whip", "market_display": "SPREAD", "side_key": "HOME", "current_line": home_line, "bets_pct": 84, "money_pct": 72},
+            {"timestamp": stamp, "sport": "ncaaf", "game_id": "recent-whip", "market_display": "SPREAD", "side_key": "AWAY", "current_line": away_line, "bets_pct": 16, "money_pct": 28},
+        ])
+
+    board, _ = build_anomaly_outputs(latest, pd.DataFrame(history), pd.DataFrame(), as_of=_timestamp(16))
+    pressure = board.loc[board["flagged_side"] == "Home -3.5"].iloc[0]
+
+    assert pressure["reaction"] == "Freeze"
+    assert pressure["path"] == "Whipsaw"
+    assert not pressure["whipsaw_recovered"]
+    assert pressure["action_type"] == "OBSERVE ONLY"
+    assert "recent Whipsaw" in pressure["action_basis"]
+
+
+def test_limited_favorable_freeze_does_not_automatically_create_a_fade():
+    latest = pd.DataFrame([
+        {"sport": "ncaab", "game_id": "limited", "market_display": "TOTAL", "side_key": "OVER", "side": "Over 44.5", "game": "Away @ Home", "canonical_key": "away @ home|ncaab|limited", "bets_pct": 84, "money_pct": 72, "open_line": "Over 44.5 @ -110", "current_line": "Over 45 @ -105", "_sort_time": "2026-09-05T16:00:00Z"},
+        {"sport": "ncaab", "game_id": "limited", "market_display": "TOTAL", "side_key": "UNDER", "side": "Under 44.5", "game": "Away @ Home", "canonical_key": "away @ home|ncaab|limited", "bets_pct": 16, "money_pct": 28, "open_line": "Under 44.5 @ -110", "current_line": "Under 44 @ -115", "_sort_time": "2026-09-05T16:00:00Z"},
+    ])
+    history = []
+    for hour in range(17, 21):
+        history.extend([
+            {"timestamp": _timestamp(hour), "sport": "ncaab", "game_id": "limited", "market_display": "TOTAL", "side_key": "OVER", "current_line": "Over 44.5 @ -110" if hour == 17 else "Over 45 @ -105", "bets_pct": 84, "money_pct": 72},
+            {"timestamp": _timestamp(hour), "sport": "ncaab", "game_id": "limited", "market_display": "TOTAL", "side_key": "UNDER", "current_line": "Under 44.5 @ -110" if hour == 17 else "Under 44 @ -115", "bets_pct": 16, "money_pct": 28},
+        ])
+
+    board, _ = build_anomaly_outputs(latest, pd.DataFrame(history), pd.DataFrame(), as_of=_timestamp(16))
+    pressure = board.loc[board["flagged_side"] == "Over 44.5"].iloc[0]
+
+    assert pressure["reaction"] == "Freeze"
+    assert pressure["response_direction"] == "LIMITED"
+    assert pressure["action_type"] == "OBSERVE ONLY"
+    assert "Freeze is descriptive" in pressure["action_basis"]
 
 
 def test_sustained_non_key_freeze_emits_the_opposing_fade_candidate():

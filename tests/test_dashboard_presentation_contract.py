@@ -135,3 +135,17 @@ def test_detail_side_and_market_switches_rebuild_shared_movement_state():
     assert "renderGameDetail();" in BOARD
     assert "window._gameDetailRows=markets;" in BOARD
     assert "const currentMovement=sideMovementHtml(selected,r);" in BOARD
+
+
+def test_strongest_side_uses_backend_anchor_not_raw_chip_count():
+    assert "const anchor=String(r.read_anchor_side||'').trim().toLowerCase();" in BOARD
+    assert "signalCount=sideSignals(side).length" not in BOARD
+    assert "side.evidence_role" in BOARD
+    assert "Public Pressure must never" not in BOARD  # implementation, not user-facing prose
+    assert "never a positive vote" in BOARD
+
+
+def test_visible_rank_is_selected_market_rank():
+    assert 'Selected-market rank: ${boardRank(r)}' in BOARD
+    assert '<span class="rank-number">${boardRank(r)}</span><span class="rank-scope">MKT</span>' in BOARD
+    assert '<span class="rank-number">${i+1}</span>' not in BOARD

@@ -70,7 +70,7 @@ class TestAnomalyBoard(unittest.TestCase):
                 [
                     {"flagged_side": "Team A -3", "bets_pct": 86, "money_pct": 78, "open_line": "-3 (-110)", "current_line": "-3 (-110)", "reaction": "Freeze"},
                     {"flagged_side": "Team B +3", "bets_pct": 14, "money_pct": 22, "open_line": "+3 (-110)", "current_line": "+3 (-110)", "reaction": "Watch"},
-                ], ["86% bets / 78% money", "near its opening number", "meaningful response"],
+                ], ["86% bets / 78% money", "no meaningful favorable response", "resistance side and evidence anchor"],
             ),
             (
                 "juice move", "SPREAD",
@@ -158,8 +158,41 @@ class TestAnomalyBoard(unittest.TestCase):
             {"sport": "nfl", "game_id": "freeze", "market_display": "SPREAD", "game": "Away @ Home", "flagged_side": "Home -3", "bets_pct": 20, "money_pct": 30, "open_line": "-3 (-110)", "current_line": "-3 (-110)", "reaction": "Watch", "anomaly_sort": 2, "severity_sort": 10},
         ])
         row = select_market_leaders(board).iloc[0]
-        self.assertEqual(row["read_anchor_side"], "Away +3")
+        self.assertEqual(row["read_anchor_side"], "Home -3")
         self.assertEqual(row["directional_lean_side"], "")
+
+    def test_pressure_at_key_with_adverse_juice_anchors_the_resistance_side_without_a_lean(self):
+        latest = pd.DataFrame([
+            {"sport": "ncaaf", "game_id": "smu-fsu", "market_display": "SPREAD", "side_key": "SMU", "side": "SMU -3", "game": "SMU @ Florida State", "bets_pct": 78, "money_pct": 78, "open_line": "SMU -3 @ -110", "current_line": "SMU -3 @ -105", "_sort_time": _ts(20, 0)},
+            {"sport": "ncaaf", "game_id": "smu-fsu", "market_display": "SPREAD", "side_key": "FSU", "side": "Florida State +3", "game": "SMU @ Florida State", "bets_pct": 22, "money_pct": 22, "open_line": "Florida State +3 @ -110", "current_line": "Florida State +3 @ -115", "_sort_time": _ts(20, 0)},
+        ])
+        history = []
+        smu_path = ["SMU -3 @ -110", "SMU -2.5 @ -120", "SMU -3 @ -105", "SMU -3 @ -105", "SMU -3 @ -105", "SMU -3 @ -105"]
+        fsu_path = ["Florida State +3 @ -110", "Florida State +2.5 @ +100", "Florida State +3 @ -115", "Florida State +3 @ -115", "Florida State +3 @ -115", "Florida State +3 @ -115"]
+        for offset, (smu_line, fsu_line) in enumerate(zip(smu_path, fsu_path), start=10):
+            history.extend([
+                {"timestamp": _ts(offset, 0), "sport": "ncaaf", "game_id": "smu-fsu", "market_display": "SPREAD", "side_key": "SMU", "current_line": smu_line, "bets_pct": 78, "money_pct": 78},
+                {"timestamp": _ts(offset, 0), "sport": "ncaaf", "game_id": "smu-fsu", "market_display": "SPREAD", "side_key": "FSU", "current_line": fsu_line, "bets_pct": 22, "money_pct": 22},
+            ])
+
+        board, _ = build_anomaly_outputs(latest, pd.DataFrame(history), pd.DataFrame(), as_of=_ts(16, 0))
+        pressure = board.loc[board["flagged_side"] == "SMU -3"].iloc[0]
+        resistance = board.loc[board["flagged_side"] == "Florida State +3"].iloc[0]
+        leader = select_market_leaders(board).iloc[0]
+        sides = {side["flagged_side"]: side for side in json.loads(leader["market_sides"])}
+
+        self.assertEqual(pressure["reaction"], "Freeze")
+        self.assertEqual(pressure["response_direction"], "AGAINST")
+        self.assertTrue(pressure["whipsaw_recovered"])
+        self.assertEqual(pressure["key_number_pinned"], "K3")
+        self.assertIn("Public Pressure", pressure["context_chips"])
+        self.assertEqual(sides["SMU -3"]["evidence_role"], "Pressure Side")
+        self.assertEqual(sides["SMU -3"]["evidence_polarity"], "adverse")
+        self.assertEqual(sides["Florida State +3"]["evidence_role"], "Resistance Side")
+        self.assertEqual(leader["read_anchor_side"], "Florida State +3")
+        self.assertEqual(leader["directional_lean_side"], "")
+        self.assertIn("price moved against that pressure", leader["market_rationale"])
+        self.assertIn("durable reset", leader["market_rationale"])
 
     def test_board_rank_keeps_more_severe_like_signals_ahead_of_alphabetical_order(self):
         board = pd.DataFrame([
@@ -331,7 +364,7 @@ class TestAnomalyBoard(unittest.TestCase):
         self.assertIn("Price Risk", board.iloc[0]["reason"])
         self.assertEqual(board.iloc[1]["reaction"], "Follow")
 
-    def test_high_public_watch_explains_the_missing_market_response(self):
+    def test_high_public_with_only_a_subthreshold_favorable_move_is_freeze(self):
         latest = pd.DataFrame([
             {"sport": "nfl", "game_id": "g4", "market_display": "TOTAL", "side_key": "Over", "side": "Over 44.5", "game": "A @ B", "bets_pct": 82, "money_pct": 76, "open_line": "Over 44.5 @ -110", "current_line": "Over 45 @ -105", "_sort_time": _ts(22, 0)},
             {"sport": "nfl", "game_id": "g4", "market_display": "TOTAL", "side_key": "Under", "side": "Under 44.5", "game": "A @ B", "bets_pct": 18, "money_pct": 24, "open_line": "Under 44.5 @ -110", "current_line": "Under 44 @ -115", "_sort_time": _ts(22, 0)},
@@ -346,9 +379,9 @@ class TestAnomalyBoard(unittest.TestCase):
         board, _ = build_anomaly_outputs(latest, history, pd.DataFrame(), as_of=_ts(17, 0))
 
         row = board.loc[board["flagged_side"] == "Over 44.5"].iloc[0]
-        self.assertEqual(row["reaction"], "Watch")
+        self.assertEqual(row["reaction"], "Freeze")
         self.assertIn("Public Pressure", row["context_chips"])
-        self.assertIn("below the confirmed signal threshold", row["reason"])
+        self.assertIn("without a meaningful favorable response", row["reason"])
 
     def test_smaller_directional_move_is_visible_as_a_developing_read(self):
         latest = pd.DataFrame([

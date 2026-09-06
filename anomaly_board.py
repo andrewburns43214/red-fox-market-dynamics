@@ -55,6 +55,8 @@ LATE_WINDOW_HOURS_BY_SPORT = {
 }
 MIN_CANDIDATE_OBSERVATIONS = 3
 MIN_FREEZE_FADE_OBSERVATIONS = 4
+WHIPSAW_RECOVERY_MIN_OBSERVATIONS = 4
+WHIPSAW_RECOVERY_MIN_HOURS = 2.0
 
 
 def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
@@ -149,6 +151,8 @@ def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
     if board_df.empty:
         return board_df, events_df
 
+    board_df = _assign_pair_evidence_roles(board_df)
+
     board_df = board_df.sort_values(
         ["anomaly_sort", "maturity_sort", "severity_sort", "kickoff_sort", "game", "market_display"],
         ascending=[True, True, False, True, True, True],
@@ -168,6 +172,36 @@ def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
     return board_df, events_df
 
 
+def _assign_pair_evidence_roles(board_df):
+    """Describe which side supplied pressure and which side resisted it.
+
+    Roles are explanatory evidence, not picks.  In particular, the opposing
+    side of a descriptive Freeze becomes the evidence anchor without becoming
+    an actionable lean unless the separate action gates qualify it.
+    """
+    work = board_df.copy()
+    work["evidence_role"] = ""
+    work["evidence_polarity"] = "neutral"
+    context = work.get("context_chips", pd.Series("", index=work.index)).fillna("").astype(str)
+    public_pressure = context.str.contains(r"(?:^|\|)\s*Public Pressure\s*(?:\||$)", regex=True)
+    work.loc[public_pressure, "evidence_role"] = "Pressure Side"
+    work.loc[public_pressure, "evidence_polarity"] = "adverse"
+    keys = ["sport", "game_id", "market_display"]
+    for _, indices in work.groupby(keys, dropna=False, sort=False).groups.items():
+        group_indices = list(indices)
+        freeze_indices = [index for index in group_indices if str(work.at[index, "reaction"]) == "Freeze"]
+        if len(freeze_indices) != 1:
+            continue
+        pressure_index = freeze_indices[0]
+        work.at[pressure_index, "evidence_role"] = "Pressure Side"
+        work.at[pressure_index, "evidence_polarity"] = "adverse"
+        counterparts = [index for index in group_indices if index != pressure_index]
+        if len(counterparts) == 1:
+            work.at[counterparts[0], "evidence_role"] = "Resistance Side"
+            work.at[counterparts[0], "evidence_polarity"] = "supportive"
+    return work
+
+
 def select_market_leaders(board_df):
     """Publish one evidence-leading side for each game and market.
 
@@ -179,7 +213,7 @@ def select_market_leaders(board_df):
         return pd.DataFrame() if board_df is None else board_df.copy()
 
     keys = ["sport", "game_id", "market_display"]
-    work = board_df.copy()
+    work = _assign_pair_evidence_roles(board_df)
     for column in keys:
         if column not in work.columns:
             work[column] = ""
@@ -225,7 +259,8 @@ def select_market_leaders(board_df):
         "reaction", "recorded_reaction", "path", "context_chips", "anomaly_chips", "data_badge",
         "broader_market_comparison", "line_dir_changes", "return_toward_open",
         "line_move_abs", "price_move_pct", "observation_count", "key_numbers_crossed",
-        "action_side", "action_type", "kpi_eligible",
+        "action_side", "action_type", "kpi_eligible", "evidence_role", "evidence_polarity",
+        "response_direction", "whipsaw_recovered", "key_number_pinned", "severity_sort",
     ]
     available_side_fields = [field for field in side_fields if field in work.columns]
     side_payload = (
@@ -259,17 +294,21 @@ def _market_read_semantics(leader):
         sides = []
     if not sides:
         return "", ""
+    pressure = next((side for side in sides if str(side.get("evidence_role", "")) == "Pressure Side"), None)
+    resistance = next((side for side in sides if str(side.get("evidence_role", "")) == "Resistance Side"), None)
+    if pressure is not None and resistance is not None:
+        anchor_side = str(resistance.get("flagged_side", "")).strip()
+        eligible = str(pressure.get("kpi_eligible", "")).strip().lower() == "true"
+        action_type = str(pressure.get("action_type", "")).strip().upper()
+        action_side = str(pressure.get("action_side", "")).strip()
+        directional = action_side if eligible and action_type == "FADE CANDIDATE" else ""
+        return anchor_side, directional
+
     anchor = min(sides, key=_rationale_side_rank)
     anchor_side = str(anchor.get("flagged_side", "")).strip()
     primary = str(anchor.get("reaction") or "Watch").strip()
     if primary in {"Contrarian", "Follow"}:
         return anchor_side, anchor_side
-    if primary == "Freeze":
-        eligible = str(anchor.get("kpi_eligible", "")).strip().lower() == "true"
-        action_type = str(anchor.get("action_type", "")).strip().upper()
-        action_side = str(anchor.get("action_side", "")).strip()
-        if eligible and action_type == "FADE CANDIDATE" and action_side:
-            return anchor_side, action_side
     return anchor_side, ""
 
 
@@ -320,7 +359,17 @@ def _market_rationale(leader):
     if primary == "Contrarian":
         sentence = _rationale_contrarian(strongest, other, market, strongest_name, other_name, other_support)
     elif primary == "Freeze":
-        sentence = f"{strongest_name} has {strongest_support}, but the market remains near its opening number—heavy pressure has not produced a meaningful response."
+        response = str(strongest.get("response_direction", "")).upper()
+        if response == "AGAINST":
+            sentence = (
+                f"{strongest_name} has {strongest_support}, but its number held while the attached price moved against that pressure. "
+                f"{other_name} is the resistance side and evidence anchor."
+            )
+        else:
+            sentence = (
+                f"{strongest_name} has {strongest_support}, but heavy pressure produced no meaningful favorable response. "
+                f"{other_name} is the resistance side and evidence anchor."
+            )
     elif primary == "Follow":
         sentence = _rationale_follow(strongest, market, strongest_name, strongest_support)
     else:
@@ -329,6 +378,9 @@ def _market_rationale(leader):
     has_whipsaw = "Whipsaw" in context or "Whipsaw" in other_context
     if has_whipsaw and "whipsaw" not in sentence.lower() and "reversed" not in sentence.lower():
         sentence += " The path later reversed, adding Whipsaw risk."
+    recovered_whipsaw = "Whipsaw Recovered" in context or "Whipsaw Recovered" in other_context
+    if recovered_whipsaw:
+        sentence += " An earlier reversal has since made a durable reset under continued split pressure."
     if "Late" in context:
         sentence += " The move first appeared inside the closing window."
     if "Market Lag" in context:
@@ -357,7 +409,9 @@ def _rationale_side_rank(side):
     primary_rank = {"Contrarian": 0, "Freeze": 1, "Follow": 2, "Watch": 3}.get(primary, 4)
     context = _rationale_context(side)
     context_rank = 9
-    for index, label in enumerate(["Market Lag", "Whipsaw", "Juice Move", "Low Bets / High $", "Public Pressure", "Developing Read", "Market Move", "Ticket-led"]):
+    # Public Pressure is adverse context for the side receiving it.  It must
+    # never improve that side's evidence rank merely by existing as a tag.
+    for index, label in enumerate(["Market Lag", "Whipsaw", "Juice Move", "Low Bets / High $", "Developing Read", "Market Move", "Ticket-led"]):
         if label in context or str(side.get("path", "")) == label:
             context_rank = index
             break
@@ -585,22 +639,25 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     kickoff_ts = _coerce_ts(latest_row.get("_sort_time")) or _coerce_ts(latest_row.get("_game_time")) or _coerce_ts(latest_row.get("dk_start_iso"))
     hours_to_kickoff = (kickoff_ts - as_of).total_seconds() / 3600 if kickoff_ts else None
     late_move = _is_late_move(points, market, move_threshold, hours_to_kickoff, sport)
-    whipsaw = dir_changes >= 1 and max_excursion >= move_threshold
+    raw_whipsaw = dir_changes >= 1 and max_excursion >= move_threshold
     held = move_abs <= hold_threshold if market == "MONEYLINE" else (
         line_move_abs <= line_hold_threshold and price_move_pct <= HOLD_PRICE_MOVE_PCT
     )
-    one_way = (not whipsaw) and meaningful_move
+    number_held = held if market == "MONEYLINE" else line_move_abs <= line_hold_threshold
+    path_held = number_held and not juice_moved
+    one_way = (not raw_whipsaw) and meaningful_move
     # Market Move is deliberately stricter than a split-backed signal. It only
     # describes a material change still present from the opening observation.
     market_move = _is_current_market_move(
         sport, market, line_move_abs, price_move_pct,
     )
+    whipsaw = raw_whipsaw
     path_label = ""
     if whipsaw:
         path_label = "Whipsaw"
     elif juice_moved and not line_moved:
         path_label = "Juice Move"
-    elif held:
+    elif path_held:
         path_label = "Held"
     elif late_move:
         path_label = "Late"
@@ -628,16 +685,47 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     extreme_public = split_alert_eligible and public_support and bets_pct >= 80
     low_bets_high_money = split_alert_eligible and bets_pct <= 35 and money_pct >= 60
 
-    move_toward_side = _move_toward_side(points, market, latest_row)
+    line_response, price_response = _signed_side_response(points, market, latest_row)
+    meaningful_toward = (
+        price_response >= MEANINGFUL_PRICE_MOVE_PCT
+        if market == "MONEYLINE"
+        else line_response >= line_move_threshold or price_response >= MEANINGFUL_PRICE_MOVE_PCT
+    )
+    adverse_response = (
+        price_response < -HOLD_PRICE_MOVE_PCT
+        if market == "MONEYLINE"
+        else line_response < -line_hold_threshold
+        or (abs(line_response) <= 1e-9 and price_response < -HOLD_PRICE_MOVE_PCT)
+    )
+    limited_favorable_response = not meaningful_toward
+    move_toward_side = line_response > 0 or (
+        abs(line_response) <= 1e-9 and price_response > 0
+    )
+    whipsaw_recovered = raw_whipsaw and _whipsaw_has_recovered(
+        points, market, bets_pct, money_pct, line_hold_threshold,
+    )
+    whipsaw = raw_whipsaw and not whipsaw_recovered
+    if whipsaw_recovered and path_label == "Whipsaw":
+        if juice_moved and not line_moved:
+            path_label = "Juice Move"
+        elif path_held:
+            path_label = "Held"
+        elif late_move:
+            path_label = "Late"
+        elif meaningful_move:
+            path_label = "One-Way"
+        else:
+            path_label = ""
     key_numbers_crossed = _key_numbers_crossed(sport, market, points)
     key_number = key_numbers_crossed[0] if key_numbers_crossed else ""
+    key_number_pinned = _current_key_number(sport, market, points)
     broader = _broader_market_context(latest_row, l2_df, market, move_threshold, hold_threshold)
     stale_dk = broader["stale_dk"]
 
     reaction = ""
     if split_alert_eligible and low_support and move_toward_side and meaningful_move:
         reaction = "Contrarian"
-    elif split_alert_eligible and public_support and held:
+    elif split_alert_eligible and public_support and limited_favorable_response:
         reaction = "Freeze"
     elif split_alert_eligible and public_support and move_toward_side and meaningful_move:
         reaction = "Follow"
@@ -671,8 +759,10 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         context_chips.append("Late")
     if stale_dk:
         context_chips.append("Market Lag")
-    if reaction == "Watch" and public_support and not split_capped and not favorite_risk:
+    if public_support and not split_capped and not favorite_risk:
         context_chips.append("Public Pressure")
+    if whipsaw_recovered:
+        context_chips.append("Whipsaw Recovered")
     if developing_read:
         context_chips.append("Developing Read")
     if market_move:
@@ -711,6 +801,8 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         market_move=market_move,
         bets_pct=bets_pct,
         money_pct=money_pct,
+        adverse_response=adverse_response,
+        key_number_pinned=key_number_pinned,
     )
     market_move_note = _market_move_note(sport, market, line_move_abs, price_move_pct) if market_move else ""
     if market_move_note:
@@ -733,6 +825,9 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         price_risk_note=price_risk_note,
         bets_pct=bets_pct,
         money_pct=money_pct,
+        whipsaw=whipsaw,
+        key_number_pinned=key_number_pinned,
+        actionable_resistance=held or adverse_response,
     )
     kickoff_label = _format_kickoff(kickoff_ts)
     maturity_sort = 1 if hours_to_kickoff is not None and hours_to_kickoff > 48 else 0
@@ -749,6 +844,8 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         stale_dk=stale_dk,
         low_bets_high_money=low_bets_high_money,
         very_low_support=very_low_support and split_alert_eligible,
+        adverse_response=adverse_response,
+        key_number_pinned=bool(key_number_pinned and reaction == "Freeze"),
     )
 
     event_rows = []
@@ -818,6 +915,11 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         "move_abs": round(move_abs, 3),
         "line_move_abs": round(line_move_abs, 3),
         "price_move_pct": round(price_move_pct, 3),
+        "line_response": round(line_response, 3),
+        "price_response_pct": round(price_response, 3),
+        "response_direction": "AGAINST" if adverse_response else ("TOWARD" if meaningful_toward else "LIMITED"),
+        "whipsaw_recovered": whipsaw_recovered,
+        "key_number_pinned": key_number_pinned,
         "movement_unit": "implied probability points" if market == "MONEYLINE" else "line points",
         "line_dir_changes": dir_changes,
         "path_min": round(path_min, 3),
@@ -1055,6 +1157,87 @@ def _move_toward_side(points, market, latest_row):
     return current_value < open_value
 
 
+def _signed_side_response(points, market, latest_row):
+    """Return signed (line, price) response from this side's perspective.
+
+    Positive values confirm the side, negative values resist it.  Keeping the
+    sign is essential for Freeze: price moving against a pressured side is
+    stronger resistance evidence, not a failure of an absolute hold test.
+    """
+    if len(points) < 2:
+        return 0.0, 0.0
+    open_value = points[0]["value"]
+    current_value = points[-1]["value"]
+    price_response = 0.0
+    if points[0].get("implied_pct") is not None and points[-1].get("implied_pct") is not None:
+        price_response = points[-1]["implied_pct"] - points[0]["implied_pct"]
+    if market == "MONEYLINE":
+        return price_response, price_response
+    delta = current_value - open_value
+    if market == "TOTAL":
+        side_text = str(latest_row.get("side", "")).lower()
+        line_response = delta if "over" in side_text else -delta if "under" in side_text else 0.0
+    else:
+        # Side-specific spreads become more expensive when their signed number
+        # decreases: +3 -> +2.5 and -3 -> -3.5 are both moves toward the side.
+        line_response = -delta
+    return line_response, price_response
+
+
+def _whipsaw_has_recovered(points, market, bets_pct, money_pct, line_hold_threshold):
+    """Return true after a durable post-reversal reset under consistent splits."""
+    if len(points) < WHIPSAW_RECOVERY_MIN_OBSERVATIONS + 2:
+        return False
+    last_dir = 0
+    last_change_index = None
+    for index, (left, right) in enumerate(zip(points, points[1:]), start=1):
+        delta = _motion_value(right, market) - _motion_value(left, market)
+        if math.isclose(delta, 0.0, abs_tol=1e-9):
+            continue
+        current_dir = 1 if delta > 0 else -1
+        if last_dir and current_dir != last_dir:
+            last_change_index = index
+        last_dir = current_dir
+    if last_change_index is None:
+        return False
+    recovery = points[last_change_index:]
+    if len(recovery) < WHIPSAW_RECOVERY_MIN_OBSERVATIONS:
+        return False
+    elapsed = (recovery[-1]["timestamp"] - recovery[0]["timestamp"]).total_seconds() / 3600
+    if elapsed < WHIPSAW_RECOVERY_MIN_HOURS:
+        return False
+
+    if market == "MONEYLINE":
+        values = [point.get("implied_pct") for point in recovery if point.get("implied_pct") is not None]
+        stable = bool(values) and max(values) - min(values) <= HOLD_PRICE_MOVE_PCT
+    else:
+        values = [point["value"] for point in recovery]
+        stable = max(values) - min(values) <= line_hold_threshold
+    if not stable:
+        return False
+
+    public_side = bets_pct >= 70 and money_pct >= 55
+    low_side = bets_pct <= 45 and money_pct <= 45
+    if not public_side and not low_side:
+        return False
+    consistent = 0
+    for point in recovery:
+        point_public = point["bets_pct"] >= 70 and point["money_pct"] >= 55
+        point_low = point["bets_pct"] <= 45 and point["money_pct"] <= 45
+        consistent += int(point_public if public_side else point_low)
+    return consistent / len(recovery) >= 0.75
+
+
+def _current_key_number(sport, market, points):
+    if market != "SPREAD" or not points:
+        return ""
+    current = abs(points[-1]["value"])
+    for key in KEY_NUMBERS_BY_SPORT.get(sport, []):
+        if math.isclose(current, key, abs_tol=1e-9):
+            return f"K{int(key)}"
+    return ""
+
+
 def _is_late_move(points, market, move_threshold, hours_to_kickoff, sport):
     """Label a move late only when it occurs in the actual closing window."""
     if (
@@ -1196,7 +1379,7 @@ def _first_anomaly_seen(points, reaction, path_label, stale_dk, market, latest_r
             continue
         if reaction == "Contrarian" and bets_pct <= 45 and money_pct <= 45 and toward_side and meaningful_move:
             return point["timestamp"].isoformat()
-        if reaction == "Freeze" and bets_pct >= 70 and money_pct >= 55 and held:
+        if reaction == "Freeze" and bets_pct >= 70 and money_pct >= 55 and not (toward_side and meaningful_move):
             return point["timestamp"].isoformat()
         if reaction == "Follow" and bets_pct >= 70 and money_pct >= 55 and toward_side and meaningful_move:
             return point["timestamp"].isoformat()
@@ -1218,7 +1401,7 @@ def _return_toward_open(points, market):
     return abs(current_value - open_value) < best_excursion
 
 
-def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ticket_led, low_bets_high_money, move_abs, move_threshold, held, broader_summary, split_capped, favorite_risk, price_move_pct, developing_read=False, market_move=False, bets_pct=0.0, money_pct=0.0):
+def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ticket_led, low_bets_high_money, move_abs, move_threshold, held, broader_summary, split_capped, favorite_risk, price_move_pct, developing_read=False, market_move=False, bets_pct=0.0, money_pct=0.0, adverse_response=False, key_number_pinned=""):
     if split_capped:
         if price_move_pct >= MEANINGFUL_PRICE_MOVE_PCT:
             return f"Price moved {price_move_pct:.1f} implied points, but a capped 0%/100% split is excluded from alert ranking"
@@ -1234,9 +1417,12 @@ def _reason_line(reaction, path_label, stale_dk, low_support, public_support, ti
     if reaction == "Freeze":
         if stale_dk and broader_summary:
             return broader_summary
+        if adverse_response:
+            key_text = f" at key number {str(key_number_pinned).lstrip('K')}" if key_number_pinned else ""
+            return f"{bets_pct:.0f}% bets and {money_pct:.0f}% money stayed on the observed side while its number held{key_text} and price moved against the pressure"
         if held:
             return f"{bets_pct:.0f}% bets and {money_pct:.0f}% money stayed on the observed side while its number held near open"
-        return f"{bets_pct:.0f}% bets and {money_pct:.0f}% money stayed on the observed side with a mostly held number"
+        return f"{bets_pct:.0f}% bets and {money_pct:.0f}% money stayed on the observed side without a meaningful favorable response"
     if reaction == "Follow":
         if path_label == "Late":
             return "Public side finally got a late move toward it"
@@ -1287,7 +1473,7 @@ def _focus_basis(reaction, low_bets_high_money, ticket_led, split_capped, favori
     if favorite_risk:
         return "Short favorite; context only"
     if reaction == "Freeze":
-        return "High-split side; market held"
+        return "High-split pressure side; market resisted"
     if reaction == "Contrarian":
         return "Low-support side; price moved toward it"
     if reaction == "Follow":
@@ -1312,6 +1498,9 @@ def _action_fields(
     price_risk_note,
     bets_pct,
     money_pct,
+    whipsaw=False,
+    key_number_pinned="",
+    actionable_resistance=False,
 ):
     """Keep observed evidence distinct from KPI-eligible action candidates."""
     observed_line = str(latest_row.get("current_line", "")).strip()
@@ -1340,8 +1529,14 @@ def _action_fields(
     if observation_count < MIN_FREEZE_FADE_OBSERVATIONS:
         base["action_basis"] = "Freeze needs four timestamped observations before it can be tracked as a fade candidate."
         return base
-    if key_number:
+    if whipsaw:
+        base["action_basis"] = "An active recent Whipsaw keeps this Freeze descriptive rather than actionable."
+        return base
+    if key_number_pinned:
         base["action_basis"] = "Freeze is pinned at a key number; treat it as evidence only."
+        return base
+    if not actionable_resistance:
+        base["action_basis"] = "Freeze is descriptive: the response was limited, but not held or adverse enough for a directional fade."
         return base
     if stale_dk:
         base["action_basis"] = "DraftKings appears stale versus the broader market; do not grade this as a public fade."
@@ -1410,7 +1605,7 @@ def _data_badge(points, latest_row, split_capped=False):
     return "Thin"
 
 
-def _severity_score(reaction, whipsaw, extreme_public, move_abs, max_excursion, stale_dk, low_bets_high_money, very_low_support):
+def _severity_score(reaction, whipsaw, extreme_public, move_abs, max_excursion, stale_dk, low_bets_high_money, very_low_support, adverse_response=False, key_number_pinned=False):
     score = move_abs + max_excursion
     if reaction == "Contrarian":
         score += 5
@@ -1425,6 +1620,10 @@ def _severity_score(reaction, whipsaw, extreme_public, move_abs, max_excursion, 
     if low_bets_high_money:
         score += 2
     if very_low_support:
+        score += 1
+    if reaction == "Freeze" and adverse_response:
+        score += 2
+    if reaction == "Freeze" and key_number_pinned:
         score += 1
     return round(score, 3)
 
@@ -1515,7 +1714,7 @@ def _rank_reason(reaction, path_label, stale_dk, split_capped, favorite_risk, ho
     if reaction == "Contrarian":
         base = "Contrarian: low support paired with a move toward the side."
     elif reaction == "Freeze":
-        base = "Freeze: the high-split side had no meaningful line or price move."
+        base = "Freeze: pressure did not earn a meaningful favorable response; held or adverse pricing is resistance evidence."
     elif reaction == "Follow":
         base = "Follow: strong tickets and money moved with the side."
     elif path_label == "Whipsaw":
