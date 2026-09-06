@@ -658,7 +658,7 @@ def update_snapshots_with_espn_finals():
     import pandas as pd
     import os
 
-    src = "data/snapshots.csv"
+    src = SNAPSHOT_CSV
     if not os.path.exists(src):
         return
 
@@ -676,6 +676,8 @@ def update_snapshots_with_espn_finals():
         df["final_score_for"] = ""
     if "final_score_against" not in df.columns:
         df["final_score_against"] = ""
+
+    original_scores = df[["final_score_for", "final_score_against"]].copy()
 
     # Normalize these columns so blanks count as missing (robust vs NA parsing)
     df["final_score_for"] = df["final_score_for"].fillna("").astype(str).str.strip()
@@ -790,11 +792,12 @@ def update_snapshots_with_espn_finals():
             df.at[idx, "final_score_against"] = away_score
             updated += 1
 
-    # Always persist schema (CSV treated as DB table)
-    df.to_csv(src, index=False)
+    # Merge only finals onto the latest capture history under the writer lock.
+    from snapshot_store import merge_final_scores
+    persisted = merge_final_scores(src, df, original_scores)
 
-    if updated > 0:
-        print(f"[finals] updated {updated} rows in {src}")
+    if persisted > 0:
+        print(f"[finals] updated {persisted} rows in {src}")
 
     update_final_scores_history()
 
@@ -2747,28 +2750,21 @@ SNAPSHOT_FIELDS = [
 ]
 
 def append_snapshot(rows, sport: str):
-    import csv
     from datetime import datetime, timezone
 
     ts = datetime.now(timezone.utc).isoformat()
 
-    with open(SNAPSHOT_CSV, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=SNAPSHOT_FIELDS)
+    if rows:
+        logger.debug("sample row keys=%s", list(rows[0].keys()))
+        logger.debug(
+            "sample game_id=%s game=%s",
+            rows[0].get("game_id"),
+            rows[0].get("game"),
+        )
 
-        # ALWAYS write header if file is empty
-        if f.tell() == 0:
-            writer.writeheader()
-
-        if rows:
-            logger.debug("sample row keys=%s", list(rows[0].keys()))
-            logger.debug(
-                "sample game_id=%s game=%s",
-                rows[0].get("game_id"),
-                rows[0].get("game"),
-            )
-
-        for row in rows:
-            writer.writerow({
+    capture = []
+    for row in rows:
+        capture.append({
                 "timestamp": ts,
                 "sport": sport,
                 "game_id": row.get("game_id"),
@@ -2782,7 +2778,10 @@ def append_snapshot(rows, sport: str):
                 "injury_news": row.get("news"),
                 "key_number_note": row.get("key_number_note"),
                 "dk_start_iso": _validate_iso_tz(row.get("start_time_iso") or row.get("start_time") or row.get("startDate") or row.get("dk_start_iso") or row.get("game_time_iso") or row.get("game_time") or "")
-            })
+        })
+
+    from snapshot_store import append_snapshot_rows
+    append_snapshot_rows(SNAPSHOT_CSV, capture, SNAPSHOT_FIELDS)
 
 
 def infer_market_type(side_txt: str, line_txt: str) -> str:
