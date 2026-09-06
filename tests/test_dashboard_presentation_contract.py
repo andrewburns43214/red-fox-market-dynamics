@@ -193,6 +193,8 @@ def test_mobile_board_refresh_uses_safe_refresh_with_double_trigger_guard():
     assert 'onclick="refreshMobileBoard(this)"' in BOARD
     assert '.mobile-board-refresh { display:none; }' in BOARD
     assert 'flex:0 0 44px;width:44px;height:44px' in BOARD
+    assert ".mobile-board-refresh::before{content:'';position:absolute;inset:3px" in BOARD
+    assert '.mobile-board-refresh svg{position:relative;z-index:1;width:20px;height:20px' in BOARD
     assert 'if(mobileBoardRefreshPending)return;' in BOARD
     assert 'await refreshBoardNow();' in BOARD
     assert "button.setAttribute('aria-busy','true')" in BOARD
