@@ -1936,7 +1936,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
     </section>
   </div>
   <div class="red-fox-tooltip favorite-badge-tooltip" id="favorite-badge-tooltip" role="tooltip" hidden><strong>Red Fox Favorite</strong><span>Matches Red Fox’s preferred wager criteria based on market support, movement, price/number, and data quality.</span></div>
-  <div class="red-fox-tooltip cross-market-split-tooltip" id="cross-market-split-tooltip" role="tooltip" hidden><strong>Cross-Market Split</strong><span>The Spread and Moneyline Market Reads currently support different teams.</span></div>
+  <div class="red-fox-tooltip cross-market-split-tooltip" id="cross-market-split-tooltip" role="tooltip" hidden><strong>Cross-Market Split</strong><span>Spread and Moneyline each have a confirmed supported side, and those sides are different teams.</span></div>
   <div class="red-fox-tooltip integrity-badge-tooltip" id="integrity-badge-tooltip" role="tooltip" hidden><strong>Cross-Market Mismatch</strong><span>The synchronized Spread and Moneyline imply materially different market positions.</span></div>
   <div class="red-fox-tooltip signal-chip-tooltip" id="signal-chip-tooltip" role="tooltip" hidden><strong id="signal-chip-tooltip-title"></strong><span id="signal-chip-tooltip-body"></span></div>
 
@@ -2284,9 +2284,9 @@ function displayRationale(r){
   return [recorded,...extras].join(' ')||'-';
 }
 const SIGNAL_META={
-  'Contrarian':{cls:'mr-aligned',tip:'Low support on that side while its price or line moved toward it.'},
-  'Freeze':{cls:'mr-freeze',tip:'Freeze is assigned to the Pressure Side when heavy ticket and money support fails to earn a meaningful favorable response. Resistance evidence points toward the opposing side, but Freeze alone does not create a fade or directional lean.'},
-  'Follow':{cls:'mr-aligned',tip:'High tickets and money on that side while its price or line moved with it.'},
+  'Contrarian':{cls:'mr-aligned',tip:'Directional. Low support on that side while its price or line moved toward it.'},
+  'Freeze':{cls:'mr-freeze',tip:'Conditional. Freeze is assigned to the Pressure Side when heavy ticket and money support fails to earn a meaningful favorable response. It creates directional support only when it qualifies as an eligible Fade Candidate; the supported side is the explicit action/fade side. A non-actionable Freeze supports neither side.'},
+  'Follow':{cls:'mr-aligned',tip:'Directional. High tickets and money on that side while its price or line moved with it.'},
   'Whipsaw':{cls:'mr-reverse',tip:'The selected market moved materially in one direction, then reversed.'},
   'Held':{cls:'mr-neutral',tip:'The spread or total number, or the moneyline price, remained within its hold threshold. Attached spread or total juice is evaluated separately and may strengthen resistance.'},
   'Late':{cls:'mr-reverse',tip:'A meaningful move first appeared late in the observed path while the market was inside its pregame closing window.'},
@@ -2315,12 +2315,13 @@ const SIGNAL_META={
   'Thin':{cls:'mr-contra',tip:'Only two valid observations are available for this market, so treat the pattern cautiously.'},
   'Feed Risk':{cls:'mr-contra',tip:'The market does not have enough complete price or line data for a reliable market read.'},
   'Split Risk':{cls:'mr-contra',tip:'A capped 0% or 100% source split creates a data-quality limitation, so the split cannot support a directional read.'},
-  'Watch':{cls:'mr-neutral',tip:'Worth monitoring, not a directional call: the selected market has notable positioning, movement, or context but lacks full confirmation for Contrarian, Freeze, or Follow. Read the accompanying chips and Market Explanation to see what is missing.'}
+  'Watch':{cls:'mr-neutral',tip:'Non-directional. The selected market has useful positioning, movement, or context but no confirmed supported side. Read the accompanying chips and Market Explanation to see what is missing.'}
 };
 const BOARD_FIELD_META = [
   ['Bets / Money', 'The share of tickets and handle on each side. Higher percentages describe positioning, not a prediction.'],
   ['Open / Current', 'Open is the first valid observed market state; Current is the latest valid observation. Movement displayed beneath Current is interpreted relative to that side.'],
   ['Market Read', 'Red Fox’s interpretation of how the book is behaving in the selected market, using positioning, line/price movement, pressure, resistance, reversals, timing, and supporting context. Market Reads are intentionally broad and can surface meaningful market behavior even when the wager does not meet Red Fox Favorite criteria.'],
+  ['Supported Side', 'A green-highlighted row means Red Fox has confirmed a supported side for that market. If neither side is highlighted, no confirmed directional side has been established. A market can still contain useful Market Reads and context, and retain a Market Read Rank, without a supported side; rank is independent of directional support.'],
   ['Market Rank (MKT)', 'The rank of the currently selected Spread, Moneyline, or Total market relative to the rest of the board. It is not a game-level rank and is intentionally broader than Red Fox Favorite qualification.'],
   ['Data Quality', 'Clean has at least three valid observations. Thin has two. Feed Risk means incomplete price or line data cannot support a reliable market read; Split Risk means a capped split cannot support a directional split read.'],
   ['Market Explanation', 'The plain-language explanation of how the book is responding to the observed positioning and movement, and why Red Fox surfaced the current Market Read.'],
@@ -2385,7 +2386,7 @@ function redFoxFavoriteGuideSection(includeHeading=true){
 }
 function marketIntegrityGuideSection(includeHeading=true,selected=''){
   const entries={
-    'Cross-Market Split':'The confirmed Spread and Moneyline Market Reads currently support different teams. This is supporting context, not a directional signal or data-integrity failure. It does not by itself change Market Rank, Market Read, or Red Fox Favorite status.',
+    'Cross-Market Split':'A Cross-Market Split appears only when Spread and Moneyline each have an independently confirmed supported side and those supported sides are different teams. A neutral or unresolved market cannot create a Cross-Market Split. This is supporting context, not a directional signal or data-integrity failure. It does not by itself change Market Rank, Market Read, or Red Fox Favorite status.',
     'Cross-Market Mismatch':'A stricter market-integrity flag indicating that synchronized Spread and Moneyline pricing materially disagree under Red Fox’s persistence and reliability thresholds. It does not change the underlying Market Read or Market Rank, but a confirmed mismatch can prevent a market from receiving Red Fox Favorite status until the conflict resolves.'
   };
   const labels=selected?[selected]:['Cross-Market Split','Cross-Market Mismatch'];
@@ -2421,7 +2422,7 @@ function openSignalGuide(selected){
       '<p class="signal-guide-navigation">Tap or click any guide-backed chip or badge on the board to jump directly to its definition.</p>'+
       redFoxFavoriteGuideSection()+
       marketIntegrityGuideSection()+
-      MARKET_GUIDE_SECTIONS.map(function(section){const note=section[0]==='Directional Reads'?'<p class="signal-guide-section-note">Directional Reads describe Red Fox’s interpretation of how the book is responding within the selected market. Freeze and Watch can remain descriptive without producing an actionable directional lean.</p>':'';return '<div class="signal-guide-section"><h3>'+escHtml(section[0])+'</h3>'+note+section[1].map(function(label){return signalGuideItem(label,signalMetaFor(label).tip);}).join('')+'</div>';}).join('')+
+      MARKET_GUIDE_SECTIONS.map(function(section){const note=section[0]==='Directional Reads'?'<p class="signal-guide-section-note">Directional Reads describe Red Fox’s interpretation of how the book is responding within the selected market. Contrarian and Follow are directional. Freeze is conditional: only an eligible Fade Candidate creates support, and support belongs to its explicit action/fade side. Watch and non-actionable Freeze support neither side. Market-behavior and context chips—including Resistance Side, Pressure Side, One-Way, Whipsaw, Held, and Market Move—do not independently create a supported side. A Freeze can therefore appear on one team while the opposing Watch row is green only when that opponent is the explicit fade action side; Watch or Resistance Side did not create the endorsement.</p>':'';return '<div class="signal-guide-section"><h3>'+escHtml(section[0])+'</h3>'+note+section[1].map(function(label){return signalGuideItem(label,signalMetaFor(label).tip);}).join('')+'</div>';}).join('')+
       '<div class="signal-guide-section"><h3>Market Movement</h3>'+MARKET_GUIDE_MOVEMENT.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'<p class="signal-guide-note">A blank movement indicator beneath Current does not necessarily mean the market never moved. It means the comparable Open and Current values are effectively unchanged or unavailable. Open the drilldown’s Market Trajectory and Market Journey to review the full intraday path, including reversals.</p></div>'+
       '<div class="signal-guide-section"><h3>Board Fields</h3>'+BOARD_FIELD_META.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'</div>';
   }

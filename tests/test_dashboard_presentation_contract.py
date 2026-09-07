@@ -168,9 +168,9 @@ def test_mobile_market_read_chips_are_compact_without_changing_global_or_desktop
 
 def test_market_guide_matches_role_and_display_semantics():
     assert "Directional Reads describe Red Fox’s interpretation of how the book is responding within the selected market" in BOARD
-    assert "Freeze and Watch can remain descriptive without producing an actionable directional lean" in BOARD
+    assert "Watch and non-actionable Freeze support neither side" in BOARD
     assert "Freeze is assigned to the Pressure Side" in BOARD
-    assert "Freeze alone does not create a fade or directional lean" in BOARD
+    assert "the supported side is the explicit action/fade side" in BOARD
     assert "The side receiving qualifying concentrated betting pressure" in BOARD
     assert "The opposing side supported by the market’s resistance to concentrated pressure" in BOARD
     assert "The spread or total number, or the moneyline price" in BOARD
@@ -258,7 +258,7 @@ def test_cross_market_split_badge_is_pair_context_with_mismatch_priority():
     assert "mismatch?crossMarketMismatchBadge():split?crossMarketSplitBadge():''" in BOARD
     assert "isRedFoxFavorite(row)||hasCrossMarketMismatch(row)||hasCrossMarketSplit(row)" in BOARD
     assert 'id="cross-market-split-tooltip" role="tooltip" hidden' in BOARD
-    assert "The Spread and Moneyline Market Reads currently support different teams." in BOARD
+    assert "Spread and Moneyline each have a confirmed supported side, and those sides are different teams." in BOARD
     assert 'class="cross-market-badge cross-market-split-badge"' in BOARD
     assert 'class="cross-market-badge cross-market-mismatch-badge"' in BOARD
     assert "if(requested==='Cross-Market Split')" in BOARD
@@ -266,6 +266,22 @@ def test_cross_market_split_badge_is_pair_context_with_mismatch_priority():
     assert "hideSplitTooltip();openSignalGuide('Cross-Market Split');" in BOARD
     assert "['Cross-Market Split','Cross-Market Mismatch']" in BOARD
     assert "When Mismatch is active, it supersedes Split." in BOARD
+    assert "A neutral or unresolved market cannot create a Cross-Market Split." in BOARD
+
+
+def test_market_guide_explains_authoritative_supported_side_semantics():
+    assert "['Supported Side', 'A green-highlighted row means Red Fox has confirmed a supported side for that market." in BOARD
+    assert "If neither side is highlighted, no confirmed directional side has been established." in BOARD
+    assert "rank is independent of directional support." in BOARD
+    assert "'Contrarian':{cls:'mr-aligned',tip:'Directional." in BOARD
+    assert "'Follow':{cls:'mr-aligned',tip:'Directional." in BOARD
+    assert "'Freeze':{cls:'mr-freeze',tip:'Conditional." in BOARD
+    assert "only when it qualifies as an eligible Fade Candidate" in BOARD
+    assert "A non-actionable Freeze supports neither side." in BOARD
+    assert "'Watch':{cls:'mr-neutral',tip:'Non-directional." in BOARD
+    assert "Market-behavior and context chips—including Resistance Side, Pressure Side, One-Way, Whipsaw, Held, and Market Move—do not independently create a supported side." in BOARD
+    assert "the opposing Watch row is green only when that opponent is the explicit fade action side" in BOARD
+    assert "Watch or Resistance Side did not create the endorsement." in BOARD
 
 
 def test_mobile_selected_market_rank_sits_beneath_unchanged_saved_control():
