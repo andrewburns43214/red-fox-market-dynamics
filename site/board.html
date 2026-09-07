@@ -2602,20 +2602,15 @@ function primaryReadRank(side){
   return ({Contrarian:0,Freeze:1,Follow:2,Watch:3})[read] ?? 4;
 }
 function strongestSideIndex(sides,r){
-  const anchor=String(r.read_anchor_side||'').trim().toLowerCase();
-  if(anchor){
-    const exact=sides.slice(0,2).findIndex(side=>String(side.flagged_side||'').trim().toLowerCase()===anchor);
+  const supported=String(r.supported_side||'').trim().toLowerCase();
+  if(supported){
+    const exact=sides.slice(0,2).findIndex(side=>String(side.flagged_side||'').trim().toLowerCase()===supported);
     if(exact>=0) return exact;
-    const identity=marketSideIdentity({flagged_side:r.read_anchor_side},r);
+    const identity=marketSideIdentity({flagged_side:r.supported_side},r);
     const matched=sides.slice(0,2).findIndex(side=>marketSideIdentity(side,r)===identity);
     if(matched>=0) return matched;
   }
-  return sides.slice(0,2).reduce((best,side,index)=>{
-    const rank=primaryReadRank(side), bestRank=primaryReadRank(sides[best]);
-    if(rank<bestRank) return index;
-    if(rank>bestRank) return best;
-    return best;
-  },0);
+  return -1;
 }
 function twoSideRationale(r){
   const canonical=String(r.market_rationale||'').trim();
@@ -2933,8 +2928,8 @@ function liveMarketSections(rows){
     return marketPresentationRank(a[0])-marketPresentationRank(b[0]);
   }).map(function(entry){
     const sides=[...entry[1].values()];
-    const anchors=new Set(sides.map(item=>String(item.row.read_anchor_side||'').trim()?marketSideIdentity({flagged_side:item.row.read_anchor_side},item.row):'').filter(Boolean));
-    const supportedIdentity=anchors.size===1?[...anchors][0]:'';
+    const confirmed=new Set(sides.map(item=>String(item.row.supported_side||'').trim()?marketSideIdentity({flagged_side:item.row.supported_side},item.row):'').filter(Boolean));
+    const supportedIdentity=confirmed.size===1?[...confirmed][0]:'';
     return {market:entry[0],sides:sides.map(item=>({...item,supported:Boolean(supportedIdentity)&&marketSideIdentity(item.side,item.row)===supportedIdentity}))};
   });
 }

@@ -137,8 +137,10 @@ def test_detail_side_and_market_switches_rebuild_shared_movement_state():
     assert "const currentMovement=sideMovementHtml(selected,r);" in BOARD
 
 
-def test_strongest_side_uses_backend_anchor_not_raw_chip_count():
-    assert "const anchor=String(r.read_anchor_side||'').trim().toLowerCase();" in BOARD
+def test_strongest_side_uses_confirmed_backend_support_not_anchor_or_chip_count():
+    assert "const supported=String(r.supported_side||'').trim().toLowerCase();" in BOARD
+    assert "r.read_anchor_side" not in BOARD[BOARD.index("function strongestSideIndex"):BOARD.index("function twoSideRationale")]
+    assert "return -1;" in BOARD[BOARD.index("function strongestSideIndex"):BOARD.index("function twoSideRationale")]
     assert "signalCount=sideSignals(side).length" not in BOARD
     assert "side.evidence_role" in BOARD
     assert "Public Pressure must never" not in BOARD  # implementation, not user-facing prose

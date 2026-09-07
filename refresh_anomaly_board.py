@@ -39,7 +39,7 @@ PUBLIC_EXPORT_COLUMNS = {
         "movement_unit", "line_dir_changes",
         "path_min", "path_max", "observed_path", "rank_reason", "anomaly_sort", "maturity_sort", "severity_sort",
         "board_rank", "recorded_reaction", "recorded_action_type", "recorded_action_side", "recorded_action_line",
-        "recorded_at", "recorded_note", "market_sides", "read_anchor_side", "directional_lean_side", "market_rationale",
+        "recorded_at", "recorded_note", "market_sides", "read_anchor_side", "supported_side", "directional_lean_side", "market_rationale",
         *CROSS_MARKET_COLUMNS, *CROSS_MARKET_SPLIT_COLUMNS, *FAVORITE_COLUMNS,
     ],
     "anomaly_events.csv": [

@@ -211,6 +211,7 @@ class TestAnomalyBoard(unittest.TestCase):
             {"sport": "ncaaf", "game_id": "temple", "market_display": "SPREAD", "game": "Rhode Island @ Temple", "flagged_side": "Temple -14.5", "bets_pct": 55, "money_pct": 75, "open_line": "-9.5 (-102)", "current_line": "-14.5 (-110)", "reaction": "Watch", "path": "One-Way", "anomaly_sort": 2, "severity_sort": 10},
         ])
         row = select_market_leaders(board).iloc[0]
+        self.assertEqual(row["supported_side"], "")
         self.assertEqual(row["directional_lean_side"], "")
         self.assertIn("Temple -14.5 moved 5.0 points from -9.5 to -14.5", row["market_rationale"])
         self.assertIn("55% bets / 75% money", row["market_rationale"])
@@ -232,9 +233,10 @@ class TestAnomalyBoard(unittest.TestCase):
         ])
         row = select_market_leaders(board).iloc[0]
         self.assertEqual(row["read_anchor_side"], "Home -3")
+        self.assertEqual(row["supported_side"], "")
         self.assertEqual(row["directional_lean_side"], "")
 
-    def test_pressure_at_key_with_adverse_juice_anchors_the_resistance_side_without_a_lean(self):
+    def test_pressure_at_key_with_adverse_juice_anchors_resistance_without_confirmed_read(self):
         latest = pd.DataFrame([
             {"sport": "ncaaf", "game_id": "smu-fsu", "market_display": "SPREAD", "side_key": "SMU", "side": "SMU -3", "game": "SMU @ Florida State", "bets_pct": 78, "money_pct": 78, "open_line": "SMU -3 @ -110", "current_line": "SMU -3 @ -105", "_sort_time": _ts(20, 0)},
             {"sport": "ncaaf", "game_id": "smu-fsu", "market_display": "SPREAD", "side_key": "FSU", "side": "Florida State +3", "game": "SMU @ Florida State", "bets_pct": 22, "money_pct": 22, "open_line": "Florida State +3 @ -110", "current_line": "Florida State +3 @ -115", "_sort_time": _ts(20, 0)},
@@ -265,9 +267,38 @@ class TestAnomalyBoard(unittest.TestCase):
         self.assertEqual(sides["SMU -3"]["evidence_polarity"], "adverse")
         self.assertEqual(sides["Florida State +3"]["evidence_role"], "Resistance Side")
         self.assertEqual(leader["read_anchor_side"], "Florida State +3")
+        self.assertEqual(leader["supported_side"], "")
         self.assertEqual(leader["directional_lean_side"], "")
         self.assertIn("price moved against that pressure", leader["market_rationale"])
         self.assertIn("durable reset", leader["market_rationale"])
+
+    def test_non_actionable_freeze_does_not_mask_confirmed_contrarian_counterpart(self):
+        board = pd.DataFrame([
+            {"sport": "ncaaf", "game_id": "smu-fsu", "market_display": "SPREAD", "game": "SMU @ Florida State", "flagged_side": "SMU -2.5", "reaction": "Freeze", "action_type": "OBSERVE ONLY", "action_side": "", "kpi_eligible": False, "evidence_role": "Pressure Side", "anomaly_sort": 1},
+            {"sport": "ncaaf", "game_id": "smu-fsu", "market_display": "SPREAD", "game": "SMU @ Florida State", "flagged_side": "Florida State +2.5", "reaction": "Contrarian", "evidence_role": "Resistance Side", "anomaly_sort": 2},
+        ])
+        leader = select_market_leaders(board).iloc[0]
+        self.assertEqual(leader["read_anchor_side"], "Florida State +2.5")
+        self.assertEqual(leader["supported_side"], "Florida State +2.5")
+        self.assertEqual(leader["directional_lean_side"], "Florida State +2.5")
+
+    def test_conflicting_directional_reads_resolve_neutral_instead_of_using_order(self):
+        board = pd.DataFrame([
+            {"sport": "nfl", "game_id": "conflict", "market_display": "SPREAD", "game": "Away @ Home", "flagged_side": "Away +3", "reaction": "Contrarian", "anomaly_sort": 1},
+            {"sport": "nfl", "game_id": "conflict", "market_display": "SPREAD", "game": "Away @ Home", "flagged_side": "Home -3", "reaction": "Follow", "anomaly_sort": 2},
+        ])
+        leader = select_market_leaders(board).iloc[0]
+        self.assertEqual(leader["supported_side"], "")
+        self.assertEqual(leader["directional_lean_side"], "")
+
+    def test_ranked_watch_does_not_require_a_supported_side(self):
+        board = pd.DataFrame([
+            {"sport": "nfl", "game_id": "watch", "market_display": "TOTAL", "game": "Away @ Home", "flagged_side": "Over 44.5", "reaction": "Watch", "anomaly_sort": 1},
+            {"sport": "nfl", "game_id": "watch", "market_display": "TOTAL", "game": "Away @ Home", "flagged_side": "Under 44.5", "reaction": "Watch", "anomaly_sort": 2},
+        ])
+        leader = select_market_leaders(board).iloc[0]
+        self.assertEqual(leader["board_rank"], 1)
+        self.assertEqual(leader["supported_side"], "")
 
     def test_board_rank_keeps_more_severe_like_signals_ahead_of_alphabetical_order(self):
         board = pd.DataFrame([

@@ -299,7 +299,10 @@ def select_market_leaders(board_df):
     leaders = work.drop_duplicates(keys, keep="first").copy()
     leaders = leaders.merge(side_payload, on=keys, how="left", validate="one_to_one")
     semantics = leaders.apply(_market_read_semantics, axis=1, result_type="expand")
-    leaders[["read_anchor_side", "directional_lean_side"]] = semantics
+    leaders[["read_anchor_side", "supported_side"]] = semantics
+    # Compatibility alias for historical consumers.  ``supported_side`` is
+    # the sole authoritative directional contract; an anchor is descriptive.
+    leaders["directional_lean_side"] = leaders["supported_side"]
     # The board consumes this prebuilt market-level explanation verbatim.  Keep
     # narrative logic beside the evaluated evidence rather than duplicating it
     # in the browser, where only partial facts are available.
@@ -314,7 +317,13 @@ def select_market_leaders(board_df):
 
 
 def _market_read_semantics(leader):
-    """Return (read anchor, directional lean) without turning context into a pick."""
+    """Return (descriptive anchor, confirmed supported side).
+
+    Contrarian and Follow are inherently directional.  Freeze is directional
+    only when the evaluator has emitted an eligible FADE CANDIDATE.  Watch and
+    every path/context/evidence chip are non-directional.  Evaluate every side
+    so a descriptive Freeze cannot mask a confirmed read on its counterpart.
+    """
     try:
         sides = json.loads(str(leader.get("market_sides", "[]")))
     except (TypeError, json.JSONDecodeError):
@@ -324,22 +333,50 @@ def _market_read_semantics(leader):
     pressure = next((side for side in sides if str(side.get("evidence_role", "")) == "Pressure Side"), None)
     resistance = next((side for side in sides if str(side.get("evidence_role", "")) == "Resistance Side"), None)
     base_anchor = min(sides, key=_rationale_side_rank)
-    base_primary = str(base_anchor.get("reaction") or "Watch").strip()
-    freeze_side = next((side for side in sides if str(side.get("reaction", "")).strip() == "Freeze"), None)
-    directional = ""
-    if freeze_side is not None:
-        eligible = str(freeze_side.get("kpi_eligible", "")).strip().lower() == "true"
-        action_type = str(freeze_side.get("action_type", "")).strip().upper()
-        action_side = str(freeze_side.get("action_side", "")).strip()
-        directional = action_side if eligible and action_type == "FADE CANDIDATE" else ""
-    elif base_primary in {"Contrarian", "Follow"}:
-        directional = str(base_anchor.get("flagged_side", "")).strip()
+    supported = _confirmed_supported_side(sides, str(leader.get("market_display", "")))
     if pressure is not None and resistance is not None:
         anchor_side = str(resistance.get("flagged_side", "")).strip()
-        return anchor_side, directional
+        return anchor_side, supported
 
     anchor_side = str(base_anchor.get("flagged_side", "")).strip()
-    return anchor_side, directional
+    return anchor_side, supported
+
+
+def _confirmed_supported_side(sides, market):
+    """Resolve independent directional evidence to one exact published side."""
+    labels = [str(side.get("flagged_side", "")).strip() for side in sides]
+    by_identity = {_market_side_identity(label, market): label for label in labels if label}
+    candidates = []
+    for side in sides:
+        reaction = str(side.get("reaction") or "Watch").strip()
+        if reaction in {"Contrarian", "Follow"}:
+            candidates.append(str(side.get("flagged_side", "")).strip())
+        elif reaction == "Freeze":
+            eligible = str(side.get("kpi_eligible", "")).strip().lower() == "true"
+            action_type = str(side.get("action_type", "")).strip().upper()
+            if eligible and action_type == "FADE CANDIDATE":
+                candidates.append(str(side.get("action_side", "")).strip())
+
+    identities = {
+        _market_side_identity(candidate, market)
+        for candidate in candidates
+        if _market_side_identity(candidate, market) in by_identity
+    }
+    if len(identities) != 1:
+        return ""
+    return by_identity[next(iter(identities))]
+
+
+def _market_side_identity(value, market):
+    text = str(value or "").strip()
+    if str(market or "").strip().upper() == "TOTAL":
+        if re.match(r"^(?:under|u\b)", text, re.IGNORECASE):
+            return "under"
+        if re.match(r"^(?:over|o\b)", text, re.IGNORECASE):
+            return "over"
+        return ""
+    team = re.sub(r"\s[+-]\d+(?:\.\d+)?(?:\s.*)?$", "", text)
+    return re.sub(r"[^a-z0-9]+", "", team.lower())
 
 
 def _market_rationale(leader):

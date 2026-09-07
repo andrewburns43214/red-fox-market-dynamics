@@ -1,8 +1,8 @@
 """Annotate trustworthy Spread/Moneyline support disagreement as context only.
 
 Cross-Market Split is deliberately separate from the stricter pricing-integrity
-evaluation. It consumes the same resolved read anchor that drives the board's
-green supported-side treatment and never changes reads, ranks, scoring, or
+evaluation. It consumes the same authoritative directional supported side that
+drives the board's green treatment and never changes reads, ranks, scoring, or
 Favorite state.
 """
 
@@ -26,9 +26,8 @@ CROSS_MARKET_SPLIT_COLUMNS = [
 def apply_cross_market_split(board: pd.DataFrame) -> pd.DataFrame:
     """Persist valid supported-side disagreement on Spread/Moneyline rows.
 
-    ``read_anchor_side`` is the resolved state used for the board's green row.
-    It may be valid even when the primary directional classification is Watch.
-    Both anchors must map unambiguously to clean, reliable market sides.
+    ``supported_side`` is present only for a confirmed directional Market Read.
+    Both supported sides must map unambiguously to clean, reliable market sides.
     Confirmed Cross-Market Mismatch always suppresses Split.
     """
     if board is None:
@@ -77,15 +76,15 @@ def apply_cross_market_split(board: pd.DataFrame) -> pd.DataFrame:
 
 
 def _resolved_supported_side(row: pd.Series) -> str:
-    """Return the trustworthy board-highlight anchor, or an empty string.
+    """Return the trustworthy confirmed directional side, or an empty string.
 
     Requiring a unique match against both clean market sides prevents Split
     from inferring support from public percentages, chip presence, or a stale
     or ambiguous label.
     """
-    anchor = _text(row.get("read_anchor_side", ""))
-    anchor_identity = _team_identity(anchor)
-    if not anchor_identity:
+    supported = _text(row.get("supported_side", ""))
+    supported_identity = _team_identity(supported)
+    if not supported_identity:
         return ""
 
     raw_sides = row.get("market_sides", "")
@@ -113,9 +112,9 @@ def _resolved_supported_side(row: pd.Series) -> str:
         identities.append(identity)
         labels[identity] = label
 
-    if len(set(identities)) != 2 or identities.count(anchor_identity) != 1:
+    if len(set(identities)) != 2 or identities.count(supported_identity) != 1:
         return ""
-    return labels[anchor_identity]
+    return labels[supported_identity]
 
 
 def _is_true(value: object) -> bool:

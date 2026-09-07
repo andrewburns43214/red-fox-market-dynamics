@@ -25,7 +25,7 @@ def row(
         lean = anchor
     return {
         "sport": "nfl", "game_id": "g1", "game": "Team A @ Team B",
-        "market_display": market, "directional_lean_side": lean,
+        "market_display": market, "supported_side": lean, "directional_lean_side": lean,
         "read_anchor_side": anchor, "board_rank": rank, "reaction": reaction,
         "market_score": 87.5 if market == "SPREAD" else 72.0,
         "market_sides": json.dumps(sides or default_sides),
@@ -74,20 +74,28 @@ def test_different_confirmed_teams_create_pair_level_split():
     assert result.iloc[0].cross_market_split_moneyline_team == "Team B"
 
 
-def test_spread_contrarian_and_moneyline_watch_with_other_green_side_split():
+def test_spread_contrarian_and_moneyline_neutral_watch_has_no_split():
     result = annotate(
         row("SPREAD", "Team A +3", reaction="Contrarian"),
         row("MONEYLINE", "Team B", lean="", rank=2, reaction="Watch"),
     )
-    assert set(result.cross_market_split) == {"true"}
+    assert set(result.cross_market_split) == {"false"}
 
 
-def test_spread_watch_green_side_and_moneyline_supported_other_side_split():
+def test_neutral_spread_anchor_and_supported_moneyline_has_no_split():
     result = annotate(
         row("SPREAD", "Team A +3", lean="", reaction="Watch"),
         row("MONEYLINE", "Team B", rank=2),
     )
-    assert set(result.cross_market_split) == {"true"}
+    assert set(result.cross_market_split) == {"false"}
+
+
+def test_descriptive_anchor_cannot_silently_become_supported_side():
+    result = annotate(
+        row("SPREAD", "Team A +3", lean="", reaction="Watch"),
+        row("MONEYLINE", "Team B", lean="Team B", rank=2),
+    )
+    assert set(result.cross_market_split) == {"false"}
 
 
 def test_missing_or_invalid_green_side_has_no_split():
@@ -121,7 +129,7 @@ def test_split_does_not_change_rank_reads_or_raw_market_data():
     board = pd.DataFrame([row("SPREAD", "Team A +3", rank=4), row("MONEYLINE", "Team B", rank=9)])
     protected = [
         "market_display", "board_rank", "market_score", "reaction",
-        "read_anchor_side", "directional_lean_side", "market_sides",
+        "read_anchor_side", "supported_side", "directional_lean_side", "market_sides",
     ]
     result = apply_cross_market_split(board)
     pd.testing.assert_frame_equal(board[protected], result[protected])
@@ -149,7 +157,7 @@ def test_confirmed_mismatch_suppresses_split():
     assert set(result.cross_market_split) == {"false"}
 
 
-def test_mississippi_state_minnesota_production_anchor_pattern_creates_split():
+def test_mississippi_state_minnesota_neutral_moneyline_anchor_has_no_split():
     spread_sides = [
         {"flagged_side": "Mississippi State -1.5", "data_badge": "Clean", "context_chips": ""},
         {"flagged_side": "Minnesota +1.5", "data_badge": "Clean", "context_chips": ""},
@@ -162,9 +170,9 @@ def test_mississippi_state_minnesota_production_anchor_pattern_creates_split():
         row("SPREAD", "Mississippi State -1.5", reaction="Contrarian", favorite="true", sides=spread_sides),
         row("MONEYLINE", "Minnesota", lean="", rank=109, reaction="Watch", sides=moneyline_sides),
     )
-    assert set(result.cross_market_split) == {"true"}
-    assert set(result.cross_market_split_spread_team) == {"Mississippi State"}
-    assert set(result.cross_market_split_moneyline_team) == {"Minnesota"}
+    assert set(result.cross_market_split) == {"false"}
+    assert set(result.cross_market_split_spread_team) == {""}
+    assert set(result.cross_market_split_moneyline_team) == {""}
     assert result.loc[result.market_display.eq("SPREAD"), "red_fox_favorite"].iloc[0] == "true"
 
 

@@ -71,8 +71,8 @@ def test_live_recent_cards_present_persisted_favorite_supported_and_saved_state(
     assert "favoriteMarkets" in BOARD
     assert 'class="live-game-badges"' in BOARD
     assert 'title="Red Fox Favorite pregame market:' in BOARD
-    assert "const anchors=new Set(sides.map(item=>String(item.row.read_anchor_side||'').trim()" in BOARD
-    assert "anchors.size===1" in BOARD
+    assert "const confirmed=new Set(sides.map(item=>String(item.row.supported_side||'').trim()" in BOARD
+    assert "confirmed.size===1" in BOARD
     assert "item.supported?' is-supported':''" in BOARD
     assert ".live-market-side-row.is-supported { background:linear-gradient(90deg,rgba(21,134,106,.10)" in BOARD
     assert 'class="live-save"' in BOARD
