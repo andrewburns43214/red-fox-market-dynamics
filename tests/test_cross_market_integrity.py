@@ -187,7 +187,8 @@ def test_publication_wires_integrity_after_reads_and_ranking_but_before_favorite
     source = (Path(__file__).resolve().parents[1] / "refresh_anomaly_board.py").read_text(encoding="utf-8")
     selected = source.index("board = select_market_leaders(board)")
     integrity = source.index("board = apply_cross_market_integrity(board, history", selected)
-    favorites = source.index("board = apply_red_fox_favorites(board", integrity)
-    assert selected < integrity < favorites
-    assert "*CROSS_MARKET_COLUMNS, *FAVORITE_COLUMNS" in source
+    split = source.index("board = apply_cross_market_split(board)", integrity)
+    favorites = source.index("board = apply_red_fox_favorites(board", split)
+    assert selected < integrity < split < favorites
+    assert "*CROSS_MARKET_COLUMNS, *CROSS_MARKET_SPLIT_COLUMNS, *FAVORITE_COLUMNS" in source
     assert "cross_market_adj" not in (Path(__file__).resolve().parents[1] / "cross_market_integrity.py").read_text(encoding="utf-8")

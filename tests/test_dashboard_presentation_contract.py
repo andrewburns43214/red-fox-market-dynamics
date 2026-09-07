@@ -230,7 +230,7 @@ def test_cross_market_integrity_badge_tooltip_and_guide_are_market_level():
     directional = BOARD.index("MARKET_GUIDE_SECTIONS.map", integrity)
     assert favorite < integrity < directional
     assert '<h3>Market Integrity</h3>' in BOARD
-    assert "A market-level integrity flag indicating that synchronized Spread and Moneyline pricing materially disagree" in BOARD
+    assert "A stricter market-integrity flag indicating that synchronized Spread and Moneyline pricing materially disagree" in BOARD
     assert "does not change the underlying Market Read or Market Rank" in BOARD
     assert "confirmed Cross-Market Mismatch" in BOARD
     assert 'id="integrity-badge-tooltip" role="tooltip" hidden' in BOARD
@@ -240,13 +240,41 @@ def test_cross_market_integrity_badge_tooltip_and_guide_are_market_level():
     assert "crossMarketMismatchBadge()" in BOARD
     assert "Cross-Market Mismatch</button>" in BOARD
     assert "if(requested==='Cross-Market Mismatch')" in BOARD
-    assert "body.innerHTML=marketIntegrityGuideSection(false);" in BOARD
+    assert "body.innerHTML=marketIntegrityGuideSection(false,'Cross-Market Mismatch');" in BOARD
     assert "hideIntegrityTooltip();openSignalGuide('Cross-Market Mismatch');" in BOARD
-    assert ".cross-market-mismatch-badge{display:inline-flex" in BOARD
-    assert "const integrity=hasCrossMarketMismatch(r), hasHeader=favorite||integrity;" in BOARD
+    assert ".cross-market-badge{display:inline-flex" in BOARD
+    assert ".cross-market-mismatch-badge{border-color:#aeb7bb" in BOARD
+    assert "const mismatch=hasCrossMarketMismatch(r), split=hasCrossMarketSplit(r), crossMarket=mismatch||split, hasHeader=favorite||crossMarket;" in BOARD
     assert "favorite?favoriteBadge():''" in BOARD
-    assert "integrity?crossMarketMismatchBadge():''" in BOARD
+    assert "mismatch?crossMarketMismatchBadge():split?crossMarketSplitBadge():''" in BOARD
     assert "market_sides.cross_market_mismatch" not in BOARD
+
+
+def test_cross_market_split_badge_is_pair_context_with_mismatch_priority():
+    assert "function hasCrossMarketSplit(row)" in BOARD
+    assert "(market==='SPREAD'||market==='MONEYLINE')&&!hasCrossMarketMismatch(row)" in BOARD
+    assert "mismatch?crossMarketMismatchBadge():split?crossMarketSplitBadge():''" in BOARD
+    assert "isRedFoxFavorite(row)||hasCrossMarketMismatch(row)||hasCrossMarketSplit(row)" in BOARD
+    assert 'id="cross-market-split-tooltip" role="tooltip" hidden' in BOARD
+    assert "The Spread and Moneyline Market Reads currently support different teams." in BOARD
+    assert 'class="cross-market-badge cross-market-split-badge"' in BOARD
+    assert 'class="cross-market-badge cross-market-mismatch-badge"' in BOARD
+    assert "if(requested==='Cross-Market Split')" in BOARD
+    assert "body.innerHTML=marketIntegrityGuideSection(false,'Cross-Market Split');" in BOARD
+    assert "hideSplitTooltip();openSignalGuide('Cross-Market Split');" in BOARD
+    assert "['Cross-Market Split','Cross-Market Mismatch']" in BOARD
+    assert "When Mismatch is active, it supersedes Split." in BOARD
+
+
+def test_mobile_selected_market_rank_sits_beneath_unchanged_saved_control():
+    assert '<span class="mobile-selected-rank">MKT #${boardRank(r)}</span>' in BOARD
+    assert ".mobile-selected-rank{display:none}" in BOARD
+    assert ".td-rank .mobile-selected-rank{display:block;position:absolute;top:34px;left:50%;width:44px" in BOARD
+    assert "color:#7b858a;font:400 7px/1.2 var(--sans)" in BOARD
+    assert ".td-rank .production-save{right:7px!important;left:auto!important;font-size:24px!important;color:#dd4a40!important}" in BOARD
+    assert "boardGameSelections.set(String(gameId),String(marketName).toUpperCase());\n  renderBoard(false);" in BOARD
+    assert '<span class="rank-number">${boardRank(r)}</span><span class="rank-scope">MKT</span>' in BOARD
+    assert ".lpane>.tscroll>table>tbody>tr,.lpane>.tscroll>table>tbody>tr.row-hi,.lpane>.tscroll>table>tbody>tr.row-mid{position:relative;display:grid;grid-template-columns:1fr 1fr" in BOARD
 
 
 def test_market_guide_terminology_order_and_deep_link_contract():
