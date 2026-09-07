@@ -300,6 +300,17 @@ class TestAnomalyBoard(unittest.TestCase):
         self.assertEqual(leader["board_rank"], 1)
         self.assertEqual(leader["supported_side"], "")
 
+    def test_heavy_favorite_context_does_not_hide_confirmed_contrarian_explanation(self):
+        board = pd.DataFrame([
+            {"sport": "ncaaf", "game_id": "heavy", "market_display": "MONEYLINE", "game": "Duke @ Illinois", "flagged_side": "Duke", "bets_pct": 12, "money_pct": 18, "open_line": "+270", "current_line": "+190", "reaction": "Contrarian", "response_direction": "TOWARD", "anomaly_sort": 1},
+            {"sport": "ncaaf", "game_id": "heavy", "market_display": "MONEYLINE", "game": "Duke @ Illinois", "flagged_side": "Illinois", "bets_pct": 88, "money_pct": 82, "open_line": "-340", "current_line": "-230", "reaction": "Watch", "response_direction": "AGAINST", "context_chips": "Heavy Favorite", "anomaly_sort": 2},
+        ])
+        leader = select_market_leaders(board).iloc[0]
+        self.assertEqual(leader["supported_side"], "Duke")
+        self.assertIn("toward Duke", leader["market_rationale"])
+        self.assertIn("does not create the supported side", leader["market_rationale"])
+        self.assertNotIn("split remains context only", leader["market_rationale"])
+
     def test_board_rank_keeps_more_severe_like_signals_ahead_of_alphabetical_order(self):
         board = pd.DataFrame([
             {"sport": "nfl", "game_id": "g5", "market_display": "SPREAD", "flagged_side": "Alpha +3", "reaction": "Freeze", "anomaly_sort": 3, "severity_sort": 10, "game": "Alpha @ Beta"},

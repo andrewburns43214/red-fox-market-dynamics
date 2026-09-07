@@ -417,7 +417,8 @@ def _market_rationale(leader):
         if "Whipsaw" in context or "Whipsaw" in other_context:
             sentence += " Its price path also reversed, adding Whipsaw risk."
         return sentence
-    if "Heavy Favorite" in context or "Heavy Favorite" in other_context:
+    has_heavy_favorite = "Heavy Favorite" in context or "Heavy Favorite" in other_context
+    if has_heavy_favorite and not str(leader.get("supported_side", "")).strip():
         return (
             f"{_rationale_transition(strongest_name, strongest.get('open_line'), strongest.get('current_line'))}. "
             "A heavy moneyline favorite has concentrated tickets; that may be parlay-driven, so the split remains context only."
@@ -458,6 +459,8 @@ def _market_rationale(leader):
         sentence += f" It crossed or touched key number{'s' if len(keys) > 1 else ''} {', '.join(keys)}."
     if "Price Risk" in context:
         sentence += " Price risk limits how much weight to place on the move alone."
+    if has_heavy_favorite:
+        sentence += " Heavy-favorite concentration remains risk context and does not create the supported side."
     if str(strongest.get("data_badge", "")).upper() == "THIN":
         sentence += " Only two valid snapshots are available, so the read is preliminary."
     return _finish_sentence(sentence)
