@@ -285,7 +285,7 @@ def select_market_leaders(board_df):
         "reaction", "recorded_reaction", "path", "context_chips", "anomaly_chips", "data_badge",
         "broader_market_comparison", "line_dir_changes", "return_toward_open",
         "line_move_abs", "price_move_pct", "observation_count", "key_numbers_crossed",
-        "observed_path",
+        "active_worsening_reversal",
         "action_side", "action_type", "kpi_eligible", "evidence_role", "evidence_polarity",
         "response_direction", "whipsaw_recovered", "key_number_pinned", "severity_sort",
     ]
@@ -735,6 +735,13 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         points, market, bets_pct, money_pct, line_hold_threshold,
     )
     whipsaw = raw_whipsaw and not whipsaw_recovered
+    last_line_response, last_price_response = _signed_side_response(points[-2:], market, latest_row)
+    active_worsening_reversal = whipsaw and (
+        last_price_response < -HOLD_PRICE_MOVE_PCT
+        if market == "MONEYLINE"
+        else last_line_response < -line_hold_threshold
+        or (abs(last_line_response) <= 1e-9 and last_price_response < -HOLD_PRICE_MOVE_PCT)
+    )
     if whipsaw_recovered and path_label == "Whipsaw":
         if juice_moved and not line_moved:
             path_label = "Juice Move"
@@ -949,6 +956,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         "price_response_pct": round(price_response, 3),
         "response_direction": "AGAINST" if adverse_response else ("TOWARD" if meaningful_toward else "LIMITED"),
         "whipsaw_recovered": whipsaw_recovered,
+        "active_worsening_reversal": active_worsening_reversal,
         "key_number_pinned": key_number_pinned,
         "movement_unit": "implied probability points" if market == "MONEYLINE" else "line points",
         "line_dir_changes": dir_changes,

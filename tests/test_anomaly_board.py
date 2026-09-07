@@ -354,6 +354,7 @@ class TestAnomalyBoard(unittest.TestCase):
         row = board.loc[board["flagged_side"] == "SEA +3"].iloc[0]
         self.assertEqual(row["reaction"], "Contrarian")
         self.assertEqual(row["path"], "Whipsaw")
+        self.assertTrue(bool(row["active_worsening_reversal"]))
         self.assertIn("K3", row["context_chips"])
         self.assertEqual(row["data_badge"], "Clean")
         self.assertEqual(row["path_summary"], "+4 -> +2.5 -> +3")

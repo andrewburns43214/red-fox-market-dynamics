@@ -11,7 +11,7 @@ from build_live_recent import ensure_output_columns
 def side(name, current, *, bets=35, money=30, reaction="Contrarian", direction="TOWARD",
          observations=4, clean=True, kpi=True, action_type="CONTRARIAN CANDIDATE",
          action_side=None, path="One-Way", line_move=1.0, price_move=3.0, context="",
-         observed_path=None):
+         active_worsening=False):
     return {
         "flagged_side": name, "bets_pct": bets, "money_pct": money,
         "open_line": current, "current_line": current, "reaction": reaction,
@@ -20,7 +20,7 @@ def side(name, current, *, bets=35, money=30, reaction="Contrarian", direction="
         "action_type": action_type, "action_side": action_side or name, "path": path,
         "line_move_abs": line_move, "price_move_pct": price_move,
         "context_chips": context, "whipsaw_recovered": "Whipsaw Recovered" in context,
-        "observed_path": json.dumps(observed_path or [current, current]),
+        "active_worsening_reversal": active_worsening,
     }
 
 
@@ -149,15 +149,13 @@ def test_corresponding_moneyline_can_confirm_outside_its_own_favorite_range():
 
 
 def test_path_aware_whipsaw_allows_intact_or_recovered_but_not_erased_move():
-    intact = side("Away +6", "+6 (-110)", path="Whipsaw", direction="TOWARD",
-                  observed_path=["+7 (-110)", "+5.5 (-110)", "+6 (-110)", "+6 (-110)"])
+    intact = side("Away +6", "+6 (-110)", path="Whipsaw", direction="TOWARD")
     assert is_favorite(result([market("nfl", "SPREAD", pair_for(intact))]))
     recovered = side("Away +6", "+6 (-110)", path="One-Way", context="Whipsaw Recovered")
     assert is_favorite(result([market("nfl", "SPREAD", pair_for(recovered))]))
     erased = side("Away +7", "+7 (-110)", path="Whipsaw", direction="LIMITED")
     assert not is_favorite(result([market("nfl", "SPREAD", pair_for(erased))]))
-    worsening = side("Away +6", "+6 (-110)", path="Whipsaw", direction="TOWARD",
-                     observed_path=["+7 (-110)", "+5.5 (-110)", "+6 (-110)"])
+    worsening = side("Away +6", "+6 (-110)", path="Whipsaw", direction="TOWARD", active_worsening=True)
     assert not is_favorite(result([market("nfl", "SPREAD", pair_for(worsening))]))
 
 

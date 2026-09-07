@@ -262,36 +262,12 @@ def _base_quality(side: dict) -> bool:
     context = _parts(side.get("context_chips"))
     if {"Market Lag", "Feed Risk", "Split Risk", "Split Cap"} & context:
         return False
-    if _active_worsening_reversal(side):
+    if _truthy(side.get("active_worsening_reversal")):
         return False
     # A Whipsaw is allowed when meaningful favorable movement remains at the
     # current snapshot. Full/through-open reversals no longer report TOWARD and
     # therefore cannot pass Paths A/C; actionable Freeze already rejects them.
     return True
-
-
-def _active_worsening_reversal(side: dict) -> bool:
-    if str(side.get("path", "")) != "Whipsaw" or _truthy(side.get("whipsaw_recovered")):
-        return False
-    try:
-        path = json.loads(str(side.get("observed_path", "[]")))
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return False
-    if not isinstance(path, list) or len(path) < 2 or str(path[-1]) == str(path[-2]):
-        return False
-    current_name = str(side.get("flagged_side", ""))
-    market = "SPREAD" if re.search(r"\s[+-]\d+(?:\.\d+)?(?:\s|$)", current_name) else "MONEYLINE"
-    previous_value = _line_value(path[-2], market)
-    current_value = _line_value(path[-1], market)
-    if previous_value is None or current_value is None:
-        return False
-    if market == "MONEYLINE":
-        return _implied_probability(current_value) < _implied_probability(previous_value)
-    if current_value != previous_value:
-        return current_value > previous_value
-    previous_odds = _attached_odds(path[-2])
-    current_odds = _attached_odds(path[-1])
-    return previous_odds is not None and current_odds is not None and _implied_probability(current_odds) < _implied_probability(previous_odds)
 
 
 def _number_is_eligible(sport: str, market: str, value: float, side: dict, game_rows: pd.DataFrame | None) -> bool:
@@ -358,15 +334,6 @@ def _line_value(value: object, market: str) -> float | None:
     else:
         match = re.search(r"(?:^|\s)([+-]?\d+(?:\.\d+)?)", text)
     return float(match.group(1)) if match else None
-
-
-def _attached_odds(value: object) -> float | None:
-    match = re.search(r"\(([+-]?\d{3,4})\)", str(value or ""))
-    return float(match.group(1)) if match else None
-
-
-def _implied_probability(odds: float) -> float:
-    return (-odds / (-odds + 100.0)) if odds < 0 else (100.0 / (odds + 100.0))
 
 
 def _side_identity(value: object) -> str:

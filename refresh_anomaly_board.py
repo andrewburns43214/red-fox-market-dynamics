@@ -33,7 +33,7 @@ PUBLIC_EXPORT_COLUMNS = {
         "path_summary", "reason", "data_badge", "observation_count", "first_anomaly_seen", "max_excursion",
         "return_toward_open", "broader_market_comparison", "key_number_note", "key_numbers_crossed", "open_line_value",
         "current_line_value", "move_abs", "line_move_abs", "price_move_pct", "line_response", "price_response_pct",
-        "response_direction", "whipsaw_recovered", "key_number_pinned", "evidence_role", "evidence_polarity",
+        "response_direction", "whipsaw_recovered", "active_worsening_reversal", "key_number_pinned", "evidence_role", "evidence_polarity",
         "movement_unit", "line_dir_changes",
         "path_min", "path_max", "observed_path", "rank_reason", "anomaly_sort", "maturity_sort", "severity_sort",
         "board_rank", "recorded_reaction", "recorded_action_type", "recorded_action_side", "recorded_action_line",
