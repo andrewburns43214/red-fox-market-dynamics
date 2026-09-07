@@ -12,6 +12,7 @@ from anomaly_action_ledger import apply_recorded_signals, update_action_ledger
 from anomaly_action_results import rebuild_action_results
 from anomaly_board import build_anomaly_outputs, select_market_leaders
 from build_live_recent import main as build_live_recent
+from cross_market_integrity import CROSS_MARKET_COLUMNS, apply_cross_market_integrity
 from main import infer_market_type, normalize_side_key
 from red_fox_favorite import FAVORITE_COLUMNS, apply_red_fox_favorites, update_favorite_tracking
 
@@ -38,7 +39,7 @@ PUBLIC_EXPORT_COLUMNS = {
         "path_min", "path_max", "observed_path", "rank_reason", "anomaly_sort", "maturity_sort", "severity_sort",
         "board_rank", "recorded_reaction", "recorded_action_type", "recorded_action_side", "recorded_action_line",
         "recorded_at", "recorded_note", "market_sides", "read_anchor_side", "directional_lean_side", "market_rationale",
-        *FAVORITE_COLUMNS,
+        *CROSS_MARKET_COLUMNS, *FAVORITE_COLUMNS,
     ],
     "anomaly_events.csv": [
         "sport", "game_id", "canonical_key", "game", "market_display", "flagged_side", "focus_basis", "action_side",
@@ -378,6 +379,7 @@ def _refresh(coverage):
     action_count = update_action_ledger(board, DATA, newest_snapshot.to_pydatetime())
     board = apply_recorded_signals(board, DATA)
     board = select_market_leaders(board)
+    board = apply_cross_market_integrity(board, history, as_of=newest_snapshot)
     board = apply_red_fox_favorites(board, as_of=newest_snapshot)
     board = update_favorite_tracking(board, DATA, as_of=newest_snapshot)
     detail_count = write_event_detail_files(board, events, details_dir=DATA / "anomaly_event_details")

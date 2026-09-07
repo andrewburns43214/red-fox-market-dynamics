@@ -71,9 +71,18 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
         (str(sport).lower(), str(game_id)): group
         for (sport, game_id), group in result.groupby(["sport", "game_id"], dropna=False, sort=False)
     }
+    opener_blocked_games = set()
     for index, row in result.iterrows():
         decision = _qualify_market(row, groups.get((str(row.get("sport", "")).lower(), str(row.get("game_id", "")))))
         if not decision:
+            continue
+        current_mismatch = _truthy(row.get("cross_market_mismatch"))
+        opener_mismatch = _truthy(row.get("cross_market_opener_mismatch_verified"))
+        if current_mismatch or opener_mismatch:
+            result.at[index, "favorite_cross_market_state"] = "mismatch"
+            result.at[index, "favorite_reason"] = "Confirmed Cross-Market Mismatch withheld Favorite qualification."
+            if opener_mismatch and not current_mismatch:
+                opener_blocked_games.add((str(row.get("sport", "")).lower(), str(row.get("game_id", ""))))
             continue
         snapshot_id = _snapshot_id(row, captured_at)
         result.at[index, "red_fox_favorite"] = "true"
@@ -90,6 +99,24 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
         result.at[index, "favorite_cross_market_state"] = decision["cross_market_state"]
         result.at[index, "favorite_snapshot_id"] = snapshot_id
         result.at[index, "favorite_reason"] = decision["reason"]
+    for sport, game_id in opener_blocked_games:
+        pair_mask = (
+            result["sport"].astype(str).str.lower().eq(sport)
+            & result["game_id"].astype(str).eq(game_id)
+            & result["market_display"].astype(str).str.upper().isin(["SPREAD", "MONEYLINE"])
+        )
+        explanation = next(
+            (str(value) for value in result.loc[pair_mask, "cross_market_opener_mismatch_explanation"] if str(value).strip()),
+            "The synchronized opening Spread and Moneyline implied different favorites.",
+        )
+        result.loc[pair_mask, "cross_market_mismatch"] = "true"
+        result.loc[pair_mask, "cross_market_mismatch_state"] = "verified_opener"
+        result.loc[pair_mask, "cross_market_mismatch_explanation"] = explanation
+        if "market_rationale" in result.columns:
+            for pair_index in result.index[pair_mask]:
+                existing = str(result.at[pair_index, "market_rationale"] or "").strip()
+                if explanation not in existing:
+                    result.at[pair_index, "market_rationale"] = " ".join(part for part in (existing, explanation) if part)
     return result
 
 

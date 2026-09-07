@@ -211,6 +211,28 @@ def test_market_read_tooltips_reuse_favorite_visuals_without_changing_chip_actio
     assert "function openSignalGuide(selected){\n  hideSignalTooltip();" in BOARD
 
 
+def test_cross_market_integrity_badge_tooltip_and_guide_are_market_level():
+    favorite = BOARD.index("redFoxFavoriteGuideSection()+")
+    integrity = BOARD.index("marketIntegrityGuideSection()+", favorite)
+    directional = BOARD.index("MARKET_GUIDE_SECTIONS.map", integrity)
+    assert favorite < integrity < directional
+    assert '<h3>Market Integrity</h3>' in BOARD
+    assert "A market-level integrity flag indicating that synchronized Spread and Moneyline pricing materially disagree" in BOARD
+    assert "does not change the underlying Market Read or Market Rank" in BOARD
+    assert "confirmed Cross-Market Mismatch" in BOARD
+    assert 'id="integrity-badge-tooltip" role="tooltip" hidden' in BOARD
+    assert "The synchronized Spread and Moneyline imply materially different market positions." in BOARD
+    assert "function hasCrossMarketMismatch(row)" in BOARD
+    assert "(market==='SPREAD'||market==='MONEYLINE')" in BOARD
+    assert "crossMarketMismatchBadge()" in BOARD
+    assert "Cross-Market Mismatch</button>" in BOARD
+    assert ".cross-market-mismatch-badge{display:inline-flex" in BOARD
+    assert "const integrity=hasCrossMarketMismatch(r), hasHeader=favorite||integrity;" in BOARD
+    assert "favorite?favoriteBadge():''" in BOARD
+    assert "integrity?crossMarketMismatchBadge():''" in BOARD
+    assert "market_sides.cross_market_mismatch" not in BOARD
+
+
 def test_visible_rank_is_selected_market_rank():
     assert 'Selected-market rank: ${boardRank(r)}' in BOARD
     assert '<span class="rank-number">${boardRank(r)}</span><span class="rank-scope">MKT</span>' in BOARD

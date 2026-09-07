@@ -1153,6 +1153,8 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .game-favorite-header{display:flex;align-items:center;gap:5px;height:32px;min-width:0;overflow:hidden}
 .game-favorite-header .game-sport{position:static;flex:0 0 auto}
 .red-fox-favorite-badge{display:block;flex:0 0 auto;width:108px;height:32px;object-fit:contain;object-position:center;white-space:nowrap}
+.cross-market-mismatch-badge{display:inline-flex;align-items:center;justify-content:center;flex:0 1 auto;min-width:0;max-width:105px;height:21px;padding:0 6px;overflow:hidden;border:1px solid #aeb7bb;border-radius:999px;background:#edf0f1;color:#39464c;font:700 6.5px/1 var(--sans);letter-spacing:.035em;text-transform:uppercase;white-space:nowrap;cursor:pointer}
+.cross-market-mismatch-badge:focus-visible{outline:2px solid #59666c;outline-offset:1px}
 .red-fox-tooltip{position:fixed;z-index:1300;width:min(270px,calc(100vw - 24px));padding:8px 10px;border:1px solid #d8dede;border-radius:8px;background:#11181c;color:#f8fafa;box-shadow:0 8px 24px rgba(5,7,8,.22);font:500 10px/1.4 var(--sans);pointer-events:none}
 .red-fox-tooltip[hidden]{display:none}.red-fox-tooltip strong{display:block;margin-bottom:2px;font-size:11px;color:#fff}.red-fox-tooltip span{display:block;color:#dce2e4}
 .favorite-plane-spacer{display:block;height:32px;pointer-events:none}
@@ -1503,6 +1505,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .lpane>.tscroll>table>tbody>tr>.td-rank{position:absolute;right:8px;top:8px;width:30px!important;height:30px!important;padding:0!important;border-radius:50%!important;background:var(--bg2);z-index:2}.rank-center{font-size:10px}.td-rank .production-save{left:auto!important;right:30px;transform:translateY(-50%)}
   .lpane>.tscroll>table>tbody>tr>.td-game{grid-column:1/-1;padding:13px 48px 9px 12px!important;border-bottom:1px solid var(--border)!important}.two-side-game .two-side-row{padding-left:0!important;min-height:30px;height:auto}.game-sport{position:static!important;margin-bottom:5px}.game-lane-name{font-size:14px!important}.game-lane-time{font-size:10px!important}
   .favorite-plane-spacer{display:none!important}.favorite-row>td:not(.td-rank){vertical-align:initial}.game-favorite-header{height:36px;min-height:36px;margin-bottom:2px;overflow:hidden}.game-favorite-header .game-sport{margin:0!important}.red-fox-favorite-badge{width:108px;height:36px;max-width:calc(100% - 42px)}
+  .game-favorite-header.has-integrity .red-fox-favorite-badge{max-width:108px}.cross-market-mismatch-badge{max-width:102px;height:21px;padding:0 5px;font-size:6px;letter-spacing:.025em}
   .lpane>.tscroll>table>tbody>tr>.td-mkt{position:absolute;left:12px;top:10px;width:auto!important;padding:0!important;color:var(--accent)!important;font-size:9px!important;transform:translateY(-100%);display:none!important}
   .lpane>.tscroll>table>tbody>tr>.td-split{grid-column:1/-1;padding:9px 12px!important;border-bottom:1px solid var(--border)!important}.lpane>.tscroll>table>tbody>tr>.td-split::before,.lpane>.tscroll>table>tbody>tr>.td-open::before,.lpane>.tscroll>table>tbody>tr>.td-current::before,.lpane>.tscroll>table>tbody>tr>.td-market-read::before,.lpane>.tscroll>table>tbody>tr>.td-dec::before{display:block;margin-bottom:6px;color:var(--text3);font:700 8px var(--mono);letter-spacing:.08em;text-transform:uppercase}.lpane>.tscroll>table>tbody>tr>.td-split::before{content:'Positioning'}.lpane>.tscroll>table>tbody>tr>.td-open::before{content:'Open'}.lpane>.tscroll>table>tbody>tr>.td-current::before{content:'Current'}.lpane>.tscroll>table>tbody>tr>.td-market-read::before{content:'Market Read'}.lpane>.tscroll>table>tbody>tr>.td-dec::before{content:'Rationale'}
   .lpane>.tscroll>table>tbody>tr>.td-open,.lpane>.tscroll>table>tbody>tr>.td-current{min-height:72px;padding:10px 12px!important}.lpane>.tscroll>table>tbody>tr>.td-open{border-right:1px solid var(--border)!important}.two-side-lines .two-side-row{min-height:27px;height:auto}.two-side-line{font-size:11px!important}
@@ -1928,6 +1931,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
     </section>
   </div>
   <div class="red-fox-tooltip favorite-badge-tooltip" id="favorite-badge-tooltip" role="tooltip" hidden><strong>Red Fox Favorite</strong><span>Matches Red Fox’s preferred wager criteria based on market support, movement, price/number, and data quality.</span></div>
+  <div class="red-fox-tooltip integrity-badge-tooltip" id="integrity-badge-tooltip" role="tooltip" hidden><strong>Cross-Market Mismatch</strong><span>The synchronized Spread and Moneyline imply materially different market positions.</span></div>
   <div class="red-fox-tooltip signal-chip-tooltip" id="signal-chip-tooltip" role="tooltip" hidden><strong id="signal-chip-tooltip-title"></strong><span id="signal-chip-tooltip-body"></span></div>
 
   <!-- PATTERN LEGEND MODAL -->
@@ -2367,10 +2371,16 @@ function redFoxFavoriteGuideSection(){
     '<ul><li><strong>Low-support Contrarian</strong> — the less-supported side receives meaningful movement in its favor.</li><li><strong>Low-support Freeze / Resistance</strong> — the less-supported side is protected while substantial opposing pressure fails to produce the expected favorable response.</li><li><strong>Moderate-support Follow</strong> — a more balanced side receives clean, meaningful movement in the same direction.</li></ul>'+
     '<p>Current Favorite eligibility:</p>'+
     '<ul><li><strong>NFL / CFB / NBA / NCAAB Spread:</strong> current spread magnitude from <strong>1 to 8 points</strong></li><li><strong>NFL / CFB / NBA / NCAAB Moneyline:</strong> corresponding spread magnitude <strong>4 points or less</strong> and current Moneyline from <strong>-165 to +125</strong></li><li><strong>MLB / NHL / UFC Moneyline:</strong> current Moneyline from <strong>-165 to +125</strong></li><li><strong>Low-support paths:</strong> normally <strong>45% or less of Bets and Money</strong></li><li><strong>Moderate-support Follow:</strong> <strong>46% to 60% of Bets and Money</strong></li><li><strong>Totals are not Favorite-eligible in the current version</strong></li></ul>'+
-    '<p>Favorite status also requires current, reliable market data and can be withheld when a meaningful reversal, market conflict, stale data, or another reliability issue materially weakens the setup.</p>'+
+    '<p>Favorite status also requires current, reliable market data and can be withheld when a meaningful reversal, confirmed Cross-Market Mismatch, stale data, or another reliability issue materially weakens the setup.</p>'+
     '<p><strong>Whipsaw does not automatically disqualify a Favorite.</strong> A market may remain eligible when a partial retrace still leaves the qualifying structure intact.</p>'+
     '<p>Red Fox Favorite is <strong>binary</strong>: a market either qualifies or it does not. It is separate from <strong>Market Rank</strong>. Market Rank measures the relative strength or significance of the selected market across the board, while Red Fox Favorite identifies the subset of markets that also match Red Fox’s preferred wager criteria.</p>'+
     '</div></div>';
+}
+function marketIntegrityGuideSection(){
+  return '<div class="signal-guide-section market-integrity-guide"><h3>Market Integrity</h3>'+
+    signalGuideItem('Cross-Market Mismatch','A market-level integrity flag indicating that synchronized Spread and Moneyline pricing materially disagree about which team is favored. It is not a directional signal and does not change the underlying Market Read or Market Rank.')+
+    '<p>The flag is only assigned when the disagreement is meaningful, synchronized, and persistent. Missing confirmation, temporary disagreement, near-pick’em pricing, or markets that became available at different times do not qualify on their own.</p>'+
+    '<p>A confirmed Cross-Market Mismatch can prevent a market from receiving the Red Fox Favorite designation until the conflicting market states resolve.</p></div>';
 }
 function openSignalGuide(selected){
   hideSignalTooltip();
@@ -2388,6 +2398,7 @@ function openSignalGuide(selected){
     title.textContent='Market Guide';
     body.innerHTML='<p class="signal-guide-intro">Use this guide to understand Red Fox market reads, movement, and context. These labels describe market behavior and evidence—not picks or wager recommendations. Tap any signal chip on the board for its definition.</p>'+
       redFoxFavoriteGuideSection()+
+      marketIntegrityGuideSection()+
       MARKET_GUIDE_SECTIONS.map(function(section){const note=section[0]==='Directional Reads'?'<p class="signal-guide-section-note">These are primary market-read classifications. Freeze and Watch can remain descriptive without producing an actionable directional lean.</p>':'';return '<div class="signal-guide-section"><h3>'+escHtml(section[0])+'</h3>'+note+section[1].map(function(label){return signalGuideItem(label,signalMetaFor(label).tip);}).join('')+'</div>';}).join('')+
       '<div class="signal-guide-section"><h3>Market Movement</h3>'+MARKET_GUIDE_MOVEMENT.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'<p class="signal-guide-note">A blank movement indicator beneath Current does not necessarily mean the market never moved. It means the comparable Open and Current values are effectively unchanged or unavailable. Open the drilldown’s Market Trajectory and Market Journey to review the full intraday path, including reversals.</p></div>'+
       '<div class="signal-guide-section"><h3>Board Fields</h3>'+BOARD_FIELD_META.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'</div>';
@@ -2476,8 +2487,9 @@ function gameLanes(r){
   const away=parts[0]||game||'—', home=parts[1]||'';
   const marker=/vs/i.test(separator)?'vs':'@';
   const favorite=isRedFoxFavorite(r);
-  const header=favorite?'<div class="game-favorite-header"><span class="game-sport">'+spChip(r.sport)+'</span>'+favoriteBadge()+'</div>':'';
-  const sport=favorite?'':'<span class="game-sport">'+spChip(r.sport)+'</span>';
+  const integrity=hasCrossMarketMismatch(r), hasHeader=favorite||integrity;
+  const header=hasHeader?'<div class="game-favorite-header'+(integrity?' has-integrity':'')+'"><span class="game-sport">'+spChip(r.sport)+'</span>'+(favorite?favoriteBadge():'')+(integrity?crossMarketMismatchBadge():'')+'</div>':'';
+  const sport=hasHeader?'':'<span class="game-sport">'+spChip(r.sport)+'</span>';
   return '<div class="two-side-cell two-side-game'+(favorite?' is-favorite':'')+'">'
     +'<span class="game-name" style="display:none">'+escHtml(game)+'</span>'
     +header
@@ -2909,6 +2921,10 @@ function updateLiveRecentBadges(count){
   for(const id of ['b-live','rail-live-count']){const badge=document.getElementById(id);if(badge)badge.textContent=count;}
 }
 function isRedFoxFavorite(row){ return String(row?.red_fox_favorite||'').trim().toLowerCase()==='true'; }
+function hasCrossMarketMismatch(row){
+  const market=String(row?.market_display||'').trim().toUpperCase();
+  return (market==='SPREAD'||market==='MONEYLINE')&&String(row?.cross_market_mismatch||'').trim().toLowerCase()==='true';
+}
 function positionRedFoxTooltip(tooltip,anchor){
   if(!tooltip||tooltip.hidden||!anchor)return;
   const rect=anchor.getBoundingClientRect(), margin=12, gap=6;
@@ -2931,6 +2947,7 @@ function showSignalTooltip(anchor){
   const copy=anchor.dataset.tooltipBody||anchor.getAttribute('title')||signalMetaFor(label).tip;
   if(!copy)return;
   hideFavoriteTooltip();
+  hideIntegrityTooltip();
   if(anchor.hasAttribute('title')){
     anchor.dataset.nativeTooltipTitle=anchor.getAttribute('title');
     anchor.removeAttribute('title');
@@ -2970,6 +2987,7 @@ function positionFavoriteTooltip(anchor){
 function showFavoriteTooltip(anchor){
   const tooltip=document.getElementById('favorite-badge-tooltip'); if(!tooltip||!anchor)return;
   hideSignalTooltip();
+  hideIntegrityTooltip();
   favoriteTooltipAnchor=anchor; tooltip.hidden=false; positionFavoriteTooltip(anchor);
 }
 function hideFavoriteTooltip(){
@@ -2980,11 +2998,29 @@ function favoriteBadgeKeydown(event,anchor){
   if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();showFavoriteTooltip(anchor);}
   if(event.key==='Escape'){event.preventDefault();hideFavoriteTooltip();anchor.blur();}
 }
-document.addEventListener('click',event=>{if(!event.target.closest('.red-fox-favorite-badge'))hideFavoriteTooltip();});
-window.addEventListener('resize',()=>{hideFavoriteTooltip();hideSignalTooltip();});
-window.addEventListener('scroll',()=>{hideFavoriteTooltip();hideSignalTooltip();},true);
+let integrityTooltipAnchor=null;
+function showIntegrityTooltip(anchor){
+  const tooltip=document.getElementById('integrity-badge-tooltip'); if(!tooltip||!anchor)return;
+  hideSignalTooltip(); hideFavoriteTooltip();
+  integrityTooltipAnchor=anchor; tooltip.hidden=false; positionRedFoxTooltip(tooltip,anchor);
+}
+function hideIntegrityTooltip(){
+  const tooltip=document.getElementById('integrity-badge-tooltip'); if(tooltip)tooltip.hidden=true;
+  integrityTooltipAnchor=null;
+}
+function integrityBadgeKeydown(event,anchor){
+  if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();showIntegrityTooltip(anchor);}
+  if(event.key==='Escape'){event.preventDefault();hideIntegrityTooltip();anchor.blur();}
+}
+document.addEventListener('click',event=>{
+  if(!event.target.closest('.red-fox-favorite-badge'))hideFavoriteTooltip();
+  if(!event.target.closest('.cross-market-mismatch-badge'))hideIntegrityTooltip();
+});
+window.addEventListener('resize',()=>{hideFavoriteTooltip();hideSignalTooltip();hideIntegrityTooltip();});
+window.addEventListener('scroll',()=>{hideFavoriteTooltip();hideSignalTooltip();hideIntegrityTooltip();},true);
 function favoriteBadge(){ return '<img class="red-fox-favorite-badge" src="assets/red-fox-favorite.png" alt="Red Fox Favorite" role="button" tabindex="0" aria-describedby="favorite-badge-tooltip" onmouseenter="showFavoriteTooltip(this)" onmouseleave="if(document.activeElement!==this)hideFavoriteTooltip()" onfocus="showFavoriteTooltip(this)" onblur="hideFavoriteTooltip()" onclick="event.stopPropagation();showFavoriteTooltip(this)" onkeydown="favoriteBadgeKeydown(event,this)">'; }
-function favoritePlane(row){ return isRedFoxFavorite(row)?'<span class="favorite-plane-spacer" aria-hidden="true"></span>':''; }
+function crossMarketMismatchBadge(){ return '<button class="cross-market-mismatch-badge" type="button" aria-describedby="integrity-badge-tooltip" onmouseenter="showIntegrityTooltip(this)" onmouseleave="if(document.activeElement!==this)hideIntegrityTooltip()" onfocus="showIntegrityTooltip(this)" onblur="hideIntegrityTooltip()" onclick="event.stopPropagation();showIntegrityTooltip(this)" onkeydown="integrityBadgeKeydown(event,this)">Cross-Market Mismatch</button>'; }
+function favoritePlane(row){ return (isRedFoxFavorite(row)||hasCrossMarketMismatch(row))?'<span class="favorite-plane-spacer" aria-hidden="true"></span>':''; }
 async function refreshLiveRecentCount(){
   if(!_liveRecentLoaded){
     const rows=await loadCSV(LIVE_RECENT_URL);
