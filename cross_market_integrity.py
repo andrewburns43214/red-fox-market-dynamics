@@ -7,6 +7,7 @@ about which team is favored and that disagreement is persistent.
 
 from __future__ import annotations
 
+from collections import defaultdict, deque
 from dataclasses import dataclass
 import json
 import re
@@ -55,15 +56,22 @@ def apply_cross_market_integrity(board: pd.DataFrame, history: pd.DataFrame, as_
     if result.empty or history is None or history.empty:
         return result
 
-    prepared = _prepare_history(history)
-    if prepared.empty:
-        return result
     active_keys = {
         (str(row["sport"]).lower(), str(row["game_id"]))
         for _, row in result[["sport", "game_id"]].drop_duplicates().iterrows()
     }
+    # The snapshot archive is intentionally retained for historical evidence,
+    # but only games on the current board can receive this annotation.  Reduce
+    # the lifetime archive before copying it and parsing every timestamp.
+    history_keys = list(zip(
+        history["sport"].astype(str).str.lower(),
+        history["game_id"].astype(str),
+    )) if {"sport", "game_id"}.issubset(history.columns) else []
+    relevant_history = history.loc[pd.Series(history_keys, index=history.index).isin(active_keys)].copy()
+    prepared = _prepare_history(relevant_history)
+    if prepared.empty:
+        return result
     prepared["_integrity_key"] = list(zip(prepared["sport"].astype(str).str.lower(), prepared["game_id"].astype(str)))
-    prepared = prepared[prepared["_integrity_key"].isin(active_keys)].copy()
     history_groups = {
         (str(sport).lower(), str(game_id)): group
         for (sport, game_id), group in prepared.groupby(["sport", "game_id"], dropna=False, sort=False)
@@ -179,38 +187,67 @@ def _prepare_history(history: pd.DataFrame) -> pd.DataFrame:
 
 
 def _market_observations(history: pd.DataFrame, market: str) -> list[dict]:
-    rows = history[history["market_display"].eq(market)]
+    rows = history.loc[
+        history["market_display"].eq(market),
+        ["timestamp", "side", "current_line", "open_line"],
+    ]
     observations = []
     for timestamp, captured in rows.groupby("timestamp", sort=True):
         current, opening, displays = {}, {}, {}
         reliable = True
-        for _, row in captured.iterrows():
-            team = _team_identity(row.get("side"))
+        # Tuple iteration avoids allocating a pandas Series for every retained
+        # historical side (hundreds of thousands per production refresh).
+        for _, side, current_line, open_line in captured.itertuples(index=False, name=None):
+            team = _team_identity(side)
             if not team or team in current:
                 reliable = False
                 break
-            current_value = _spread_value(row.get("current_line"), row.get("side")) if market == "SPREAD" else _odds(row.get("current_line"))
-            open_value = _spread_value(row.get("open_line"), row.get("side")) if market == "SPREAD" else _odds(row.get("open_line"))
-            if current_value is None or open_value is None or _unreliable_text(row.get("current_line")) or _unreliable_text(row.get("open_line")):
+            current_value = _spread_value(current_line, side) if market == "SPREAD" else _odds(current_line)
+            open_value = _spread_value(open_line, side) if market == "SPREAD" else _odds(open_line)
+            if current_value is None or open_value is None or _unreliable_text(current_line) or _unreliable_text(open_line):
                 reliable = False
                 break
-            current[team], opening[team], displays[team] = current_value, open_value, _team_label(row.get("side"))
+            current[team], opening[team], displays[team] = current_value, open_value, _team_label(side)
         if reliable and len(current) == 2:
             observations.append({"time": timestamp, "current": current, "open": opening, "labels": displays})
     return observations
 
 
 def _pair_observations(spread: list[dict], moneyline: list[dict]) -> list[dict]:
+    """Pair each Spread capture with the nearest unused Moneyline capture.
+
+    Production captures normally share an exact timestamp.  The former code
+    scanned every remaining Moneyline observation for every Spread observation,
+    making a refresh quadratic as the retained timeline grew.  Index exact
+    timestamp/team matches for the normal path and retain the original nearest
+    match rule as a compatibility fallback for asynchronously captured data.
+    """
     pairs, unused = [], set(range(len(moneyline)))
+    exact = defaultdict(deque)
+    by_teams = defaultdict(list)
+    for index, observation in enumerate(moneyline):
+        teams = tuple(sorted(observation["current"]))
+        exact[(teams, observation["time"])].append(index)
+        by_teams[teams].append(index)
     for spread_observation in spread:
-        candidates = [
-            index for index in unused
-            if set(spread_observation["current"]) == set(moneyline[index]["current"])
-            and abs(spread_observation["time"] - moneyline[index]["time"]) <= pd.Timedelta(minutes=CONFIG.max_pair_minutes)
-        ]
-        if not candidates:
-            continue
-        index = min(candidates, key=lambda item: abs(spread_observation["time"] - moneyline[item]["time"]))
+        teams = tuple(sorted(spread_observation["current"]))
+        queue = exact.get((teams, spread_observation["time"]))
+        while queue and queue[0] not in unused:
+            queue.popleft()
+        if queue:
+            index = queue.popleft()
+        else:
+            candidates = [
+                candidate for candidate in by_teams.get(teams, ())
+                if candidate in unused
+                and abs(spread_observation["time"] - moneyline[candidate]["time"])
+                <= pd.Timedelta(minutes=CONFIG.max_pair_minutes)
+            ]
+            if not candidates:
+                continue
+            # Including the original position preserves the old first-index
+            # tie break when captures are equally distant.
+            index = min(candidates, key=lambda item: (abs(spread_observation["time"] - moneyline[item]["time"]), item))
         unused.remove(index)
         ml_observation = moneyline[index]
         pairs.append({

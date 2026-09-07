@@ -233,6 +233,25 @@ def market_for(row):
     return infer_market_type(row.get("side", ""), row.get("current_line", ""))
 
 
+def markets_for(frame):
+    """Vectorized equivalent of ``market_for`` for the lifetime archive."""
+    if frame is None or frame.empty:
+        return pd.Series(dtype=str, index=getattr(frame, "index", None))
+    side = frame.get("side", pd.Series("", index=frame.index)).fillna("").astype(str)
+    line = frame.get("current_line", pd.Series("", index=frame.index)).fillna("").astype(str)
+    normalized_side = side.str.strip().str.lower()
+    result = pd.Series("", index=frame.index, dtype=str)
+    total = normalized_side.str.startswith(("over", "under"))
+    result.loc[total] = "TOTAL"
+    spread = ~total & side.str.contains(r"[+-]\d+(?:\.\d+)?\b", regex=True, na=False)
+    result.loc[spread] = "SPREAD"
+    price = line.str.strip().str.replace("?", "-", regex=False).str.extract(r"@\s*([+-]\d{3,7})\s*$", expand=False)
+    price_number = pd.to_numeric(price, errors="coerce").abs()
+    moneyline = ~total & ~spread & price_number.between(100, 1_000_000, inclusive="both")
+    result.loc[moneyline] = "MONEYLINE"
+    return result
+
+
 def latest_synchronized_market_rows(active):
     """Return only the latest complete, same-timestamp two-side market states.
 
@@ -319,15 +338,11 @@ def _refresh(coverage):
     snapshots = pd.read_csv(snapshot_path, dtype=str, keep_default_na=False) if snapshot_path.exists() else pd.DataFrame(
         columns=["sport", "game_id", "game", "side", "current_line", "open_line", "bets_pct", "money_pct", "dk_start_iso", "timestamp"])
 
-    snapshots["market_display"] = snapshots.apply(market_for, axis=1) if len(snapshots) else pd.Series(dtype=str)
+    snapshots["market_display"] = markets_for(snapshots)
     coverage.seed(snapshots)
     supported = snapshots[snapshots["market_display"].isin(["MONEYLINE", "SPREAD", "TOTAL"])].copy()
     coverage.stage(snapshots, supported, "NORMALIZATION_FAILED")
     snapshots = coverage.validated(supported)
-    snapshots["side_key"] = snapshots.apply(
-        lambda row: normalize_side_key(row.get("sport", ""), row["market_display"], row.get("side", "")), axis=1
-    ) if len(snapshots) else pd.Series(dtype=str)
-    history = snapshots.copy()
     snapshots["timestamp"] = pd.to_datetime(snapshots["timestamp"], utc=True, errors="coerce")
     coverage.stage(snapshots, snapshots[snapshots["timestamp"].notna()], "CAPTURE_TIMESTAMP_INVALID")
     newest_snapshot = snapshots["timestamp"].max()
@@ -335,12 +350,23 @@ def _refresh(coverage):
         newest_snapshot = coverage.now
     active = snapshots[snapshots["timestamp"] >= newest_snapshot - pd.Timedelta(hours=2)].copy()
     coverage.stage(snapshots, active, "STALE_CAPTURE")
+    active["side_key"] = active.apply(
+        lambda row: normalize_side_key(row.get("sport", ""), row["market_display"], row.get("side", "")), axis=1
+    ) if len(active) else pd.Series(dtype=str)
     dashboard = latest_synchronized_market_rows(active)
     coverage.stage(active, dashboard, "AWAITING_COMPLETE_PAIR")
     coverage.pairs(dashboard)
     complete = complete_public_market_rows(dashboard)
     coverage.stage(dashboard, complete, "INCOMPLETE_MARKET_DATA")
     dashboard = complete
+    # Only currently represented markets need their retained lifetime path.
+    # Filtering first avoids normalizing every side in unrelated old games on
+    # each live publish while preserving the full opener/timeline for the board.
+    history_keys = dashboard[["sport", "game_id", "market_display"]].drop_duplicates()
+    history = snapshots.merge(history_keys, on=["sport", "game_id", "market_display"], how="inner")
+    history["side_key"] = history.apply(
+        lambda row: normalize_side_key(row.get("sport", ""), row["market_display"], row.get("side", "")), axis=1
+    ) if len(history) else pd.Series(dtype=str)
     complete_market_count = dashboard[["sport", "game_id", "market_display"]].drop_duplicates().shape[0]
     print(f"[ok] kept {complete_market_count} complete customer-inspectable same-snapshot markets")
     before_freshness = len(dashboard)

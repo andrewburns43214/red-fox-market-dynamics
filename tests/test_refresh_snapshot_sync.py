@@ -9,6 +9,8 @@ from refresh_anomaly_board import (
     filter_publication_eligible_markets,
     latest_synchronized_market_rows,
     write_board_freshness,
+    market_for,
+    markets_for,
 )
 
 
@@ -24,6 +26,19 @@ def test_snapshot_watchdog_is_bounded_and_runner_does_not_stamp_dk_wall_clock():
     assert 'SNAPSHOT_TIMEOUT_SECONDS="${REDFOX_SNAPSHOT_TIMEOUT_SECONDS:-120}"' in script
     assert 'timeout "$SNAPSHOT_TIMEOUT_SECONDS" "$PY" main.py snapshot' in script
     assert "f['dk_ts'] = datetime.now" not in script
+
+
+def test_vectorized_market_inference_matches_row_contract():
+    rows = pd.DataFrame([
+        {"side": "Over 47.5", "current_line": "Over 47.5 @ -110"},
+        {"side": "Under 47.5", "current_line": "Under 47.5 @ -110"},
+        {"side": "Team A -3.5", "current_line": "Team A -3.5 @ -105"},
+        {"side": "Team B", "current_line": "Team B @ +125"},
+        {"side": "Team C", "current_line": "Team C @ ?140"},
+        {"side": "Draw", "current_line": "Unavailable"},
+    ])
+    expected = rows.apply(market_for, axis=1)
+    pd.testing.assert_series_equal(markets_for(rows), expected, check_names=False)
 
 
 def test_stale_paired_market_is_omitted_instead_of_republished_as_current():
