@@ -2855,10 +2855,8 @@ function liveMarketSections(rows){
       if(!existing||marketSideIdentity(row,row)===identity) sides.set(identity,{side,index,row});
     });
   });
-  const order=['MONEYLINE','TOTAL','SPREAD'];
   return [...groups.entries()].sort(function(a,b){
-    const ai=order.indexOf(a[0]), bi=order.indexOf(b[0]);
-    return (ai<0?order.length:ai)-(bi<0?order.length:bi);
+    return marketPresentationRank(a[0])-marketPresentationRank(b[0]);
   }).map(function(entry){return {market:entry[0],sides:[...entry[1].values()]};});
 }
 
@@ -2916,6 +2914,13 @@ let _boardHasRendered=false;
 const boardGameSelections=new Map();
 function boardGameKey(row){ return String(row.game_id||row.game||''); }
 function boardRank(row){ const rank=Number(row?.board_rank); return Number.isFinite(rank)?rank:999999; }
+function marketPresentationRank(value){
+  const order={SPREAD:0,MONEYLINE:1,TOTAL:2};
+  return order[String(value||'').toUpperCase()]??99;
+}
+function marketsInPresentationOrder(rows){
+  return [...rows].sort((a,b)=>marketPresentationRank(a.market_display)-marketPresentationRank(b.market_display));
+}
 const BOARD_SORTS={FAVORITES:'Red Fox Favorites',RANK:'Market Read Rank',DATE:'Date & Time',MARKET:'Market',SAVED:'Saved First'};
 let boardSortMode='FAVORITES';
 function boardSortLabel(){ return BOARD_SORTS[boardSortMode]||BOARD_SORTS.RANK; }
@@ -2965,7 +2970,7 @@ function sortBoardGames(games){
 }
 function gameMarketSelector(group,selected){
   const id=boardGameKey(selected), selectedMarket=String(selected.market_display||'').toUpperCase();
-  return '<div class="game-market-selector" role="group" aria-label="Available markets for '+escHtml(selected.game||'game')+'">'+group.map(row=>{
+  return '<div class="game-market-selector" role="group" aria-label="Available markets for '+escHtml(selected.game||'game')+'">'+marketsInPresentationOrder(group).map(row=>{
     const market=String(row.market_display||'').toUpperCase(), active=market===selectedMarket;
     const marketArg=JSON.stringify(market).replace(/"/g,'&quot;');
     return '<button type="button" class="'+(active?'on':'')+'" aria-pressed="'+active+'" onclick="event.stopPropagation();selectBoardGameMarket('+JSON.stringify(id).replace(/"/g,'&quot;')+','+marketArg+')">'+escHtml(row.market_display||'Market')+'</button>';
@@ -4709,6 +4714,7 @@ async function openGameDetail(r,selectedSideLabel){
   const frozenPregame=(allLiveRecent||[]).includes(r);
   const relatedRows=frozenPregame?(allLiveRecent||[]):[...(window._boardRows||[]),...(allLiveRecent||[])];
   relatedRows.filter(row=>(row.game_id||row.game||'')===gid).forEach(row=>{ const key=String(row.market_display||'').toUpperCase(); if(key&&!seen.has(key)){seen.add(key);markets.push(row);} });
+  markets.sort((a,b)=>marketPresentationRank(a.market_display)-marketPresentationRank(b.market_display));
   window._gameDetailRows=markets;
   const sides=marketSides(r);
   const selectedIdentity=marketSideIdentity({flagged_side:selectedSideLabel||r.flagged_side||''},r);

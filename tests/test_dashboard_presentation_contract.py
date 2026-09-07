@@ -185,6 +185,15 @@ def test_visible_rank_is_selected_market_rank():
     assert '<span class="rank-number">${i+1}</span>' not in BOARD
 
 
+def test_market_chip_presentation_order_is_fixed_without_changing_selection_or_board_sorting():
+    assert "const order={SPREAD:0,MONEYLINE:1,TOTAL:2};" in BOARD
+    assert "marketsInPresentationOrder(group).map(row=>" in BOARD
+    assert "markets.sort((a,b)=>marketPresentationRank(a.market_display)-marketPresentationRank(b.market_display));" in BOARD
+    assert "return marketPresentationRank(a[0])-marketPresentationRank(b[0]);" in BOARD
+    assert "const market=String(row.market_display||'').toUpperCase(), active=market===selectedMarket;" in BOARD
+    assert "const order={MONEYLINE:0,SPREAD:1,TOTAL:2};" in BOARD
+
+
 def test_live_recent_responsive_polish_reuses_board_controls_without_logic_changes():
     assert 'class="live-recent-inner"' in BOARD
     assert ".live-recent-inner { width:100%; max-width:1440px; margin:0; }" in BOARD

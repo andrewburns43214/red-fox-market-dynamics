@@ -62,7 +62,7 @@ def test_live_cards_group_trusted_frozen_sides_by_market_and_open_the_clicked_si
     assert "function liveMarketSections(rows)" in BOARD
     assert "function frozenMarketSides(row,events)" in BOARD
     assert "The frozen event" in BOARD
-    assert "const order=['MONEYLINE','TOTAL','SPREAD'];" in BOARD
+    assert "return marketPresentationRank(a[0])-marketPresentationRank(b[0]);" in BOARD
     assert "marketSides(row).forEach(function(side)" in BOARD
     assert 'class="live-market-section"' in BOARD
     assert 'class="live-market-side-row"' in BOARD
