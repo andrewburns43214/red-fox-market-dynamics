@@ -1,12 +1,14 @@
-"""Annotate confirmed Spread/Moneyline read disagreement as context only.
+"""Annotate trustworthy Spread/Moneyline support disagreement as context only.
 
 Cross-Market Split is deliberately separate from the stricter pricing-integrity
-evaluation. It consumes the resolved directional lean already produced by the
-Market Read engine and never changes reads, ranks, scoring, or Favorite state.
+evaluation. It consumes the same resolved read anchor that drives the board's
+green supported-side treatment and never changes reads, ranks, scoring, or
+Favorite state.
 """
 
 from __future__ import annotations
 
+import json
 import re
 
 import pandas as pd
@@ -22,11 +24,11 @@ CROSS_MARKET_SPLIT_COLUMNS = [
 
 
 def apply_cross_market_split(board: pd.DataFrame) -> pd.DataFrame:
-    """Persist confirmed read disagreement on Spread and Moneyline rows.
+    """Persist valid supported-side disagreement on Spread/Moneyline rows.
 
-    ``directional_lean_side`` is the engine's resolved directional output. A
-    read anchor without a directional lean (including Watch or descriptive
-    resistance context) is intentionally not enough to create this state.
+    ``read_anchor_side`` is the resolved state used for the board's green row.
+    It may be valid even when the primary directional classification is Watch.
+    Both anchors must map unambiguously to clean, reliable market sides.
     Confirmed Cross-Market Mismatch always suppresses Split.
     """
     if board is None:
@@ -50,8 +52,8 @@ def apply_cross_market_split(board: pd.DataFrame) -> pd.DataFrame:
         if pair.get("cross_market_mismatch", pd.Series("false", index=pair.index)).map(_is_true).any():
             continue
 
-        spread_side = _text(spread_rows.iloc[0].get("directional_lean_side", ""))
-        moneyline_side = _text(moneyline_rows.iloc[0].get("directional_lean_side", ""))
+        spread_side = _resolved_supported_side(spread_rows.iloc[0])
+        moneyline_side = _resolved_supported_side(moneyline_rows.iloc[0])
         spread_identity = _team_identity(spread_side)
         moneyline_identity = _team_identity(moneyline_side)
         if not spread_identity or not moneyline_identity or spread_identity == moneyline_identity:
@@ -72,6 +74,48 @@ def apply_cross_market_split(board: pd.DataFrame) -> pd.DataFrame:
         for column, value in values.items():
             result.loc[pair_mask, column] = value
     return result
+
+
+def _resolved_supported_side(row: pd.Series) -> str:
+    """Return the trustworthy board-highlight anchor, or an empty string.
+
+    Requiring a unique match against both clean market sides prevents Split
+    from inferring support from public percentages, chip presence, or a stale
+    or ambiguous label.
+    """
+    anchor = _text(row.get("read_anchor_side", ""))
+    anchor_identity = _team_identity(anchor)
+    if not anchor_identity:
+        return ""
+
+    raw_sides = row.get("market_sides", "")
+    try:
+        sides = json.loads(raw_sides) if isinstance(raw_sides, str) else raw_sides
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return ""
+    if not isinstance(sides, list) or len(sides) != 2:
+        return ""
+
+    identities: list[str] = []
+    labels: dict[str, str] = {}
+    unreliable_context = {"market lag", "feed risk", "split risk", "split cap"}
+    for side in sides:
+        if not isinstance(side, dict) or _text(side.get("data_badge", "")).lower() != "clean":
+            return ""
+        context = side.get("context_chips", "")
+        chips = context if isinstance(context, list) else _text(context).split("|")
+        if any(_text(chip).lower() in unreliable_context for chip in chips):
+            return ""
+        label = _team_label(side.get("flagged_side", ""))
+        identity = _team_identity(label)
+        if not identity:
+            return ""
+        identities.append(identity)
+        labels[identity] = label
+
+    if len(set(identities)) != 2 or identities.count(anchor_identity) != 1:
+        return ""
+    return labels[anchor_identity]
 
 
 def _is_true(value: object) -> bool:
