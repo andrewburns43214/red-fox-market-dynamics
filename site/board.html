@@ -1153,8 +1153,8 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .game-favorite-header{display:flex;align-items:center;gap:5px;height:32px;min-width:0;overflow:hidden}
 .game-favorite-header .game-sport{position:static;flex:0 0 auto}
 .red-fox-favorite-badge{display:block;flex:0 0 auto;width:108px;height:32px;object-fit:contain;object-position:center;white-space:nowrap}
-.favorite-badge-tooltip{position:fixed;z-index:1300;width:min(270px,calc(100vw - 24px));padding:8px 10px;border:1px solid #d8dede;border-radius:8px;background:#11181c;color:#f8fafa;box-shadow:0 8px 24px rgba(5,7,8,.22);font:500 10px/1.4 var(--sans);pointer-events:none}
-.favorite-badge-tooltip[hidden]{display:none}.favorite-badge-tooltip strong{display:block;margin-bottom:2px;font-size:11px;color:#fff}.favorite-badge-tooltip span{display:block;color:#dce2e4}
+.red-fox-tooltip{position:fixed;z-index:1300;width:min(270px,calc(100vw - 24px));padding:8px 10px;border:1px solid #d8dede;border-radius:8px;background:#11181c;color:#f8fafa;box-shadow:0 8px 24px rgba(5,7,8,.22);font:500 10px/1.4 var(--sans);pointer-events:none}
+.red-fox-tooltip[hidden]{display:none}.red-fox-tooltip strong{display:block;margin-bottom:2px;font-size:11px;color:#fff}.red-fox-tooltip span{display:block;color:#dce2e4}
 .favorite-plane-spacer{display:block;height:32px;pointer-events:none}
 .favorite-row>td:not(.td-rank){vertical-align:top}
 .th-game { padding-left:74px!important; }
@@ -1927,7 +1927,8 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
       <div class="signal-guide-body" id="signal-guide-body"></div>
     </section>
   </div>
-  <div class="favorite-badge-tooltip" id="favorite-badge-tooltip" role="tooltip" hidden><strong>Red Fox Favorite</strong><span>Matches Red Fox’s preferred wager criteria based on market support, movement, price/number, and data quality.</span></div>
+  <div class="red-fox-tooltip favorite-badge-tooltip" id="favorite-badge-tooltip" role="tooltip" hidden><strong>Red Fox Favorite</strong><span>Matches Red Fox’s preferred wager criteria based on market support, movement, price/number, and data quality.</span></div>
+  <div class="red-fox-tooltip signal-chip-tooltip" id="signal-chip-tooltip" role="tooltip" hidden><strong id="signal-chip-tooltip-title"></strong><span id="signal-chip-tooltip-body"></span></div>
 
   <!-- PATTERN LEGEND MODAL -->
   <div class="drill-overlay" id="pat-legend-overlay" onclick="if(event.target===this)closePatLegend()">
@@ -2349,6 +2350,9 @@ function applySignalTooltips(){
     const label=button.dataset.signal||button.textContent.trim();
     const meta=signalMetaFor(label);
     button.title=meta.tip;
+    button.dataset.signalTooltip='true';
+    button.dataset.tooltipTitle=meta.label||label;
+    button.dataset.tooltipBody=meta.tip;
     button.setAttribute('aria-label',(meta.label||label)+': '+meta.tip);
   });
 }
@@ -2369,6 +2373,7 @@ function redFoxFavoriteGuideSection(){
     '</div></div>';
 }
 function openSignalGuide(selected){
+  hideSignalTooltip();
   const overlay=document.getElementById('signal-guide-overlay');
   const title=document.getElementById('signal-guide-title');
   const body=document.getElementById('signal-guide-body');
@@ -2396,14 +2401,14 @@ function anomalyBadge(text){
   const meta=signalMetaFor(t);
   const signalClass='signal-'+String(meta.label||t).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
   const clickArg=JSON.stringify(t).replace(/"/g,'&quot;');
-  return `<button class="mr signal-chip ${meta.cls||'mr-neutral'} ${signalClass}" type="button" onclick="event.stopPropagation();openSignalGuide(${clickArg})" aria-label="Explain ${escHtml(meta.label||t)}" title="${escHtml(meta.tip)}" style="margin-right:4px">${escHtml(meta.label||t)}</button>`;
+  return `<button class="mr signal-chip ${meta.cls||'mr-neutral'} ${signalClass}" type="button" data-signal-tooltip="true" data-tooltip-title="${escHtml(meta.label||t)}" data-tooltip-body="${escHtml(meta.tip)}" onclick="event.stopPropagation();openSignalGuide(${clickArg})" aria-label="Explain ${escHtml(meta.label||t)}" title="${escHtml(meta.tip)}" style="margin-right:4px">${escHtml(meta.label||t)}</button>`;
 }
 function dataBadge(v){
   const t=String(v||'').trim().toUpperCase();
   const label=t==='CLEAN'?'CLEAN':t==='THIN'?'THIN':t==='SPLIT RISK'?'SPLIT RISK':'FEED RISK';
   const cls=t==='CLEAN'?'tMID':t==='THIN'?'tLATE':'tLIVE';
   const meta=signalMetaFor(label);
-  return `<button class="tim ${cls} signal-chip" type="button" onclick="event.stopPropagation();openSignalGuide('${label}')" aria-label="Explain ${escHtml(label)}" title="${escHtml(meta.tip)}">${label}</button>`;
+  return `<button class="tim ${cls} signal-chip" type="button" data-signal-tooltip="true" data-tooltip-title="${escHtml(label)}" data-tooltip-body="${escHtml(meta.tip)}" onclick="event.stopPropagation();openSignalGuide('${label}')" aria-label="Explain ${escHtml(label)}" title="${escHtml(meta.tip)}">${label}</button>`;
 }
 function hasSplitRead(r){ return String(r?.data_badge||'').trim().toUpperCase()!=='SPLIT RISK'; }
 function splitCell(r){
@@ -2904,17 +2909,67 @@ function updateLiveRecentBadges(count){
   for(const id of ['b-live','rail-live-count']){const badge=document.getElementById(id);if(badge)badge.textContent=count;}
 }
 function isRedFoxFavorite(row){ return String(row?.red_fox_favorite||'').trim().toLowerCase()==='true'; }
-let favoriteTooltipAnchor=null;
-function positionFavoriteTooltip(anchor){
-  const tooltip=document.getElementById('favorite-badge-tooltip'); if(!tooltip||tooltip.hidden||!anchor)return;
+function positionRedFoxTooltip(tooltip,anchor){
+  if(!tooltip||tooltip.hidden||!anchor)return;
   const rect=anchor.getBoundingClientRect(), margin=12, gap=6;
   const left=Math.max(margin,Math.min(rect.left,window.innerWidth-tooltip.offsetWidth-margin));
   let top=rect.bottom+gap;
   if(top+tooltip.offsetHeight>window.innerHeight-margin) top=Math.max(margin,rect.top-tooltip.offsetHeight-gap);
   tooltip.style.left=left+'px'; tooltip.style.top=top+'px';
 }
+const SIGNAL_TOOLTIP_TARGET='[data-signal-tooltip="true"]';
+const DESKTOP_TOOLTIP_MEDIA='(hover: hover) and (pointer: fine)';
+let signalTooltipAnchor=null;
+function desktopSignalTooltipsEnabled(){ return window.matchMedia(DESKTOP_TOOLTIP_MEDIA).matches; }
+function showSignalTooltip(anchor){
+  if(!anchor||!desktopSignalTooltipsEnabled())return;
+  const tooltip=document.getElementById('signal-chip-tooltip');
+  const title=document.getElementById('signal-chip-tooltip-title');
+  const body=document.getElementById('signal-chip-tooltip-body');
+  if(!tooltip||!title||!body)return;
+  const label=anchor.dataset.tooltipTitle||anchor.textContent.trim();
+  const copy=anchor.dataset.tooltipBody||anchor.getAttribute('title')||signalMetaFor(label).tip;
+  if(!copy)return;
+  hideFavoriteTooltip();
+  if(anchor.hasAttribute('title')){
+    anchor.dataset.nativeTooltipTitle=anchor.getAttribute('title');
+    anchor.removeAttribute('title');
+  }
+  signalTooltipAnchor=anchor;
+  title.textContent=label;
+  body.textContent=copy;
+  tooltip.hidden=false;
+  positionRedFoxTooltip(tooltip,anchor);
+}
+function hideSignalTooltip(){
+  const tooltip=document.getElementById('signal-chip-tooltip');
+  if(tooltip)tooltip.hidden=true;
+  if(signalTooltipAnchor&&Object.prototype.hasOwnProperty.call(signalTooltipAnchor.dataset,'nativeTooltipTitle')){
+    signalTooltipAnchor.setAttribute('title',signalTooltipAnchor.dataset.nativeTooltipTitle);
+    delete signalTooltipAnchor.dataset.nativeTooltipTitle;
+  }
+  signalTooltipAnchor=null;
+}
+function signalTooltipTarget(event){
+  return event.target&&event.target.closest?event.target.closest(SIGNAL_TOOLTIP_TARGET):null;
+}
+document.addEventListener('mouseover',event=>{
+  const target=signalTooltipTarget(event);
+  if(target&&(!event.relatedTarget||!target.contains(event.relatedTarget)))showSignalTooltip(target);
+});
+document.addEventListener('mouseout',event=>{
+  const target=signalTooltipTarget(event);
+  if(target&&(!event.relatedTarget||!target.contains(event.relatedTarget)))hideSignalTooltip();
+});
+document.addEventListener('focusin',event=>{const target=signalTooltipTarget(event);if(target)showSignalTooltip(target);});
+document.addEventListener('focusout',event=>{const target=signalTooltipTarget(event);if(target)hideSignalTooltip();});
+let favoriteTooltipAnchor=null;
+function positionFavoriteTooltip(anchor){
+  positionRedFoxTooltip(document.getElementById('favorite-badge-tooltip'),anchor);
+}
 function showFavoriteTooltip(anchor){
   const tooltip=document.getElementById('favorite-badge-tooltip'); if(!tooltip||!anchor)return;
+  hideSignalTooltip();
   favoriteTooltipAnchor=anchor; tooltip.hidden=false; positionFavoriteTooltip(anchor);
 }
 function hideFavoriteTooltip(){
@@ -2926,8 +2981,8 @@ function favoriteBadgeKeydown(event,anchor){
   if(event.key==='Escape'){event.preventDefault();hideFavoriteTooltip();anchor.blur();}
 }
 document.addEventListener('click',event=>{if(!event.target.closest('.red-fox-favorite-badge'))hideFavoriteTooltip();});
-window.addEventListener('resize',hideFavoriteTooltip);
-window.addEventListener('scroll',hideFavoriteTooltip,true);
+window.addEventListener('resize',()=>{hideFavoriteTooltip();hideSignalTooltip();});
+window.addEventListener('scroll',()=>{hideFavoriteTooltip();hideSignalTooltip();},true);
 function favoriteBadge(){ return '<img class="red-fox-favorite-badge" src="assets/red-fox-favorite.png" alt="Red Fox Favorite" role="button" tabindex="0" aria-describedby="favorite-badge-tooltip" onmouseenter="showFavoriteTooltip(this)" onmouseleave="if(document.activeElement!==this)hideFavoriteTooltip()" onfocus="showFavoriteTooltip(this)" onblur="hideFavoriteTooltip()" onclick="event.stopPropagation();showFavoriteTooltip(this)" onkeydown="favoriteBadgeKeydown(event,this)">'; }
 function favoritePlane(row){ return isRedFoxFavorite(row)?'<span class="favorite-plane-spacer" aria-hidden="true"></span>':''; }
 async function refreshLiveRecentCount(){

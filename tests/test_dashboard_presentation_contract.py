@@ -196,6 +196,21 @@ def test_red_fox_favorite_guide_section_and_tooltip_are_isolated_copy_additions(
     assert 'onclick="event.stopPropagation();showFavoriteTooltip(this)"' in BOARD
 
 
+def test_market_read_tooltips_reuse_favorite_visuals_without_changing_chip_actions():
+    shared_style = ".red-fox-tooltip{position:fixed;z-index:1300;width:min(270px,calc(100vw - 24px));padding:8px 10px;border:1px solid #d8dede;border-radius:8px;background:#11181c;color:#f8fafa;box-shadow:0 8px 24px rgba(5,7,8,.22);font:500 10px/1.4 var(--sans);pointer-events:none}"
+    assert shared_style in BOARD
+    assert 'class="red-fox-tooltip favorite-badge-tooltip"' in BOARD
+    assert 'class="red-fox-tooltip signal-chip-tooltip"' in BOARD
+    assert 'data-signal-tooltip="true" data-tooltip-title="${escHtml(meta.label||t)}" data-tooltip-body="${escHtml(meta.tip)}"' in BOARD
+    assert 'data-signal-tooltip="true" data-tooltip-title="${escHtml(label)}" data-tooltip-body="${escHtml(meta.tip)}"' in BOARD
+    assert "button.dataset.tooltipBody=meta.tip;" in BOARD
+    assert "const DESKTOP_TOOLTIP_MEDIA='(hover: hover) and (pointer: fine)';" in BOARD
+    assert "document.addEventListener('mouseover'" in BOARD
+    assert "document.addEventListener('focusin'" in BOARD
+    assert "onclick=\"event.stopPropagation();openSignalGuide(${clickArg})\"" in BOARD
+    assert "function openSignalGuide(selected){\n  hideSignalTooltip();" in BOARD
+
+
 def test_visible_rank_is_selected_market_rank():
     assert 'Selected-market rank: ${boardRank(r)}' in BOARD
     assert '<span class="rank-number">${boardRank(r)}</span><span class="rank-scope">MKT</span>' in BOARD
