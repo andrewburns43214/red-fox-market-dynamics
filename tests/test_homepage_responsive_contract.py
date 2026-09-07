@@ -87,3 +87,52 @@ def test_mobile_screenshots_and_pricing_keep_intrinsic_widths():
     assert ".pricing-grid{grid-template-columns:minmax(0,1fr);gap:16px;width:100%;}" in source
     assert "grid-template-columns:repeat(3,minmax(0,1fr));" in source
     assert "object-fit:cover" not in source
+
+
+def test_homepage_favorite_copy_update_preserves_existing_structure_and_assets():
+    source = _source()
+    soup = BeautifulSoup(source, "html.parser")
+
+    assert soup.select_one(".hero-badge").get_text(strip=True) == (
+        "Bloomberg-style market intelligence for sports bettors"
+    )
+    assert soup.select_one(".hero h1").get_text(" ", strip=True) == (
+        "Make More Informed Wagering Decisions."
+    )
+    assert soup.select_one(".hero-sub").get_text(" ", strip=True) == (
+        "Red Fox continuously evaluates market positioning, line and price movement, pressure and resistance, "
+        "reversals, and timing to surface meaningful market behavior. Start with Red Fox Favorites, follow the "
+        "strongest Market Reads, and drill into the evidence behind every signal."
+    )
+    assert soup.select_one(".hero-positioning").get_text(" ", strip=True) == (
+        "No blind picks. Red Fox shows you what the market is doing, why it matters, and which setups meet its "
+        "most selective criteria."
+    )
+    feature_copy = [item.get_text(" ", strip=True) for item in soup.select(".feat-card p")]
+    assert feature_copy == [
+        "See where a line started, how price and splits changed along the way, and where the market stands now. "
+        "Replay the journey whenever you need more context.",
+        "Red Fox combines positioning, movement, pressure, resistance, reversals, and timing into a structured "
+        "Market Read with the supporting evidence behind it.",
+        "Quickly find the selective markets that meet Red Fox’s preferred wager criteria, then open the full "
+        "Market Read and evidence before making your decision.",
+    ]
+    assert [item.get_text(" ", strip=True) for item in soup.select(".not-grid .not-item")][:2] == [
+        "× Blind picks", "✓ Evidence-backed Favorites"
+    ]
+    assert soup.select_one(".journey-teaser h3").get_text(strip=True) == (
+        "See the evidence behind every Market Read."
+    )
+    assert [image.get("src") for image in soup.select(".preview-screenshot,.journey-screenshot")] == [
+        "home-board.png?v=20260904", "home-journey.png?v=20260904"
+    ]
+    assert [item.get_text(" ", strip=True) for item in soup.select(".price-card:nth-of-type(1) .price-features li")] == [
+        "Full board access", "Red Fox Favorites", "All active markets", "Market journey and timeline", "Real-time updates"
+    ]
+    assert [item.get_text(" ", strip=True) for item in soup.select(".price-card:nth-of-type(2) .price-features li")] == [
+        "Unlimited daily access", "Red Fox Favorites", "All markets and timeline history", "Live Market Read context", "Cancel anytime"
+    ]
+    assert [item.get_text(" ", strip=True) for item in soup.select(".price-card:nth-of-type(3) .price-features li")] == [
+        "Everything in Monthly Unlimited", "Red Fox Favorites all season", "Full season of market journeys", "Cancel anytime"
+    ]
+    assert "DraftKings" not in soup.get_text(" ", strip=True)
