@@ -48,11 +48,11 @@ def test_score_coverage_counts_canonical_states_and_failure_stages(tmp_path, mon
     assert "provider unavailable 1" in issues
 
 
-def test_live_recent_controls_and_sort_modes_use_separate_canonical_state():
+def test_live_recent_controls_and_sort_modes_use_frozen_canonical_state():
     assert 'id="live-sport-filters"' in BOARD
     assert 'id="live-status-filters"' in BOARD
     assert '<option value="STATUS_TIME">Status &amp; Time</option>' in BOARD
-    assert '<option value="GAME_TIME">Game Time</option>' in BOARD
+    assert '<option value="GAME_TIME">Game Time</option>' not in BOARD
     assert '<option value="RANK">Pregame Market Read Rank</option>' in BOARD
     assert '<option value="SAVED">Saved First</option>' in BOARD
     assert "function liveState(game){ return String(game.first.score_state" in BOARD
@@ -61,6 +61,24 @@ def test_live_recent_controls_and_sort_modes_use_separate_canonical_state():
     assert "if(liveRecentSort==='RANK') return a.bestRank-b.bestRank" in BOARD
     assert "if(liveRecentSort==='SAVED') return Number(b.saved)-Number(a.saved)" in BOARD
     assert "Math.min(...gameRows.map(boardRank))" in BOARD
+    assert "function frozenFavoriteRank(row)" in BOARD
+    assert "favorite_final_market_rank" in BOARD
+    assert "Math.min(...favorites.map(frozenFavoriteRank))" in BOARD
+
+
+def test_live_recent_cards_present_persisted_favorite_supported_and_saved_state():
+    assert "const favorites=gameRows.filter(isRedFoxFavorite);" in BOARD
+    assert "favoriteMarkets" in BOARD
+    assert 'class="live-game-badges"' in BOARD
+    assert 'title="Red Fox Favorite pregame market:' in BOARD
+    assert "const anchors=new Set(sides.map(item=>String(item.row.read_anchor_side||'').trim()" in BOARD
+    assert "anchors.size===1" in BOARD
+    assert "item.supported?' is-supported':''" in BOARD
+    assert ".live-market-side-row.is-supported { background:linear-gradient(90deg,rgba(21,134,106,.10)" in BOARD
+    assert 'class="live-save"' in BOARD
+    assert "window.toggleSavedLiveGame=function(gameKey,event)" in BOARD
+    assert "const favoriteRows=rows.filter(isRedFoxFavorite).sort" in BOARD
+    assert "[...(window._boardRows||[]),...(allLiveRecent||[])]" in BOARD
 
 
 def test_progressive_render_keeps_full_inventory_for_filtering_and_sorting():

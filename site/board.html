@@ -1310,15 +1310,25 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .live-recent-grid { width:100%; display:grid; grid-template-columns:repeat(auto-fit,minmax(285px,1fr)); gap:10px; align-content:start; }
 .live-game-card { padding:12px; border:1px solid var(--border); border-radius:10px; background:#fff; box-shadow:0 2px 8px rgba(22,53,61,.05); }
 .live-game-top { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
-.live-game-name { font-size:14px; font-weight:800; line-height:1.25; }
+.live-game-heading { min-width:0; }
+.live-game-badges { display:flex; align-items:center; gap:6px; min-height:24px; }
+.live-game-badges .spchip { flex:0 0 auto; }
+.live-game-badges .red-fox-favorite-badge { width:108px; height:24px; }
+.live-game-name { margin-top:6px; font-size:14px; font-weight:800; line-height:1.25; }
 .live-status { margin-top:5px; color:var(--text3); font:700 9px var(--mono); text-transform:uppercase; letter-spacing:.05em; }
+.live-game-score-actions { flex:0 0 auto; display:grid; justify-items:end; gap:3px; }
 .live-score { text-align:right; font:800 17px var(--mono); white-space:nowrap; }
+.live-save { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--red); font:400 22px/1 var(--sans); cursor:pointer; }
+.live-save:hover { background:var(--red-soft); }
+.live-save:focus-visible { outline:2px solid var(--red); outline-offset:2px; }
 .live-freeze { margin:12px 0 8px; padding-top:10px; border-top:1px solid var(--border); color:var(--red); font:800 9px var(--mono); text-transform:uppercase; letter-spacing:.06em; }
 .live-market-section { margin-top:8px; padding-top:8px; border-top:1px solid #eef2f3; }
 .live-market-section:first-of-type { margin-top:0; padding-top:0; border-top:0; }
 .live-market-type { margin-bottom:3px; color:var(--text3); font:800 9px var(--mono); }
 .live-market-side-row { display:grid; width:100%; grid-template-columns:minmax(112px,42%) minmax(0,1fr); gap:3px 8px; align-items:start; padding:5px 6px; border:0; border-radius:5px; background:transparent; color:inherit; text-align:left; font:inherit; cursor:pointer; }
 .live-market-side-row:hover { background:#f6fbfa; }
+.live-market-side-row.is-supported { background:linear-gradient(90deg,rgba(21,134,106,.10),rgba(21,134,106,0)); }
+.live-market-side-row.is-supported:hover { background:linear-gradient(90deg,rgba(21,134,106,.13),rgba(21,134,106,.03)); }
 .live-market-side-row:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .live-market-side { min-width:0; font-size:12px; font-weight:700; line-height:1.25; }
 .live-market-meta { min-width:0; color:var(--text3); font:600 9px/1.35 var(--mono); text-align:left; overflow-wrap:anywhere; }
@@ -1499,7 +1509,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .mobile-nav{position:fixed;z-index:300;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(4,1fr);min-height:62px;padding:7px 10px calc(7px + env(safe-area-inset-bottom));background:rgba(255,255,255,.96);border-top:1px solid var(--border);backdrop-filter:blur(16px)}.mobile-nav button{display:grid;place-items:center;gap:2px;min-height:42px;border:0;background:transparent;color:var(--text3);font:700 10px var(--sans);cursor:pointer}.mobile-nav button span{font:700 17px/1 var(--sans)}.mobile-nav button.active{color:var(--red)}
   .mobile-sheet[hidden]{display:none}.mobile-sheet{position:fixed;z-index:500;inset:0;background:rgba(8,14,18,.38);display:flex;align-items:flex-end}.mobile-sheet-panel{width:100%;max-height:min(72dvh,600px);overflow:auto;border-radius:18px 18px 0 0;background:#fff;padding:0 16px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -12px 36px rgba(8,14,18,.16)}.mobile-sheet-panel header{position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;padding:14px 0 12px;background:#fff;border-bottom:1px solid var(--border)}.mobile-sheet-panel header strong{font-size:16px}.mobile-sheet-panel header button{width:34px;height:34px;border:0;border-radius:50%;background:var(--bg2);font-size:24px;color:var(--text2)}.mobile-sheet-list{display:grid;gap:8px;padding:14px 0}.mobile-sheet-list button,.mobile-sheet-action{width:100%;min-height:48px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);text-align:left;font:600 14px var(--sans)}.mobile-sheet-empty{padding:24px 0;color:var(--text3);font-size:14px;line-height:1.5}.mobile-sheet-action{display:block;margin-top:10px;text-decoration:none}.mobile-sheet-action.primary{border-color:var(--red);background:var(--red);color:#fff;text-align:center}
   .tabs{padding-left:12px;padding-right:12px;gap:4px}.tab{font-size:11px;padding:0 10px}.tab .tbadge{min-width:22px;padding:2px 6px}.sfilters{position:absolute;left:0;right:0;top:100%;display:flex;overflow-x:auto;gap:6px;padding:8px 12px;background:#fff;border-bottom:1px solid var(--border);scrollbar-width:none}.sfilters::-webkit-scrollbar{display:none}.schip{flex:0 0 auto;min-height:32px;padding:6px 12px}.app-board-controls{margin-top:48px}.app-board-controls::before{content:'Market';position:sticky;left:-12px;display:flex;align-items:center;padding-right:7px;background:rgba(250,249,246,.96);color:var(--text3);font:700 9px var(--mono);letter-spacing:.08em;text-transform:uppercase}
-  .live-recent{padding:16px 12px 24px}.live-recent-head h2{font-size:20px}.live-game-card{border-radius:12px;padding:14px}.live-market-side-row{grid-template-columns:minmax(116px,42%) minmax(0,1fr);padding:8px 6px}.live-market-meta{font-family:var(--sans);font-size:11px;line-height:1.38}
+  .live-recent{padding:16px 12px 24px}.live-recent-head h2{font-size:20px}.live-game-card{border-radius:12px;padding:14px}.live-game-badges .red-fox-favorite-badge{width:108px;height:24px;max-width:calc(100% - 42px)}.live-save{width:40px;height:40px;font-size:25px}.live-market-side-row{grid-template-columns:minmax(116px,42%) minmax(0,1fr);padding:8px 6px}.live-market-side-row.is-supported{background:rgba(21,134,106,.08)}.live-market-meta{font-family:var(--sans);font-size:11px;line-height:1.38}
   #drill-overlay .game-detail-modal .game-detail-content{padding:12px 12px 24px!important}#drill-overlay .game-detail-modal .game-detail-content>div:first-child{margin:0 0 10px!important;padding:0!important;border:0!important}#drill-overlay .game-detail-modal .game-detail-content>div:first-child>.sport-chip,#drill-overlay .game-detail-modal .game-detail-content>div:first-child>.spchip,#drill-overlay .game-detail-modal .detail-game-heading,#drill-overlay .game-detail-modal .detail-game-meta,#drill-overlay .game-detail-modal .detail-frozen-status{display:none!important}#drill-overlay .game-detail-modal .detail-market-switcher{margin-top:0}.movement-chart{padding:10px;margin:10px 0}.movement-chart-note{font-size:9px;line-height:1.3}.movement-svg{touch-action:none}.movement-scrub-point{pointer-events:none}.movement-scrub-point.is-active{fill:#0f6f7f;fill-opacity:.18;stroke:#0f6f7f;stroke-width:2}.movement-inspector{min-height:30px;margin:6px 0 2px;padding:7px 8px;border-radius:6px;background:#eef5f5;color:var(--text2);font:600 9px/1.3 var(--sans)}.movement-facts{gap:5px}.movement-fact{padding:7px}.market-journey{margin:10px 0;padding:10px}.journey-event{padding-bottom:9px!important}.market-story{padding:11px;margin:10px 0}.detail-proof{padding:11px}.detail-observations{display:none!important}.detail-proof.is-open .detail-observations{display:block!important}.detail-observations-toggle{display:inline-flex;align-items:center;justify-content:center;width:100%;min-height:42px;margin-top:10px;border:1px solid var(--border2);border-radius:8px;background:#fff;color:var(--accent);font:700 11px var(--sans);cursor:pointer}
   /* Desktop-derived Red Fox treatment: decisive black chrome and restrained red accents. */
   .topbar{height:calc(58px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 12px 0!important;background:#050708!important;border-color:#20272a!important;box-shadow:none!important}.tl{min-width:0}.logo-wrap{margin:0!important;padding:0!important;border:0!important}.wm-main,.wm-main span{color:#ed4c43!important;font-size:18px!important;letter-spacing:-.055em}.wm-sup{margin-left:2px!important;color:#fff!important;font-size:7px!important;letter-spacing:.2em}.live-badge{display:none!important}.mobile-header-search{display:flex;align-items:center;gap:5px;width:112px;margin-left:auto;padding:7px 8px;border:1px solid #343b3f;border-radius:7px;background:#161b1e;color:#aab3b7}.mobile-header-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#fff;font:500 11px var(--sans)}.mobile-header-search input::placeholder{color:#aab3b7}.mobile-board-refresh{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 44px;width:44px;height:44px;margin-left:6px;border:0;background:transparent;color:#d7dcde;cursor:pointer}.mobile-board-refresh::before{content:'';position:absolute;inset:3px;border:1px solid #343b3f;border-radius:7px;background:#161b1e}.mobile-board-refresh svg{position:relative;z-index:1;width:20px;height:20px;stroke-width:1.9}.mobile-board-refresh:focus-visible{outline:2px solid #ed4c43;outline-offset:0;border-radius:9px}.mobile-board-refresh:disabled{cursor:wait;opacity:.58}.mobile-board-refresh.is-refreshing svg{animation:mobile-refresh-spin .8s linear infinite}@keyframes mobile-refresh-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.mobile-board-refresh.is-refreshing svg{animation:none}}.tabs{top:calc(58px + env(safe-area-inset-top));border-color:var(--border2);background:#fff}.app-board-controls{position:fixed!important;top:calc(152px + env(safe-area-inset-top));left:0;right:0;margin:0!important;background:#fff;border-color:var(--border2)}.board{padding-top:108px!important}
@@ -1825,7 +1835,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
     </div>
   </div>
 
-  <div class="tab-content" id="tab-live-recent"><div class="live-recent"><div class="live-recent-inner"><div class="live-recent-head"><h2>Live &amp; Recent</h2><p>Live score and the final pregame market record.</p></div><div class="live-recent-controls" aria-label="Live and recent controls"><div class="live-control-row"><span class="live-control-label">Sport</span><div class="live-control-group" id="live-sport-filters" role="group" aria-label="Filter by sport"><button type="button" class="schip on" aria-pressed="true" onclick="setLiveRecentSport('ALL',this)">All</button></div></div><div class="live-control-row live-control-row-secondary"><div class="live-control-group" id="live-status-filters" role="group" aria-label="Filter by game status"><button type="button" class="schip on" aria-pressed="true" onclick="setLiveRecentStatus('ALL',this)">All</button><button type="button" class="schip" aria-pressed="false" onclick="setLiveRecentStatus('LIVE',this)">Live</button><button type="button" class="schip" aria-pressed="false" onclick="setLiveRecentStatus('RECENT',this)">Recent</button></div><label class="live-sort-control"><span>Sort</span><select id="live-sort" onchange="setLiveRecentSort(this.value)" aria-label="Sort Live and Recent games"><option value="STATUS_TIME">Status &amp; Time</option><option value="FAVORITES">Red Fox Favorites</option><option value="GAME_TIME">Game Time</option><option value="RANK">Pregame Market Read Rank</option><option value="SAVED">Saved First</option></select></label></div></div><div class="live-recent-grid" id="live-recent-grid"><div class="live-empty">Choose Live &amp; Recent to load game context.</div></div></div></div></div>
+  <div class="tab-content" id="tab-live-recent"><div class="live-recent"><div class="live-recent-inner"><div class="live-recent-head"><h2>Live &amp; Recent</h2><p>Live score and the final pregame market record.</p></div><div class="live-recent-controls" aria-label="Live and recent controls"><div class="live-control-row"><span class="live-control-label">Sport</span><div class="live-control-group" id="live-sport-filters" role="group" aria-label="Filter by sport"><button type="button" class="schip on" aria-pressed="true" onclick="setLiveRecentSport('ALL',this)">All</button></div></div><div class="live-control-row live-control-row-secondary"><div class="live-control-group" id="live-status-filters" role="group" aria-label="Filter by game status"><button type="button" class="schip on" aria-pressed="true" onclick="setLiveRecentStatus('ALL',this)">All</button><button type="button" class="schip" aria-pressed="false" onclick="setLiveRecentStatus('LIVE',this)">Live</button><button type="button" class="schip" aria-pressed="false" onclick="setLiveRecentStatus('RECENT',this)">Recent</button></div><label class="live-sort-control"><span>Sort</span><select id="live-sort" onchange="setLiveRecentSort(this.value)" aria-label="Sort Live and Recent games"><option value="STATUS_TIME">Status &amp; Time</option><option value="FAVORITES">Red Fox Favorites</option><option value="RANK">Pregame Market Read Rank</option><option value="SAVED">Saved First</option></select></label></div></div><div class="live-recent-grid" id="live-recent-grid"><div class="live-empty">Choose Live &amp; Recent to load game context.</div></div></div></div></div>
 
   <!-- PERFORMANCE -->
   <div class="tab-content" id="tab-perf">
@@ -2741,6 +2751,7 @@ function liveGameKey(row){ return [row.sport,row.game_id,row.game].join('|'); }
 function liveTimestamp(value,fallback){ const parsed=new Date(value||fallback||'').getTime(); return Number.isFinite(parsed)?parsed:0; }
 function liveState(game){ return String(game.first.score_state||'unknown').trim().toLowerCase(); }
 function liveStateOrder(game){ return liveState(game)==='in'?0:liveState(game)==='post'?1:2; }
+function frozenFavoriteRank(row){ const rank=Number(row?.favorite_final_market_rank); return Number.isFinite(rank)&&rank>0?rank:999999; }
 function liveStatusTimeCompare(a,b){
   const stateDiff=liveStateOrder(a)-liveStateOrder(b); if(stateDiff)return stateDiff;
   if(liveState(a)==='in') return a.kickoff-b.kickoff||a.label.localeCompare(b.label);
@@ -2753,7 +2764,8 @@ function groupLiveRecentRows(rows){
   return [...grouped.entries()].map(([key,gameRows])=>{
     const first=gameRows[0]||{}, kickoff=liveTimestamp(first.kickoff_iso,first._game_time);
     const favorites=gameRows.filter(isRedFoxFavorite);
-    return {key,rows:gameRows,first,kickoff,completed:liveTimestamp(first.score_completed_at_utc,first.kickoff_iso),bestRank:Math.min(...gameRows.map(boardRank)),hasFavorite:favorites.length>0,bestFavoriteRank:favorites.length?Math.min(...favorites.map(boardRank)):999999,saved:gameSaved({rows:gameRows}),label:String(first.game||'')};
+    const favoriteMarkets=[...new Set(favorites.map(row=>String(row.market_display||'').toUpperCase()).filter(Boolean))].sort((a,b)=>marketPresentationRank(a)-marketPresentationRank(b));
+    return {key,rows:gameRows,first,kickoff,completed:liveTimestamp(first.score_completed_at_utc,first.kickoff_iso),bestRank:Math.min(...gameRows.map(boardRank)),hasFavorite:favorites.length>0,bestFavoriteRank:favorites.length?Math.min(...favorites.map(frozenFavoriteRank)):999999,favoriteMarkets,saved:gameSaved({rows:gameRows}),label:String(first.game||'')};
   });
 }
 function filteredLiveRecentGames(rows=allLiveRecent){
@@ -2766,7 +2778,6 @@ function filteredLiveRecentGames(rows=allLiveRecent){
 function sortLiveRecentGames(games){
   return games.sort((a,b)=>{
     if(liveRecentSort==='FAVORITES') return Number(b.hasFavorite)-Number(a.hasFavorite)||a.bestFavoriteRank-b.bestFavoriteRank||liveStatusTimeCompare(a,b);
-    if(liveRecentSort==='GAME_TIME') return a.kickoff-b.kickoff||a.label.localeCompare(b.label);
     if(liveRecentSort==='RANK') return a.bestRank-b.bestRank||liveStatusTimeCompare(a,b);
     if(liveRecentSort==='SAVED') return Number(b.saved)-Number(a.saved)||liveStatusTimeCompare(a,b);
     return liveStatusTimeCompare(a,b);
@@ -2800,7 +2811,9 @@ function observeLiveRecentMore(){
 }
 function liveGameCard(game){
   const first=game.first, markets=game.rows, key=escHtml(game.key), score=liveScoreText(first), status=liveDisplayStatus(first);
-  return `<article class="live-game-card" data-live-game-key="${key}"><div class="live-game-top"><div><div>${spChip(first.sport)}</div><div class="live-game-name">${escHtml(first.game||'--')}</div><div class="live-status">${escHtml(status)}</div></div><div class="live-score">${escHtml(score)}</div></div><div class="live-freeze">Frozen pregame record</div>${liveMarketSections(markets).map(function(section){return `<section class="live-market-section"><div class="live-market-type">${escHtml(section.market)}</div>${section.sides.map(function(item){const sideArg=JSON.stringify(item.side.flagged_side||'').replace(/"/g,'&quot;');return `<button class="live-market-side-row" type="button" onclick="openGameDetail(allLiveRecent[${item.index}],${sideArg})" aria-label="Open frozen pregame ${escHtml(section.market)} market for ${escHtml(item.side.flagged_side||'side')}"><span class="live-market-side">${escHtml(item.side.flagged_side||'--')}</span><span class="live-market-meta">${escHtml(item.side.open_line||'--')} → ${escHtml(item.side.current_line||'--')} · ${escHtml(detailPercent(item.side.bets_pct))} Bets / ${escHtml(detailPercent(item.side.money_pct))} Money</span></button>`;}).join('')}</section>`;}).join('')}</article>`;
+  const favoriteContext=game.favoriteMarkets.join(', '), favorite=game.hasFavorite?`<img class="red-fox-favorite-badge" src="assets/red-fox-favorite.png" alt="Red Fox Favorite — ${escHtml(favoriteContext)}" title="Red Fox Favorite pregame market: ${escHtml(favoriteContext)}">`:'';
+  const saveLabel=(game.saved?'Remove saved game ':'Save game ')+String(first.game||'').trim();
+  return `<article class="live-game-card" data-live-game-key="${key}"><div class="live-game-top"><div class="live-game-heading"><div class="live-game-badges">${spChip(first.sport)}${favorite}</div><div class="live-game-name">${escHtml(first.game||'--')}</div><div class="live-status">${escHtml(status)}</div></div><div class="live-game-score-actions"><div class="live-score">${escHtml(score)}</div><button class="live-save" type="button" aria-label="${escHtml(saveLabel)}" title="${escHtml(saveLabel)}" aria-pressed="${game.saved}" onclick="toggleSavedLiveGame(${JSON.stringify(game.key).replace(/"/g,'&quot;')},event)">${game.saved?'★':'☆'}</button></div></div><div class="live-freeze">Frozen pregame record</div>${liveMarketSections(markets).map(function(section){return `<section class="live-market-section"><div class="live-market-type">${escHtml(section.market)}</div>${section.sides.map(function(item){const sideArg=JSON.stringify(item.side.flagged_side||'').replace(/"/g,'&quot;');return `<button class="live-market-side-row${item.supported?' is-supported':''}" type="button" onclick="openGameDetail(allLiveRecent[${item.index}],${sideArg})" aria-label="Open frozen pregame ${escHtml(section.market)} market for ${escHtml(item.side.flagged_side||'side')}"><span class="live-market-side">${escHtml(item.side.flagged_side||'--')}</span><span class="live-market-meta">${escHtml(item.side.open_line||'--')} → ${escHtml(item.side.current_line||'--')} · ${escHtml(detailPercent(item.side.bets_pct))} Bets / ${escHtml(detailPercent(item.side.money_pct))} Money</span></button>`;}).join('')}</section>`;}).join('')}</article>`;
 }
 function renderLiveRecent(){
   const grid=document.getElementById('live-recent-grid'); if(!grid)return;
@@ -2857,7 +2870,12 @@ function liveMarketSections(rows){
   });
   return [...groups.entries()].sort(function(a,b){
     return marketPresentationRank(a[0])-marketPresentationRank(b[0]);
-  }).map(function(entry){return {market:entry[0],sides:[...entry[1].values()]};});
+  }).map(function(entry){
+    const sides=[...entry[1].values()];
+    const anchors=new Set(sides.map(item=>String(item.row.read_anchor_side||'').trim()?marketSideIdentity({flagged_side:item.row.read_anchor_side},item.row):'').filter(Boolean));
+    const supportedIdentity=anchors.size===1?[...anchors][0]:'';
+    return {market:entry[0],sides:sides.map(item=>({...item,supported:Boolean(supportedIdentity)&&marketSideIdentity(item.side,item.row)===supportedIdentity}))};
+  });
 }
 
 function updateLiveRecentBadges(count){
@@ -5045,6 +5063,18 @@ setInterval(refreshLiveRecentScores, 60000);
   const keyFor=row=>String(row.game||'').trim()+' | '+String(row.market_display||'').trim();
   const labelFor=row=>String(row.game||'').trim()+' · '+String(row.market_display||'').trim();
   window.isSavedGame=function(rows){ return (rows||[]).some(row=>saved.some(item=>item.id===keyFor(row))); };
+  window.toggleSavedLiveGame=function(gameKey,event){
+    event?.stopPropagation();
+    const rows=(allLiveRecent||[]).filter(row=>liveGameKey(row)===gameKey); if(!rows.length)return;
+    const ids=new Set(rows.map(keyFor)), present=saved.some(item=>ids.has(item.id));
+    if(present) saved=saved.filter(item=>!ids.has(item.id));
+    else {
+      const favoriteRows=rows.filter(isRedFoxFavorite).sort((a,b)=>frozenFavoriteRank(a)-frozenFavoriteRank(b));
+      const row=favoriteRows[0]||[...rows].sort((a,b)=>boardRank(a)-boardRank(b))[0];
+      saved=[{id:keyFor(row),label:labelFor(row)},...saved];
+    }
+    persist(); renderSaved(); renderLiveRecent();
+  };
   function persist(){ localStorage.setItem(savedKey,JSON.stringify(saved)); }
   function renderSaved(){
     const host=document.getElementById('saved-games'),count=document.getElementById('saved-count');
@@ -5058,8 +5088,8 @@ setInterval(refreshLiveRecentScores, 60000);
     saved.forEach(item=>{
       const row=document.createElement('div');row.className='saved-item';
       row.innerHTML='<span class="star" aria-hidden="true">★</span><button type="button" class="saved-label"></button><button type="button" class="saved-remove" aria-label="Remove saved market">×</button>';
-      const open=row.querySelector('.saved-label');open.textContent=item.label;open.onclick=()=>{const market=(window._boardRows||[]).find(r=>keyFor(r)===item.id);if(market)openGameDetail(market)};
-      row.querySelector('.saved-remove').onclick=()=>{saved=saved.filter(x=>x.id!==item.id);persist();renderSaved();if(boardSortMode==='SAVED')renderBoard(false);else decorateRows();};
+      const open=row.querySelector('.saved-label');open.textContent=item.label;open.onclick=()=>{const market=[...(window._boardRows||[]),...(allLiveRecent||[])].find(r=>keyFor(r)===item.id);if(market)openGameDetail(market)};
+      row.querySelector('.saved-remove').onclick=()=>{saved=saved.filter(x=>x.id!==item.id);persist();renderSaved();if(tabId==='live-recent')renderLiveRecent();else if(boardSortMode==='SAVED')renderBoard(false);else decorateRows();};
       host.append(row);
     });
   }

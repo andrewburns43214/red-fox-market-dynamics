@@ -65,7 +65,7 @@ def test_live_cards_group_trusted_frozen_sides_by_market_and_open_the_clicked_si
     assert "return marketPresentationRank(a[0])-marketPresentationRank(b[0]);" in BOARD
     assert "marketSides(row).forEach(function(side)" in BOARD
     assert 'class="live-market-section"' in BOARD
-    assert 'class="live-market-side-row"' in BOARD
+    assert 'class="live-market-side-row${item.supported?' in BOARD
     assert "openGameDetail(allLiveRecent[${item.index}],${sideArg})" in BOARD
     assert "async function openGameDetail(r,selectedSideLabel)" in BOARD
 
