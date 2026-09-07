@@ -285,6 +285,7 @@ def select_market_leaders(board_df):
         "reaction", "recorded_reaction", "path", "context_chips", "anomaly_chips", "data_badge",
         "broader_market_comparison", "line_dir_changes", "return_toward_open",
         "line_move_abs", "price_move_pct", "observation_count", "key_numbers_crossed",
+        "observed_path",
         "action_side", "action_type", "kpi_eligible", "evidence_role", "evidence_polarity",
         "response_direction", "whipsaw_recovered", "key_number_pinned", "severity_sort",
     ]

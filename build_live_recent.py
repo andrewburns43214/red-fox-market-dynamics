@@ -25,6 +25,11 @@ EMPTY_COLUMNS = [
     "sport", "game_id", "game", "kickoff_iso", "market_display", "flagged_side", "reaction", "path",
     "score_away", "score_home", "score_status", "score_state", "score_provider", "score_provider_event_id",
     "score_match_state", "score_updated_at_utc", "score_completed_at_utc", "frozen_at_utc",
+    "red_fox_favorite", "favorite_side", "favorite_pathway", "favorite_rule_version",
+    "favorite_first_qualified_at", "favorite_final_qualified_at", "favorite_state",
+    "favorite_final_market_read", "favorite_final_market_rank",
+    "favorite_supporting_evidence", "favorite_whipsaw_state", "favorite_cross_market_state",
+    "favorite_snapshot_id", "favorite_reason",
 ]
 SCOREBOARD_URLS = {
     "nfl": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",

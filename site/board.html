@@ -1150,6 +1150,11 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .game-lane-time { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text3); font-size:10px; font-weight:700; line-height:1.1; }
 .game-sport { position:absolute; top:2px; left:0; z-index:1; }
 .game-sport .sport-tag,.game-sport .spchip { margin:0!important; }
+.game-favorite-header{display:flex;align-items:center;gap:5px;height:32px;min-width:0;overflow:hidden}
+.game-favorite-header .game-sport{position:static;flex:0 0 auto}
+.red-fox-favorite-badge{display:block;flex:0 0 auto;width:108px;height:32px;object-fit:contain;object-position:center;white-space:nowrap}
+.favorite-plane-spacer{display:block;height:32px;pointer-events:none}
+.favorite-row>td:not(.td-rank){vertical-align:top}
 .th-game { padding-left:74px!important; }
 .th-market-read { text-align:left!important; padding-left:9px!important; }
 .two-side-label { overflow:hidden; text-overflow:ellipsis; color:var(--text2); font:700 9px var(--sans); white-space:nowrap; }
@@ -1480,6 +1485,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .lpane>.tscroll>table>tbody>tr:hover{transform:none;box-shadow:0 2px 10px rgba(25,37,42,.05)!important}.lpane>.tscroll>table>tbody>tr>td{display:block!important;width:auto!important;max-width:none!important;min-width:0!important;padding:10px!important;border:0!important;white-space:normal!important}
   .lpane>.tscroll>table>tbody>tr>.td-rank{position:absolute;right:8px;top:8px;width:30px!important;height:30px!important;padding:0!important;border-radius:50%!important;background:var(--bg2);z-index:2}.rank-center{font-size:10px}.td-rank .production-save{left:auto!important;right:30px;transform:translateY(-50%)}
   .lpane>.tscroll>table>tbody>tr>.td-game{grid-column:1/-1;padding:13px 48px 9px 12px!important;border-bottom:1px solid var(--border)!important}.two-side-game .two-side-row{padding-left:0!important;min-height:30px;height:auto}.game-sport{position:static!important;margin-bottom:5px}.game-lane-name{font-size:14px!important}.game-lane-time{font-size:10px!important}
+  .favorite-plane-spacer{display:none!important}.favorite-row>td:not(.td-rank){vertical-align:initial}.game-favorite-header{height:36px;min-height:36px;margin-bottom:2px;overflow:hidden}.game-favorite-header .game-sport{margin:0!important}.red-fox-favorite-badge{width:108px;height:36px;max-width:calc(100% - 42px)}
   .lpane>.tscroll>table>tbody>tr>.td-mkt{position:absolute;left:12px;top:10px;width:auto!important;padding:0!important;color:var(--accent)!important;font-size:9px!important;transform:translateY(-100%);display:none!important}
   .lpane>.tscroll>table>tbody>tr>.td-split{grid-column:1/-1;padding:9px 12px!important;border-bottom:1px solid var(--border)!important}.lpane>.tscroll>table>tbody>tr>.td-split::before,.lpane>.tscroll>table>tbody>tr>.td-open::before,.lpane>.tscroll>table>tbody>tr>.td-current::before,.lpane>.tscroll>table>tbody>tr>.td-market-read::before,.lpane>.tscroll>table>tbody>tr>.td-dec::before{display:block;margin-bottom:6px;color:var(--text3);font:700 8px var(--mono);letter-spacing:.08em;text-transform:uppercase}.lpane>.tscroll>table>tbody>tr>.td-split::before{content:'Positioning'}.lpane>.tscroll>table>tbody>tr>.td-open::before{content:'Open'}.lpane>.tscroll>table>tbody>tr>.td-current::before{content:'Current'}.lpane>.tscroll>table>tbody>tr>.td-market-read::before{content:'Market Read'}.lpane>.tscroll>table>tbody>tr>.td-dec::before{content:'Rationale'}
   .lpane>.tscroll>table>tbody>tr>.td-open,.lpane>.tscroll>table>tbody>tr>.td-current{min-height:72px;padding:10px 12px!important}.lpane>.tscroll>table>tbody>tr>.td-open{border-right:1px solid var(--border)!important}.two-side-lines .two-side-row{min-height:27px;height:auto}.two-side-line{font-size:11px!important}
@@ -1819,7 +1825,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
     </div>
   </div>
 
-  <div class="tab-content" id="tab-live-recent"><div class="live-recent"><div class="live-recent-inner"><div class="live-recent-head"><h2>Live &amp; Recent</h2><p>Live score and the final pregame market record.</p></div><div class="live-recent-controls" aria-label="Live and recent controls"><div class="live-control-row"><span class="live-control-label">Sport</span><div class="live-control-group" id="live-sport-filters" role="group" aria-label="Filter by sport"><button type="button" class="schip on" aria-pressed="true" onclick="setLiveRecentSport('ALL',this)">All</button></div></div><div class="live-control-row live-control-row-secondary"><div class="live-control-group" id="live-status-filters" role="group" aria-label="Filter by game status"><button type="button" class="schip on" aria-pressed="true" onclick="setLiveRecentStatus('ALL',this)">All</button><button type="button" class="schip" aria-pressed="false" onclick="setLiveRecentStatus('LIVE',this)">Live</button><button type="button" class="schip" aria-pressed="false" onclick="setLiveRecentStatus('RECENT',this)">Recent</button></div><label class="live-sort-control"><span>Sort</span><select id="live-sort" onchange="setLiveRecentSort(this.value)" aria-label="Sort Live and Recent games"><option value="STATUS_TIME">Status &amp; Time</option><option value="GAME_TIME">Game Time</option><option value="RANK">Pregame Market Read Rank</option><option value="SAVED">Saved First</option></select></label></div></div><div class="live-recent-grid" id="live-recent-grid"><div class="live-empty">Choose Live &amp; Recent to load game context.</div></div></div></div></div>
+  <div class="tab-content" id="tab-live-recent"><div class="live-recent"><div class="live-recent-inner"><div class="live-recent-head"><h2>Live &amp; Recent</h2><p>Live score and the final pregame market record.</p></div><div class="live-recent-controls" aria-label="Live and recent controls"><div class="live-control-row"><span class="live-control-label">Sport</span><div class="live-control-group" id="live-sport-filters" role="group" aria-label="Filter by sport"><button type="button" class="schip on" aria-pressed="true" onclick="setLiveRecentSport('ALL',this)">All</button></div></div><div class="live-control-row live-control-row-secondary"><div class="live-control-group" id="live-status-filters" role="group" aria-label="Filter by game status"><button type="button" class="schip on" aria-pressed="true" onclick="setLiveRecentStatus('ALL',this)">All</button><button type="button" class="schip" aria-pressed="false" onclick="setLiveRecentStatus('LIVE',this)">Live</button><button type="button" class="schip" aria-pressed="false" onclick="setLiveRecentStatus('RECENT',this)">Recent</button></div><label class="live-sort-control"><span>Sort</span><select id="live-sort" onchange="setLiveRecentSort(this.value)" aria-label="Sort Live and Recent games"><option value="STATUS_TIME">Status &amp; Time</option><option value="FAVORITES">Red Fox Favorites</option><option value="GAME_TIME">Game Time</option><option value="RANK">Pregame Market Read Rank</option><option value="SAVED">Saved First</option></select></label></div></div><div class="live-recent-grid" id="live-recent-grid"><div class="live-empty">Choose Live &amp; Recent to load game context.</div></div></div></div></div>
 
   <!-- PERFORMANCE -->
   <div class="tab-content" id="tab-perf">
@@ -2432,9 +2438,13 @@ function gameLanes(r){
   const parts=game.split(separator);
   const away=parts[0]||game||'—', home=parts[1]||'';
   const marker=/vs/i.test(separator)?'vs':'@';
-  return '<div class="two-side-cell two-side-game">'
+  const favorite=isRedFoxFavorite(r);
+  const header=favorite?'<div class="game-favorite-header"><span class="game-sport">'+spChip(r.sport)+'</span>'+favoriteBadge()+'</div>':'';
+  const sport=favorite?'':'<span class="game-sport">'+spChip(r.sport)+'</span>';
+  return '<div class="two-side-cell two-side-game'+(favorite?' is-favorite':'')+'">'
     +'<span class="game-name" style="display:none">'+escHtml(game)+'</span>'
-    +'<div class="two-side-row"><div class="game-lane game-away"><span class="game-sport">'+spChip(r.sport)+'</span><span class="game-lane-mark away">A</span><span class="game-lane-name">'+escHtml(away)+'</span></div></div>'
+    +header
+    +'<div class="two-side-row"><div class="game-lane game-away">'+sport+'<span class="game-lane-mark away">A</span><span class="game-lane-name">'+escHtml(away)+'</span></div></div>'
     +'<div class="two-side-row"><div class="game-lane"><span class="game-lane-mark home">H</span><span class="game-lane-stack"><span class="game-lane-name">'+escHtml(home||'—')+'</span><span class="game-lane-time">'+escHtml(r.kickoff_time||'')+'</span></span></div></div>'
     +'</div>';
 }
@@ -2742,7 +2752,8 @@ function groupLiveRecentRows(rows){
   rows.forEach(row=>{const key=liveGameKey(row);if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(row);});
   return [...grouped.entries()].map(([key,gameRows])=>{
     const first=gameRows[0]||{}, kickoff=liveTimestamp(first.kickoff_iso,first._game_time);
-    return {key,rows:gameRows,first,kickoff,completed:liveTimestamp(first.score_completed_at_utc,first.kickoff_iso),bestRank:Math.min(...gameRows.map(boardRank)),saved:gameSaved({rows:gameRows}),label:String(first.game||'')};
+    const favorites=gameRows.filter(isRedFoxFavorite);
+    return {key,rows:gameRows,first,kickoff,completed:liveTimestamp(first.score_completed_at_utc,first.kickoff_iso),bestRank:Math.min(...gameRows.map(boardRank)),hasFavorite:favorites.length>0,bestFavoriteRank:favorites.length?Math.min(...favorites.map(boardRank)):999999,saved:gameSaved({rows:gameRows}),label:String(first.game||'')};
   });
 }
 function filteredLiveRecentGames(rows=allLiveRecent){
@@ -2754,6 +2765,7 @@ function filteredLiveRecentGames(rows=allLiveRecent){
 }
 function sortLiveRecentGames(games){
   return games.sort((a,b)=>{
+    if(liveRecentSort==='FAVORITES') return Number(b.hasFavorite)-Number(a.hasFavorite)||a.bestFavoriteRank-b.bestFavoriteRank||liveStatusTimeCompare(a,b);
     if(liveRecentSort==='GAME_TIME') return a.kickoff-b.kickoff||a.label.localeCompare(b.label);
     if(liveRecentSort==='RANK') return a.bestRank-b.bestRank||liveStatusTimeCompare(a,b);
     if(liveRecentSort==='SAVED') return Number(b.saved)-Number(a.saved)||liveStatusTimeCompare(a,b);
@@ -2853,6 +2865,9 @@ function liveMarketSections(rows){
 function updateLiveRecentBadges(count){
   for(const id of ['b-live','rail-live-count']){const badge=document.getElementById(id);if(badge)badge.textContent=count;}
 }
+function isRedFoxFavorite(row){ return String(row?.red_fox_favorite||'').trim().toLowerCase()==='true'; }
+function favoriteBadge(){ return '<img class="red-fox-favorite-badge" src="assets/red-fox-favorite.png" alt="Red Fox Favorite">'; }
+function favoritePlane(row){ return isRedFoxFavorite(row)?'<span class="favorite-plane-spacer" aria-hidden="true"></span>':''; }
 async function refreshLiveRecentCount(){
   if(!_liveRecentLoaded){
     const rows=await loadCSV(LIVE_RECENT_URL);
@@ -2901,12 +2916,12 @@ let _boardHasRendered=false;
 const boardGameSelections=new Map();
 function boardGameKey(row){ return String(row.game_id||row.game||''); }
 function boardRank(row){ const rank=Number(row?.board_rank); return Number.isFinite(rank)?rank:999999; }
-const BOARD_SORTS={RANK:'Market Read Rank',DATE:'Date & Time',MARKET:'Market',SAVED:'Saved First'};
-let boardSortMode='RANK';
+const BOARD_SORTS={FAVORITES:'Red Fox Favorites',RANK:'Market Read Rank',DATE:'Date & Time',MARKET:'Market',SAVED:'Saved First'};
+let boardSortMode='FAVORITES';
 function boardSortLabel(){ return BOARD_SORTS[boardSortMode]||BOARD_SORTS.RANK; }
 function boardSortOptions(){ return Object.entries(BOARD_SORTS).map(([key,label])=>'<button type="button" role="menuitemradio" aria-checked="'+(boardSortMode===key)+'" class="'+(boardSortMode===key?'active':'')+'" onclick="setBoardSort(\''+key+'\')"><span>'+label+'</span><span class="sort-check" aria-hidden="true">✓</span></button>').join(''); }
 function syncBoardSortControls(){
-  const nonDefault=boardSortMode!=='RANK', label=boardSortLabel();
+  const nonDefault=boardSortMode!=='FAVORITES', label=boardSortLabel();
   const desktop=document.getElementById('desktop-sort-label'), mobile=document.getElementById('mobile-sort-label'), trigger=document.getElementById('desktop-sort-trigger'), mobileTrigger=document.querySelector('.app-sort-trigger');
   if(desktop) desktop.textContent=nonDefault?'Sort: '+label:'Sort';
   if(mobile) mobile.textContent=nonDefault?'Sort: '+label:'Sort';
@@ -2940,7 +2955,8 @@ function gameSaved(game){ return typeof window.isSavedGame==='function'&&window.
 function sortBoardGames(games){
   return games.sort((a,b)=>{
     let result=0;
-    if(boardSortMode==='DATE') result=gameKickoffTime(a)-gameKickoffTime(b);
+    if(boardSortMode==='FAVORITES') result=Number(b.hasFavorite)-Number(a.hasFavorite)||a.bestFavoriteRank-b.bestFavoriteRank;
+    else if(boardSortMode==='DATE') result=gameKickoffTime(a)-gameKickoffTime(b);
     else if(boardSortMode==='MARKET') result=gameMarketOrder(a)-gameMarketOrder(b);
     else if(boardSortMode==='SAVED') result=Number(gameSaved(b))-Number(gameSaved(a));
     if(result) return result;
@@ -2973,8 +2989,9 @@ function renderBoard(resetPage=true){
   const games=[...grouped.values()].map(rows=>{
     rows.sort((a,b)=>boardRank(a)-boardRank(b)||String(a.market_display||'').localeCompare(String(b.market_display||'')));
     const id=boardGameKey(rows[0]), requested=boardGameSelections.get(id);
-    const selected=rows.find(row=>String(row.market_display||'').toUpperCase()===requested)||rows[0];
-    return {id,rows,selected,bestRank:boardRank(rows[0])};
+    const favoriteRows=rows.filter(isRedFoxFavorite);
+    const selected=rows.find(row=>String(row.market_display||'').toUpperCase()===requested)||favoriteRows[0]||rows[0];
+    return {id,rows,selected,bestRank:boardRank(rows[0]),hasFavorite:favoriteRows.length>0,bestFavoriteRank:favoriteRows.length?boardRank(favoriteRows[0]):999999};
   });
   sortBoardGames(games);
   const data=games.map(game=>game.selected);
@@ -3001,15 +3018,16 @@ function renderBoard(resetPage=true){
     tr.title='Open Market Journey and evidence';
     tr.onclick=()=>openGameDetail(window._boardRows[i]);
     if((r.recorded_reaction||r.reaction)==='Contrarian'||(r.recorded_reaction||r.reaction)==='Freeze') tr.classList.add('row-hi');
+    if(isRedFoxFavorite(r)) tr.classList.add('favorite-row');
     tr.innerHTML=`
       <td class="td-rank" title="Selected-market rank: ${boardRank(r)}. ${rankReason}"><span class="rank-center"><span class="rank-number">${boardRank(r)}</span><span class="rank-scope">MKT</span></span><span class="info-btn" onclick="event.stopPropagation();openGameDetail(window._boardRows[${i}])" title="Game detail">i</span></td>
       <td class="td-game">${gameLanes(r)}${gameMarketSelector(game.rows,r)}</td>
-      <td class="td-mkt">${r.market_display||'-'}</td>
-      <td class="td-split">${twoSideSplitCell(r)}</td>
-      <td class="td-line td-open">${twoSideLineCell(r,'open_line')}</td>
-      <td class="td-line td-current">${twoSideLineCell(r,'current_line')}</td>
-      <td class="td-market-read">${twoSideReadCell(r)}</td>
-      <td class="td-dec">${twoSideRationale(r)}</td>
+      <td class="td-mkt">${favoritePlane(r)}${r.market_display||'-'}</td>
+      <td class="td-split">${favoritePlane(r)}${twoSideSplitCell(r)}</td>
+      <td class="td-line td-open">${favoritePlane(r)}${twoSideLineCell(r,'open_line')}</td>
+      <td class="td-line td-current">${favoritePlane(r)}${twoSideLineCell(r,'current_line')}</td>
+      <td class="td-market-read">${favoritePlane(r)}${twoSideReadCell(r)}</td>
+      <td class="td-dec">${favoritePlane(r)}${twoSideRationale(r)}</td>
     `;
     const rationale=tr.querySelector('.two-side-rationale');
     if(rationale && rationale.querySelectorAll('.two-side-row').length>1){
