@@ -101,9 +101,13 @@ def test_homepage_favorite_copy_update_preserves_existing_structure_and_assets()
     )
     assert soup.select_one(".hero-sub").get_text(" ", strip=True) == (
         "Red Fox continuously evaluates market positioning, line and price movement, pressure, resistance, "
-        "reversals, and timing to surface meaningful market behavior. Start with Red Fox Favorites, then drill "
+        "reversals, and timing to understand how the book is responding. Start with Red Fox Favorites, then drill "
         "into the Market Reads and evidence behind every signal."
     )
+    assert soup.select_one(".hero-philosophy").get_text(" ", strip=True) == (
+        "We study how the book responds to betting pressure — not just where the bets are."
+    )
+    assert soup.select_one(".hero-philosophy > strong") is not None
     assert soup.select_one(".hero-positioning") is None
     assert [item.get_text(" ", strip=True) for item in soup.select(".feat-card h3")] == [
         "Follow the Market Journey", "Understand the Market Read", "Start With Red Fox Favorites"
@@ -112,8 +116,8 @@ def test_homepage_favorite_copy_update_preserves_existing_structure_and_assets()
     assert feature_copy == [
         "See where a line started, how price and splits changed along the way, and where the market stands now. "
         "Replay the journey whenever you need more context.",
-        "Red Fox combines positioning, movement, pressure, resistance, reversals, and timing into a structured "
-        "Market Read with the supporting evidence behind it.",
+        "Red Fox interprets how the book responds to positioning, movement, pressure, resistance, reversals, and "
+        "timing — then turns that behavior into a structured Market Read.",
         "Quickly find the selective markets that meet Red Fox’s preferred wager criteria, then open the full "
         "Market Read and evidence before making your decision.",
     ]
@@ -150,6 +154,16 @@ def test_homepage_favorite_copy_update_preserves_existing_structure_and_assets()
     assert "Market-driven" in page_text
     assert "Price-sensitive" not in page_text
     assert "DraftKings" not in page_text
+
+
+def test_homepage_book_response_copy_is_single_source_across_responsive_views():
+    source = _source()
+    assert source.count("We study how the book responds to betting pressure — not just where the bets are.") == 1
+    assert source.count('class="hero-sub"') == 1
+    assert source.count('class="hero-philosophy"') == 1
+    assert ".hero-philosophy {" in source
+    assert ".hero-philosophy { font-size:14px; margin-bottom:32px; }" in source
+    assert ".hero-ctas {" in source
 
 
 def test_desktop_pricing_cards_use_equal_height_flow_without_changing_mobile_cards():

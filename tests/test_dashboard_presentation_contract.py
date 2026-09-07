@@ -165,26 +165,28 @@ def test_mobile_market_read_chips_are_compact_without_changing_global_or_desktop
 
 
 def test_market_guide_matches_role_and_display_semantics():
-    assert "These are primary market-read classifications. Freeze and Watch can remain descriptive" in BOARD
+    assert "Directional Reads describe Red Fox’s interpretation of how the book is responding within the selected market" in BOARD
+    assert "Freeze and Watch can remain descriptive without producing an actionable directional lean" in BOARD
     assert "Freeze is assigned to the Pressure Side" in BOARD
     assert "Freeze alone does not create a fade or directional lean" in BOARD
     assert "The side receiving qualifying concentrated betting pressure" in BOARD
     assert "The opposing side supported by the market’s resistance to concentrated pressure" in BOARD
     assert "The spread or total number, or the moneyline price" in BOARD
     assert "late in the observed path while the market was inside its pregame closing window" in BOARD
-    assert "['Risk / Data Limitations',['Price Risk','Capped Split','Thin','Feed Risk','Split Risk']]" in BOARD
+    assert "['Risk & Data Quality',['Price Risk','Capped Split','Thin','Feed Risk','Split Risk']]" in BOARD
     assert "incomplete price or line data cannot support a reliable market read" in BOARD
-    assert "['Market Rank (MKT)', 'The rank of the currently selected market on the board. It is not a game-level rank.']" in BOARD
+    assert "The rank of the currently selected Spread, Moneyline, or Total market relative to the rest of the board" in BOARD
     assert "a measurable Open-to-Current change" in BOARD
     assert "no qualifying Open-to-Current directional movement" not in BOARD
 
 
 def test_red_fox_favorite_guide_section_and_tooltip_are_isolated_copy_additions():
-    intro = BOARD.index("Use this guide to understand Red Fox market reads, movement, and context.")
+    intro = BOARD.index("Use this guide to understand Red Fox Market Reads, book behavior, movement, positioning, and context.")
     favorite = BOARD.index("redFoxFavoriteGuideSection()+", intro)
     directional = BOARD.index("MARKET_GUIDE_SECTIONS.map", favorite)
     assert intro < favorite < directional
     assert '<h3>Red Fox Favorite</h3>' in BOARD
+    assert '<p><strong>Red Fox Favorite</strong></p>' not in BOARD
     assert "A selective designation for markets that match Red Fox’s preferred wager structures based on current market positioning, movement or resistance, wager price/number, and data quality." in BOARD
     assert "based on current DraftKings positioning" not in BOARD
     assert "Low-support Freeze / Resistance" in BOARD
@@ -201,7 +203,7 @@ def test_favorite_badge_hover_and_exact_guide_navigation_share_authoritative_cop
     assert 'onmouseenter="showFavoriteTooltip(this)"' in BOARD
     assert "if(requested==='Red Fox Favorite')" in BOARD
     assert "title.textContent='Red Fox Favorite';" in BOARD
-    assert "body.innerHTML=redFoxFavoriteGuideSection();" in BOARD
+    assert "body.innerHTML=redFoxFavoriteGuideSection(false);" in BOARD
     assert "hideFavoriteTooltip();openSignalGuide('Red Fox Favorite');" in BOARD
     assert ".red-fox-favorite-badge{display:block;flex:0 0 auto;width:108px;height:32px" in BOARD
     assert ".red-fox-favorite-badge{width:108px;height:36px;max-width:calc(100% - 42px)}" in BOARD
@@ -237,11 +239,54 @@ def test_cross_market_integrity_badge_tooltip_and_guide_are_market_level():
     assert "(market==='SPREAD'||market==='MONEYLINE')" in BOARD
     assert "crossMarketMismatchBadge()" in BOARD
     assert "Cross-Market Mismatch</button>" in BOARD
+    assert "if(requested==='Cross-Market Mismatch')" in BOARD
+    assert "body.innerHTML=marketIntegrityGuideSection(false);" in BOARD
+    assert "hideIntegrityTooltip();openSignalGuide('Cross-Market Mismatch');" in BOARD
     assert ".cross-market-mismatch-badge{display:inline-flex" in BOARD
     assert "const integrity=hasCrossMarketMismatch(r), hasHeader=favorite||integrity;" in BOARD
     assert "favorite?favoriteBadge():''" in BOARD
     assert "integrity?crossMarketMismatchBadge():''" in BOARD
     assert "market_sides.cross_market_mismatch" not in BOARD
+
+
+def test_market_guide_terminology_order_and_deep_link_contract():
+    intro = BOARD.index("Use this guide to understand Red Fox Market Reads, book behavior, movement, positioning, and context.")
+    favorite = BOARD.index("redFoxFavoriteGuideSection()+", intro)
+    integrity = BOARD.index("marketIntegrityGuideSection()+", favorite)
+    section_map = BOARD.index("MARKET_GUIDE_SECTIONS.map", integrity)
+    movement = BOARD.index("<h3>Market Movement</h3>", section_map)
+    fields = BOARD.index("<h3>Board Fields</h3>", movement)
+    assert intro < favorite < integrity < section_map < movement < fields
+
+    directional = BOARD.index("['Directional Reads'")
+    behavior = BOARD.index("['Market Behavior'", directional)
+    positioning = BOARD.index("['Positioning & Context'", behavior)
+    risk = BOARD.index("['Risk & Data Quality'", positioning)
+    assert directional < behavior < positioning < risk
+    assert "We study how the book responds to betting pressure — not just where the bets are." in BOARD
+    assert "Tap or click any guide-backed chip or badge on the board to jump directly to its definition." in BOARD
+    assert "These labels describe market behavior and evidence—not picks or wager recommendations." not in BOARD
+    assert "Red Fox’s interpretation of how the book is behaving in the selected market" in BOARD
+    assert "The plain-language explanation of how the book is responding" in BOARD
+    assert "Market Reads are intentionally broader than Red Fox Favorites" in BOARD
+    assert "based on current DraftKings positioning" not in BOARD
+
+    for label in (
+        "Contrarian", "Freeze", "Follow", "Watch", "Whipsaw", "Whipsaw Recovered", "Held", "Late",
+        "One-Way", "Market Move", "Market Lag", "Juice Move", "Key Number", "Pressure Side",
+        "Resistance Side", "Ticket-led", "Public Pressure", "Developing Read", "Low Bets / High $",
+        "Heavy Favorite", "Price Risk", "Capped Split", "Thin", "Feed Risk", "Split Risk",
+    ):
+        assert f"'{label}'" in BOARD
+    assert "onclick=\"event.stopPropagation();openSignalGuide(${clickArg})\"" in BOARD
+    assert "onclick=\"openSignalGuide('Split Cap')\"" in BOARD
+
+
+def test_capped_split_and_split_risk_keep_distinct_context_and_quality_roles():
+    assert "This describes the observed source condition; directional split signals are disabled." in BOARD
+    assert "creates a data-quality limitation, so the split cannot support a directional read." in BOARD
+    assert "if(raw==='Capped Split') return SIGNAL_META['Split Cap'];" in BOARD
+    assert "t==='SPLIT RISK'?'SPLIT RISK':'FEED RISK'" in BOARD
 
 
 def test_visible_rank_is_selected_market_rank():

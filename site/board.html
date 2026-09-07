@@ -1197,6 +1197,8 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .signal-guide-close { width:30px; height:30px; border:0; border-radius:50%; background:var(--bg2); color:var(--text2); font-size:20px; cursor:pointer; }
 .signal-guide-body { padding:14px 18px 24px; }
 .signal-guide-intro { margin:0 0 14px; color:var(--text2); font-size:12px; line-height:1.5; }
+.signal-guide-philosophy { margin:0 0 8px; color:var(--text); font-size:12px; line-height:1.5; font-weight:800; }
+.signal-guide-navigation { margin:0 0 14px; color:var(--text2); font-size:11px; line-height:1.48; }
 .signal-guide-section-note { margin:0 0 8px; color:var(--text2); font-size:11px; line-height:1.48; }
 .signal-guide-section { margin-top:20px; }
 .signal-guide-section h3 { margin:0 0 8px; color:var(--text3); font:800 9px var(--mono); letter-spacing:.1em; text-transform:uppercase; }
@@ -2281,11 +2283,11 @@ const SIGNAL_META={
   'Contrarian':{cls:'mr-aligned',tip:'Low support on that side while its price or line moved toward it.'},
   'Freeze':{cls:'mr-freeze',tip:'Freeze is assigned to the Pressure Side when heavy ticket and money support fails to earn a meaningful favorable response. Resistance evidence points toward the opposing side, but Freeze alone does not create a fade or directional lean.'},
   'Follow':{cls:'mr-aligned',tip:'High tickets and money on that side while its price or line moved with it.'},
-  'Whipsaw':{cls:'mr-reverse',tip:'The market moved materially in one direction, then reversed.'},
+  'Whipsaw':{cls:'mr-reverse',tip:'The selected market moved materially in one direction, then reversed.'},
   'Held':{cls:'mr-neutral',tip:'The spread or total number, or the moneyline price, remained within its hold threshold. Attached spread or total juice is evaluated separately and may strengthen resistance.'},
   'Late':{cls:'mr-reverse',tip:'A meaningful move first appeared late in the observed path while the market was inside its pregame closing window.'},
-  'One-Way':{cls:'mr-neutral',tip:'The market made a meaningful move without a qualifying reversal.'},
-  'Market Move':{cls:'mr-neutral',tip:'The market moved meaningfully from open in either direction, regardless of the current split. This is evidence, not a directional signal.'},
+  'One-Way':{cls:'mr-neutral',tip:'The selected market made a meaningful move without a qualifying reversal.'},
+  'Market Move':{cls:'mr-neutral',tip:'The selected market moved meaningfully from open in either direction, regardless of the current split. This is evidence, not a directional signal.'},
   'Market Lag':{cls:'mr-contra',tip:'The broader market moved while the displayed price held, indicating a possible market lag.'},
   'Stale DK':{label:'Market Lag',cls:'mr-contra',tip:'The broader market moved while the displayed price held, indicating a possible market lag.'},
   'Ticket-led':{cls:'mr-reverse',tip:'Tickets are concentrated while money is not strong enough for a Freeze or Follow.'},
@@ -2305,19 +2307,19 @@ const SIGNAL_META={
   'Juice Move':{cls:'mr-freeze',tip:'The primary spread or total number held while the attached American odds moved materially.'},
   'Price Risk':{cls:'mr-reverse',tip:'An extreme moneyline price, expensive attached juice, or unusually large spread. This is caution context, not a directional signal.'},
   'Heavy Favorite':{cls:'mr-reverse',tip:'A heavily priced or ticket-heavy moneyline favorite. This is risk context, not a directional signal.'},
-  'Split Cap':{label:'Capped Split',cls:'mr-contra',tip:'The source reported a capped 0% or 100% split, so directional split signals are disabled.'},
+  'Split Cap':{label:'Capped Split',cls:'mr-contra',tip:'The source reported a capped 0% or 100% split. This describes the observed source condition; directional split signals are disabled.'},
   'Thin':{cls:'mr-contra',tip:'Only two valid observations are available for this market, so treat the pattern cautiously.'},
   'Feed Risk':{cls:'mr-contra',tip:'The market does not have enough complete price or line data for a reliable market read.'},
-  'Split Risk':{cls:'mr-contra',tip:'The source reported a capped 0% or 100% split, so the split cannot support a directional read.'},
-  'Watch':{cls:'mr-neutral',tip:'Worth monitoring, not a directional call: the market has notable positioning, movement, or context but lacks full confirmation for Contrarian, Freeze, or Follow. Read the accompanying chips and Market Explanation to see what is missing.'}
+  'Split Risk':{cls:'mr-contra',tip:'A capped 0% or 100% source split creates a data-quality limitation, so the split cannot support a directional read.'},
+  'Watch':{cls:'mr-neutral',tip:'Worth monitoring, not a directional call: the selected market has notable positioning, movement, or context but lacks full confirmation for Contrarian, Freeze, or Follow. Read the accompanying chips and Market Explanation to see what is missing.'}
 };
 const BOARD_FIELD_META = [
   ['Bets / Money', 'The share of tickets and handle on each side. Higher percentages describe positioning, not a prediction.'],
   ['Open / Current', 'Open is the first valid observed market state; Current is the latest valid observation. Movement displayed beneath Current is interpreted relative to that side.'],
-  ['Market Read', 'The current Red Fox interpretation for each side, together with supporting market-behavior, positioning, and risk/context labels.'],
-  ['Market Rank (MKT)', 'The rank of the currently selected market on the board. It is not a game-level rank.'],
+  ['Market Read', 'Red Fox’s interpretation of how the book is behaving in the selected market, using positioning, line/price movement, pressure, resistance, reversals, timing, and supporting context. Market Reads are intentionally broad and can surface meaningful market behavior even when the wager does not meet Red Fox Favorite criteria.'],
+  ['Market Rank (MKT)', 'The rank of the currently selected Spread, Moneyline, or Total market relative to the rest of the board. It is not a game-level rank and is intentionally broader than Red Fox Favorite qualification.'],
   ['Data Quality', 'Clean has at least three valid observations. Thin has two. Feed Risk means incomplete price or line data cannot support a reliable market read; Split Risk means a capped split cannot support a directional split read.'],
-  ['Market Explanation', 'The plain-language explanation of the positioning, movement, and context behind the displayed Market Read.'],
+  ['Market Explanation', 'The plain-language explanation of how the book is responding to the observed positioning and movement, and why Red Fox surfaced the current Market Read.'],
   ['Market Trajectory', 'The full timestamped path for the selected side. Use Line, Price, Bets %, and Money % to inspect how the market developed over time.'],
   ['Market Journey', 'A milestone view of the most meaningful events in the market path, such as the open, signal changes, major moves, reversals, and current state.'],
 ];
@@ -2325,10 +2327,10 @@ const MARKET_GUIDE_SECTIONS=[
   ['Directional Reads',['Contrarian','Freeze','Follow','Watch']],
   ['Market Behavior',['Whipsaw','Whipsaw Recovered','Held','Late','One-Way','Market Move','Market Lag','Juice Move','Key Number']],
   ['Positioning & Context',['Pressure Side','Resistance Side','Ticket-led','Public Pressure','Developing Read','Low Bets / High $','Heavy Favorite']],
-  ['Risk / Data Limitations',['Price Risk','Capped Split','Thin','Feed Risk','Split Risk']],
+  ['Risk & Data Quality',['Price Risk','Capped Split','Thin','Feed Risk','Split Risk']],
 ];
 const MARKET_GUIDE_MOVEMENT=[
-  ['Toward / Against','Movement is interpreted relative to each side. TOWARD means the market moved from Open toward that side; AGAINST means it moved against that side. Green/red represents market direction, not whether a wager is good or bad.'],
+  ['Toward / Against','Movement is interpreted within the currently selected Spread, Moneyline, or Total market and relative to each side. TOWARD means the selected market moved from Open toward that side; AGAINST means it moved against that side. Green/red represents market direction, not whether a wager is good or bad.'],
   ['Point movement','For spreads and totals, a measurable Open-to-Current change in the primary number appears beneath Current as 1.0 pt · TOWARD or 1.0 pt · AGAINST.'],
   ['Juice','When a spread or total number holds but its attached American odds change from Open, the board may show JUICE · TOWARD or JUICE · AGAINST.'],
   ['Price','A measurable moneyline Open-to-Current change may appear as PRICE · TOWARD or PRICE · AGAINST.'],
@@ -2363,9 +2365,8 @@ function applySignalTooltips(){
 function signalGuideItem(label, tip){
   return `<div class="signal-guide-item"><strong>${escHtml(label)}</strong><p>${escHtml(tip)}</p></div>`;
 }
-function redFoxFavoriteGuideSection(){
-  return '<div class="signal-guide-section red-fox-favorite-guide"><h3>Red Fox Favorite</h3><div class="favorite-guide-copy">'+
-    '<p><strong>Red Fox Favorite</strong></p>'+
+function redFoxFavoriteGuideSection(includeHeading=true){
+  return '<div class="signal-guide-section red-fox-favorite-guide">'+(includeHeading?'<h3>Red Fox Favorite</h3>':'')+'<div class="favorite-guide-copy">'+
     '<p>A selective designation for markets that match Red Fox’s preferred wager structures based on current market positioning, movement or resistance, wager price/number, and data quality.</p>'+
     '<p>A market may qualify through:</p>'+
     '<ul><li><strong>Low-support Contrarian</strong> — the less-supported side receives meaningful movement in its favor.</li><li><strong>Low-support Freeze / Resistance</strong> — the less-supported side is protected while substantial opposing pressure fails to produce the expected favorable response.</li><li><strong>Moderate-support Follow</strong> — a more balanced side receives clean, meaningful movement in the same direction.</li></ul>'+
@@ -2373,11 +2374,13 @@ function redFoxFavoriteGuideSection(){
     '<ul><li><strong>NFL / CFB / NBA / NCAAB Spread:</strong> current spread magnitude from <strong>1 to 8 points</strong></li><li><strong>NFL / CFB / NBA / NCAAB Moneyline:</strong> corresponding spread magnitude <strong>4 points or less</strong> and current Moneyline from <strong>-165 to +125</strong></li><li><strong>MLB / NHL / UFC Moneyline:</strong> current Moneyline from <strong>-165 to +125</strong></li><li><strong>Low-support paths:</strong> normally <strong>45% or less of Bets and Money</strong></li><li><strong>Moderate-support Follow:</strong> <strong>46% to 60% of Bets and Money</strong></li><li><strong>Totals are not Favorite-eligible in the current version</strong></li></ul>'+
     '<p>Favorite status also requires current, reliable market data and can be withheld when a meaningful reversal, confirmed Cross-Market Mismatch, stale data, or another reliability issue materially weakens the setup.</p>'+
     '<p><strong>Whipsaw does not automatically disqualify a Favorite.</strong> A market may remain eligible when a partial retrace still leaves the qualifying structure intact.</p>'+
-    '<p>Red Fox Favorite is <strong>binary</strong>: a market either qualifies or it does not. It is separate from <strong>Market Rank</strong>. Market Rank measures the relative strength or significance of the selected market across the board, while Red Fox Favorite identifies the subset of markets that also match Red Fox’s preferred wager criteria.</p>'+
+    '<p>Red Fox Favorite is <strong>binary</strong>: a market either qualifies or it does not.</p>'+
+    '<p>It is separate from <strong>Market Rank</strong>:</p><ul><li><strong>Market Rank</strong> measures the relative strength or significance of the selected market across the board.</li><li><strong>Red Fox Favorite</strong> identifies the narrower subset of markets that also match Red Fox’s preferred wager criteria.</li></ul>'+
+    '<p>This distinction is important because Market Reads are intentionally broader than Red Fox Favorites.</p>'+
     '</div></div>';
 }
-function marketIntegrityGuideSection(){
-  return '<div class="signal-guide-section market-integrity-guide"><h3>Market Integrity</h3>'+
+function marketIntegrityGuideSection(includeHeading=true){
+  return '<div class="signal-guide-section market-integrity-guide">'+(includeHeading?'<h3>Market Integrity</h3>':'')+
     signalGuideItem('Cross-Market Mismatch','A market-level integrity flag indicating that synchronized Spread and Moneyline pricing materially disagree about which team is favored. It is not a directional signal and does not change the underlying Market Read or Market Rank.')+
     '<p>The flag is only assigned when the disagreement is meaningful, synchronized, and persistent. Missing confirmation, temporary disagreement, near-pick’em pricing, or markets that became available at different times do not qualify on their own.</p>'+
     '<p>A confirmed Cross-Market Mismatch can prevent a market from receiving the Red Fox Favorite designation until the conflicting market states resolve.</p></div>';
@@ -2390,7 +2393,10 @@ function openSignalGuide(selected){
   const requested=String(selected||'').trim();
   if(requested==='Red Fox Favorite'){
     title.textContent='Red Fox Favorite';
-    body.innerHTML=redFoxFavoriteGuideSection();
+    body.innerHTML=redFoxFavoriteGuideSection(false);
+  } else if(requested==='Cross-Market Mismatch'){
+    title.textContent='Market Integrity — Cross-Market Mismatch';
+    body.innerHTML=marketIntegrityGuideSection(false);
   } else if(requested){
     const meta=signalMetaFor(requested);
     title.textContent=(meta.label||requested)+' definition';
@@ -2399,10 +2405,12 @@ function openSignalGuide(selected){
       '<div class="signal-guide-section"><h3>Board context</h3>'+BOARD_FIELD_META.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'</div>';
   } else {
     title.textContent='Market Guide';
-    body.innerHTML='<p class="signal-guide-intro">Use this guide to understand Red Fox market reads, movement, and context. These labels describe market behavior and evidence—not picks or wager recommendations. Tap any signal chip on the board for its definition.</p>'+
+    body.innerHTML='<p class="signal-guide-intro">Use this guide to understand Red Fox Market Reads, book behavior, movement, positioning, and context. A market is the wager type being analyzed — Spread, Moneyline, or Total. Red Fox evaluates how the book behaves within each market and uses that behavior to generate Market Reads.</p>'+
+      '<p class="signal-guide-philosophy"><strong>We study how the book responds to betting pressure — not just where the bets are.</strong></p>'+
+      '<p class="signal-guide-navigation">Tap or click any guide-backed chip or badge on the board to jump directly to its definition.</p>'+
       redFoxFavoriteGuideSection()+
       marketIntegrityGuideSection()+
-      MARKET_GUIDE_SECTIONS.map(function(section){const note=section[0]==='Directional Reads'?'<p class="signal-guide-section-note">These are primary market-read classifications. Freeze and Watch can remain descriptive without producing an actionable directional lean.</p>':'';return '<div class="signal-guide-section"><h3>'+escHtml(section[0])+'</h3>'+note+section[1].map(function(label){return signalGuideItem(label,signalMetaFor(label).tip);}).join('')+'</div>';}).join('')+
+      MARKET_GUIDE_SECTIONS.map(function(section){const note=section[0]==='Directional Reads'?'<p class="signal-guide-section-note">Directional Reads describe Red Fox’s interpretation of how the book is responding within the selected market. Freeze and Watch can remain descriptive without producing an actionable directional lean.</p>':'';return '<div class="signal-guide-section"><h3>'+escHtml(section[0])+'</h3>'+note+section[1].map(function(label){return signalGuideItem(label,signalMetaFor(label).tip);}).join('')+'</div>';}).join('')+
       '<div class="signal-guide-section"><h3>Market Movement</h3>'+MARKET_GUIDE_MOVEMENT.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'<p class="signal-guide-note">A blank movement indicator beneath Current does not necessarily mean the market never moved. It means the comparable Open and Current values are effectively unchanged or unavailable. Open the drilldown’s Market Trajectory and Market Journey to review the full intraday path, including reversals.</p></div>'+
       '<div class="signal-guide-section"><h3>Board Fields</h3>'+BOARD_FIELD_META.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'</div>';
   }
@@ -3012,7 +3020,7 @@ function hideIntegrityTooltip(){
   integrityTooltipAnchor=null;
 }
 function integrityBadgeKeydown(event,anchor){
-  if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();showIntegrityTooltip(anchor);}
+  if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();hideIntegrityTooltip();openSignalGuide('Cross-Market Mismatch');}
   if(event.key==='Escape'){event.preventDefault();hideIntegrityTooltip();anchor.blur();}
 }
 document.addEventListener('click',event=>{
@@ -3022,7 +3030,7 @@ document.addEventListener('click',event=>{
 window.addEventListener('resize',()=>{hideFavoriteTooltip();hideSignalTooltip();hideIntegrityTooltip();});
 window.addEventListener('scroll',()=>{hideFavoriteTooltip();hideSignalTooltip();hideIntegrityTooltip();},true);
 function favoriteBadge(){ return '<img class="red-fox-favorite-badge" src="assets/red-fox-favorite.png" alt="Red Fox Favorite" role="button" tabindex="0" aria-describedby="favorite-badge-tooltip" onmouseenter="showFavoriteTooltip(this)" onmouseleave="if(document.activeElement!==this)hideFavoriteTooltip()" onfocus="showFavoriteTooltip(this)" onblur="hideFavoriteTooltip()" onclick="event.stopPropagation();hideFavoriteTooltip();openSignalGuide(\'Red Fox Favorite\')" onkeydown="favoriteBadgeKeydown(event,this)">'; }
-function crossMarketMismatchBadge(){ return '<button class="cross-market-mismatch-badge" type="button" aria-describedby="integrity-badge-tooltip" onmouseenter="showIntegrityTooltip(this)" onmouseleave="if(document.activeElement!==this)hideIntegrityTooltip()" onfocus="showIntegrityTooltip(this)" onblur="hideIntegrityTooltip()" onclick="event.stopPropagation();showIntegrityTooltip(this)" onkeydown="integrityBadgeKeydown(event,this)">Cross-Market Mismatch</button>'; }
+function crossMarketMismatchBadge(){ return '<button class="cross-market-mismatch-badge" type="button" aria-describedby="integrity-badge-tooltip" onmouseenter="showIntegrityTooltip(this)" onmouseleave="if(document.activeElement!==this)hideIntegrityTooltip()" onfocus="showIntegrityTooltip(this)" onblur="hideIntegrityTooltip()" onclick="event.stopPropagation();hideIntegrityTooltip();openSignalGuide(\'Cross-Market Mismatch\')" onkeydown="integrityBadgeKeydown(event,this)">Cross-Market Mismatch</button>'; }
 function favoritePlane(row){ return (isRedFoxFavorite(row)||hasCrossMarketMismatch(row))?'<span class="favorite-plane-spacer" aria-hidden="true"></span>':''; }
 async function refreshLiveRecentCount(){
   if(!_liveRecentLoaded){
