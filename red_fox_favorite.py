@@ -18,7 +18,7 @@ import pandas as pd
 
 @dataclass(frozen=True)
 class FavoriteConfig:
-    version: str = "red_fox_favorite_v1"
+    version: str = "red_fox_favorite_v2"
     spread_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
     primary_moneyline_sports: frozenset[str] = frozenset({"mlb", "nhl", "ufc"})
     secondary_moneyline_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
@@ -211,6 +211,14 @@ def _qualify_market(row: pd.Series, game_rows: pd.DataFrame | None) -> dict | No
         pathway = _pathway(side, other)
         if not pathway:
             continue
+        # Favorite is a narrower designation layered over the published
+        # Market Read.  Never publish a Favorite when that same side is not
+        # the market's authoritative confirmed supported side; otherwise the
+        # red badge can appear with no corresponding green row (or on the
+        # opposite row).  Do not infer support here from movement/context --
+        # ``supported_side`` is resolved upstream by the Market Read engine.
+        if not _matches_confirmed_supported_side(row, side):
+            continue
         cross_state = "not_applicable"
         if market == "SPREAD":
             cross_state = _corresponding_moneyline_state(side, game_rows)
@@ -391,6 +399,20 @@ def _line_value(value: object, market: str) -> float | None:
 def _side_identity(value: object) -> str:
     text = re.sub(r"\s[+-]\d+(?:\.\d+)?(?:\s.*)?$", "", str(value or "").strip())
     return re.sub(r"[^a-z0-9]+", "", text.lower())
+
+
+def _matches_confirmed_supported_side(row: pd.Series, candidate: dict) -> bool:
+    """Require one exact published-side match for the Favorite candidate."""
+    supported_identity = _side_identity(row.get("supported_side", ""))
+    candidate_identity = _side_identity(candidate.get("flagged_side", ""))
+    if not supported_identity or supported_identity != candidate_identity:
+        return False
+    published_identities = [
+        _side_identity(side.get("flagged_side", ""))
+        for side in _sides(row)
+        if isinstance(side, dict)
+    ]
+    return published_identities.count(supported_identity) == 1
 
 
 def _parts(value: object) -> set[str]:

@@ -74,6 +74,7 @@ def favorite_board_pair():
         "context_chips": "", "active_worsening_reversal": False,
     }
     frame.at[0, "market_sides"] = json.dumps([candidate, opponent])
+    frame.at[0, "supported_side"] = "Team A +3"
     return frame
 
 

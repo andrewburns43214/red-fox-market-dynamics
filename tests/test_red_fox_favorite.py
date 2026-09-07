@@ -6,6 +6,7 @@ import pytest
 
 from red_fox_favorite import CONFIG, apply_red_fox_favorites, update_favorite_tracking
 from build_live_recent import ensure_output_columns
+from audit_directional_integrity import audit as audit_directional_integrity
 
 
 def side(name, current, *, bets=35, money=30, reaction="Contrarian", direction="TOWARD",
@@ -25,11 +26,13 @@ def side(name, current, *, bets=35, money=30, reaction="Contrarian", direction="
     }
 
 
-def market(sport, market_name, sides, *, game_id="1", game="Away @ Home", rank=1):
+def market(sport, market_name, sides, *, game_id="1", game="Away @ Home", rank=1, supported_side=None):
+    if supported_side is None:
+        supported_side = sides[0]["flagged_side"]
     return {
         "sport": sport, "game_id": game_id, "game": game, "market_display": market_name,
         "board_rank": rank, "current_line": sides[0]["current_line"],
-        "market_sides": json.dumps(sides),
+        "market_sides": json.dumps(sides), "supported_side": supported_side,
     }
 
 
@@ -92,12 +95,23 @@ def florida_state_path_b(*, active_worsening=False, pressure_reaction="Freeze", 
     return candidate, pressure
 
 
-def test_florida_state_key_three_recovered_freeze_qualifies_without_generic_fade_candidate():
+def test_florida_state_key_three_recovered_freeze_without_confirmed_supported_side_is_not_favorite():
     candidate, pressure = florida_state_path_b()
     assert pressure["kpi_eligible"] is False
     assert pressure["action_type"] == "OBSERVE ONLY"
     assert pressure["key_number_pinned"] == "K3"
-    frame = result([market("ncaaf", "SPREAD", [candidate, pressure], game_id="smu-fsu", game="SMU @ Florida State")])
+    frame = result([market("ncaaf", "SPREAD", [candidate, pressure], game_id="smu-fsu",
+                           game="SMU @ Florida State", supported_side="")])
+    assert not is_favorite(frame)
+
+
+def test_freeze_resistance_path_qualifies_when_engine_confirms_the_fade_side():
+    candidate, pressure = florida_state_path_b()
+    pressure["kpi_eligible"] = True
+    pressure["action_type"] = "FADE CANDIDATE"
+    pressure["action_side"] = "Florida State +3"
+    frame = result([market("ncaaf", "SPREAD", [candidate, pressure], game_id="smu-fsu",
+                           game="SMU @ Florida State", supported_side="Florida State +3")])
     assert is_favorite(frame)
     assert frame.iloc[0].favorite_pathway == "low_support_freeze"
     assert frame.iloc[0].favorite_side == "Florida State +3"
@@ -124,14 +138,43 @@ def test_path_b_material_moneyline_contradiction_does_not_qualify():
     assert not is_favorite(result([spread, moneyline]))
 
 
-def test_moderate_support_follow_path_uses_existing_movement_evidence():
+def test_moderate_support_movement_without_directional_market_read_is_not_favorite():
     candidate = side("Confirming side -3", "-3 (-110)", bets=55, money=52,
                      reaction="Watch", direction="TOWARD", kpi=False, line_move=1.0)
     opponent = side("Other side +3", "+3 (-110)", bets=45, money=48,
                     reaction="Watch", direction="AGAINST", kpi=False)
-    frame = result([market("ncaaf", "SPREAD", [candidate, opponent])])
-    assert is_favorite(frame)
-    assert frame.iloc[0].favorite_pathway == "moderate_support_follow"
+    frame = result([market("ncaaf", "SPREAD", [candidate, opponent], supported_side="")])
+    assert not is_favorite(frame)
+
+
+def test_favorite_requires_supported_side_to_match_the_qualified_side():
+    candidate = side("Away +3", "+3 (-110)")
+    opponent = side("Home -3", "-3 (-110)", bets=65, money=70, reaction="Watch",
+                    direction="AGAINST", kpi=False, action_type="OBSERVE ONLY")
+    assert not is_favorite(result([market("nfl", "SPREAD", [candidate, opponent], supported_side="")]))
+    assert not is_favorite(result([market("nfl", "SPREAD", [candidate, opponent], supported_side="Home -3")]))
+    assert is_favorite(result([market("nfl", "SPREAD", [candidate, opponent], supported_side="Away +3")]))
+
+
+def test_directional_integrity_audit_reports_favorite_without_green_side():
+    candidate = side("Away +3", "+3 (-110)")
+    opponent = side("Home -3", "-3 (-110)", bets=65, money=70, reaction="Watch",
+                    direction="AGAINST", kpi=False, action_type="OBSERVE ONLY")
+    legacy = pd.DataFrame([market("nfl", "SPREAD", [candidate, opponent], supported_side="")])
+    legacy["red_fox_favorite"] = "true"
+    legacy["favorite_side"] = "Away +3"
+    report = audit_directional_integrity(legacy)
+    assert report["red_fox_favorites"] == 1
+    assert report["favorites_without_supported_side"] == 1
+    assert report["favorites_on_different_supported_side"] == 0
+    assert report["anomalies"][0]["issue"] == "Favorite has no confirmed supported side"
+
+
+def test_directional_integrity_audit_accepts_an_empty_board():
+    report = audit_directional_integrity(pd.DataFrame(columns=["market_display", "market_sides"]))
+    assert report["published_markets"] == 0
+    assert report["red_fox_favorites"] == 0
+    assert not report["anomalies"]
 
 
 def test_heavy_public_follow_and_nonmeaningful_move_do_not_qualify():
