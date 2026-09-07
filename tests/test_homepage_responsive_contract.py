@@ -100,14 +100,14 @@ def test_homepage_favorite_copy_update_preserves_existing_structure_and_assets()
         "Make More Informed Wagering Decisions."
     )
     assert soup.select_one(".hero-sub").get_text(" ", strip=True) == (
-        "Red Fox continuously evaluates market positioning, line and price movement, pressure and resistance, "
-        "reversals, and timing to surface meaningful market behavior. Start with Red Fox Favorites, follow the "
-        "strongest Market Reads, and drill into the evidence behind every signal."
+        "Red Fox continuously evaluates market positioning, line and price movement, pressure, resistance, "
+        "reversals, and timing to surface meaningful market behavior. Start with Red Fox Favorites, then drill "
+        "into the Market Reads and evidence behind every signal."
     )
-    assert soup.select_one(".hero-positioning").get_text(" ", strip=True) == (
-        "No blind picks. Red Fox shows you what the market is doing, why it matters, and which setups meet its "
-        "most selective criteria."
-    )
+    assert soup.select_one(".hero-positioning") is None
+    assert [item.get_text(" ", strip=True) for item in soup.select(".feat-card h3")] == [
+        "Follow the Market Journey", "Understand the Market Read", "Start With Red Fox Favorites"
+    ]
     feature_copy = [item.get_text(" ", strip=True) for item in soup.select(".feat-card p")]
     assert feature_copy == [
         "See where a line started, how price and splits changed along the way, and where the market stands now. "
@@ -123,6 +123,17 @@ def test_homepage_favorite_copy_update_preserves_existing_structure_and_assets()
     assert soup.select_one(".journey-teaser h3").get_text(strip=True) == (
         "See the evidence behind every Market Read."
     )
+    assert soup.select_one(".journey-teaser p").get_text(" ", strip=True) == (
+        "Trace the line or price from first observation to current state and review the market evidence behind the read."
+    )
+    preview = soup.select_one(".preview")
+    assert [heading.get_text(" ", strip=True) for heading in preview.select("h2")] == [
+        "Favorites first. Full market intelligence underneath.", "See the Market Story Unfold"
+    ]
+    assert [item.get_text(" ", strip=True) for item in preview.select(":scope > .container > .preview-sub")] == [
+        "Red Fox Favorites rise to the top, followed by the strongest remaining Market Reads.",
+        "Follow the journey from open to current, then review the exact path, split changes, and timestamped evidence.",
+    ]
     assert [image.get("src") for image in soup.select(".preview-screenshot,.journey-screenshot")] == [
         "home-board.png?v=20260904", "home-journey.png?v=20260904"
     ]
@@ -135,4 +146,20 @@ def test_homepage_favorite_copy_update_preserves_existing_structure_and_assets()
     assert [item.get_text(" ", strip=True) for item in soup.select(".price-card:nth-of-type(3) .price-features li")] == [
         "Everything in Monthly Unlimited", "Red Fox Favorites all season", "Full season of market journeys", "Cancel anytime"
     ]
-    assert "DraftKings" not in soup.get_text(" ", strip=True)
+    page_text = soup.get_text(" ", strip=True)
+    assert "Market-driven" in page_text
+    assert "Price-sensitive" not in page_text
+    assert "DraftKings" not in page_text
+
+
+def test_desktop_pricing_cards_use_equal_height_flow_without_changing_mobile_cards():
+    source = _source().replace(" ", "").replace("\n", "")
+
+    desktop = source[source.index("@media(min-width:769px)"):source.index("@media(min-width:1201px)")]
+    assert ".price-card{display:flex;flex-direction:column;}" in desktop
+    assert ".price-features{flex:11auto;}" in desktop
+    assert ".price-actions{flex:0093px;}" in desktop
+    assert source.count('class="price-actions"') == 3
+    mobile = source[source.index("@media(max-width:768px)"):]
+    assert ".price-card{display:flex" not in mobile
+    assert ".price-actions{" not in mobile

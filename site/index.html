@@ -705,6 +705,9 @@ section { padding: 100px 40px; }
   .mobile-app { position:absolute; z-index:20; top:100px; right:60px; left:auto; width:520px; padding:0; border:0; background:transparent; }
   .mobile-install-banner { max-width:none; }
   .mobile-install-artwork { width:100%; max-width:100%; height:auto; border-radius:12px; }
+  .price-card { display:flex; flex-direction:column; }
+  .price-features { flex:1 1 auto; }
+  .price-actions { flex:0 0 93px; }
 }
 
 @media (min-width: 1201px) and (max-width: 1799px) {
@@ -722,6 +725,7 @@ section { padding: 100px 40px; }
   .pricing-grid { gap:12px; }
   .price-card { padding:28px 16px; }
   .price-card .btn-lg { max-width:100%; padding:11px 10px; font-size:12px; }
+  .price-actions { flex-basis:81px; }
   .price-amount { font-size:36px; }
 }
 
@@ -804,8 +808,7 @@ section { padding: 100px 40px; }
   <div class="container">
     <div class="hero-badge">Bloomberg-style market intelligence for sports bettors</div>
     <h1>Make More Informed <em>Wagering Decisions.</em></h1>
-    <p class="hero-sub">Red Fox continuously evaluates market positioning, line and price movement, pressure and resistance, reversals, and timing to surface meaningful market behavior. Start with Red Fox Favorites, follow the strongest Market Reads, and drill into the evidence behind every signal.</p>
-    <p class="hero-positioning">No blind picks. Red Fox shows you what the market is doing, why it matters, and which setups meet its most selective criteria.</p>
+    <p class="hero-sub">Red Fox continuously evaluates market positioning, line and price movement, pressure, resistance, reversals, and timing to surface meaningful market behavior. Start with Red Fox Favorites, then drill into the Market Reads and evidence behind every signal.</p>
     <div class="hero-ctas">
       <button class="btn btn-primary btn-lg" id="hero-primary-action" onclick="startFreeTrial()">Try Free for 24 Hours</button>
       <button class="btn btn-ghost btn-lg" id="hero-secondary-action" onclick="beginAccess('professional')">Go Unlimited - $29.99/mo</button>
@@ -825,12 +828,12 @@ section { padding: 100px 40px; }
       </div>
       <div class="feat-card">
         <div class="feat-icon feat-icon-regime">&#9632;</div>
-        <h3>See the Signal in Context</h3>
+        <h3>Understand the Market Read</h3>
         <p>Red Fox combines positioning, movement, pressure, resistance, reversals, and timing into a structured Market Read with the supporting evidence behind it.</p>
       </div>
       <div class="feat-card">
         <div class="feat-icon feat-icon-scoring">&#9650;</div>
-        <h3>Make Your Own Call</h3>
+        <h3>Start With Red Fox Favorites</h3>
         <p>Quickly find the selective markets that meet Red Fox&rsquo;s preferred wager criteria, then open the full Market Read and evidence before making your decision.</p>
       </div>
     </div>
@@ -881,7 +884,7 @@ section { padding: 100px 40px; }
       <div class="not-item negative"><span class="not-icon">&times;</span> Not trend-based betting</div>
       <div class="not-item positive"><span class="not-icon">&#10003;</span> Systematic</div>
       <div class="not-item negative"><span class="not-icon">&times;</span> Not opinions or narratives</div>
-      <div class="not-item positive"><span class="not-icon">&#10003;</span> Price-sensitive</div>
+      <div class="not-item positive"><span class="not-icon">&#10003;</span> Market-driven</div>
       <div class="not-item negative"><span class="not-icon">&times;</span> Not a tipster newsletter</div>
       <div class="not-item positive"><span class="not-icon">&#10003;</span> Timing-aware</div>
     </div>
@@ -891,9 +894,10 @@ section { padding: 100px 40px; }
 <!-- ─── DASHBOARD PREVIEW ─── -->
 <section class="preview">
   <div class="container">
-    <p class="preview-sub">Red Fox Favorites rise to the top of the board, followed by the strongest remaining Market Reads, so you can start with the most selective setups without losing the broader market picture.</p>
+    <h2>Favorites first. Full market intelligence underneath.</h2>
+    <p class="preview-sub">Red Fox Favorites rise to the top, followed by the strongest remaining Market Reads.</p>
     <h2>See the Market Story Unfold</h2>
-    <p class="preview-sub">Follow the real-time journey from open to current price, then look back through the exact path, split changes, and timestamped market evidence.</p>
+    <p class="preview-sub">Follow the journey from open to current, then review the exact path, split changes, and timestamped evidence.</p>
     <div class="preview-wrap">
       <img src="home-board.png?v=20260904" alt="Red Fox live market board showing signals, market evidence, and timelines" class="preview-screenshot">
       <div class="preview-overlay">
@@ -907,7 +911,7 @@ section { padding: 100px 40px; }
         <div>
           <div class="journey-eyebrow">Inside each signal</div>
           <h3>See the evidence behind every Market Read.</h3>
-          <p>Open any market to trace the line or price from first observation to current state, compare ticket and money-share changes, review pressure, resistance, reversals, and timing, and inspect the timestamped proof layer.</p>
+          <p>Trace the line or price from first observation to current state and review the market evidence behind the read.</p>
         </div>
         <div class="journey-visual"><img src="home-journey.png?v=20260904" alt="Red Fox Market Journey with price trajectory and milestone evidence" class="journey-screenshot"></div>
       </div>
@@ -933,8 +937,10 @@ section { padding: 100px 40px; }
           <li>Market journey and timeline</li>
           <li>Real-time updates</li>
         </ul>
-        <button class="btn btn-primary btn-lg" id="pricing-access-action" onclick="startFreeTrial()">Try Free for 24 Hours</button>
-        <button class="btn btn-ghost" style="margin-top:10px;width:100%" onclick="handleCheckout('day_pass')">Buy Day Access - $3.99</button>
+        <div class="price-actions">
+          <button class="btn btn-primary btn-lg" id="pricing-access-action" onclick="startFreeTrial()">Try Free for 24 Hours</button>
+          <button class="btn btn-ghost" style="margin-top:10px;width:100%" onclick="handleCheckout('day_pass')">Buy Day Access - $3.99</button>
+        </div>
       </div>
       <div class="price-card">
         <div class="price-label">Monthly Unlimited</div>
@@ -947,7 +953,7 @@ section { padding: 100px 40px; }
           <li>Live Market Read context</li>
           <li>Cancel anytime</li>
         </ul>
-        <button class="btn btn-accent btn-lg" onclick="handleCheckout('professional')">Go Unlimited</button>
+        <div class="price-actions"><button class="btn btn-accent btn-lg" onclick="handleCheckout('professional')">Go Unlimited</button></div>
       </div>
       <div class="price-card featured">
         <div class="price-label">Annual <span class="best-value">Best Value</span></div>
@@ -959,7 +965,7 @@ section { padding: 100px 40px; }
           <li>Full season of market journeys</li>
           <li>Cancel anytime</li>
         </ul>
-        <button class="btn btn-primary btn-lg" onclick="handleCheckout('annual')">Choose Annual</button>
+        <div class="price-actions"><button class="btn btn-primary btn-lg" onclick="handleCheckout('annual')">Choose Annual</button></div>
       </div>
     </div>
     <label class="consent"><input id="purchase-consent" type="checkbox"><span>I am at least 21, understand this is market information rather than betting advice, and agree to the <a href="/terms.html" target="_blank">Terms</a>, <a href="/privacy.html" target="_blank">Privacy Policy</a>, and <a href="/refund-policy.html" target="_blank">Refund and Cancellation Policy</a>. Checkout is securely hosted by Stripe; Red Fox never receives or stores card details.</span></label>

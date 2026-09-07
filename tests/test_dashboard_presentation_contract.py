@@ -179,6 +179,23 @@ def test_market_guide_matches_role_and_display_semantics():
     assert "no qualifying Open-to-Current directional movement" not in BOARD
 
 
+def test_red_fox_favorite_guide_section_and_tooltip_are_isolated_copy_additions():
+    intro = BOARD.index("Use this guide to understand Red Fox market reads, movement, and context.")
+    favorite = BOARD.index("redFoxFavoriteGuideSection()+", intro)
+    directional = BOARD.index("MARKET_GUIDE_SECTIONS.map", favorite)
+    assert intro < favorite < directional
+    assert '<h3>Red Fox Favorite</h3>' in BOARD
+    assert "A selective designation for markets that match Red Fox’s preferred wager structures" in BOARD
+    assert "Low-support Freeze / Resistance" in BOARD
+    assert "Totals are not Favorite-eligible in the current version" in BOARD
+    assert "Whipsaw does not automatically disqualify a Favorite." in BOARD
+    assert "Red Fox Favorite is <strong>binary</strong>" in BOARD
+    assert "Matches Red Fox’s preferred wager criteria based on market support, movement, price/number, and data quality." in BOARD
+    assert 'aria-describedby="favorite-badge-tooltip"' in BOARD
+    assert 'onmouseenter="showFavoriteTooltip(this)"' in BOARD
+    assert 'onclick="event.stopPropagation();showFavoriteTooltip(this)"' in BOARD
+
+
 def test_visible_rank_is_selected_market_rank():
     assert 'Selected-market rank: ${boardRank(r)}' in BOARD
     assert '<span class="rank-number">${boardRank(r)}</span><span class="rank-scope">MKT</span>' in BOARD
