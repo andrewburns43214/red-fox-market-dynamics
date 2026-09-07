@@ -185,7 +185,8 @@ def test_red_fox_favorite_guide_section_and_tooltip_are_isolated_copy_additions(
     directional = BOARD.index("MARKET_GUIDE_SECTIONS.map", favorite)
     assert intro < favorite < directional
     assert '<h3>Red Fox Favorite</h3>' in BOARD
-    assert "A selective designation for markets that match Red Fox’s preferred wager structures" in BOARD
+    assert "A selective designation for markets that match Red Fox’s preferred wager structures based on current market positioning, movement or resistance, wager price/number, and data quality." in BOARD
+    assert "based on current DraftKings positioning" not in BOARD
     assert "Low-support Freeze / Resistance" in BOARD
     assert "Totals are not Favorite-eligible in the current version" in BOARD
     assert "Whipsaw does not automatically disqualify a Favorite." in BOARD
@@ -193,7 +194,17 @@ def test_red_fox_favorite_guide_section_and_tooltip_are_isolated_copy_additions(
     assert "Matches Red Fox’s preferred wager criteria based on market support, movement, price/number, and data quality." in BOARD
     assert 'aria-describedby="favorite-badge-tooltip"' in BOARD
     assert 'onmouseenter="showFavoriteTooltip(this)"' in BOARD
-    assert 'onclick="event.stopPropagation();showFavoriteTooltip(this)"' in BOARD
+    assert "onclick=\"event.stopPropagation();hideFavoriteTooltip();openSignalGuide(\\'Red Fox Favorite\\')\"" in BOARD
+
+
+def test_favorite_badge_hover_and_exact_guide_navigation_share_authoritative_copy():
+    assert 'onmouseenter="showFavoriteTooltip(this)"' in BOARD
+    assert "if(requested==='Red Fox Favorite')" in BOARD
+    assert "title.textContent='Red Fox Favorite';" in BOARD
+    assert "body.innerHTML=redFoxFavoriteGuideSection();" in BOARD
+    assert "hideFavoriteTooltip();openSignalGuide('Red Fox Favorite');" in BOARD
+    assert ".red-fox-favorite-badge{display:block;flex:0 0 auto;width:108px;height:32px" in BOARD
+    assert ".red-fox-favorite-badge{width:108px;height:36px;max-width:calc(100% - 42px)}" in BOARD
 
 
 def test_market_read_tooltips_reuse_favorite_visuals_without_changing_chip_actions():

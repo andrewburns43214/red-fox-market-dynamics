@@ -2366,7 +2366,7 @@ function signalGuideItem(label, tip){
 function redFoxFavoriteGuideSection(){
   return '<div class="signal-guide-section red-fox-favorite-guide"><h3>Red Fox Favorite</h3><div class="favorite-guide-copy">'+
     '<p><strong>Red Fox Favorite</strong></p>'+
-    '<p>A selective designation for markets that match Red Fox’s preferred wager structures based on current DraftKings positioning, market movement or resistance, wager price/number, and data quality.</p>'+
+    '<p>A selective designation for markets that match Red Fox’s preferred wager structures based on current market positioning, movement or resistance, wager price/number, and data quality.</p>'+
     '<p>A market may qualify through:</p>'+
     '<ul><li><strong>Low-support Contrarian</strong> — the less-supported side receives meaningful movement in its favor.</li><li><strong>Low-support Freeze / Resistance</strong> — the less-supported side is protected while substantial opposing pressure fails to produce the expected favorable response.</li><li><strong>Moderate-support Follow</strong> — a more balanced side receives clean, meaningful movement in the same direction.</li></ul>'+
     '<p>Current Favorite eligibility:</p>'+
@@ -2388,7 +2388,10 @@ function openSignalGuide(selected){
   const title=document.getElementById('signal-guide-title');
   const body=document.getElementById('signal-guide-body');
   const requested=String(selected||'').trim();
-  if(requested){
+  if(requested==='Red Fox Favorite'){
+    title.textContent='Red Fox Favorite';
+    body.innerHTML=redFoxFavoriteGuideSection();
+  } else if(requested){
     const meta=signalMetaFor(requested);
     title.textContent=(meta.label||requested)+' definition';
     body.innerHTML='<p class="signal-guide-intro">This label describes market behavior. It does not tell you what to bet.</p>'+
@@ -2995,7 +2998,7 @@ function hideFavoriteTooltip(){
   favoriteTooltipAnchor=null;
 }
 function favoriteBadgeKeydown(event,anchor){
-  if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();showFavoriteTooltip(anchor);}
+  if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();hideFavoriteTooltip();openSignalGuide('Red Fox Favorite');}
   if(event.key==='Escape'){event.preventDefault();hideFavoriteTooltip();anchor.blur();}
 }
 let integrityTooltipAnchor=null;
@@ -3018,7 +3021,7 @@ document.addEventListener('click',event=>{
 });
 window.addEventListener('resize',()=>{hideFavoriteTooltip();hideSignalTooltip();hideIntegrityTooltip();});
 window.addEventListener('scroll',()=>{hideFavoriteTooltip();hideSignalTooltip();hideIntegrityTooltip();},true);
-function favoriteBadge(){ return '<img class="red-fox-favorite-badge" src="assets/red-fox-favorite.png" alt="Red Fox Favorite" role="button" tabindex="0" aria-describedby="favorite-badge-tooltip" onmouseenter="showFavoriteTooltip(this)" onmouseleave="if(document.activeElement!==this)hideFavoriteTooltip()" onfocus="showFavoriteTooltip(this)" onblur="hideFavoriteTooltip()" onclick="event.stopPropagation();showFavoriteTooltip(this)" onkeydown="favoriteBadgeKeydown(event,this)">'; }
+function favoriteBadge(){ return '<img class="red-fox-favorite-badge" src="assets/red-fox-favorite.png" alt="Red Fox Favorite" role="button" tabindex="0" aria-describedby="favorite-badge-tooltip" onmouseenter="showFavoriteTooltip(this)" onmouseleave="if(document.activeElement!==this)hideFavoriteTooltip()" onfocus="showFavoriteTooltip(this)" onblur="hideFavoriteTooltip()" onclick="event.stopPropagation();hideFavoriteTooltip();openSignalGuide(\'Red Fox Favorite\')" onkeydown="favoriteBadgeKeydown(event,this)">'; }
 function crossMarketMismatchBadge(){ return '<button class="cross-market-mismatch-badge" type="button" aria-describedby="integrity-badge-tooltip" onmouseenter="showIntegrityTooltip(this)" onmouseleave="if(document.activeElement!==this)hideIntegrityTooltip()" onfocus="showIntegrityTooltip(this)" onblur="hideIntegrityTooltip()" onclick="event.stopPropagation();showIntegrityTooltip(this)" onkeydown="integrityBadgeKeydown(event,this)">Cross-Market Mismatch</button>'; }
 function favoritePlane(row){ return (isRedFoxFavorite(row)||hasCrossMarketMismatch(row))?'<span class="favorite-plane-spacer" aria-hidden="true"></span>':''; }
 async function refreshLiveRecentCount(){
