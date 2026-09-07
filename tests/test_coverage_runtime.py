@@ -254,6 +254,9 @@ def test_wrong_side_identity_is_quarantined_without_deleting_valid_other_markets
 
 def test_monitor_can_certify_a_fresh_complete_consistent_run(tmp_path):
     store = CoverageStore(tmp_path)
+    # A timed-out historical run is recovered once a newer run in the same
+    # stream completes; it must not poison health forever.
+    store.begin("PUBLICATION", now=(NOW - pd.Timedelta(hours=1)).isoformat())
     for sport in ["mlb", "nfl", "ncaaf", "ufc"]:
         run_id = store.begin("SCRAPE", sport, now=NOW.isoformat())
         store.finish(run_id, "COMPLETE")

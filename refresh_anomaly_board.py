@@ -422,7 +422,10 @@ def _refresh(coverage):
         temporary.replace(DATA / name)
     coverage_summary = coverage.publish(board, DATA / "anomaly_board.csv", filter_publication_eligible_markets)
     print("[coverage] " + json.dumps(coverage_summary["sports"], sort_keys=True))
-    freshness = write_board_freshness(dashboard, data_dir=DATA, now=coverage.now)
+    # ``coverage.now`` is the deterministic evaluation clock captured at run
+    # start.  Customer-facing publish age must record when the completed files
+    # actually became available, especially when a large board takes minutes.
+    freshness = write_board_freshness(dashboard, data_dir=DATA)
     resolved_count = rebuild_action_results(DATA)
     freshness_summary = "no current source rows" if freshness is None else (
         f"source range {freshness[0].isoformat()} to {freshness[1].isoformat()} across {freshness[2]} markets"

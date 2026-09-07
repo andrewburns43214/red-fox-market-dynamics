@@ -42,8 +42,13 @@ def check(data_dir, now=None, max_age_minutes=25):
             captures = db.execute("SELECT sport,state FROM runs WHERE kind='CAPTURE' ORDER BY started_at").fetchall()
             if any(state == "CAPTURE_FAILED" for state in dict(captures).values()):
                 issues.append("LATEST_CAPTURE_FAILED")
-            running = db.execute("SELECT kind,started_at FROM runs WHERE state='RUNNING'").fetchall()
-            if any((now - datetime.fromisoformat(start)).total_seconds() > max_age_minutes * 60 for _, start in running):
+            runs = db.execute("SELECT kind,sport,state,started_at FROM runs ORDER BY started_at").fetchall()
+            latest_by_stream = {(kind, sport): (state, started) for kind, sport, state, started in runs}
+            if any(
+                state == "RUNNING"
+                and (now - datetime.fromisoformat(started)).total_seconds() > max_age_minutes * 60
+                for state, started in latest_by_stream.values()
+            ):
                 issues.append("INTERRUPTED_COVERAGE_RUN")
     except (OSError, ValueError, TypeError, KeyError, sqlite3.Error) as error:
         return {"issues": ["COVERAGE_EVIDENCE_UNAVAILABLE"], "detail": str(error)}, False
