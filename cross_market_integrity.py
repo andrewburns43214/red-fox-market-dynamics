@@ -58,6 +58,16 @@ def apply_cross_market_integrity(board: pd.DataFrame, history: pd.DataFrame, as_
     prepared = _prepare_history(history)
     if prepared.empty:
         return result
+    active_keys = {
+        (str(row["sport"]).lower(), str(row["game_id"]))
+        for _, row in result[["sport", "game_id"]].drop_duplicates().iterrows()
+    }
+    prepared["_integrity_key"] = list(zip(prepared["sport"].astype(str).str.lower(), prepared["game_id"].astype(str)))
+    prepared = prepared[prepared["_integrity_key"].isin(active_keys)].copy()
+    history_groups = {
+        (str(sport).lower(), str(game_id)): group
+        for (sport, game_id), group in prepared.groupby(["sport", "game_id"], dropna=False, sort=False)
+    }
     captured_at = _utc_timestamp(as_of)
     for (sport, game_id), indexes in result.groupby(["sport", "game_id"], dropna=False, sort=False).groups.items():
         game_rows = result.loc[indexes]
@@ -66,10 +76,7 @@ def apply_cross_market_integrity(board: pd.DataFrame, history: pd.DataFrame, as_
             continue
         if not _board_pair_reliable(game_rows):
             continue
-        game_history = prepared[
-            prepared["sport"].astype(str).str.lower().eq(str(sport).lower())
-            & prepared["game_id"].astype(str).eq(str(game_id))
-        ]
+        game_history = history_groups.get((str(sport).lower(), str(game_id)), prepared.iloc[0:0])
         evaluation = evaluate_cross_market_history(game_history, as_of=captured_at)
         pair_mask = result.index.isin(indexes) & result["market_display"].astype(str).str.upper().isin(["SPREAD", "MONEYLINE"])
         if evaluation["opener_verified"]:
