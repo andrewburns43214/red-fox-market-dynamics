@@ -24,8 +24,15 @@ def test_refresh_watchdog_keeps_atomic_failure_protection_with_measured_headroom
 
 def test_healthcheck_resets_consecutive_failure_count_after_success():
     script = (Path(__file__).resolve().parents[1] / "ops" / "redfox-healthcheck.sh").read_text(encoding="utf-8")
+    assert 'MAX_BOARD_AGE_MINUTES="${REDFOX_MAX_BOARD_AGE_MINUTES:-20}"' in script
     assert "/refresh anomaly board DONE/ { failures=0; next }" in script
     assert "/refresh anomaly board ERROR/ { failures++ }" in script
+
+
+def test_customer_freshness_threshold_includes_the_scheduled_processing_window():
+    board = (Path(__file__).resolve().parents[1] / "site" / "board.html").read_text(encoding="utf-8")
+    assert "label:'Board source', ts:f.board_oldest_ts||f.dk_ts, fresh:15, warn:20" in board
+    assert "label:'Board publish', ts:f.board_published_at||f.engine_ts, fresh:15, warn:20" in board
 
 
 def test_snapshot_watchdog_is_bounded_and_runner_does_not_stamp_dk_wall_clock():
