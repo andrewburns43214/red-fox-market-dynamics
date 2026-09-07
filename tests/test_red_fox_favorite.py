@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from red_fox_favorite import CONFIG, apply_red_fox_favorites, update_favorite_tracking
+from build_live_recent import ensure_output_columns
 
 
 def side(name, current, *, bets=35, money=30, reaction="Contrarian", direction="TOWARD",
@@ -216,3 +217,13 @@ def test_customer_badge_and_sort_contract_preserve_active_market_semantics():
     assert ".favorite-plane-spacer{display:block;height:32px" in board
     assert ".favorite-plane-spacer{display:none!important}" in board
     assert ".red-fox-favorite-badge{width:108px;height:36px;max-width:calc(100% - 42px)}" in board
+
+
+def test_live_recent_legacy_rows_receive_the_favorite_schema_without_backfill():
+    legacy = pd.DataFrame([{"sport": "mlb", "game_id": "old", "market_display": "MONEYLINE"}])
+    output = ensure_output_columns(legacy)
+    assert output.iloc[0].red_fox_favorite == "false"
+    for column in ("favorite_side", "favorite_pathway", "favorite_first_qualified_at",
+                   "favorite_final_market_read", "favorite_snapshot_id"):
+        assert column in output
+        assert output.iloc[0][column] == ""

@@ -174,6 +174,15 @@ def read_csv_or_empty(path: Path) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def ensure_output_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Keep the frozen export schema stable across pre-feature retained rows."""
+    result = frame.copy()
+    for column in EMPTY_COLUMNS:
+        if column not in result.columns:
+            result[column] = "false" if column == "red_fox_favorite" else ""
+    return result
+
+
 def market_type(side: object) -> str:
     value = str(side or "").strip().lower()
     if value.startswith(("over ", "under ")):
@@ -277,7 +286,7 @@ def main(scores_only: bool = False) -> None:
             write_score_coverage(empty, now)
             return
         rows.append(recovered)
-    live = pd.concat(rows, ignore_index=True, sort=False)
+    live = ensure_output_columns(pd.concat(rows, ignore_index=True, sort=False))
     # Compare in one timezone-free representation; CSVs can contain a mix of
     # offset-aware and legacy naive kickoff values.
     kickoff_values = live["kickoff_iso"] if "kickoff_iso" in live.columns else pd.Series(pd.NaT, index=live.index)
