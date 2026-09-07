@@ -11,16 +11,17 @@ from build_live_recent import ensure_output_columns
 def side(name, current, *, bets=35, money=30, reaction="Contrarian", direction="TOWARD",
          observations=4, clean=True, kpi=True, action_type="CONTRARIAN CANDIDATE",
          action_side=None, path="One-Way", line_move=1.0, price_move=3.0, context="",
-         active_worsening=False):
+         active_worsening=False, open_line=None, evidence_role="", key_number_pinned=""):
     return {
         "flagged_side": name, "bets_pct": bets, "money_pct": money,
-        "open_line": current, "current_line": current, "reaction": reaction,
+        "open_line": open_line or current, "current_line": current, "reaction": reaction,
         "response_direction": direction, "observation_count": observations,
         "data_badge": "Clean" if clean else "Thin", "kpi_eligible": kpi,
         "action_type": action_type, "action_side": action_side or name, "path": path,
         "line_move_abs": line_move, "price_move_pct": price_move,
         "context_chips": context, "whipsaw_recovered": "Whipsaw Recovered" in context,
         "active_worsening_reversal": active_worsening,
+        "evidence_role": evidence_role, "key_number_pinned": key_number_pinned,
     }
 
 
@@ -74,22 +75,53 @@ def test_moneyline_outside_final_v1_range_is_rejected(price):
     assert not is_favorite(result([market("mlb", "MONEYLINE", [candidate, opponent])]))
 
 
-def test_actionable_persistent_freeze_resistance_qualifies():
-    candidate = side("Low side +3", "+3 (-110)", bets=20, money=15, reaction="Watch",
-                     direction="LIMITED", kpi=False, action_type="OBSERVE ONLY")
-    pressure = side("Public side -3", "-3 (-110)", bets=80, money=85, reaction="Freeze",
-                    direction="LIMITED", kpi=True, action_type="FADE CANDIDATE",
-                    action_side="Low side +3", path="Held")
-    frame = result([market("nfl", "SPREAD", [candidate, pressure])])
+def florida_state_path_b(*, active_worsening=False, pressure_reaction="Freeze", pressure_direction="AGAINST"):
+    candidate = side(
+        "Florida State +3", "+3 (-115)", open_line="+3 (-110)", bets=23, money=25,
+        reaction="Watch", direction="LIMITED", kpi=False, action_type="OBSERVE ONLY",
+        path="Held", line_move=0, price_move=1.107, context="K3 | Whipsaw Recovered",
+        active_worsening=active_worsening, evidence_role="Resistance Side", key_number_pinned="K3",
+    )
+    pressure = side(
+        "SMU -3", "-3 (-105)", open_line="-3 (-110)", bets=77, money=75,
+        reaction=pressure_reaction, direction=pressure_direction, kpi=False,
+        action_type="OBSERVE ONLY", path="Held", line_move=0, price_move=1.162,
+        context="K3 | Public Pressure | Whipsaw Recovered", evidence_role="Pressure Side",
+        key_number_pinned="K3",
+    )
+    return candidate, pressure
+
+
+def test_florida_state_key_three_recovered_freeze_qualifies_without_generic_fade_candidate():
+    candidate, pressure = florida_state_path_b()
+    assert pressure["kpi_eligible"] is False
+    assert pressure["action_type"] == "OBSERVE ONLY"
+    assert pressure["key_number_pinned"] == "K3"
+    frame = result([market("ncaaf", "SPREAD", [candidate, pressure], game_id="smu-fsu", game="SMU @ Florida State")])
     assert is_favorite(frame)
     assert frame.iloc[0].favorite_pathway == "low_support_freeze"
+    assert frame.iloc[0].favorite_side == "Florida State +3"
 
 
-def test_descriptive_freeze_does_not_qualify():
-    candidate = side("Low side +3", "+3 (-110)", bets=20, money=15, reaction="Watch", direction="LIMITED", kpi=False)
-    pressure = side("Public side -3", "-3 (-110)", bets=80, money=85, reaction="Freeze",
-                    direction="LIMITED", kpi=False, action_type="OBSERVE ONLY", action_side="Low side +3", path="Held")
+def test_similar_splits_without_resistance_or_protection_do_not_qualify():
+    candidate, pressure = florida_state_path_b(pressure_reaction="Follow", pressure_direction="TOWARD")
+    candidate["response_direction"] = "AGAINST"
     assert not is_favorite(result([market("nfl", "SPREAD", [candidate, pressure])]))
+
+
+def test_path_b_active_destructive_reversal_does_not_qualify():
+    candidate, pressure = florida_state_path_b(active_worsening=True)
+    assert not is_favorite(result([market("ncaaf", "SPREAD", [candidate, pressure])]))
+
+
+def test_path_b_material_moneyline_contradiction_does_not_qualify():
+    candidate, pressure = florida_state_path_b()
+    spread = market("ncaaf", "SPREAD", [candidate, pressure], game_id="smu-fsu", game="SMU @ Florida State")
+    moneyline = market("ncaaf", "MONEYLINE", [
+        side("Florida State", "+120", bets=23, money=25, reaction="Watch", direction="AGAINST", kpi=False, price_move=3.0),
+        side("SMU", "-140", bets=77, money=75, reaction="Follow", direction="TOWARD", kpi=False, price_move=3.0),
+    ], game_id="smu-fsu", game="SMU @ Florida State", rank=2)
+    assert not is_favorite(result([spread, moneyline]))
 
 
 def test_moderate_support_follow_path_uses_existing_movement_evidence():

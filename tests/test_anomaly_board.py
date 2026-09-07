@@ -258,6 +258,8 @@ class TestAnomalyBoard(unittest.TestCase):
         self.assertEqual(pressure["response_direction"], "AGAINST")
         self.assertTrue(pressure["whipsaw_recovered"])
         self.assertEqual(pressure["key_number_pinned"], "K3")
+        self.assertEqual(pressure["action_type"], "OBSERVE ONLY")
+        self.assertFalse(pressure["kpi_eligible"])
         self.assertIn("Public Pressure", pressure["context_chips"])
         self.assertEqual(sides["SMU -3"]["evidence_role"], "Pressure Side")
         self.assertEqual(sides["SMU -3"]["evidence_polarity"], "adverse")

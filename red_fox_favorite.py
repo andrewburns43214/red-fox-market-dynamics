@@ -181,7 +181,7 @@ def _qualify_market(row: pd.Series, game_rows: pd.DataFrame | None) -> dict | No
         value = _line_value(side.get("current_line"), market)
         if value is None or not _number_is_eligible(sport, market, value, side, game_rows):
             continue
-        pathway = _pathway(side, other, sides)
+        pathway = _pathway(side, other)
         if not pathway:
             continue
         cross_state = "not_applicable"
@@ -221,7 +221,7 @@ def _qualify_market(row: pd.Series, game_rows: pd.DataFrame | None) -> dict | No
     }
 
 
-def _pathway(side: dict, other: dict, sides: list[dict]) -> str:
+def _pathway(side: dict, other: dict) -> str:
     bets, money = _number(side.get("bets_pct")), _number(side.get("money_pct"))
     other_bets, other_money = _number(other.get("bets_pct")), _number(other.get("money_pct"))
     if None in {bets, money, other_bets, other_money}:
@@ -231,7 +231,7 @@ def _pathway(side: dict, other: dict, sides: list[dict]) -> str:
     reaction = str(side.get("reaction", ""))
     if low and reaction == "Contrarian" and toward and _truthy(side.get("kpi_eligible")):
         return "low_support_contrarian"
-    if low and _is_actionable_resistance(side, sides):
+    if low and _is_favorite_resistance(side, other):
         return "low_support_freeze"
     moderate = (
         CONFIG.moderate_support_min <= bets <= CONFIG.moderate_support_max
@@ -242,16 +242,41 @@ def _pathway(side: dict, other: dict, sides: list[dict]) -> str:
     return ""
 
 
-def _is_actionable_resistance(side: dict, sides: list[dict]) -> bool:
-    name = _side_identity(side.get("flagged_side"))
-    for pressure in sides:
-        if str(pressure.get("reaction", "")) != "Freeze":
-            continue
-        if not _truthy(pressure.get("kpi_eligible")) or str(pressure.get("action_type", "")).upper() != "FADE CANDIDATE":
-            continue
-        if _side_identity(pressure.get("action_side")) == name:
-            return True
-    return False
+def _is_favorite_resistance(side: dict, pressure: dict) -> bool:
+    """Evaluate Favorite Path B without inheriting generic fade safeguards.
+
+    The Market Read engine places ``Freeze`` on the high-support pressure side
+    and ``Resistance Side`` on the protected, low-support counterpart.  Its
+    generic fade candidate additionally blocks key numbers and requires 80%
+    tickets; neither safeguard belongs to the Favorite contract.
+    """
+    if str(pressure.get("reaction", "")) != "Freeze" or not _base_quality(pressure):
+        return False
+    pressure_bets = _number(pressure.get("bets_pct"))
+    pressure_money = _number(pressure.get("money_pct"))
+    if pressure_bets is None or pressure_money is None:
+        return False
+    pressure_context = _parts(pressure.get("context_chips"))
+    substantial_pressure = (
+        "Public Pressure" in pressure_context
+        or (pressure_bets >= 70 and pressure_money >= 55)
+    )
+    if not substantial_pressure:
+        return False
+    # Freeze means concentrated pressure failed to earn a meaningful favorable
+    # response.  The paired side must still be held/protected, not moving
+    # materially against the proposed Favorite.
+    if str(pressure.get("response_direction", "")).upper() not in {"AGAINST", "LIMITED"}:
+        return False
+    if str(side.get("response_direction", "")).upper() not in {"TOWARD", "LIMITED"}:
+        return False
+    pressure_role = str(pressure.get("evidence_role", "")).strip()
+    resistance_role = str(side.get("evidence_role", "")).strip()
+    if pressure_role and pressure_role != "Pressure Side":
+        return False
+    if resistance_role and resistance_role != "Resistance Side":
+        return False
+    return True
 
 
 def _base_quality(side: dict) -> bool:
