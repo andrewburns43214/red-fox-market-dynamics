@@ -19,6 +19,13 @@ def test_refresh_watchdog_keeps_atomic_failure_protection_with_measured_headroom
     assert 'REFRESH_TIMEOUT_SECONDS="${REDFOX_REFRESH_TIMEOUT_SECONDS:-300}"' in script
     assert 'if timeout "$REFRESH_TIMEOUT_SECONDS" "$PY" refresh_anomaly_board.py' in script
     assert 'refresh anomaly board ERROR' in script
+    assert "export PYTHONUNBUFFERED=1" in script
+
+
+def test_healthcheck_resets_consecutive_failure_count_after_success():
+    script = (Path(__file__).resolve().parents[1] / "ops" / "redfox-healthcheck.sh").read_text(encoding="utf-8")
+    assert "/refresh anomaly board DONE/ { failures=0; next }" in script
+    assert "/refresh anomaly board ERROR/ { failures++ }" in script
 
 
 def test_snapshot_watchdog_is_bounded_and_runner_does_not_stamp_dk_wall_clock():

@@ -43,7 +43,13 @@ recent_log=$(tail -n 2000 /var/log/redfox_update.log 2>/dev/null || true)
 if ! grep -q 'RUN END' <<<"$recent_log"; then
   issues+=("no completed full pipeline marker")
 fi
-upstream_errors=$(grep -Eic 'snapshot ERROR|refresh anomaly board ERROR|TimeoutException|SessionNotCreatedException' <<<"$recent_log" || true)
+# Count consecutive failed publish outcomes, not old failures that preceded a
+# successful recovery.  This keeps the status actionable after the board heals.
+upstream_errors=$(awk '
+  /refresh anomaly board DONE/ { failures=0; next }
+  /refresh anomaly board ERROR/ { failures++ }
+  END { print failures+0 }
+' <<<"$recent_log")
 (( upstream_errors < MAX_UPSTREAM_ERRORS )) || issues+=("repeated upstream failures ${upstream_errors}")
 
 status_file="$STATE_DIR/status"
