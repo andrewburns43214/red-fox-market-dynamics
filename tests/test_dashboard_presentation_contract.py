@@ -167,10 +167,11 @@ def test_mobile_market_read_chips_are_compact_without_changing_global_or_desktop
 
 
 def test_market_guide_matches_role_and_display_semantics():
-    assert "Directional Reads describe Red Fox’s interpretation of how the book is responding within the selected market" in BOARD
-    assert "Watch and non-actionable Freeze support neither side" in BOARD
+    assert "Contrarian and Follow are directional." in BOARD
+    assert "Watch and non-actionable Freeze are neutral." in BOARD
     assert "Freeze is assigned to the Pressure Side" in BOARD
     assert "the supported side is the explicit action/fade side" in BOARD
+    assert "support belongs to the explicit action side—not necessarily the side carrying the Freeze chip" in BOARD
     assert "The side receiving qualifying concentrated betting pressure" in BOARD
     assert "The opposing side supported by the market’s resistance to concentrated pressure" in BOARD
     assert "The spread or total number, or the moneyline price" in BOARD
@@ -178,21 +179,22 @@ def test_market_guide_matches_role_and_display_semantics():
     assert "['Risk & Data Quality',['Price Risk','Capped Split','Thin','Feed Risk','Split Risk']]" in BOARD
     assert "incomplete price or line data cannot support a reliable market read" in BOARD
     assert "The rank of the currently selected Spread, Moneyline, or Total market relative to the rest of the board" in BOARD
-    assert "a measurable Open-to-Current change" in BOARD
+    assert "meaningful Open-to-Current movement" in BOARD
     assert "no qualifying Open-to-Current directional movement" not in BOARD
 
 
 def test_red_fox_favorite_guide_section_and_tooltip_are_isolated_copy_additions():
-    intro = BOARD.index("Use this guide to understand Red Fox Market Reads, book behavior, movement, positioning, and context.")
+    intro = BOARD.index("<h3>What Red Fox Is Reading</h3>")
     favorite = BOARD.index("redFoxFavoriteGuideSection()+", intro)
-    directional = BOARD.index("MARKET_GUIDE_SECTIONS.map", favorite)
+    directional = BOARD.index("marketGuideSection(MARKET_GUIDE_SECTIONS[0]", favorite)
     assert intro < favorite < directional
     assert '<h3>Red Fox Favorite</h3>' in BOARD
     assert '<p><strong>Red Fox Favorite</strong></p>' not in BOARD
-    assert "A selective designation for markets that match Red Fox’s preferred wager structures based on current market positioning, movement or resistance, wager price/number, and data quality." in BOARD
+    assert "A selective designation for a confirmed Supported Side that also matches Red Fox’s preferred wager profile." in BOARD
     assert "based on current DraftKings positioning" not in BOARD
-    assert "Low-support Freeze / Resistance" in BOARD
-    assert "Totals are not Favorite-eligible in the current version" in BOARD
+    assert "Lower-support Freeze / Fade" in BOARD
+    assert "reasonably actionable range" in BOARD
+    assert "Not every directional read or wager type is Favorite-eligible." in BOARD
     assert "Whipsaw does not automatically disqualify a Favorite." in BOARD
     assert "Red Fox Favorite is <strong>binary</strong>" in BOARD
     assert "Matches Red Fox’s preferred wager criteria based on market support, movement, price/number, and data quality." in BOARD
@@ -229,10 +231,10 @@ def test_market_read_tooltips_reuse_favorite_visuals_without_changing_chip_actio
 def test_cross_market_integrity_badge_tooltip_and_guide_are_market_level():
     favorite = BOARD.index("redFoxFavoriteGuideSection()+")
     integrity = BOARD.index("marketIntegrityGuideSection()+", favorite)
-    directional = BOARD.index("MARKET_GUIDE_SECTIONS.map", integrity)
-    assert favorite < integrity < directional
+    risk = BOARD.index("marketGuideSection(MARKET_GUIDE_SECTIONS[3]", integrity)
+    assert favorite < integrity < risk
     assert '<h3>Market Integrity</h3>' in BOARD
-    assert "A stricter market-integrity flag indicating that synchronized Spread and Moneyline pricing materially disagree" in BOARD
+    assert "A stricter market-integrity flag indicating that synchronized Spread and Moneyline pricing disagree in a sustained and reliable way" in BOARD
     assert "does not change the underlying Market Read or Market Rank" in BOARD
     assert "confirmed Cross-Market Mismatch" in BOARD
     assert 'id="integrity-badge-tooltip" role="tooltip" hidden' in BOARD
@@ -265,7 +267,7 @@ def test_cross_market_split_badge_is_pair_context_with_mismatch_priority():
     assert "body.innerHTML=marketIntegrityGuideSection(false,'Cross-Market Split');" in BOARD
     assert "hideSplitTooltip();openSignalGuide('Cross-Market Split');" in BOARD
     assert "['Cross-Market Split','Cross-Market Mismatch']" in BOARD
-    assert "When Mismatch is active, it supersedes Split." in BOARD
+    assert "is the more serious label when both descriptions could otherwise apply." in BOARD
     assert "A neutral or unresolved market cannot create a Cross-Market Split." in BOARD
 
 
@@ -279,9 +281,9 @@ def test_market_guide_explains_authoritative_supported_side_semantics():
     assert "only when it qualifies as an eligible Fade Candidate" in BOARD
     assert "A non-actionable Freeze supports neither side." in BOARD
     assert "'Watch':{cls:'mr-neutral',tip:'Non-directional." in BOARD
-    assert "Market-behavior and context chips—including Resistance Side, Pressure Side, One-Way, Whipsaw, Held, and Market Move—do not independently create a supported side." in BOARD
-    assert "the opposing Watch row is green only when that opponent is the explicit fade action side" in BOARD
-    assert "Watch or Resistance Side did not create the endorsement." in BOARD
+    assert "Market-behavior and context chips do not independently create a Supported Side." in BOARD
+    assert "No green means the market is neutral" in BOARD
+    assert "Rank measures priority and significance, not direction." in BOARD
 
 
 def test_mobile_selected_market_rank_sits_beneath_unchanged_saved_control():
@@ -296,20 +298,31 @@ def test_mobile_selected_market_rank_sits_beneath_unchanged_saved_control():
 
 
 def test_market_guide_terminology_order_and_deep_link_contract():
-    intro = BOARD.index("Use this guide to understand Red Fox Market Reads, book behavior, movement, positioning, and context.")
-    favorite = BOARD.index("redFoxFavoriteGuideSection()+", intro)
-    integrity = BOARD.index("marketIntegrityGuideSection()+", favorite)
-    section_map = BOARD.index("MARKET_GUIDE_SECTIONS.map", integrity)
-    movement = BOARD.index("<h3>Market Movement</h3>", section_map)
-    fields = BOARD.index("<h3>Board Fields</h3>", movement)
-    assert intro < favorite < integrity < section_map < movement < fields
+    ordered_markers = (
+        "<h3>What Red Fox Is Reading</h3>",
+        "<h3>Market Read</h3>",
+        "<h3>Supported Side</h3>",
+        "<h3>Market Rank</h3>",
+        "redFoxFavoriteGuideSection()+",
+        "marketGuideSection(MARKET_GUIDE_SECTIONS[0]",
+        "marketGuideSection(MARKET_GUIDE_SECTIONS[1]",
+        "marketGuideSection(MARKET_GUIDE_SECTIONS[2]",
+        "<h3>Market Movement</h3>",
+        "marketIntegrityGuideSection()+",
+        "marketGuideSection(MARKET_GUIDE_SECTIONS[3]",
+        "<h3>Board Fields</h3>",
+        "<h3>Drilldown</h3>",
+        "<h3>How to Read Red Fox</h3>",
+    )
+    positions = [BOARD.index(marker) for marker in ordered_markers]
+    assert positions == sorted(positions)
 
     directional = BOARD.index("['Directional Reads'")
     behavior = BOARD.index("['Market Behavior'", directional)
     positioning = BOARD.index("['Positioning & Context'", behavior)
     risk = BOARD.index("['Risk & Data Quality'", positioning)
     assert directional < behavior < positioning < risk
-    assert "We study how the book responds to betting pressure — not just where the bets are." in BOARD
+    assert "Red Fox studies how the book responds to betting pressure, not just where the bets are" in BOARD
     assert "Tap or click any guide-backed chip or badge on the board to jump directly to its definition." in BOARD
     assert "These labels describe market behavior and evidence—not picks or wager recommendations." not in BOARD
     assert "Red Fox’s interpretation of how the book is behaving in the selected market" in BOARD
@@ -326,6 +339,36 @@ def test_market_guide_terminology_order_and_deep_link_contract():
         assert f"'{label}'" in BOARD
     assert "onclick=\"event.stopPropagation();openSignalGuide(${clickArg})\"" in BOARD
     assert "onclick=\"openSignalGuide('Split Cap')\"" in BOARD
+    assert "['Market Rank','Market Rank (MKT)','MKT'].includes(requested)" in BOARD
+    assert "['Market Read','Supported Side'].includes(requested)" in BOARD
+
+
+def test_market_guide_generalizes_implementation_sensitive_details():
+    guide_start = BOARD.index("const SIGNAL_META={")
+    guide_end = BOARD.index("function closeSignalGuide()", guide_start)
+    guide = BOARD[guide_start:guide_end]
+    for revealing_copy in (
+        "1 to 8 points",
+        "-165 to +125",
+        "45% or less",
+        "46% to 60%",
+        "Only two valid observations",
+        "at least three valid observations",
+        "capped 0% or 100%",
+        "persistence and reliability thresholds",
+        "hold threshold",
+        "confirmed signal threshold",
+    ):
+        assert revealing_copy not in guide
+    for conceptual_copy in (
+        "meaningful movement",
+        "concentrated pressure",
+        "lower-supported side",
+        "reasonably actionable range",
+        "sufficient confirmation",
+        "reliable market data",
+    ):
+        assert conceptual_copy in guide.lower()
 
 
 def test_capped_split_and_split_risk_keep_distinct_context_and_quality_roles():
