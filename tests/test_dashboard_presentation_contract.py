@@ -168,17 +168,18 @@ def test_mobile_market_read_chips_are_compact_without_changing_global_or_desktop
 
 def test_market_guide_matches_role_and_display_semantics():
     assert "Contrarian and Follow are directional." in BOARD
-    assert "Watch and non-actionable Freeze are neutral." in BOARD
-    assert "Freeze is assigned to the Pressure Side" in BOARD
-    assert "the supported side is the explicit action/fade side" in BOARD
-    assert "support belongs to the explicit action side—not necessarily the side carrying the Freeze chip" in BOARD
+    assert "Otherwise, Freeze is neutral. Watch is also neutral." in BOARD
+    assert "Freeze identifies concentrated pressure that fails to produce the expected favorable market response" in BOARD
+    assert "Red Fox may establish the opposing side as the supported fade" in BOARD
+    assert "Red Fox may support the opposing action side—not necessarily the side carrying the Freeze chip" in BOARD
     assert "The side receiving qualifying concentrated betting pressure" in BOARD
     assert "The opposing side supported by the market’s resistance to concentrated pressure" in BOARD
     assert "The spread or total number, or the moneyline price" in BOARD
     assert "late in the observed path while the market was inside its pregame closing window" in BOARD
     assert "['Risk & Data Quality',['Price Risk','Capped Split','Thin','Feed Risk','Split Risk']]" in BOARD
     assert "incomplete price or line data cannot support a reliable market read" in BOARD
-    assert "The rank of the currently selected Spread, Moneyline, or Total market relative to the rest of the board" in BOARD
+    assert "Market Rank measures the relative significance of the selected market across the board." in BOARD
+    assert "It does not establish direction or imply a recommendation." in BOARD
     assert "meaningful Open-to-Current movement" in BOARD
     assert "no qualifying Open-to-Current directional movement" not in BOARD
 
@@ -278,12 +279,12 @@ def test_market_guide_explains_authoritative_supported_side_semantics():
     assert "'Contrarian':{cls:'mr-aligned',tip:'Directional." in BOARD
     assert "'Follow':{cls:'mr-aligned',tip:'Directional." in BOARD
     assert "'Freeze':{cls:'mr-freeze',tip:'Conditional." in BOARD
-    assert "only when it qualifies as an eligible Fade Candidate" in BOARD
-    assert "A non-actionable Freeze supports neither side." in BOARD
+    assert "eligible Fade Candidate" not in BOARD
+    assert "Otherwise, Freeze remains non-directional." in BOARD
     assert "'Watch':{cls:'mr-neutral',tip:'Non-directional." in BOARD
     assert "Market-behavior and context chips do not independently create a Supported Side." in BOARD
     assert "No green means the market is neutral" in BOARD
-    assert "Rank measures priority and significance, not direction." in BOARD
+    assert "A highly ranked market can still be neutral and have no green Supported Side." in BOARD
 
 
 def test_mobile_selected_market_rank_sits_beneath_unchanged_saved_control():
@@ -341,6 +342,12 @@ def test_market_guide_terminology_order_and_deep_link_contract():
     assert "onclick=\"openSignalGuide('Split Cap')\"" in BOARD
     assert "['Market Rank','Market Rank (MKT)','MKT'].includes(requested)" in BOARD
     assert "['Market Read','Supported Side'].includes(requested)" in BOARD
+
+
+def test_market_guide_board_fields_excludes_duplicate_core_concepts():
+    assert "const MARKET_GUIDE_BOARD_FIELDS=['Bets / Money','Open / Current','Data Quality','Market Explanation'];" in BOARD
+    assert "MARKET_GUIDE_BOARD_FIELDS.map(boardFieldGuideItem).join('')" in BOARD
+    assert "const MARKET_GUIDE_DRILLDOWN_FIELDS=['Market Trajectory','Market Journey'];" in BOARD
 
 
 def test_market_guide_generalizes_implementation_sensitive_details():

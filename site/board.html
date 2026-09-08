@@ -2285,7 +2285,7 @@ function displayRationale(r){
 }
 const SIGNAL_META={
   'Contrarian':{cls:'mr-aligned',tip:'Directional. Low support on that side while its price or line moved toward it.'},
-  'Freeze':{cls:'mr-freeze',tip:'Conditional. Freeze is assigned to the Pressure Side when heavy ticket and money support fails to earn a meaningful favorable response. It creates directional support only when it qualifies as an eligible Fade Candidate; the supported side is the explicit action/fade side. A non-actionable Freeze supports neither side.'},
+  'Freeze':{cls:'mr-freeze',tip:'Conditional. Freeze identifies concentrated pressure that fails to produce the expected favorable market response. In qualifying resistance-based setups, Red Fox may establish the opposing side as the supported fade. Otherwise, Freeze remains non-directional.'},
   'Follow':{cls:'mr-aligned',tip:'Directional. High tickets and money on that side while its price or line moved with it.'},
   'Whipsaw':{cls:'mr-reverse',tip:'The selected market moved materially in one direction, then reversed.'},
   'Held':{cls:'mr-neutral',tip:'The spread or total number, or the moneyline price, remained effectively steady. Attached spread or total juice is evaluated separately and may strengthen resistance.'},
@@ -2322,7 +2322,7 @@ const BOARD_FIELD_META = [
   ['Open / Current', 'Open is the first valid observed market state; Current is the latest valid observation. Movement displayed beneath Current is interpreted relative to that side.'],
   ['Market Read', 'Red Fox’s interpretation of how the book is behaving in the selected market, using positioning, line/price movement, pressure, resistance, reversals, timing, and supporting context. Market Reads are intentionally broad and can surface meaningful market behavior even when the wager does not meet Red Fox Favorite criteria.'],
   ['Supported Side', 'A green-highlighted row means Red Fox has confirmed a supported side for that market. If neither side is highlighted, no confirmed directional side has been established. A market can still contain useful Market Reads and context, and retain a Market Read Rank, without a supported side; rank is independent of directional support.'],
-  ['Market Rank (MKT)', 'The rank of the currently selected Spread, Moneyline, or Total market relative to the rest of the board. It is not a game-level rank and is intentionally broader than Red Fox Favorite qualification.'],
+  ['Market Rank (MKT)', 'Market Rank measures the relative significance of the selected market across the board. It does not establish direction or imply a recommendation.'],
   ['Data Quality', 'Clean indicates reliable market data. Thin indicates limited valid history and should be treated cautiously. Feed Risk means incomplete price or line data cannot support a reliable market read; Split Risk means an unusably capped split cannot support a directional split read.'],
   ['Market Explanation', 'The plain-language explanation of how the book is responding to the observed positioning and movement, and why Red Fox surfaced the current Market Read.'],
   ['Market Trajectory', 'The full timestamped path for the selected side. Use Line, Price, Bets %, and Money % to inspect how the market developed over time.'],
@@ -2334,6 +2334,8 @@ const MARKET_GUIDE_SECTIONS=[
   ['Positioning & Context',['Pressure Side','Resistance Side','Ticket-led','Public Pressure','Developing Read','Low Bets / High $','Heavy Favorite']],
   ['Risk & Data Quality',['Price Risk','Capped Split','Thin','Feed Risk','Split Risk']],
 ];
+const MARKET_GUIDE_BOARD_FIELDS=['Bets / Money','Open / Current','Data Quality','Market Explanation'];
+const MARKET_GUIDE_DRILLDOWN_FIELDS=['Market Trajectory','Market Journey'];
 const MARKET_GUIDE_MOVEMENT=[
   ['Toward / Against','Movement is interpreted within the currently selected Spread, Moneyline, or Total market and relative to each side. TOWARD means the selected market moved from Open toward that side; AGAINST means it moved against that side. Green/red represents market direction, not whether a wager is good or bad.'],
   ['Point movement','For spreads and totals, meaningful Open-to-Current movement in the primary number appears beneath Current with its magnitude and direction.'],
@@ -2381,12 +2383,12 @@ function redFoxFavoriteGuideSection(includeHeading=true){
   return '<div class="signal-guide-section red-fox-favorite-guide">'+(includeHeading?'<h3>Red Fox Favorite</h3>':'')+'<div class="favorite-guide-copy">'+
     '<p>A selective designation for a confirmed Supported Side that also matches Red Fox’s preferred wager profile. It considers market positioning, meaningful movement or resistance, whether the wager is in a reasonably actionable range, and data quality.</p>'+
     '<p>Examples of qualifying structures include:</p>'+
-    '<ul><li><strong>Lower-support Contrarian</strong> — the lower-supported side receives meaningful movement in its favor.</li><li><strong>Lower-support Freeze / Fade</strong> — concentrated pressure fails to earn the expected response, and the explicit action side qualifies as the supported fade.</li><li><strong>Confirmed Follow</strong> — aligned positioning and movement provide sufficient confirmation in an eligible market.</li></ul>'+
+    '<ul><li><strong>Lower-support Contrarian</strong> — the lower-supported side receives meaningful movement in its favor.</li><li><strong>Lower-support Freeze / Fade</strong> — concentrated pressure fails to earn the expected response, and Red Fox may support the opposing side as the fade.</li><li><strong>Confirmed Follow</strong> — aligned positioning and movement provide sufficient confirmation in an eligible market.</li></ul>'+
     '<p>A Favorite requires a confirmed Supported Side, an eligible wager structure and price or number, sufficient confirmation, and reliable market data. Not every directional read or wager type is Favorite-eligible.</p>'+
     '<p>Favorite status can be withheld when a meaningful reversal, confirmed Cross-Market Mismatch, stale data, or another reliability issue materially weakens the setup.</p>'+
     '<p><strong>Whipsaw does not automatically disqualify a Favorite.</strong> A market may remain eligible when a partial retrace still leaves the qualifying structure intact.</p>'+
     '<p>Red Fox Favorite is <strong>binary</strong>: a market either qualifies or it does not.</p>'+
-    '<p>It is separate from <strong>Market Rank</strong>:</p><ul><li><strong>Market Rank</strong> measures the relative strength or significance of the selected market across the board.</li><li><strong>Red Fox Favorite</strong> identifies the narrower subset of markets that also match Red Fox’s preferred wager criteria.</li></ul>'+
+    '<p>It is separate from <strong>Market Rank</strong>:</p><ul><li><strong>Market Rank</strong> measures the relative significance of the selected market across the board. It does not establish direction or imply a recommendation.</li><li><strong>Red Fox Favorite</strong> identifies the narrower subset of markets that also match Red Fox’s preferred wager criteria.</li></ul>'+
     '<p>This distinction is important because Market Reads are intentionally broader than Red Fox Favorites.</p>'+
     '</div></div>';
 }
@@ -2429,12 +2431,12 @@ function openSignalGuide(selected){
       '<div class="signal-guide-section"><h3>Board context</h3>'+BOARD_FIELD_META.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'</div>';
   } else {
     title.textContent='Market Guide';
-    const directionalNote='<p class="signal-guide-section-note">Contrarian and Follow are directional. Freeze is conditional: only an actionable Freeze/Fade creates support, and support belongs to the explicit action side—not necessarily the side carrying the Freeze chip. Watch and non-actionable Freeze are neutral. Market-behavior and context chips do not independently create a Supported Side.</p>';
+    const directionalNote='<p class="signal-guide-section-note">Contrarian and Follow are directional. Freeze is conditional: in a qualifying resistance-based setup, Red Fox may support the opposing action side—not necessarily the side carrying the Freeze chip. Otherwise, Freeze is neutral. Watch is also neutral. Market-behavior and context chips do not independently create a Supported Side.</p>';
     body.innerHTML='<p class="signal-guide-navigation">Tap or click any guide-backed chip or badge on the board to jump directly to its definition.</p>'+
       '<div class="signal-guide-section"><h3>What Red Fox Is Reading</h3><p class="signal-guide-intro">A market is the wager type being analyzed — Spread, Moneyline, or Total. Red Fox studies how the book responds to betting pressure, not just where the bets are, and interprets that behavior using positioning, movement, resistance, reversals, timing, and data quality.</p><p class="signal-guide-philosophy"><strong>Evidence describes what happened. Market Read interprets it. Supported Side confirms direction.</strong></p></div>'+
       '<div class="signal-guide-section"><h3>Market Read</h3>'+boardFieldGuideItem('Market Read')+'<p class="signal-guide-section-note">A Market Read can be useful and highly ranked even when it remains neutral.</p></div>'+
       '<div class="signal-guide-section"><h3>Supported Side</h3>'+boardFieldGuideItem('Supported Side')+'</div>'+
-      '<div class="signal-guide-section"><h3>Market Rank</h3>'+boardFieldGuideItem('Market Rank (MKT)')+'<p class="signal-guide-section-note">Rank measures priority and significance, not direction. A highly ranked market can therefore have no green Supported Side.</p></div>'+
+      '<div class="signal-guide-section"><h3>Market Rank</h3>'+boardFieldGuideItem('Market Rank (MKT)')+'<p class="signal-guide-section-note">A highly ranked market can still be neutral and have no green Supported Side.</p></div>'+
       redFoxFavoriteGuideSection()+
       marketGuideSection(MARKET_GUIDE_SECTIONS[0][0],MARKET_GUIDE_SECTIONS[0][1],directionalNote)+
       marketGuideSection(MARKET_GUIDE_SECTIONS[1][0],MARKET_GUIDE_SECTIONS[1][1])+
@@ -2442,9 +2444,9 @@ function openSignalGuide(selected){
       '<div class="signal-guide-section"><h3>Market Movement</h3>'+MARKET_GUIDE_MOVEMENT.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'<p class="signal-guide-note">A blank movement indicator beneath Current does not necessarily mean the market never moved. It means the comparable Open and Current values are effectively unchanged or unavailable. Open the drilldown’s Market Trajectory and Market Journey to review the full intraday path, including reversals.</p></div>'+
       marketIntegrityGuideSection()+
       marketGuideSection(MARKET_GUIDE_SECTIONS[3][0],MARKET_GUIDE_SECTIONS[3][1])+
-      '<div class="signal-guide-section"><h3>Board Fields</h3>'+BOARD_FIELD_META.slice(0,7).map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'</div>'+
-      '<div class="signal-guide-section"><h3>Drilldown</h3>'+BOARD_FIELD_META.slice(7).map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'<p class="signal-guide-section-note">Use the full path and milestone view to confirm how the market developed, including meaningful moves, reversals, timing, and the latest state.</p></div>'+
-      '<div class="signal-guide-section"><h3>How to Read Red Fox</h3>'+signalGuideItem('1. Start with Market Read','Understand Red Fox’s interpretation of the selected market.')+signalGuideItem('2. Check Supported Side','Green identifies the one confirmed directional side. No green means the market is neutral, even when the read or rank is notable.')+signalGuideItem('3. Use Market Rank for priority','Rank helps compare the selected market with the rest of the board; it does not create direction.')+signalGuideItem('4. Treat Favorite as narrower','Red Fox Favorite identifies a selective subset of confirmed Supported Sides that also meet preferred wager and reliability criteria.')+signalGuideItem('5. Validate the context','Use behavior, positioning, movement, integrity, risk, and drilldown evidence to understand why the read was surfaced.')+'</div>';
+      '<div class="signal-guide-section"><h3>Board Fields</h3>'+MARKET_GUIDE_BOARD_FIELDS.map(boardFieldGuideItem).join('')+'</div>'+
+      '<div class="signal-guide-section"><h3>Drilldown</h3>'+MARKET_GUIDE_DRILLDOWN_FIELDS.map(boardFieldGuideItem).join('')+'<p class="signal-guide-section-note">Use the full path and milestone view to confirm how the market developed, including meaningful moves, reversals, timing, and the latest state.</p></div>'+
+      '<div class="signal-guide-section"><h3>How to Read Red Fox</h3>'+signalGuideItem('1. Start with Market Read','Understand Red Fox’s interpretation of the selected market.')+signalGuideItem('2. Check Supported Side','Green identifies the one confirmed directional side. No green means the market is neutral, even when the read or rank is notable.')+signalGuideItem('3. Use Market Rank for context','Compare the selected market’s relative significance across the board; rank does not establish direction or imply a recommendation.')+signalGuideItem('4. Treat Favorite as narrower','Red Fox Favorite identifies a selective subset of confirmed Supported Sides that also meet preferred wager and reliability criteria.')+signalGuideItem('5. Validate the context','Use behavior, positioning, movement, integrity, risk, and drilldown evidence to understand why the read was surfaced.')+'</div>';
   }
   overlay.classList.add('open');
 }
