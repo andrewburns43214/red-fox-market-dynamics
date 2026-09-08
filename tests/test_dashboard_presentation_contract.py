@@ -177,10 +177,10 @@ def test_market_guide_matches_role_and_display_semantics():
     assert "The spread or total number, or the moneyline price" in BOARD
     assert "late in the observed path while the market was inside its pregame closing window" in BOARD
     assert "['Risk & Data Quality',['Price Risk','Capped Split','Thin','Feed Risk','Split Risk']]" in BOARD
-    assert "incomplete price or line data cannot support a reliable market read" in BOARD
+    assert "does not have enough complete price or line data for a reliable market read" in BOARD
     assert "Market Rank measures the relative significance of the selected market across the board." in BOARD
     assert "It does not establish direction or imply a recommendation." in BOARD
-    assert "meaningful Open-to-Current movement" in BOARD
+    assert "the board may display point, juice, or price movement beneath Current" in BOARD
     assert "no qualifying Open-to-Current directional movement" not in BOARD
 
 
@@ -191,13 +191,12 @@ def test_red_fox_favorite_guide_section_and_tooltip_are_isolated_copy_additions(
     assert intro < favorite < directional
     assert '<h3>Red Fox Favorite</h3>' in BOARD
     assert '<p><strong>Red Fox Favorite</strong></p>' not in BOARD
-    assert "A selective designation for a confirmed Supported Side that also matches Red Fox’s preferred wager profile." in BOARD
+    assert "A selective designation for a confirmed Supported Side that matches Red Fox’s preferred wager profile" in BOARD
     assert "based on current DraftKings positioning" not in BOARD
     assert "Lower-support Freeze / Fade" in BOARD
     assert "reasonably actionable range" in BOARD
-    assert "Not every directional read or wager type is Favorite-eligible." in BOARD
-    assert "Whipsaw does not automatically disqualify a Favorite." in BOARD
-    assert "Red Fox Favorite is <strong>binary</strong>" in BOARD
+    assert "Red Fox Favorite is a binary, selective designation." in BOARD
+    assert "Whipsaw alone does not automatically disqualify a market." in BOARD
     assert "Matches Red Fox’s preferred wager criteria based on market support, movement, price/number, and data quality." in BOARD
     assert 'aria-describedby="favorite-badge-tooltip"' in BOARD
     assert 'onmouseenter="showFavoriteTooltip(this)"' in BOARD
@@ -235,9 +234,9 @@ def test_cross_market_integrity_badge_tooltip_and_guide_are_market_level():
     risk = BOARD.index("marketGuideSection(MARKET_GUIDE_SECTIONS[3]", integrity)
     assert favorite < integrity < risk
     assert '<h3>Market Integrity</h3>' in BOARD
-    assert "A stricter market-integrity flag indicating that synchronized Spread and Moneyline pricing disagree in a sustained and reliable way" in BOARD
-    assert "does not change the underlying Market Read or Market Rank" in BOARD
-    assert "confirmed Cross-Market Mismatch" in BOARD
+    assert "Spread and Moneyline pricing disagree in a sustained, reliable way." in BOARD
+    assert "does not change Market Read or Market Rank" in BOARD
+    assert "it can prevent Red Fox Favorite status until the conflict resolves" in BOARD
     assert 'id="integrity-badge-tooltip" role="tooltip" hidden' in BOARD
     assert "The synchronized Spread and Moneyline imply materially different market positions." in BOARD
     assert "function hasCrossMarketMismatch(row)" in BOARD
@@ -268,14 +267,15 @@ def test_cross_market_split_badge_is_pair_context_with_mismatch_priority():
     assert "body.innerHTML=marketIntegrityGuideSection(false,'Cross-Market Split');" in BOARD
     assert "hideSplitTooltip();openSignalGuide('Cross-Market Split');" in BOARD
     assert "['Cross-Market Split','Cross-Market Mismatch']" in BOARD
-    assert "is the more serious label when both descriptions could otherwise apply." in BOARD
-    assert "A neutral or unresolved market cannot create a Cross-Market Split." in BOARD
+    assert "Mismatch describes a more serious pricing-integrity conflict." in BOARD
+    assert "A neutral market cannot create a Split." in BOARD
+    assert "independently confirmed Supported Sides for different teams" in BOARD
 
 
 def test_market_guide_explains_authoritative_supported_side_semantics():
     assert "['Supported Side', 'A green-highlighted row means Red Fox has confirmed a supported side for that market." in BOARD
     assert "If neither side is highlighted, no confirmed directional side has been established." in BOARD
-    assert "rank is independent of directional support." in BOARD
+    assert "It does not establish direction or imply a recommendation." in BOARD
     assert "'Contrarian':{cls:'mr-aligned',tip:'Directional." in BOARD
     assert "'Follow':{cls:'mr-aligned',tip:'Directional." in BOARD
     assert "'Freeze':{cls:'mr-freeze',tip:'Conditional." in BOARD
@@ -328,7 +328,7 @@ def test_market_guide_terminology_order_and_deep_link_contract():
     assert "These labels describe market behavior and evidence—not picks or wager recommendations." not in BOARD
     assert "Red Fox’s interpretation of how the book is behaving in the selected market" in BOARD
     assert "The plain-language explanation of how the book is responding" in BOARD
-    assert "Market Reads are intentionally broader than Red Fox Favorites" in BOARD
+    assert "A Market Read can surface meaningful market behavior even when Red Fox does not support a side or identify a Favorite." in BOARD
     assert "based on current DraftKings positioning" not in BOARD
 
     for label in (

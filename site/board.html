@@ -2320,10 +2320,10 @@ const SIGNAL_META={
 const BOARD_FIELD_META = [
   ['Bets / Money', 'The share of tickets and handle on each side. Higher percentages describe positioning, not a prediction.'],
   ['Open / Current', 'Open is the first valid observed market state; Current is the latest valid observation. Movement displayed beneath Current is interpreted relative to that side.'],
-  ['Market Read', 'Red Fox’s interpretation of how the book is behaving in the selected market, using positioning, line/price movement, pressure, resistance, reversals, timing, and supporting context. Market Reads are intentionally broad and can surface meaningful market behavior even when the wager does not meet Red Fox Favorite criteria.'],
-  ['Supported Side', 'A green-highlighted row means Red Fox has confirmed a supported side for that market. If neither side is highlighted, no confirmed directional side has been established. A market can still contain useful Market Reads and context, and retain a Market Read Rank, without a supported side; rank is independent of directional support.'],
-  ['Market Rank (MKT)', 'Market Rank measures the relative significance of the selected market across the board. It does not establish direction or imply a recommendation.'],
-  ['Data Quality', 'Clean indicates reliable market data. Thin indicates limited valid history and should be treated cautiously. Feed Risk means incomplete price or line data cannot support a reliable market read; Split Risk means an unusably capped split cannot support a directional split read.'],
+  ['Market Read', 'Red Fox’s interpretation of how the book is behaving in the selected market. A Market Read can surface meaningful market behavior even when Red Fox does not support a side or identify a Favorite.'],
+  ['Supported Side', 'A green-highlighted row means Red Fox has confirmed a supported side for that market. If neither side is highlighted, no confirmed directional side has been established.'],
+  ['Market Rank (MKT)', 'Market Rank measures the relative significance of the selected market across the board. It does not establish direction or imply a recommendation. A highly ranked market can still be neutral and have no green Supported Side.'],
+  ['Data Quality', 'Summarizes whether the available market history, pricing, and betting splits are reliable enough for interpretation.'],
   ['Market Explanation', 'The plain-language explanation of how the book is responding to the observed positioning and movement, and why Red Fox surfaced the current Market Read.'],
   ['Market Trajectory', 'The full timestamped path for the selected side. Use Line, Price, Bets %, and Money % to inspect how the market developed over time.'],
   ['Market Journey', 'A milestone view of the most meaningful events in the market path, such as the open, signal changes, major moves, reversals, and current state.'],
@@ -2337,10 +2337,8 @@ const MARKET_GUIDE_SECTIONS=[
 const MARKET_GUIDE_BOARD_FIELDS=['Bets / Money','Open / Current','Data Quality','Market Explanation'];
 const MARKET_GUIDE_DRILLDOWN_FIELDS=['Market Trajectory','Market Journey'];
 const MARKET_GUIDE_MOVEMENT=[
-  ['Toward / Against','Movement is interpreted within the currently selected Spread, Moneyline, or Total market and relative to each side. TOWARD means the selected market moved from Open toward that side; AGAINST means it moved against that side. Green/red represents market direction, not whether a wager is good or bad.'],
-  ['Point movement','For spreads and totals, meaningful Open-to-Current movement in the primary number appears beneath Current with its magnitude and direction.'],
-  ['Juice','When a spread or total number holds but its attached American odds change from Open, the board may show JUICE · TOWARD or JUICE · AGAINST.'],
-  ['Price','A measurable moneyline Open-to-Current change may appear as PRICE · TOWARD or PRICE · AGAINST.'],
+  ['Toward / Against','Movement is interpreted relative to each side. TOWARD means the selected market moved toward that side; AGAINST means it moved away. Green and red describe movement direction—not wager quality.'],
+  ['Movement display','Depending on the market, the board may display point, juice, or price movement beneath Current.'],
 ];
 
 function escHtml(value){
@@ -2381,24 +2379,19 @@ function marketGuideSection(title,labels,note=''){
 }
 function redFoxFavoriteGuideSection(includeHeading=true){
   return '<div class="signal-guide-section red-fox-favorite-guide">'+(includeHeading?'<h3>Red Fox Favorite</h3>':'')+'<div class="favorite-guide-copy">'+
-    '<p>A selective designation for a confirmed Supported Side that also matches Red Fox’s preferred wager profile. It considers market positioning, meaningful movement or resistance, whether the wager is in a reasonably actionable range, and data quality.</p>'+
+    '<p>A selective designation for a confirmed Supported Side that matches Red Fox’s preferred wager profile, including a reasonably actionable range and reliable data.</p>'+
     '<p>Examples of qualifying structures include:</p>'+
     '<ul><li><strong>Lower-support Contrarian</strong> — the lower-supported side receives meaningful movement in its favor.</li><li><strong>Lower-support Freeze / Fade</strong> — concentrated pressure fails to earn the expected response, and Red Fox may support the opposing side as the fade.</li><li><strong>Confirmed Follow</strong> — aligned positioning and movement provide sufficient confirmation in an eligible market.</li></ul>'+
-    '<p>A Favorite requires a confirmed Supported Side, an eligible wager structure and price or number, sufficient confirmation, and reliable market data. Not every directional read or wager type is Favorite-eligible.</p>'+
-    '<p>Favorite status can be withheld when a meaningful reversal, confirmed Cross-Market Mismatch, stale data, or another reliability issue materially weakens the setup.</p>'+
-    '<p><strong>Whipsaw does not automatically disqualify a Favorite.</strong> A market may remain eligible when a partial retrace still leaves the qualifying structure intact.</p>'+
-    '<p>Red Fox Favorite is <strong>binary</strong>: a market either qualifies or it does not.</p>'+
-    '<p>It is separate from <strong>Market Rank</strong>:</p><ul><li><strong>Market Rank</strong> measures the relative significance of the selected market across the board. It does not establish direction or imply a recommendation.</li><li><strong>Red Fox Favorite</strong> identifies the narrower subset of markets that also match Red Fox’s preferred wager criteria.</li></ul>'+
-    '<p>This distinction is important because Market Reads are intentionally broader than Red Fox Favorites.</p>'+
+    '<p>Red Fox Favorite is a binary, selective designation. It requires a confirmed Supported Side and a qualifying, reliable market setup. Reversals, integrity conflicts, stale data, or other reliability concerns can prevent Favorite status, although Whipsaw alone does not automatically disqualify a market.</p>'+
     '</div></div>';
 }
 function marketIntegrityGuideSection(includeHeading=true,selected=''){
   const entries={
-    'Cross-Market Split':'A Cross-Market Split appears only when Spread and Moneyline each have an independently confirmed supported side and those supported sides are different teams. A neutral or unresolved market cannot create a Cross-Market Split. This is supporting context, not a directional signal or data-integrity failure. It does not by itself change Market Rank, Market Read, or Red Fox Favorite status.',
-    'Cross-Market Mismatch':'A stricter market-integrity flag indicating that synchronized Spread and Moneyline pricing disagree in a sustained and reliable way. It does not change the underlying Market Read or Market Rank, but a confirmed mismatch can prevent a market from receiving Red Fox Favorite status until the conflict resolves.'
+    'Cross-Market Split':'Spread and Moneyline each have independently confirmed Supported Sides for different teams. A neutral market cannot create a Split. This is context, not direction or a data-integrity failure, and it does not change Market Read, Market Rank, or Red Fox Favorite status.',
+    'Cross-Market Mismatch':'Spread and Moneyline pricing disagree in a sustained, reliable way. This stricter integrity flag does not change Market Read or Market Rank, but it can prevent Red Fox Favorite status until the conflict resolves.'
   };
   const labels=selected?[selected]:['Cross-Market Split','Cross-Market Mismatch'];
-  const distinction=selected?'':'<p class="signal-guide-section-note">Cross-Market Split describes differing confirmed Red Fox reads. Cross-Market Mismatch describes a confirmed pricing-integrity conflict and is the more serious label when both descriptions could otherwise apply.</p>';
+  const distinction=selected?'':'<p class="signal-guide-section-note">Split describes differing confirmed reads; Mismatch describes a more serious pricing-integrity conflict.</p>';
   return '<div class="signal-guide-section market-integrity-guide">'+(includeHeading?'<h3>Market Integrity</h3>':'')+
     labels.map(label=>signalGuideItem(label,entries[label])).join('')+distinction+'</div>';
 }
@@ -2434,14 +2427,14 @@ function openSignalGuide(selected){
     const directionalNote='<p class="signal-guide-section-note">Contrarian and Follow are directional. Freeze is conditional: in a qualifying resistance-based setup, Red Fox may support the opposing action side—not necessarily the side carrying the Freeze chip. Otherwise, Freeze is neutral. Watch is also neutral. Market-behavior and context chips do not independently create a Supported Side.</p>';
     body.innerHTML='<p class="signal-guide-navigation">Tap or click any guide-backed chip or badge on the board to jump directly to its definition.</p>'+
       '<div class="signal-guide-section"><h3>What Red Fox Is Reading</h3><p class="signal-guide-intro">A market is the wager type being analyzed — Spread, Moneyline, or Total. Red Fox studies how the book responds to betting pressure, not just where the bets are, and interprets that behavior using positioning, movement, resistance, reversals, timing, and data quality.</p><p class="signal-guide-philosophy"><strong>Evidence describes what happened. Market Read interprets it. Supported Side confirms direction.</strong></p></div>'+
-      '<div class="signal-guide-section"><h3>Market Read</h3>'+boardFieldGuideItem('Market Read')+'<p class="signal-guide-section-note">A Market Read can be useful and highly ranked even when it remains neutral.</p></div>'+
+      '<div class="signal-guide-section"><h3>Market Read</h3>'+boardFieldGuideItem('Market Read')+'</div>'+
       '<div class="signal-guide-section"><h3>Supported Side</h3>'+boardFieldGuideItem('Supported Side')+'</div>'+
-      '<div class="signal-guide-section"><h3>Market Rank</h3>'+boardFieldGuideItem('Market Rank (MKT)')+'<p class="signal-guide-section-note">A highly ranked market can still be neutral and have no green Supported Side.</p></div>'+
+      '<div class="signal-guide-section"><h3>Market Rank</h3>'+boardFieldGuideItem('Market Rank (MKT)')+'</div>'+
       redFoxFavoriteGuideSection()+
       marketGuideSection(MARKET_GUIDE_SECTIONS[0][0],MARKET_GUIDE_SECTIONS[0][1],directionalNote)+
       marketGuideSection(MARKET_GUIDE_SECTIONS[1][0],MARKET_GUIDE_SECTIONS[1][1])+
       marketGuideSection(MARKET_GUIDE_SECTIONS[2][0],MARKET_GUIDE_SECTIONS[2][1])+
-      '<div class="signal-guide-section"><h3>Market Movement</h3>'+MARKET_GUIDE_MOVEMENT.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'<p class="signal-guide-note">A blank movement indicator beneath Current does not necessarily mean the market never moved. It means the comparable Open and Current values are effectively unchanged or unavailable. Open the drilldown’s Market Trajectory and Market Journey to review the full intraday path, including reversals.</p></div>'+
+      '<div class="signal-guide-section"><h3>Market Movement</h3>'+MARKET_GUIDE_MOVEMENT.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'<p class="signal-guide-note">A blank movement indicator does not necessarily mean the market never moved. Open Market Trajectory or Market Journey to review the full path, including reversals.</p></div>'+
       marketIntegrityGuideSection()+
       marketGuideSection(MARKET_GUIDE_SECTIONS[3][0],MARKET_GUIDE_SECTIONS[3][1])+
       '<div class="signal-guide-section"><h3>Board Fields</h3>'+MARKET_GUIDE_BOARD_FIELDS.map(boardFieldGuideItem).join('')+'</div>'+
