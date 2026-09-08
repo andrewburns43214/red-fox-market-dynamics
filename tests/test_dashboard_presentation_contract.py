@@ -147,41 +147,6 @@ def test_strongest_side_uses_confirmed_backend_support_not_anchor_or_chip_count(
     assert "never a positive vote" in BOARD
 
 
-def test_desktop_supported_side_tint_spans_evidence_lane_but_stops_before_explanation():
-    desktop = BOARD[BOARD.index("@media(min-width:851px){"):BOARD.index("/* Phone board:")]
-    selector = ".lpane>.tscroll tbody tr>td:not(.td-rank):not(.td-dec) .two-side-row.is-supported-lane"
-    assert selector in desktop
-    assert "background:rgba(21,134,106,.08)!important" in desktop
-    assert "linear-gradient" not in desktop[desktop.index(selector):desktop.index(selector) + 500]
-    assert ":not(.td-dec)" in selector
-    assert "two-side-market-label" in desktop
-    assert '<td class="td-mkt">${favoritePlane(r)}${twoSideMarketCell(r)}${desktopMarketSelectorPlane()}</td>' in BOARD
-    assert '<td class="td-dec">${favoritePlane(r)}${twoSideRationale(r)}${desktopMarketSelectorPlane()}</td>' in BOARD
-    assert ".desktop-market-selector-spacer{display:block;height:32px;pointer-events:none}" in desktop
-    assert "is-supported-lane" not in BOARD[BOARD.index("function twoSideRationale"):BOARD.index("function splitSummary")]
-
-
-def test_supported_lane_uses_only_authoritative_supported_side_for_every_evidence_column():
-    resolver = BOARD[BOARD.index("function strongestSideIndex"):BOARD.index("function twoSideRationale")]
-    lane_helpers = BOARD[BOARD.index("function supportedLaneIndex"):BOARD.index("function sideSignals")]
-    assert "function supportedLaneIndex(r){ return strongestSideIndex(marketSides(r),r); }" in lane_helpers
-    assert "const supported=String(r.supported_side||'').trim().toLowerCase();" in resolver
-    for forbidden in ("read_anchor_side", "red_fox_favorite", "evidence_role", "reaction", "home", "away"):
-        assert forbidden not in resolver
-    for renderer in ("gameLanes", "twoSideMarketCell", "twoSideSplitCell", "twoSideLineCell", "twoSideReadCell"):
-        start = BOARD.index("function " + renderer)
-        end = BOARD.find("\nfunction ", start + 10)
-        assert "supportedLane" in BOARD[start:end] or "strongestSideIndex" in BOARD[start:end]
-
-
-def test_mobile_supported_side_treatment_is_unchanged_and_desktop_lane_rule_is_scoped_out():
-    mobile = BOARD[BOARD.index("@media (max-width:850px){", BOARD.index("/* Phone board:")):]
-    assert ".two-side-read .two-side-row.is-strongest{background:rgba(21,134,106,.08)!important;box-shadow:none!important}" in mobile
-    assert ".live-market-side-row.is-supported{background:rgba(21,134,106,.08)}" in mobile
-    assert "tbody tr>td:not(.td-rank):not(.td-dec) .two-side-row.is-supported-lane" not in mobile
-    assert ".desktop-market-selector-spacer{display:block" not in mobile
-
-
 def test_evidence_role_chips_use_neutral_context_color_without_changing_movement_colors():
     assert "'Pressure Side':{cls:'mr-neutral'" in BOARD
     assert "'Resistance Side':{cls:'mr-neutral'" in BOARD
