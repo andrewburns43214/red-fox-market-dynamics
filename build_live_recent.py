@@ -25,7 +25,6 @@ EMPTY_COLUMNS = [
     "sport", "game_id", "game", "kickoff_iso", "market_display", "flagged_side", "reaction", "path",
     "score_away", "score_home", "score_status", "score_state", "score_provider", "score_provider_event_id",
     "score_match_state", "score_updated_at_utc", "score_completed_at_utc", "frozen_at_utc",
-    "state_as_of_utc", "final_pregame_state_at_utc", "freeze_method",
     "red_fox_favorite", "favorite_side", "favorite_pathway", "favorite_rule_version",
     "favorite_first_qualified_at", "favorite_final_qualified_at", "favorite_state",
     "favorite_final_market_read", "favorite_final_market_rank",
@@ -211,37 +210,11 @@ def bootstrap_started_records(now: datetime) -> pd.DataFrame:
     latest["path"] = "Pregame snapshot"
     latest["reason"] = "Frozen from the final available pregame snapshot."
     latest["frozen_at_utc"] = now.isoformat()
-    latest["state_as_of_utc"] = latest["_seen"].map(lambda value: value.isoformat() if pd.notna(value) else "")
-    latest["final_pregame_state_at_utc"] = latest["state_as_of_utc"]
-    # This recovery path has raw market data only.  It is useful for the live
-    # score screen but never reconstructs Red Fox classifications.
-    latest["freeze_method"] = "raw_snapshot_recovery_no_classification"
     return latest
 
 
 def _text(value: object) -> str:
     return "" if pd.isna(value) else str(value).strip()
-
-
-def final_pregame_states(previous: pd.DataFrame, now: datetime) -> pd.DataFrame:
-    """Return started rows whose published source state is valid at kickoff."""
-    if previous.empty or "kickoff_iso" not in previous:
-        return pd.DataFrame()
-    prior = previous.copy()
-    prior["_kickoff"] = pd.to_datetime(prior["kickoff_iso"], errors="coerce", utc=True)
-    prior["_state_at"] = pd.to_datetime(prior.get("state_as_of_utc", ""), errors="coerce", utc=True)
-    started = prior[
-        prior["_kickoff"].notna()
-        & (prior["_kickoff"] <= now)
-        & prior["_state_at"].notna()
-        & (prior["_state_at"] <= prior["_kickoff"])
-    ].copy()
-    if started.empty:
-        return started.drop(columns=["_kickoff", "_state_at"], errors="ignore")
-    started["frozen_at_utc"] = now.isoformat()
-    started["final_pregame_state_at_utc"] = started["_state_at"].map(lambda value: value.isoformat())
-    started["freeze_method"] = "published_state_latest_at_or_before_start"
-    return started.drop(columns=["_kickoff", "_state_at"])
 
 
 def write_score_coverage(live: pd.DataFrame, now: datetime) -> dict:
@@ -299,9 +272,12 @@ def main(scores_only: bool = False) -> None:
     if not existing.empty:
         rows.append(existing)
     if not previous.empty and "kickoff_iso" in previous:
-        started = final_pregame_states(previous, now)
+        prior = previous.copy()
+        prior["_kickoff"] = pd.to_datetime(prior["kickoff_iso"], errors="coerce", utc=True)
+        started = prior[prior["_kickoff"].notna() & (prior["_kickoff"] <= now)].copy()
         if not started.empty:
-            rows.append(started)
+            started["frozen_at_utc"] = now.isoformat()
+            rows.append(started.drop(columns=["_kickoff"]))
     if not rows:
         recovered = bootstrap_started_records(now)
         if recovered.empty:
