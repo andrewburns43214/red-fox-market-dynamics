@@ -25,9 +25,9 @@
       <h2>Performance</h2>
       <p>Frozen final-pregame classifications with resolved results where available.</p>
       <div class="downloads">
-        <a href="/admin-data/performance_supported_sides.csv" download>Download Supported Side CSV</a>
-        <a href="/admin-data/performance_favorites.csv" download>Download Red Fox Favorite CSV</a>
-        <a href="/admin-data/performance_combined.csv" download>Download combined CSV</a>
+        <a href="/admin-data/performance_supported_sides.csv" data-filename="redfox_supported_side_performance.csv">Download Supported Side CSV</a>
+        <a href="/admin-data/performance_favorites.csv" data-filename="redfox_favorite_performance.csv">Download Red Fox Favorite CSV</a>
+        <a href="/admin-data/performance_combined.csv" data-filename="redfox_performance_combined.csv">Download combined CSV</a>
       </div>
     </section>
     <h2>Customer Directory</h2>
@@ -56,6 +56,19 @@
     const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const time=v=>v?new Date(v).toLocaleString():'—';
     const accessLabel=v=>v==='Free Day'?'Free Trial':v;
+    async function downloadPerformance(event){
+      event.preventDefault();
+      const link=event.currentTarget;
+      const{data:{session}}=await sb.auth.getSession();
+      if(!session){location.replace('/');return}
+      const response=await fetch(link.href,{headers:{'Authorization':'Bearer '+session.access_token}});
+      if(response.status===401||response.status===403){$('status').textContent='Admin authorization expired. Sign in again and retry.';return}
+      if(!response.ok){$('status').textContent='Unable to download performance CSV.';return}
+      const url=URL.createObjectURL(await response.blob());
+      const save=document.createElement('a');
+      save.href=url;save.download=link.dataset.filename;document.body.appendChild(save);save.click();save.remove();
+      URL.revokeObjectURL(url);
+    }
     async function load(){
       const{data:{session}}=await sb.auth.getSession();
       if(!session){location.replace('/');return}
@@ -71,6 +84,7 @@
     $('apply').onclick=()=>{offset=0;load()};
     $('previous').onclick=()=>{offset=Math.max(0,offset-limit);load()};
     $('next').onclick=()=>{if(lastCount===limit){offset+=limit;load()}};
+    document.querySelectorAll('.downloads a').forEach(link=>link.addEventListener('click',downloadPerformance));
     load();
   </script>
 </body>

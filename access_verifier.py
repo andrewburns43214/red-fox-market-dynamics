@@ -64,6 +64,15 @@ def access_token(cookie_header: str | None) -> str | None:
     return unquote(token.value) if token and token.value else None
 
 
+def bearer_token(authorization_header: str | None) -> str | None:
+    if not authorization_header:
+        return None
+    scheme, separator, token = authorization_header.partition(" ")
+    if separator and scheme.lower() == "bearer" and token.strip():
+        return token.strip()
+    return None
+
+
 def has_rpc_access(token: str, function_name: str) -> bool:
     request = Request(
         f"{SUPABASE_URL}/rest/v1/rpc/{function_name}",
@@ -122,7 +131,7 @@ class AccessHandler(BaseHTTPRequestHandler):
         if self.path not in {"/verify", "/verify-admin"}:
             self.send_error(404)
             return
-        token = access_token(self.headers.get("Cookie"))
+        token = bearer_token(self.headers.get("Authorization")) or access_token(self.headers.get("Cookie"))
         if self.path == "/verify-admin":
             allowed = bool(token and has_admin_access(token))
         else:

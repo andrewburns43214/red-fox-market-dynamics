@@ -147,8 +147,11 @@ def test_admin_exports_are_protected_and_engine_refresh_does_not_import_ledger()
     assert "location = /_internal/admin-access" in nginx
     assert nginx.count("auth_request /_internal/admin-access;") == 3
     assert "/verify-admin" in access and "is_admin" in access
+    assert "bearer_token(self.headers.get(\"Authorization\"))" in access
+    assert "proxy_set_header Authorization $http_authorization;" in nginx
     assert "Download Supported Side CSV" in admin
     assert "Download Red Fox Favorite CSV" in admin
+    assert "fetch(link.href,{headers:{'Authorization':'Bearer '+session.access_token}})" in admin
     assert "performance_ledger" not in refresh
     assert "performance_ledger" not in runner
     assert "performance_ledger.py --freeze-only" in service
