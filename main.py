@@ -6024,14 +6024,6 @@ def cmd_report_maintenance(_args):
         print(f"[espn finals] skipped due to error: {repr(e)}")
     resolve_results_for_baseline()
     build_color_baseline_summary()
-    # Performance reporting is downstream of the engine. It consumes only
-    # already-frozen Live & Recent rows and already-resolved scores.
-    try:
-        from performance_ledger import update_performance_ledger
-        performance = update_performance_ledger(DATA_DIR)
-        print(f"[performance] {performance['rows']} rows, {performance['graded']} graded")
-    except Exception as e:
-        print(f"[performance] skipped due to error: {repr(e)}")
 
 
 def cmd_report(_args):
