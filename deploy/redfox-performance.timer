@@ -1,0 +1,12 @@
+[Unit]
+Description=Capture frozen Red Fox performance rows outside the publish path
+
+[Timer]
+OnActiveSec=15s
+OnUnitActiveSec=2min
+AccuracySec=15s
+Unit=redfox-performance.service
+
+[Install]
+WantedBy=timers.target
+
