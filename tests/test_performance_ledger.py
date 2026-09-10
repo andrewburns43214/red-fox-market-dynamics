@@ -151,7 +151,8 @@ def test_admin_exports_are_protected_and_engine_refresh_does_not_import_ledger()
     assert "proxy_set_header Authorization $http_authorization;" in nginx
     assert "Download Supported Side CSV" in admin
     assert "Download Red Fox Favorite CSV" in admin
-    assert "fetch(link.href,{headers:{'Authorization':'Bearer '+session.access_token}})" in admin
+    assert "document.cookie='redfox_access_token='+encodeURIComponent(session.access_token)" in admin
+    assert "fetch(link.href,{credentials:'same-origin',headers:{'Authorization':'Bearer '+session.access_token}})" in admin
     assert "performance_ledger" not in refresh
     assert "performance_ledger" not in runner
     assert "performance_ledger.py --freeze-only" in service

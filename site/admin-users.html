@@ -61,7 +61,8 @@
       const link=event.currentTarget;
       const{data:{session}}=await sb.auth.getSession();
       if(!session){location.replace('/');return}
-      const response=await fetch(link.href,{headers:{'Authorization':'Bearer '+session.access_token}});
+      document.cookie='redfox_access_token='+encodeURIComponent(session.access_token)+'; Path=/; Secure; SameSite=Lax; Max-Age=3600';
+      const response=await fetch(link.href,{credentials:'same-origin',headers:{'Authorization':'Bearer '+session.access_token}});
       if(response.status===401||response.status===403){$('status').textContent='Admin authorization expired. Sign in again and retry.';return}
       if(!response.ok){$('status').textContent='Unable to download performance CSV.';return}
       const url=URL.createObjectURL(await response.blob());
