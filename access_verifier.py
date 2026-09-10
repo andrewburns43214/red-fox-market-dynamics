@@ -97,7 +97,24 @@ def has_active_access(token: str) -> bool:
 
 
 def has_admin_access(token: str) -> bool:
-    return has_rpc_access(token, "is_admin")
+    # Use the same deployed server-side admin authority as the customer
+    # directory. It validates the user session and calls is_admin() before
+    # returning any data. The response body is intentionally discarded.
+    request = Request(
+        f"{SUPABASE_URL}/functions/v1/admin-users",
+        data=b'{"search":"","filter":"all","limit":1,"offset":0}',
+        method="POST",
+        headers={
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urlopen(request, timeout=6) as response:
+            return response.status == 200
+    except (HTTPError, URLError, TimeoutError):
+        return False
 
 
 def has_explicit_complimentary_access(token: str) -> bool:

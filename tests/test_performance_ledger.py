@@ -146,7 +146,7 @@ def test_admin_exports_are_protected_and_engine_refresh_does_not_import_ledger()
     timer = (root / "deploy" / "redfox-performance.timer").read_text(encoding="utf-8")
     assert "location = /_internal/admin-access" in nginx
     assert nginx.count("auth_request /_internal/admin-access;") == 3
-    assert "/verify-admin" in access and "is_admin" in access
+    assert "/verify-admin" in access and "/functions/v1/admin-users" in access
     assert "bearer_token(self.headers.get(\"Authorization\"))" in access
     assert nginx.count("set $redfox_admin_authorization $http_authorization;") == 3
     assert "proxy_set_header Authorization $redfox_admin_authorization;" in nginx
