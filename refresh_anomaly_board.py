@@ -41,7 +41,6 @@ PUBLIC_EXPORT_COLUMNS = {
         "board_rank", "recorded_reaction", "recorded_action_type", "recorded_action_side", "recorded_action_line",
         "recorded_at", "recorded_note", "market_sides", "read_anchor_side", "supported_side", "directional_lean_side", "market_rationale",
         *CROSS_MARKET_COLUMNS, *CROSS_MARKET_SPLIT_COLUMNS, *FAVORITE_COLUMNS,
-        "state_as_of_utc",
     ],
     "anomaly_events.csv": [
         "sport", "game_id", "canonical_key", "game", "market_display", "flagged_side", "focus_basis", "action_side",
@@ -411,24 +410,6 @@ def _refresh(coverage):
     board = apply_cross_market_split(board)
     board = apply_red_fox_favorites(board, as_of=newest_snapshot)
     board = update_favorite_tracking(board, DATA, as_of=newest_snapshot)
-    # Persist the source observation time used for each published market.  The
-    # downstream freeze worker can then select/validate the final state by
-    # source time rather than by the minute at which its timer happens to run.
-    state_keys = ["sport", "game_id", "market_display"]
-    if not board.empty and all(column in board for column in state_keys):
-        state_times = (
-            dashboard.groupby(state_keys, as_index=False)["timestamp"]
-            .max()
-            .rename(columns={"timestamp": "state_as_of_utc"})
-        )
-        board = board.drop(columns=["state_as_of_utc"], errors="ignore").merge(
-            state_times, on=state_keys, how="left"
-        )
-        board["state_as_of_utc"] = pd.to_datetime(
-            board["state_as_of_utc"], errors="coerce", utc=True
-        ).map(lambda value: value.isoformat() if pd.notna(value) else "")
-    else:
-        board["state_as_of_utc"] = ""
     detail_count = write_event_detail_files(board, events, details_dir=DATA / "anomaly_event_details")
     # Replace each public file only after its complete export is ready for Nginx.
     for frame, name in ((board, "anomaly_board.csv"), (events, "anomaly_events.csv")):
