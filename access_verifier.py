@@ -64,9 +64,9 @@ def access_token(cookie_header: str | None) -> str | None:
     return unquote(token.value) if token and token.value else None
 
 
-def has_active_access(token: str) -> bool:
+def has_rpc_access(token: str, function_name: str) -> bool:
     request = Request(
-        f"{SUPABASE_URL}/rest/v1/rpc/has_active_access",
+        f"{SUPABASE_URL}/rest/v1/rpc/{function_name}",
         data=b"{}",
         method="POST",
         headers={
@@ -81,6 +81,14 @@ def has_active_access(token: str) -> bool:
             return response.status == 200 and json.loads(response.read()) is True
     except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError):
         return False
+
+
+def has_active_access(token: str) -> bool:
+    return has_rpc_access(token, "has_active_access")
+
+
+def has_admin_access(token: str) -> bool:
+    return has_rpc_access(token, "is_admin")
 
 
 def has_explicit_complimentary_access(token: str) -> bool:
@@ -111,8 +119,15 @@ class AccessHandler(BaseHTTPRequestHandler):
         return
 
     def do_GET(self) -> None:
+        if self.path not in {"/verify", "/verify-admin"}:
+            self.send_error(404)
+            return
         token = access_token(self.headers.get("Cookie"))
-        if token and (has_active_access(token) or has_explicit_complimentary_access(token)):
+        if self.path == "/verify-admin":
+            allowed = bool(token and has_admin_access(token))
+        else:
+            allowed = bool(token and (has_active_access(token) or has_explicit_complimentary_access(token)))
+        if allowed:
             self.send_response(204)
             self.end_headers()
             return
