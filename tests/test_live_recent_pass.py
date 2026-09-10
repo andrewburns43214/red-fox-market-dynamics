@@ -114,3 +114,26 @@ def test_score_coverage_artifact_is_valid_json(tmp_path):
     observed, issues = evaluate(path)
     assert observed == payload
     assert issues == []
+
+
+def test_final_pregame_state_depends_on_source_time_not_timer_offset():
+    board = pd.DataFrame([{
+        "sport": "mlb", "game_id": "1", "market_display": "MONEYLINE",
+        "kickoff_iso": "2026-09-08T22:40:00Z",
+        "state_as_of_utc": "2026-09-08T22:30:55Z",
+        "supported_side": "NY Mets",
+    }])
+    before = live.final_pregame_states(board, datetime(2026, 9, 8, 22, 39, tzinfo=timezone.utc))
+    one_minute_after = live.final_pregame_states(board, datetime(2026, 9, 8, 22, 41, tzinfo=timezone.utc))
+    three_minutes_after = live.final_pregame_states(board, datetime(2026, 9, 8, 22, 43, tzinfo=timezone.utc))
+    assert before.empty
+    assert one_minute_after.iloc[0]["supported_side"] == three_minutes_after.iloc[0]["supported_side"] == "NY Mets"
+    assert one_minute_after.iloc[0]["final_pregame_state_at_utc"] == three_minutes_after.iloc[0]["final_pregame_state_at_utc"]
+
+
+def test_final_pregame_state_rejects_source_observed_after_kickoff():
+    board = pd.DataFrame([{
+        "kickoff_iso": "2026-09-08T22:40:00Z",
+        "state_as_of_utc": "2026-09-08T22:40:01Z",
+    }])
+    assert live.final_pregame_states(board, datetime(2026, 9, 8, 22, 42, tzinfo=timezone.utc)).empty
