@@ -148,7 +148,8 @@ def test_admin_exports_are_protected_and_engine_refresh_does_not_import_ledger()
     assert nginx.count("auth_request /_internal/admin-access;") == 3
     assert "/verify-admin" in access and "is_admin" in access
     assert "bearer_token(self.headers.get(\"Authorization\"))" in access
-    assert "proxy_set_header Authorization $http_authorization;" in nginx
+    assert nginx.count("set $redfox_admin_authorization $http_authorization;") == 3
+    assert "proxy_set_header Authorization $redfox_admin_authorization;" in nginx
     assert "Download Supported Side CSV" in admin
     assert "Download Red Fox Favorite CSV" in admin
     assert "document.cookie='redfox_access_token='+encodeURIComponent(session.access_token)" in admin
