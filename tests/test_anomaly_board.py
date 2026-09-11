@@ -215,7 +215,37 @@ class TestAnomalyBoard(unittest.TestCase):
         self.assertEqual(row["directional_lean_side"], "")
         self.assertIn("Temple -14.5 moved 5.0 points from -9.5 to -14.5", row["market_rationale"])
         self.assertIn("55% bets / 75% money", row["market_rationale"])
-        self.assertIn("does not meet the confirmation threshold for Follow", row["market_rationale"])
+        self.assertIn("55% share of bets is below the 70% required for Follow", row["market_rationale"])
+        self.assertIn("market remains Watch", row["market_rationale"])
+
+    def test_watch_rationale_describes_attached_price_without_claiming_zero_point_move(self):
+        board = pd.DataFrame([
+            {"sport": "nfl", "game_id": "sf-lar", "market_display": "SPREAD", "game": "SF 49ers @ LA Rams", "flagged_side": "SF 49ers +3.5", "bets_pct": 36, "money_pct": 38, "open_line": "+3.5 (-108)", "current_line": "+3.5 (-105)", "reaction": "Watch", "path": "Held", "anomaly_sort": 1, "severity_sort": 20},
+            {"sport": "nfl", "game_id": "sf-lar", "market_display": "SPREAD", "game": "SF 49ers @ LA Rams", "flagged_side": "LA Rams -3.5", "bets_pct": 64, "money_pct": 62, "open_line": "-3.5 (-112)", "current_line": "-3.5 (-115)", "reaction": "Watch", "path": "Held", "anomaly_sort": 2, "severity_sort": 10},
+        ])
+
+        rationale = select_market_leaders(board).iloc[0]["market_rationale"]
+
+        self.assertIn("LA Rams -3.5 has 64% bets / 62% money", rationale)
+        self.assertIn("spread held at -3.5", rationale)
+        self.assertIn("attached price moved -112 → -115 toward that side", rationale)
+        self.assertIn("64% share of bets is below the 70% required for Follow", rationale)
+        self.assertIn("market remains Watch", rationale)
+        self.assertNotIn("moved 0.0 points", rationale)
+
+    def test_watch_rationale_combines_mixed_whipsaw_state_without_conflicting_sentences(self):
+        board = pd.DataFrame([
+            {"sport": "nfl", "game_id": "mixed-path", "market_display": "TOTAL", "game": "Away @ Home", "flagged_side": "Under 38.5", "bets_pct": 56, "money_pct": 89, "open_line": "U 38.5 (-105)", "current_line": "U 38.5 (-108)", "reaction": "Watch", "path": "Whipsaw", "anomaly_sort": 1, "severity_sort": 20},
+            {"sport": "nfl", "game_id": "mixed-path", "market_display": "TOTAL", "game": "Away @ Home", "flagged_side": "Over 38.5", "bets_pct": 44, "money_pct": 11, "open_line": "O 38.5 (-115)", "current_line": "O 38.5 (-112)", "reaction": "Watch", "path": "Held", "context_chips": "Whipsaw Recovered", "anomaly_sort": 2, "severity_sort": 10},
+        ])
+
+        rationale = select_market_leaders(board).iloc[0]["market_rationale"]
+
+        self.assertIn("total held at 38.5", rationale)
+        self.assertIn("path reversed earlier and has partly recovered", rationale)
+        self.assertIn("mixed path still carries Whipsaw risk", rationale)
+        self.assertNotIn("The path later reversed", rationale)
+        self.assertNotIn("durable reset", rationale)
 
     def test_follow_whipsaw_mentions_the_reversal_in_canonical_rationale(self):
         board = pd.DataFrame([

@@ -443,11 +443,13 @@ def _market_rationale(leader):
     else:
         sentence = _rationale_watch(strongest, other, market, strongest_name, other_name, strongest_support, other_support, context)
 
-    has_whipsaw = "Whipsaw" in context or "Whipsaw" in other_context
-    if has_whipsaw and "whipsaw" not in sentence.lower() and "reversed" not in sentence.lower():
-        sentence += " The path later reversed, adding Whipsaw risk."
     recovered_whipsaw = "Whipsaw Recovered" in context or "Whipsaw Recovered" in other_context
-    if recovered_whipsaw:
+    has_whipsaw = "Whipsaw" in context or "Whipsaw" in other_context
+    if has_whipsaw and recovered_whipsaw and "whipsaw" not in sentence.lower() and "reversed" not in sentence.lower():
+        sentence += " The path reversed earlier and has partly recovered, but the mixed path still carries Whipsaw risk."
+    elif has_whipsaw and "whipsaw" not in sentence.lower() and "reversed" not in sentence.lower():
+        sentence += " The path later reversed, adding Whipsaw risk."
+    elif recovered_whipsaw:
         sentence += " An earlier reversal has since made a durable reset under continued split pressure."
     if "Late" in context:
         sentence += " The move first appeared inside the closing window."
@@ -622,15 +624,32 @@ def _rationale_watch(side, other, market, side_name, other_name, side_support, o
     open_line, current_line = str(side.get("open_line", "")), str(side.get("current_line", ""))
     moved, toward, magnitude = _rationale_movement(side, market)
     bets_pct, money_pct = _num(side.get("bets_pct")), _num(side.get("money_pct"))
+    base_open, base_current = _rationale_base_line(open_line), _rationale_base_line(current_line)
+    old_odds, new_odds = _rationale_odds(open_line), _rationale_odds(current_line)
+    point_moved = base_open != base_current
     if (
         market in {"SPREAD", "TOTAL"}
-        and moved and toward and magnitude > 0
+        and point_moved and moved and toward and magnitude > 0
         and 35 < bets_pct < 70 and money_pct >= 55
     ):
         start, end = _rationale_line_number(open_line), _rationale_line_number(current_line)
         return (
             f"{side_name} moved {magnitude:.1f} points from {start} to {end} with {side_support}, "
-            "but ticket share does not meet the confirmation threshold for Follow."
+            f"but its {bets_pct:.0f}% share of bets is below the 70% required for Follow, so the market remains Watch."
+        )
+    if (
+        market in {"SPREAD", "TOTAL"}
+        and base_open == base_current
+        and old_odds and new_odds and old_odds != new_odds
+        and moved and toward
+        and 35 < bets_pct < 70 and money_pct >= 55
+    ):
+        market_name = "spread" if market == "SPREAD" else "total"
+        held_number = _rationale_line_number(current_line) if market == "TOTAL" else base_current
+        return (
+            f"{side_name} has {side_support}. The {market_name} held at {held_number} while the attached price "
+            f"moved {old_odds} → {new_odds} toward that side. This is a modest response, and its {bets_pct:.0f}% "
+            "share of bets is below the 70% required for Follow, so the market remains Watch."
         )
     if open_line == current_line and path not in {"Whipsaw", "Juice Move"}:
         return f"{side_name} has {side_support} versus {other_name} at {other_support}, and held at {_rationale_base_line(current_line) or current_line}."
