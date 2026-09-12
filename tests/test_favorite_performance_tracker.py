@@ -52,3 +52,9 @@ def test_aggregate_endpoint_is_board_protected_without_exposing_admin_rows():
     assert "auth_request /_internal/board-access;" in production
     assert "favorite_performance\\.json" in site
     assert "FAVORITE_PERFORMANCE_URL = '/data/favorite_performance.json'" in BOARD
+
+
+def test_local_preview_serves_the_existing_favorite_asset():
+    server = (ROOT / "serve.py").read_text(encoding="utf-8")
+    assert "elif path.startswith('/assets/'):" in server
+    assert "self.path = '/site' + self.path" in server

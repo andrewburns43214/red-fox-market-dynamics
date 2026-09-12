@@ -43,6 +43,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.path = '/site/preview.png'
         elif path.startswith('/logo.png'):
             self.path = '/site/logo.png'
+        elif path.startswith('/assets/'):
+            self.path = '/site' + self.path
         return super().do_GET()
 
     def _serve_sandbox_data(self, path):
