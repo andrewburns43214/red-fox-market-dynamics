@@ -44,6 +44,10 @@ SCOREBOARD_URLS = {
 # ESPN occasionally spells an MLB city out where the sportsbook uses its three
 # letter abbreviation. Keep these score-feed-only aliases explicit.
 SCOREBOARD_TEAM_ALIASES = {
+    # DraftKings uses the university name while ESPN brands the athletics
+    # program as "App State".  Normalize the provider spelling to the same
+    # canonical identity used by team_aliases.py.
+    "app state": "appalachian st",
     "chi white sox": "chicago white sox",
     "chi cubs": "chicago cubs",
     "la angels": "los angeles angels",
@@ -253,6 +257,30 @@ def final_pregame_states(previous: pd.DataFrame, now: datetime) -> pd.DataFrame:
     return started.drop(columns=["_kickoff", "_state_at"])
 
 
+def expire_started_board_rows(now: datetime, grace_minutes: int = 5) -> int:
+    """Atomically remove started games from the pregame board.
+
+    The full board publisher can take several minutes on a large Saturday
+    slate.  Its kickoff gate must not depend on that expensive rebuild reaching
+    the final write.  The one-minute Live & Recent worker calls this only after
+    it has had an opportunity to freeze the existing board rows.
+    """
+    board = read_csv_or_empty(BOARD)
+    if board.empty or "kickoff_iso" not in board.columns:
+        return 0
+    kickoff = utc_series(board["kickoff_iso"], board.index)
+    cutoff = pd.Timestamp(now) - pd.Timedelta(minutes=grace_minutes)
+    keep = kickoff.isna() | (kickoff > cutoff)
+    removed = int((~keep).sum())
+    if not removed:
+        return 0
+    temporary = BOARD.with_name("." + BOARD.name + ".kickoff.tmp")
+    board.loc[keep].to_csv(temporary, index=False)
+    temporary.replace(BOARD)
+    print(f"[live-recent] removed {removed} started rows from the pregame board")
+    return removed
+
+
 def write_score_coverage(live: pd.DataFrame, now: datetime) -> dict:
     games = live.drop_duplicates([column for column in ("sport", "game_id", "game") if column in live]).copy()
     state = games.get("score_state", pd.Series("", index=games.index)).astype(str).str.lower()
@@ -372,6 +400,10 @@ def main(scores_only: bool = False) -> None:
     temp = DATA / ".live_recent.csv.tmp"
     live.to_csv(temp, index=False)
     temp.replace(OUT)
+    # Freeze first, then remove.  This preserves the exact final published
+    # pregame classification while making board expiry independent of the
+    # slower anomaly rebuild completing successfully.
+    expire_started_board_rows(now)
     write_score_coverage(live, now)
     print(f"[live-recent] wrote {len(live)} frozen pregame records")
 

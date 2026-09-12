@@ -26,6 +26,22 @@ def test_provider_location_and_abbreviation_keys_cover_verified_cfb_mismatches()
         assert live.game_key(game, "ncaaf") in live.provider_game_keys(away, home, "ncaaf")
 
 
+def test_app_state_provider_brand_matches_appalachian_state_board_identity():
+    away = {
+        "displayName": "App State Mountaineers",
+        "location": "App State",
+        "shortDisplayName": "App State",
+        "abbreviation": "APP",
+    }
+    home = {
+        "displayName": "East Carolina Pirates",
+        "location": "East Carolina",
+        "shortDisplayName": "East Carolina",
+        "abbreviation": "ECU",
+    }
+    assert live.game_key("Appalachian State @ East Carolina", "ncaaf") in live.provider_game_keys(away, home, "ncaaf")
+
+
 def test_score_coverage_counts_canonical_states_and_failure_stages(tmp_path, monkeypatch):
     monkeypatch.setattr(live, "SCORE_COVERAGE_OUT", tmp_path / "live_score_coverage.json")
     now = datetime.now(timezone.utc)
@@ -137,3 +153,20 @@ def test_final_pregame_state_rejects_source_observed_after_kickoff():
         "state_as_of_utc": "2026-09-08T22:40:01Z",
     }])
     assert live.final_pregame_states(board, datetime(2026, 9, 8, 22, 42, tzinfo=timezone.utc)).empty
+
+
+def test_one_minute_worker_expires_started_board_only_after_freeze_window(tmp_path, monkeypatch):
+    board_path = tmp_path / "anomaly_board.csv"
+    monkeypatch.setattr(live, "BOARD", board_path)
+    pd.DataFrame([
+        {"game_id": "started", "kickoff_iso": "2026-09-12T16:00:00Z", "red_fox_favorite": "true"},
+        {"game_id": "grace", "kickoff_iso": "2026-09-12T16:08:00Z", "red_fox_favorite": "false"},
+        {"game_id": "future", "kickoff_iso": "2026-09-12T18:00:00Z", "red_fox_favorite": "false"},
+    ]).to_csv(board_path, index=False)
+
+    removed = live.expire_started_board_rows(datetime(2026, 9, 12, 16, 10, tzinfo=timezone.utc))
+
+    assert removed == 1
+    remaining = pd.read_csv(board_path, dtype=str, keep_default_na=False)
+    assert remaining.game_id.tolist() == ["grace", "future"]
+    assert remaining.loc[remaining.game_id.eq("grace"), "red_fox_favorite"].item() == "false"
