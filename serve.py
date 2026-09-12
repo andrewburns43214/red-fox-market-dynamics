@@ -49,6 +49,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         allowed = {
             'anomaly_board.csv', 'anomaly_events.csv', 'results_resolved.csv',
             'kpi_master_dataset.csv', 'freshness.json', 'book_lines.json', 'live_recent.csv',
+            'favorite_performance.json',
         }
         filename = urllib.parse.unquote(path.removeprefix('/sandbox-data/'))
         is_detail = (

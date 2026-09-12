@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -22,6 +23,7 @@ from anomaly_action_results import _grade_action
 
 SUPPORTED_SIDE_VALID_FROM = pd.Timestamp("2026-09-07T17:57:58Z")
 FAVORITE_VALID_FROM = pd.Timestamp("2026-09-07T22:11:12Z")
+FAVORITE_TRACKING_START_DATE = "2026-09-06"
 LEDGER_COLUMNS = [
     "ledger_id", "event_id", "game", "sport", "scheduled_start", "market", "side",
     "final_pregame_line", "final_pregame_price", "market_read", "market_read_detail",
@@ -58,6 +60,16 @@ def _atomic_csv(frame: pd.DataFrame, path: Path) -> None:
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:
         frame.to_csv(temporary, index=False)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _atomic_json(payload: dict, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    try:
+        temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
@@ -308,11 +320,17 @@ def update_performance_ledger(
     _atomic_csv(ledger.reindex(columns=LEDGER_COLUMNS), ledger_path)
     _exports(ledger, data_dir)
     graded = ledger[ledger["grade"].isin(["W", "L", "Push"])]
-    return {
+    result = {
         "rows": int(len(ledger)), "new_rows": int(len(new_records)), "graded": int(len(graded)),
         "supported": summary(graded),
         "favorites": summary(graded[graded["favorite_qualified"].eq("yes")]),
     }
+    _atomic_json({
+        **result["favorites"],
+        "tracking_start_date": FAVORITE_TRACKING_START_DATE,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }, data_dir / "favorite_performance.json")
+    return result
 
 
 def summary(rows: pd.DataFrame) -> dict:
