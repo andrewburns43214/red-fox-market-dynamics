@@ -156,7 +156,8 @@ def test_admin_exports_are_protected_and_engine_refresh_does_not_import_ledger()
     assert "fetch(link.href,{credentials:'same-origin',headers:{'Authorization':'Bearer '+session.access_token}})" in admin
     assert "performance_ledger" not in refresh
     assert "performance_ledger" not in runner
-    assert "performance_ledger.py --freeze-only" in service
+    assert "performance_ledger.py" in service
+    assert "--freeze-only" not in service
     assert "OnActiveSec=15s" in timer
     assert "OnUnitActiveSec=2min" in timer
     assert "Persistent=true" not in timer

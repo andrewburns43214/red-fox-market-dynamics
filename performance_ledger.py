@@ -23,7 +23,7 @@ from anomaly_action_results import _grade_action
 
 SUPPORTED_SIDE_VALID_FROM = pd.Timestamp("2026-09-07T17:57:58Z")
 FAVORITE_VALID_FROM = pd.Timestamp("2026-09-07T22:11:12Z")
-FAVORITE_TRACKING_START_DATE = "2026-09-06"
+FAVORITE_TRACKING_START_DATE = "2026-09-07"
 LEDGER_COLUMNS = [
     "ledger_id", "event_id", "game", "sport", "scheduled_start", "market", "side",
     "final_pregame_line", "final_pregame_price", "market_read", "market_read_detail",

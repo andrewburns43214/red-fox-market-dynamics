@@ -36,9 +36,8 @@ def test_tracker_uses_one_shared_payload_for_desktop_mobile_and_guide():
     assert 'favorite-performance-mobile' in BOARD
     assert "const gradedDecisions=wins+losses;" in BOARD
     assert "winPercentage:gradedDecisions?wins/gradedDecisions*100:0" in BOARD
-    assert "FAVORITE_PERFORMANCE_BOOTSTRAP = Object.freeze({wins:7,losses:3,pushes:0,tracking_start_date:'2026-09-06'})" in BOARD
-    assert "let favoritePerformance=normalizeFavoritePerformance(FAVORITE_PERFORMANCE_BOOTSTRAP);" in BOARD
-    assert "renderFavoritePerformance();" in BOARD
+    assert "FAVORITE_PERFORMANCE_BOOTSTRAP" not in BOARD
+    assert "let favoritePerformance=null;" in BOARD
     assert "favoritePerformanceFooter()" in BOARD
     assert 'class="favorite-guide-record"' in BOARD
     assert "footer.textContent=text?`Record: ${text.record} · ${text.rate} · ${text.since}`:'';" in BOARD
@@ -52,6 +51,9 @@ def test_aggregate_endpoint_is_board_protected_without_exposing_admin_rows():
     assert "auth_request /_internal/board-access;" in production
     assert "favorite_performance\\.json" in site
     assert "FAVORITE_PERFORMANCE_URL = '/data/favorite_performance.json'" in BOARD
+    board_locations = (ROOT / "deploy" / "redfox-board-locations.conf").read_text(encoding="utf-8")
+    assert "location = /data/favorite_performance.json" in board_locations
+    assert "auth_request /_internal/board-access;" in board_locations
 
 
 def test_local_preview_serves_the_existing_favorite_asset():

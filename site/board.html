@@ -2104,7 +2104,6 @@ const RESULTS_URL = '/data/results_resolved.csv';
 const FREEZE_URL  = '/data/decision_freeze_ledger.csv';
 const LIVE_RECENT_URL = '/data/live_recent.csv';
 const FAVORITE_PERFORMANCE_URL = '/data/favorite_performance.json';
-const FAVORITE_PERFORMANCE_BOOTSTRAP = Object.freeze({wins:7,losses:3,pushes:0,tracking_start_date:'2026-09-06'});
 
 const MOCK_DASH = [
   {sport:'nba',game_id:'101',market_display:'TOTAL',game:'CLE Cavaliers @ DET Pistons',favored_side:'Under 226.5',game_confidence:66.4,net_edge:10.0,game_decision:'LEAN',_game_time:'2026-02-27T19:10:00-05:00',bets_pct:38,money_pct:62,open_line:'226.5',current_line:'224.5',timing_bucket:'MID'},
@@ -2139,7 +2138,7 @@ const MOCK_RESULTS = [
 ];
 
 let allDash=[], allLedger=[], allEvents=[], allResults=[], allKPI=[], allLiveRecent=[];
-let favoritePerformance=normalizeFavoritePerformance(FAVORITE_PERFORMANCE_BOOTSTRAP);
+let favoritePerformance=null;
 let liveRecentSport='ALL', liveRecentStatus='ALL', liveRecentSort='STATUS_TIME', liveRecentVisible=18;
 let _liveRecentLoaded=false, _liveRecentLoading=null, _liveRecentObserver=null;
 let sport='ALL', market='ALL', filter='all', tabId='board';
@@ -5304,7 +5303,6 @@ async function loadFavoritePerformance(){
 }
 
 loadAll();
-renderFavoritePerformance();
 loadFavoritePerformance();
 setInterval(updateStats, 1000);
 setInterval(loadAll, 60000);
