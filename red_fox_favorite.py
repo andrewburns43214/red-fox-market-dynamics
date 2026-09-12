@@ -27,12 +27,17 @@ class FavoriteConfig:
     secondary_moneyline_spread_max: float = 4.0
     moneyline_min: int = -165
     moneyline_max: int = 125
+    primary_moneyline_max: int = 120
     low_support_max: float = 45.0
     moderate_support_min: float = 46.0
     moderate_support_max: float = 60.0
     minimum_observations: int = 3
     meaningful_spread_move: float = 0.5
     meaningful_moneyline_price_move: float = 2.5
+    resistance_min_bets: float = 80.0
+    resistance_min_money: float = 60.0
+    resistance_max_direction_changes: int = 4
+    freeze_disabled_sports: frozenset[str] = frozenset({"ufc"})
 
 
 CONFIG = FavoriteConfig()
@@ -208,7 +213,7 @@ def _qualify_market(row: pd.Series, game_rows: pd.DataFrame | None) -> dict | No
         value = _line_value(side.get("current_line"), market)
         if value is None or not _number_is_eligible(sport, market, value, side, game_rows):
             continue
-        pathway = _pathway(side, other)
+        pathway = _pathway(side, other, sport, market)
         if not pathway:
             continue
         # Favorite is a narrower designation layered over the published
@@ -256,7 +261,7 @@ def _qualify_market(row: pd.Series, game_rows: pd.DataFrame | None) -> dict | No
     }
 
 
-def _pathway(side: dict, other: dict) -> str:
+def _pathway(side: dict, other: dict, sport: str, market: str) -> str:
     bets, money = _number(side.get("bets_pct")), _number(side.get("money_pct"))
     other_bets, other_money = _number(other.get("bets_pct")), _number(other.get("money_pct"))
     if None in {bets, money, other_bets, other_money}:
@@ -266,7 +271,7 @@ def _pathway(side: dict, other: dict) -> str:
     reaction = str(side.get("reaction", ""))
     if low and reaction == "Contrarian" and toward and _truthy(side.get("kpi_eligible")):
         return "low_support_contrarian"
-    if low and _is_favorite_resistance(side, other):
+    if low and _is_favorite_resistance(side, other, sport, market):
         return "low_support_freeze"
     moderate = (
         CONFIG.moderate_support_min <= bets <= CONFIG.moderate_support_max
@@ -277,26 +282,34 @@ def _pathway(side: dict, other: dict) -> str:
     return ""
 
 
-def _is_favorite_resistance(side: dict, pressure: dict) -> bool:
-    """Evaluate Favorite Path B without inheriting generic fade safeguards.
-
-    The Market Read engine places ``Freeze`` on the high-support pressure side
-    and ``Resistance Side`` on the protected, low-support counterpart.  Its
-    generic fade candidate additionally blocks key numbers and requires 80%
-    tickets; neither safeguard belongs to the Favorite contract.
-    """
+def _is_favorite_resistance(side: dict, pressure: dict, sport: str, market: str) -> bool:
+    """Require a clean, persistent resistance state for Favorite Path B."""
+    if sport in CONFIG.freeze_disabled_sports:
+        return False
     if str(pressure.get("reaction", "")) != "Freeze" or not _base_quality(pressure):
         return False
     pressure_bets = _number(pressure.get("bets_pct"))
     pressure_money = _number(pressure.get("money_pct"))
     if pressure_bets is None or pressure_money is None:
         return False
-    pressure_context = _parts(pressure.get("context_chips"))
     substantial_pressure = (
-        "Public Pressure" in pressure_context
-        or (pressure_bets >= 70 and pressure_money >= 55)
+        pressure_bets >= CONFIG.resistance_min_bets
+        and pressure_money >= CONFIG.resistance_min_money
+        and _truthy(pressure.get("kpi_eligible"))
+        and str(pressure.get("action_type", "")).upper() == "FADE CANDIDATE"
     )
     if not substantial_pressure:
+        return False
+    # A Favorite is stronger than a descriptive Freeze. Do not elevate a
+    # market that merely wandered back toward its opener or repeatedly changed
+    # direction inside a small price range.
+    if _truthy(side.get("return_toward_open")) or _truthy(pressure.get("return_toward_open")):
+        return False
+    direction_changes = max(
+        int(_number(side.get("line_dir_changes")) or 0),
+        int(_number(pressure.get("line_dir_changes")) or 0),
+    )
+    if direction_changes > CONFIG.resistance_max_direction_changes:
         return False
     # Freeze means concentrated pressure failed to earn a meaningful favorable
     # response.  The paired side must still be held/protected, not moving
@@ -304,6 +317,16 @@ def _is_favorite_resistance(side: dict, pressure: dict) -> bool:
     if str(pressure.get("response_direction", "")).upper() not in {"AGAINST", "LIMITED"}:
         return False
     if str(side.get("response_direction", "")).upper() not in {"TOWARD", "LIMITED"}:
+        return False
+    held = str(pressure.get("path", "")) == "Held" and str(side.get("path", "")) == "Held"
+    adverse_move = str(pressure.get("response_direction", "")).upper() == "AGAINST" and (
+        (_number(pressure.get("price_move_pct")) or 0) >= CONFIG.meaningful_moneyline_price_move
+        or (
+            market == "SPREAD"
+            and (_number(pressure.get("line_move_abs")) or 0) >= CONFIG.meaningful_spread_move
+        )
+    )
+    if not held and not adverse_move:
         return False
     pressure_role = str(pressure.get("evidence_role", "")).strip()
     resistance_role = str(side.get("evidence_role", "")).strip()
@@ -333,7 +356,8 @@ def _base_quality(side: dict) -> bool:
 def _number_is_eligible(sport: str, market: str, value: float, side: dict, game_rows: pd.DataFrame | None) -> bool:
     if market == "SPREAD":
         return CONFIG.spread_min <= abs(value) <= CONFIG.spread_max
-    if not CONFIG.moneyline_min <= value <= CONFIG.moneyline_max:
+    maximum = CONFIG.primary_moneyline_max if sport in CONFIG.primary_moneyline_sports else CONFIG.moneyline_max
+    if not CONFIG.moneyline_min <= value <= maximum:
         return False
     if sport in CONFIG.primary_moneyline_sports:
         return True

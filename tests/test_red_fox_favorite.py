@@ -12,7 +12,8 @@ from audit_directional_integrity import audit as audit_directional_integrity
 def side(name, current, *, bets=35, money=30, reaction="Contrarian", direction="TOWARD",
          observations=4, clean=True, kpi=True, action_type="CONTRARIAN CANDIDATE",
          action_side=None, path="One-Way", line_move=1.0, price_move=3.0, context="",
-         active_worsening=False, open_line=None, evidence_role="", key_number_pinned=""):
+         active_worsening=False, open_line=None, evidence_role="", key_number_pinned="",
+         return_toward_open=False, line_dir_changes=0):
     return {
         "flagged_side": name, "bets_pct": bets, "money_pct": money,
         "open_line": open_line or current, "current_line": current, "reaction": reaction,
@@ -23,6 +24,7 @@ def side(name, current, *, bets=35, money=30, reaction="Contrarian", direction="
         "context_chips": context, "whipsaw_recovered": "Whipsaw Recovered" in context,
         "active_worsening_reversal": active_worsening,
         "evidence_role": evidence_role, "key_number_pinned": key_number_pinned,
+        "return_toward_open": return_toward_open, "line_dir_changes": line_dir_changes,
     }
 
 
@@ -63,7 +65,7 @@ def test_spread_outside_v1_range_is_rejected(current):
 
 
 @pytest.mark.parametrize("sport", ["mlb", "nhl", "ufc"])
-@pytest.mark.parametrize("price", [-165, 125])
+@pytest.mark.parametrize("price", [-165, 120])
 def test_primary_moneyline_sports_and_boundaries_qualify(sport, price):
     candidate = side("Candidate", f"{price:+d}", price_move=3.1)
     opponent = side("Opponent", f"{-price:+d}", bets=65, money=70, reaction="Watch",
@@ -71,7 +73,7 @@ def test_primary_moneyline_sports_and_boundaries_qualify(sport, price):
     assert is_favorite(result([market(sport, "MONEYLINE", [candidate, opponent])]))
 
 
-@pytest.mark.parametrize("price", [-166, 126])
+@pytest.mark.parametrize("price", [-166, 121, 125, 126])
 def test_moneyline_outside_final_v1_range_is_rejected(price):
     candidate = side("Candidate", f"{price:+d}")
     opponent = side("Opponent", "+100", bets=65, money=70, reaction="Watch", direction="LIMITED", kpi=False)
@@ -86,7 +88,7 @@ def florida_state_path_b(*, active_worsening=False, pressure_reaction="Freeze", 
         active_worsening=active_worsening, evidence_role="Resistance Side", key_number_pinned="K3",
     )
     pressure = side(
-        "SMU -3", "-3 (-105)", open_line="-3 (-110)", bets=77, money=75,
+        "SMU -3", "-3 (-105)", open_line="-3 (-110)", bets=81, money=75,
         reaction=pressure_reaction, direction=pressure_direction, kpi=False,
         action_type="OBSERVE ONLY", path="Held", line_move=0, price_move=1.162,
         context="K3 | Public Pressure | Whipsaw Recovered", evidence_role="Pressure Side",
@@ -115,6 +117,67 @@ def test_freeze_resistance_path_qualifies_when_engine_confirms_the_fade_side():
     assert is_favorite(frame)
     assert frame.iloc[0].favorite_pathway == "low_support_freeze"
     assert frame.iloc[0].favorite_side == "Florida State +3"
+
+
+def test_primary_moneyline_ceiling_does_not_change_secondary_moneyline_ceiling():
+    ml = market("nfl", "MONEYLINE", pair_for(side("Away", "+124")))
+    spread = market("nfl", "SPREAD", pair_for(side("Away +3", "+3 (-110)")), rank=2)
+    assert is_favorite(result([ml, spread]), 0)
+
+
+def test_ufc_freeze_path_is_not_favorite_eligible_but_movement_backed_contrarian_remains_eligible():
+    protected = side("Underdog", "+110", bets=19, money=10, reaction="Watch", direction="LIMITED",
+                     kpi=False, action_type="OBSERVE ONLY", path="Held", line_move=0, price_move=0)
+    pressure = side("Favorite", "-130", bets=81, money=90, reaction="Freeze", direction="LIMITED",
+                    action_type="FADE CANDIDATE", action_side="Underdog", path="Held",
+                    evidence_role="Pressure Side", line_move=0, price_move=0)
+    assert not is_favorite(result([market("ufc", "MONEYLINE", [protected, pressure], supported_side="Underdog")]))
+    contrarian = side("Underdog", "+110", bets=19, money=10, reaction="Contrarian",
+                      direction="TOWARD", price_move=3.0)
+    assert is_favorite(result([market("ufc", "MONEYLINE", pair_for(contrarian), supported_side="Underdog")]))
+
+
+@pytest.mark.parametrize("candidate_change,pressure_change", [
+    ({"return_toward_open": True}, {}),
+    ({}, {"return_toward_open": True}),
+    ({"line_dir_changes": 5}, {}),
+    ({}, {"line_dir_changes": 5}),
+])
+def test_freeze_favorite_rejects_retracement_and_excessive_price_churn(candidate_change, pressure_change):
+    candidate = side("Underdog", "+110", bets=19, money=10, reaction="Watch", direction="LIMITED",
+                     kpi=False, action_type="OBSERVE ONLY", path="Held", line_move=0, price_move=0,
+                     evidence_role="Resistance Side", **candidate_change)
+    pressure = side("Favorite", "-130", bets=81, money=90, reaction="Freeze", direction="LIMITED",
+                    action_type="FADE CANDIDATE", action_side="Underdog", path="Held",
+                    line_move=0, price_move=0, evidence_role="Pressure Side", **pressure_change)
+    assert not is_favorite(result([market("mlb", "MONEYLINE", [candidate, pressure], supported_side="Underdog")]))
+
+
+def test_freeze_favorite_requires_strong_pressure_and_persistent_resistance():
+    candidate = side("Underdog", "+110", bets=19, money=10, reaction="Watch", direction="LIMITED",
+                     kpi=False, action_type="OBSERVE ONLY", path="", line_move=0, price_move=2.6,
+                     evidence_role="Resistance Side")
+    pressure = side("Favorite", "-130", bets=81, money=90, reaction="Freeze", direction="AGAINST",
+                    action_type="FADE CANDIDATE", action_side="Underdog", path="",
+                    line_move=0, price_move=2.6, evidence_role="Pressure Side")
+    assert is_favorite(result([market("mlb", "MONEYLINE", [candidate, pressure], supported_side="Underdog")]))
+    weak_pressure = dict(pressure, bets_pct=79)
+    assert not is_favorite(result([market("mlb", "MONEYLINE", [candidate, weak_pressure], supported_side="Underdog")]))
+    small_move = dict(pressure, price_move_pct=2.4)
+    assert not is_favorite(result([market("mlb", "MONEYLINE", [candidate, small_move], supported_side="Underdog")]))
+
+
+def test_rule_tightening_keeps_v2_version_and_tracking_history_append_only(tmp_path):
+    assert CONFIG.version == "red_fox_favorite_v2"
+    legacy = result([market("mlb", "MONEYLINE", pair_for(side("Away", "+120")))])
+    update_favorite_tracking(legacy, tmp_path, as_of="2026-09-06T20:00:00Z")
+    newly_ineligible = legacy.copy()
+    newly_ineligible["red_fox_favorite"] = "false"
+    newly_ineligible["favorite_state"] = "not_qualified"
+    update_favorite_tracking(newly_ineligible, tmp_path, as_of="2026-09-06T20:01:00Z")
+    ledger = pd.read_csv(tmp_path / "red_fox_favorite_tracking.csv", dtype=str, keep_default_na=False)
+    assert ledger.favorite_state.tolist() == ["qualified", "not_qualified"]
+    assert ledger.favorite_rule_version.tolist() == ["red_fox_favorite_v2", "red_fox_favorite_v2"]
 
 
 def test_similar_splits_without_resistance_or_protection_do_not_qualify():
