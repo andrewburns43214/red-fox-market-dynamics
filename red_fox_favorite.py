@@ -190,8 +190,9 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
             and str(prior.get("favorite_state", "")) == "qualified"
             and str(prior.get("snapshot_id", "")) == str(row.get("favorite_snapshot_id", ""))
         )
-        if favorite and not same_snapshot:
-            records.append(_tracking_record(current.loc[index], at, first_line))
+        if favorite:
+            if not same_snapshot:
+                records.append(_tracking_record(current.loc[index], at, first_line))
         elif prior is not None and str(prior.get("favorite_state", "")) == "qualified":
             record = {column: str(prior.get(column, "")) for column in TRACKING_COLUMNS}
             record.update(
@@ -268,7 +269,23 @@ def _apply_visibility_lock(
             if pd.isna(kickoff):
                 continue
             minutes = (kickoff - now).total_seconds() / 60
-            if 0 <= minutes <= CONFIG.visibility_review_minutes and _official_active(history, key, now):
+            active = _official_active(history, key, now)
+            if not active or minutes < 0:
+                continue
+            if minutes > CONFIG.visibility_review_minutes:
+                reason = "Favorite market temporarily absent; awaiting a second consecutive nonqualifying scrape."
+                if _review_confirmed(reviews, key, "removal", now):
+                    review_records.append(_review_record(row, at, "applied", "removal", _latest_review_reason(reviews, key) or reason))
+                    continue
+                held = row.copy()
+                held["favorite_reason"] = "Favorite held through a single missing-market capture."
+                held["favorite_review_state"] = "pending_removal"
+                held["favorite_review_reason"] = reason
+                held["favorite_review_at"] = at
+                held["_visibility_restored"] = "true"
+                additions.append(held)
+                review_records.append(_review_record(row, at, "pending", "removal", reason))
+            elif minutes <= CONFIG.visibility_review_minutes:
                 held = row.copy()
                 held["favorite_reason"] = "Favorite retained through the closing review window."
                 held["_visibility_restored"] = "true"
@@ -293,7 +310,9 @@ def _apply_visibility_lock(
         source = _archived_row(archived, key)
 
         if minutes > CONFIG.visibility_review_minutes:
-            # A brand-new designation needs two consecutive ten-minute pulls.
+            # Additions and ordinary removals both need two consecutive
+            # ten-minute pulls. This prevents one-cycle classification or
+            # source-availability flicker from changing an established slate.
             if raw_favorite and not active:
                 reason = "Awaiting a second consecutive qualifying scrape."
                 if _review_confirmed(reviews, key, "addition", now):
@@ -302,7 +321,24 @@ def _apply_visibility_lock(
                     _clear_favorite(result, index, reason)
                     _set_review(result, index, "pending_addition", reason, at)
                     review_records.append(_review_record(row, at, "pending", "addition", reason))
+            elif not raw_favorite and active:
+                hard, _, reason = _material_removal(row, source)
+                confirmed = _review_confirmed(reviews, key, "removal", now)
+                if hard or confirmed:
+                    if confirmed:
+                        reason = _latest_review_reason(reviews, key) or reason
+                    _clear_favorite(result, index, reason)
+                    _set_review(result, index, "applied_removal", reason, at)
+                    review_records.append(_review_record(row, at, "applied", "removal", reason))
+                else:
+                    reason = "Favorite failed one capture; awaiting a second consecutive nonqualifying scrape."
+                    _restore_favorite(result, index, source)
+                    result.at[index, "favorite_reason"] = "Favorite held through a single nonqualifying capture."
+                    _set_review(result, index, "pending_removal", reason, at)
+                    review_records.append(_review_record(row, at, "pending", "removal", reason))
             elif not raw_favorite and not active:
+                _clear_pending_review(reviews, review_records, row, key, at)
+            else:
                 _clear_pending_review(reviews, review_records, row, key, at)
             continue
 

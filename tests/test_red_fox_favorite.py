@@ -427,6 +427,46 @@ def test_new_favorite_requires_two_consecutive_scrapes(tmp_path: Path):
     assert "second consecutive" in locked.iloc[0].favorite_reason
 
 
+def test_established_favorite_requires_two_nonqualifying_scrapes_before_t40(tmp_path: Path):
+    source = market("ncaaf", "SPREAD", pair_for(side("Away +3", "+3 (-110)", bets=30, money=20)))
+    source["kickoff_iso"] = "2026-09-06T21:00:00Z"
+    for captured in ("2026-09-06T19:20:00Z", "2026-09-06T19:30:00Z"):
+        qualified = apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured)
+        update_favorite_tracking(qualified, tmp_path, as_of=captured)
+    lost = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T19:40:00Z")
+    lost["red_fox_favorite"] = "false"
+    lost["favorite_state"] = "not_qualified"
+    held = update_favorite_tracking(lost, tmp_path, as_of="2026-09-06T19:40:00Z")
+    assert held.iloc[0].red_fox_favorite == "true"
+    assert held.iloc[0].favorite_review_state == "pending_removal"
+    tracking = pd.read_csv(tmp_path / "red_fox_favorite_tracking.csv", dtype=str, keep_default_na=False)
+    assert tracking.iloc[-1].favorite_state == "qualified"
+    recovered = update_favorite_tracking(
+        apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T19:50:00Z"),
+        tmp_path, as_of="2026-09-06T19:50:00Z",
+    )
+    assert recovered.iloc[0].red_fox_favorite == "true"
+    second_loss = lost.copy()
+    removed = update_favorite_tracking(second_loss, tmp_path, as_of="2026-09-06T20:00:00Z")
+    assert removed.iloc[0].red_fox_favorite == "true"
+    removed = update_favorite_tracking(second_loss, tmp_path, as_of="2026-09-06T20:10:00Z")
+    assert removed.iloc[0].red_fox_favorite == "false"
+
+
+def test_missing_market_requires_two_scrapes_to_remove_established_favorite_before_t40(tmp_path: Path):
+    source = market("ncaaf", "SPREAD", pair_for(side("Away +3", "+3 (-110)", bets=30, money=20)))
+    source["kickoff_iso"] = "2026-09-06T21:00:00Z"
+    for captured in ("2026-09-06T19:20:00Z", "2026-09-06T19:30:00Z"):
+        qualified = apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured)
+        update_favorite_tracking(qualified, tmp_path, as_of=captured)
+    empty = pd.DataFrame(columns=apply_red_fox_favorites(pd.DataFrame([source])).columns)
+    held = update_favorite_tracking(empty, tmp_path, as_of="2026-09-06T19:40:00Z")
+    assert len(held) == 1
+    assert held.iloc[0].red_fox_favorite == "true"
+    removed = update_favorite_tracking(empty, tmp_path, as_of="2026-09-06T19:50:00Z")
+    assert removed.empty
+
+
 def test_review_window_keeps_confirmed_favorite_from_nonmaterial_falloff(tmp_path: Path):
     source = market("ncaaf", "SPREAD", pair_for(side("Away +3", "+3 (-110)", bets=30, money=20)))
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
