@@ -382,7 +382,9 @@ def test_tracking_persists_first_qualification_and_records_subsequent_snapshots(
 def test_tracking_retains_full_favorite_handoff_candidate_after_board_disappearance(tmp_path: Path):
     source = market("ncaaf", "SPREAD", pair_for(side("Florida Atlantic +4", "+4 (-108)", bets=20, money=19)),
                     game_id="34603696", game="Navy @ Florida Atlantic")
-    source["kickoff_iso"] = "2026-09-12T23:35:00Z"
+    # Keep this handoff test outside the final-hour visibility lock; final-hour
+    # behavior has dedicated coverage below.
+    source["kickoff_iso"] = "2026-09-13T00:35:00Z"
     source["state_as_of_utc"] = "2026-09-12T23:11:03Z"
     qualified = result([source])
     update_favorite_tracking(qualified, tmp_path, as_of="2026-09-12T23:11:50Z")
@@ -403,6 +405,54 @@ def test_tracking_records_when_a_current_market_loses_favorite_status(tmp_path: 
     ledger = pd.read_csv(tmp_path / "red_fox_favorite_tracking.csv", dtype=str)
     assert ledger.favorite_state.tolist() == ["qualified", "not_qualified"]
     assert ledger.iloc[-1].disappearance_reason == "current qualification gates no longer satisfied"
+
+
+def test_visibility_invalidated_jacksonville_state_is_not_a_favorite():
+    source = market(
+        "ncaaf", "SPREAD",
+        pair_for(side("Jacksonville State +1.5", "+1.5 (-105)", bets=34, money=24)),
+        game_id="34603681", game="Jacksonville State @ Ohio",
+    )
+    assert not is_favorite(result([source]))
+
+
+def test_final_hour_rejects_unconfirmed_late_addition(tmp_path: Path):
+    source = market("ncaaf", "SPREAD", pair_for(side("Away +3", "+3 (-110)", bets=30, money=20)))
+    source["kickoff_iso"] = "2026-09-06T21:00:00Z"
+    qualified = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T20:10:00Z")
+    locked = update_favorite_tracking(qualified, tmp_path, as_of="2026-09-06T20:10:00Z")
+    assert locked.iloc[0].red_fox_favorite == "false"
+    assert "T-60" in locked.iloc[0].favorite_reason
+
+
+def test_final_hour_keeps_confirmed_favorite_from_falling_off(tmp_path: Path):
+    source = market("ncaaf", "SPREAD", pair_for(side("Away +3", "+3 (-110)", bets=30, money=20)))
+    source["kickoff_iso"] = "2026-09-06T21:00:00Z"
+    for captured in ("2026-09-06T19:40:00Z", "2026-09-06T19:50:00Z"):
+        qualified = apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured)
+        update_favorite_tracking(qualified, tmp_path, as_of=captured)
+    lost = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T20:10:00Z")
+    lost["red_fox_favorite"] = "false"
+    lost["favorite_state"] = "not_qualified"
+    locked = update_favorite_tracking(lost, tmp_path, as_of="2026-09-06T20:10:00Z")
+    assert locked.iloc[0].red_fox_favorite == "true"
+    assert locked.iloc[0].favorite_state == "qualified"
+
+
+def test_final_hour_rejects_requalification_without_two_prelock_confirmations(tmp_path: Path):
+    source = market("ncaaf", "SPREAD", pair_for(side("Away +3", "+3 (-110)", bets=30, money=20)))
+    source["kickoff_iso"] = "2026-09-06T21:00:00Z"
+    first = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T19:40:00Z")
+    update_favorite_tracking(first, tmp_path, as_of="2026-09-06T19:40:00Z")
+    lost = first.copy()
+    lost["red_fox_favorite"] = "false"
+    lost["favorite_state"] = "not_qualified"
+    update_favorite_tracking(lost, tmp_path, as_of="2026-09-06T19:50:00Z")
+    returned = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T19:54:00Z")
+    update_favorite_tracking(returned, tmp_path, as_of="2026-09-06T19:54:00Z")
+    final_hour = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T20:10:00Z")
+    locked = update_favorite_tracking(final_hour, tmp_path, as_of="2026-09-06T20:10:00Z")
+    assert locked.iloc[0].red_fox_favorite == "false"
 
 
 def test_customer_badge_and_sort_contract_preserve_active_market_semantics():

@@ -44,9 +44,15 @@ class FavoriteConfig:
     football_short_home_max_spread_money: float = 40.0
     football_favorite_max_direction_changes: int = 4
     freeze_disabled_sports: frozenset[str] = frozenset({"ufc"})
+    visibility_lock_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
+    visibility_lock_minutes: int = 60
+    visibility_confirmations: int = 2
 
 
 CONFIG = FavoriteConfig()
+VISIBILITY_INVALIDATED_FAVORITES = frozenset({
+    ("ncaaf", "34603681", "SPREAD"),  # Jacksonville State @ Ohio, 2026-09-12
+})
 FAVORITE_COLUMNS = [
     "red_fox_favorite", "favorite_side", "favorite_pathway", "favorite_rule_version",
     "favorite_first_qualified_at", "favorite_final_qualified_at", "favorite_state",
@@ -84,6 +90,16 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
     }
     opener_blocked_games = set()
     for index, row in result.iterrows():
+        identity = (
+            str(row.get("sport", "")).lower(),
+            str(row.get("game_id", "")),
+            str(row.get("market_display", "")).upper(),
+        )
+        if identity in VISIBILITY_INVALIDATED_FAVORITES:
+            result.at[index, "favorite_reason"] = (
+                "Favorite qualification withheld: audited final-hour visibility failure."
+            )
+            continue
         decision = _qualify_market(row, groups.get((str(row.get("sport", "")).lower(), str(row.get("game_id", "")))))
         if not decision:
             continue
@@ -137,6 +153,7 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
     at = _timestamp(as_of)
     path = Path(data_dir) / "red_fox_favorite_tracking.csv"
     history = _read_tracking(path)
+    current = _apply_visibility_lock(current, history, Path(data_dir), at)
     keys = ["sport", "game_id", "market_display"]
     previous = {}
     if not history.empty:
@@ -197,6 +214,127 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
         temporary.replace(path)
     _update_freeze_candidates(current, Path(data_dir), at)
     return current
+
+
+def _apply_visibility_lock(
+    current: pd.DataFrame,
+    history: pd.DataFrame,
+    data_dir: Path,
+    at: str,
+) -> pd.DataFrame:
+    """Lock the official Favorite slate one hour before scheduled start.
+
+    Two consecutive qualifying captures at or before T-60 prove the play was
+    stable and realistically visible. Inside the final hour the lock prevents
+    both new additions and late removals while raw market reads keep updating.
+    """
+    if current is None or "kickoff_iso" not in current:
+        return current
+    result = current.copy()
+    now = pd.Timestamp(at)
+    now = now.tz_localize("UTC") if now.tzinfo is None else now.tz_convert("UTC")
+    archived_path = data_dir / "red_fox_favorite_freeze_candidates.csv"
+    try:
+        archived = (
+            pd.read_csv(archived_path, dtype=str, keep_default_na=False)
+            if archived_path.exists() and archived_path.stat().st_size
+            else pd.DataFrame()
+        )
+    except (OSError, pd.errors.EmptyDataError):
+        archived = pd.DataFrame()
+
+    keys = ("sport", "game_id", "market_display")
+    current_keys = {
+        tuple(str(row.get(column, "")) for column in keys)
+        for _, row in result.iterrows()
+    }
+    if not archived.empty and all(column in archived for column in (*keys, "kickoff_iso")):
+        additions = []
+        for _, row in archived.iterrows():
+            key = tuple(str(row.get(column, "")) for column in keys)
+            if key in current_keys:
+                continue
+            identity = (key[0].lower(), key[1], key[2].upper())
+            if identity in VISIBILITY_INVALIDATED_FAVORITES or identity[0] not in CONFIG.visibility_lock_sports:
+                continue
+            kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
+            if pd.isna(kickoff):
+                continue
+            minutes = (kickoff - now).total_seconds() / 60
+            if 0 <= minutes <= CONFIG.visibility_lock_minutes and _locked_favorite(history, key, kickoff):
+                held = row.copy()
+                held["favorite_reason"] = "Official Favorite slate locked at T-60."
+                additions.append(held)
+        if additions:
+            result = pd.concat([result, pd.DataFrame(additions)], ignore_index=True, sort=False)
+
+    for index, row in result.iterrows():
+        kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
+        if pd.isna(kickoff):
+            continue
+        minutes = (kickoff - now).total_seconds() / 60
+        if not 0 <= minutes <= CONFIG.visibility_lock_minutes:
+            continue
+        key = tuple(str(row.get(column, "")) for column in keys)
+        identity = (key[0].lower(), key[1], key[2].upper())
+        if identity in VISIBILITY_INVALIDATED_FAVORITES:
+            _clear_favorite(result, index, "Favorite qualification withheld: audited final-hour visibility failure.")
+            continue
+        if identity[0] not in CONFIG.visibility_lock_sports:
+            continue
+        if _locked_favorite(history, key, kickoff):
+            if not _truthy(row.get("red_fox_favorite")):
+                source = _archived_row(archived, key)
+                if source is not None:
+                    for column in FAVORITE_COLUMNS:
+                        result.at[index, column] = source.get(column, "")
+                    result.at[index, "red_fox_favorite"] = "true"
+                    result.at[index, "favorite_state"] = "qualified"
+            result.at[index, "favorite_reason"] = "Official Favorite slate locked at T-60."
+        else:
+            _clear_favorite(result, index, "Not eligible: absent from the confirmed T-60 Favorite slate.")
+    return result
+
+
+def _locked_favorite(history: pd.DataFrame, key: tuple[str, str, str], kickoff: pd.Timestamp) -> bool:
+    if history.empty:
+        return False
+    mask = pd.Series(True, index=history.index)
+    for column, value in zip(("sport", "game_id", "market_display"), key):
+        if column not in history:
+            return False
+        mask &= history[column].astype(str).eq(value)
+    scoped = history.loc[mask].copy()
+    if scoped.empty:
+        return False
+    scoped["_at"] = pd.to_datetime(scoped["recorded_at"], errors="coerce", utc=True)
+    cutoff = kickoff - pd.Timedelta(minutes=CONFIG.visibility_lock_minutes)
+    scoped = scoped.loc[scoped["_at"].notna() & (scoped["_at"] <= cutoff)].sort_values("_at", kind="mergesort")
+    if len(scoped) < CONFIG.visibility_confirmations:
+        return False
+    states = scoped.tail(CONFIG.visibility_confirmations)["favorite_state"].astype(str)
+    return bool(states.eq("qualified").all())
+
+
+def _archived_row(archived: pd.DataFrame, key: tuple[str, str, str]) -> pd.Series | None:
+    if archived.empty:
+        return None
+    mask = pd.Series(True, index=archived.index)
+    for column, value in zip(("sport", "game_id", "market_display"), key):
+        if column not in archived:
+            return None
+        mask &= archived[column].astype(str).eq(value)
+    matches = archived.loc[mask]
+    return matches.iloc[-1] if not matches.empty else None
+
+
+def _clear_favorite(frame: pd.DataFrame, index: object, reason: str) -> None:
+    for column in FAVORITE_COLUMNS:
+        frame.at[index, column] = ""
+    frame.at[index, "red_fox_favorite"] = "false"
+    frame.at[index, "favorite_rule_version"] = CONFIG.version
+    frame.at[index, "favorite_state"] = "not_qualified"
+    frame.at[index, "favorite_reason"] = reason
 
 
 def _qualify_market(row: pd.Series, game_rows: pd.DataFrame | None) -> dict | None:

@@ -99,6 +99,25 @@ def test_v1_favorite_is_supported_side_only_and_unresolved_rows_remain_ungraded(
     assert favorites.empty
 
 
+def test_visibility_invalidated_game_is_removed_from_favorite_kpi(tmp_path):
+    row = frozen_row(
+        sport="ncaaf", game_id="34603681", game="Jacksonville State @ Ohio",
+        market_display="SPREAD", supported_side="Jacksonville State +1.5",
+        favorite_side="Jacksonville State +1.5",
+        market_sides=json.dumps([
+            {"flagged_side": "Jacksonville State +1.5", "current_line": "+1.5 (-105)", "reaction": "Contrarian"},
+            {"flagged_side": "Ohio -1.5", "current_line": "-1.5 (-115)"},
+        ]),
+    )
+    write(pd.DataFrame([row]), tmp_path / "live_recent.csv")
+    result = update_performance_ledger(tmp_path, attach_results=False)
+    assert result["rows"] == 1
+    ledger = pd.read_csv(tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False)
+    assert ledger.iloc[0].favorite_qualified == "no"
+    favorites = pd.read_csv(tmp_path / "performance_favorites.csv", dtype=str, keep_default_na=False)
+    assert favorites.empty
+
+
 def test_freeze_uses_latest_source_state_before_kickoff_and_rejects_post_start(tmp_path):
     earlier = frozen_row(supported_side="NY Mets", final_pregame_price="", final_pregame_state_at_utc="2026-09-08T17:08:00Z")
     latest = frozen_row(

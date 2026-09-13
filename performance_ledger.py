@@ -24,6 +24,9 @@ from anomaly_action_results import _grade_action
 SUPPORTED_SIDE_VALID_FROM = pd.Timestamp("2026-09-07T17:57:58Z")
 FAVORITE_VALID_FROM = pd.Timestamp("2026-09-07T22:11:12Z")
 FAVORITE_TRACKING_START_DATE = "2026-09-07"
+FAVORITE_KPI_EXCLUSIONS = frozenset({
+    ("34603681", "SPREAD"),  # Jacksonville State @ Ohio, visibility invalidated
+})
 LEDGER_COLUMNS = [
     "ledger_id", "event_id", "game", "sport", "scheduled_start", "market", "side",
     "final_pregame_line", "final_pregame_price", "market_read", "market_read_detail",
@@ -182,6 +185,7 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
             and _text(row.get("favorite_rule_version")) == "red_fox_favorite_v2"
             and _truthy(row.get("red_fox_favorite"))
             and _identity(row.get("favorite_side")) == _identity(supported)
+            and (_text(row.get("game_id")), market) not in FAVORITE_KPI_EXCLUSIONS
         )
         frozen_at = _text(row.get("frozen_at_utc"))
         state_at = row["_state_at"].isoformat()
@@ -308,6 +312,17 @@ def update_performance_ledger(
     new_records = [record for record in candidates if record["ledger_id"] not in existing_ids]
     if new_records:
         ledger = pd.concat([ledger, pd.DataFrame(new_records)], ignore_index=True, sort=False)
+    if not ledger.empty:
+        excluded = pd.Series(
+            [
+                (_text(row.get("event_id")), _text(row.get("market")).upper())
+                in FAVORITE_KPI_EXCLUSIONS
+                for _, row in ledger.iterrows()
+            ],
+            index=ledger.index,
+        )
+        ledger.loc[excluded, "favorite_qualified"] = "no"
+        ledger.loc[excluded, "favorite_final_qualified_at"] = ""
     before_classification = ledger.reindex(columns=CLASSIFICATION_COLUMNS).copy()
     ledger = ledger.reindex(columns=LEDGER_COLUMNS)
     if attach_results:
