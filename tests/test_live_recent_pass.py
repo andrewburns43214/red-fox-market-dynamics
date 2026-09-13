@@ -185,6 +185,17 @@ def test_favorite_handoff_survives_absence_from_current_board():
     assert frozen.iloc[0].freeze_method == "favorite_tracking_last_qualified_at_or_before_start"
 
 
+def test_visibility_invalidated_favorite_cannot_reenter_from_handoff_archive():
+    candidate = pd.DataFrame([{
+        "sport": "ncaaf", "game_id": "34603681", "market_display": "SPREAD",
+        "kickoff_iso": "2026-09-12T22:00:00Z", "state_as_of_utc": "2026-09-12T21:50:59Z",
+        "supported_side": "Jacksonville State +1.5", "red_fox_favorite": "true",
+        "favorite_side": "Jacksonville State +1.5", "favorite_state": "qualified",
+    }])
+    frozen = live.favorite_handoff_states(candidate, datetime(2026, 9, 12, 22, 1, tzinfo=timezone.utc))
+    assert frozen.empty
+
+
 def test_one_minute_worker_expires_started_board_only_after_freeze_window(tmp_path, monkeypatch):
     board_path = tmp_path / "anomaly_board.csv"
     monkeypatch.setattr(live, "BOARD", board_path)

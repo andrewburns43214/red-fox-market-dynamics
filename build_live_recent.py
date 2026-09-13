@@ -10,6 +10,7 @@ import re
 
 import pandas as pd
 import requests
+from red_fox_favorite import FAVORITE_COLUMNS, VISIBILITY_INVALIDATED_FAVORITES
 from team_aliases import normalize_team_name
 
 
@@ -268,6 +269,7 @@ def favorite_handoff_states(candidates: pd.DataFrame, now: datetime) -> pd.DataF
     """
     if candidates.empty:
         return pd.DataFrame()
+    candidates = apply_favorite_exclusions(candidates)
     favorite = candidates[
         candidates.get("red_fox_favorite", pd.Series("false", index=candidates.index))
         .astype(str).str.lower().isin({"1", "true", "yes"})
@@ -276,6 +278,31 @@ def favorite_handoff_states(candidates: pd.DataFrame, now: datetime) -> pd.DataF
     if not frozen.empty:
         frozen["freeze_method"] = "favorite_tracking_last_qualified_at_or_before_start"
     return frozen
+
+
+def apply_favorite_exclusions(frame: pd.DataFrame) -> pd.DataFrame:
+    """Prevent audited visibility failures from re-entering frozen displays."""
+    if frame.empty or not all(column in frame for column in ("sport", "game_id", "market_display")):
+        return frame
+    result = frame.copy()
+    invalid = pd.Series(
+        [
+            (str(row.get("sport", "")).lower(), str(row.get("game_id", "")), str(row.get("market_display", "")).upper())
+            in VISIBILITY_INVALIDATED_FAVORITES
+            for _, row in result.iterrows()
+        ],
+        index=result.index,
+    )
+    for column in FAVORITE_COLUMNS:
+        if column in result:
+            result.loc[invalid, column] = ""
+    if "red_fox_favorite" in result:
+        result.loc[invalid, "red_fox_favorite"] = "false"
+    if "favorite_state" in result:
+        result.loc[invalid, "favorite_state"] = "not_qualified"
+    if "favorite_reason" in result:
+        result.loc[invalid, "favorite_reason"] = "Favorite removed: audited final-hour visibility failure."
+    return result
 
 
 def expire_started_board_rows(now: datetime, grace_minutes: int = 5) -> int:
@@ -375,7 +402,7 @@ def main(scores_only: bool = False) -> None:
             write_score_coverage(empty, now)
             return
         rows.append(recovered)
-    live = ensure_output_columns(pd.concat(rows, ignore_index=True, sort=False))
+    live = apply_favorite_exclusions(ensure_output_columns(pd.concat(rows, ignore_index=True, sort=False)))
     # Compare in one timezone-free representation; CSVs can contain a mix of
     # offset-aware and legacy naive kickoff values.
     kickoff_values = live["kickoff_iso"] if "kickoff_iso" in live.columns else pd.Series(pd.NaT, index=live.index)
