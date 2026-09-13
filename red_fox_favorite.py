@@ -24,6 +24,9 @@ class FavoriteConfig:
     secondary_moneyline_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
     spread_min: float = 1.0
     spread_max: float = 8.0
+    nfl_positive_spread_max: float = 10.0
+    nfl_extended_spread_max_support: float = 40.0
+    nfl_extended_spread_min_move: float = 1.0
     secondary_moneyline_spread_max: float = 4.0
     moneyline_min: int = -165
     moneyline_max: int = 125
@@ -43,6 +46,11 @@ class FavoriteConfig:
     football_short_home_max_money: float = 35.0
     football_short_home_max_spread_money: float = 40.0
     football_favorite_max_direction_changes: int = 4
+    partial_whipsaw_min_retention: float = 0.65
+    partial_whipsaw_max_material_direction_changes: int = 3
+    partial_whipsaw_confirmation_minutes: int = 10
+    normal_freshness_minutes: int = 30
+    whipsaw_freshness_minutes: int = 20
     freeze_disabled_sports: frozenset[str] = frozenset({"ufc"})
     visibility_lock_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
     visibility_review_minutes: int = 40
@@ -61,6 +69,10 @@ FAVORITE_COLUMNS = [
     "favorite_final_market_read", "favorite_final_market_rank",
     "favorite_supporting_evidence", "favorite_whipsaw_state",
     "favorite_cross_market_state", "favorite_snapshot_id", "favorite_reason",
+    "favorite_shadow_freeze_side", "favorite_shadow_freeze_eligible",
+    "favorite_shadow_freeze_reason",
+    "favorite_originally_qualified", "favorite_late_invalidated",
+    "favorite_late_invalidated_at", "favorite_late_invalidated_reason",
 ]
 TRACKING_COLUMNS = [
     "recorded_at", "sport", "game_id", "game", "market_display", "favorite_state",
@@ -75,6 +87,17 @@ REVIEW_COLUMNS = [
     "review_state", "review_action", "favorite_side", "current_line", "reason",
 ]
 REVIEW_BOARD_COLUMNS = ["favorite_review_state", "favorite_review_reason", "favorite_review_at"]
+SHADOW_COLUMNS = [
+    "capture_id", "captured_at", "sport", "game_id", "game", "kickoff_iso",
+    "minutes_before_start", "market_display", "candidate_side", "candidate_decision",
+    "candidate_reason", "favorite_pathway", "favorite_rule_version", "open_line",
+    "current_line", "bets_pct", "money_pct", "reaction", "path", "data_badge",
+    "observation_count", "line_direction_changes", "return_toward_open",
+    "active_worsening_reversal", "whipsaw_state", "cross_market_state", "snapshot_id",
+    "whipsaw_retention_ratio", "material_direction_changes",
+    "whipsaw_confirmation_ready", "whipsaw_confirmation_minutes",
+    "shadow_cohort", "shadow_eligible",
+]
 
 
 def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
@@ -102,6 +125,13 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
             str(row.get("game_id", "")),
             str(row.get("market_display", "")).upper(),
         )
+        shadow_freeze = _shadow_freeze_candidate(
+            row, groups.get((str(row.get("sport", "")).lower(), str(row.get("game_id", ""))))
+        )
+        if shadow_freeze:
+            result.at[index, "favorite_shadow_freeze_side"] = shadow_freeze["side"]
+            result.at[index, "favorite_shadow_freeze_eligible"] = "true"
+            result.at[index, "favorite_shadow_freeze_reason"] = shadow_freeze["reason"]
         if identity in VISIBILITY_INVALIDATED_FAVORITES:
             result.at[index, "favorite_reason"] = (
                 "Favorite qualification withheld: audited final-hour visibility failure."
@@ -133,6 +163,7 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
         result.at[index, "favorite_cross_market_state"] = decision["cross_market_state"]
         result.at[index, "favorite_snapshot_id"] = snapshot_id
         result.at[index, "favorite_reason"] = decision["reason"]
+        result.at[index, "favorite_originally_qualified"] = "true"
     for sport, game_id in opener_blocked_games:
         pair_mask = (
             result["sport"].astype(str).str.lower().eq(sport)
@@ -220,8 +251,87 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
         temporary = path.with_name("." + path.name + ".tmp")
         updated.to_csv(temporary, index=False)
         temporary.replace(path)
+    _update_candidate_shadow(current, Path(data_dir), at)
     _update_freeze_candidates(current, Path(data_dir), at)
     return current.drop(columns=["_visibility_restored"], errors="ignore")
+
+
+def _update_candidate_shadow(current: pd.DataFrame, data_dir: Path, at: str) -> None:
+    """Append every published Supported Side evaluation, accepted or rejected."""
+    path = data_dir / "red_fox_favorite_shadow.csv"
+    try:
+        history = pd.read_csv(path, dtype=str, keep_default_na=False) if path.exists() and path.stat().st_size else pd.DataFrame(columns=SHADOW_COLUMNS)
+    except (OSError, pd.errors.EmptyDataError):
+        history = pd.DataFrame(columns=SHADOW_COLUMNS)
+    records = []
+    captured = pd.Timestamp(at)
+    captured = captured.tz_localize("UTC") if captured.tzinfo is None else captured.tz_convert("UTC")
+    for _, row in current.iterrows():
+        supported = str(row.get("supported_side", "")).strip()
+        shadow_side = str(row.get("favorite_shadow_freeze_side", "")).strip()
+        candidate_specs = []
+        if supported:
+            candidate_specs.append((supported, "favorite_rules", ""))
+        if shadow_side and _side_identity(shadow_side) != _side_identity(supported):
+            candidate_specs.append((shadow_side, "nfl_freeze_75_79", row.get("favorite_shadow_freeze_reason", "")))
+        if not candidate_specs:
+            continue
+        kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
+        minutes = "" if pd.isna(kickoff) else f"{round((kickoff - captured).total_seconds() / 60.0, 3):g}"
+        for candidate_side, cohort, shadow_reason in candidate_specs:
+            candidate = next((side for side in _sides(row) if _side_identity(side.get("flagged_side")) == _side_identity(candidate_side)), None)
+            if candidate is None:
+                continue
+            accepted = cohort == "favorite_rules" and _truthy(row.get("red_fox_favorite")) and _side_identity(row.get("favorite_side")) == _side_identity(candidate_side)
+            capture_key = "|".join([
+                at, str(row.get("sport", "")), str(row.get("game_id", "")),
+                str(row.get("market_display", "")), candidate_side, cohort,
+            ])
+            context = _parts(candidate.get("context_chips"))
+            whipsaw = "recovered" if _truthy(candidate.get("whipsaw_recovered")) or "Whipsaw Recovered" in context else (
+                "active_or_partial" if str(candidate.get("path", "")) == "Whipsaw" else "none"
+            )
+            records.append({
+            "capture_id": hashlib.sha256(capture_key.encode("utf-8")).hexdigest()[:24],
+            "captured_at": at, "sport": row.get("sport", ""), "game_id": row.get("game_id", ""),
+            "game": row.get("game", ""), "kickoff_iso": row.get("kickoff_iso", ""),
+            "minutes_before_start": minutes, "market_display": row.get("market_display", ""),
+            "candidate_side": candidate_side,
+            "candidate_decision": "shadow_eligible" if cohort != "favorite_rules" else ("accepted" if accepted else "rejected"),
+            "candidate_reason": shadow_reason or row.get("favorite_reason", "") or (
+                "Accepted by current Favorite rules." if accepted else "Rejected by current Favorite rules."
+            ),
+            "favorite_pathway": row.get("favorite_pathway", ""),
+            "favorite_rule_version": row.get("favorite_rule_version", CONFIG.version),
+            "open_line": candidate.get("open_line", ""), "current_line": candidate.get("current_line", ""),
+            "bets_pct": candidate.get("bets_pct", ""), "money_pct": candidate.get("money_pct", ""),
+            "reaction": candidate.get("reaction", ""), "path": candidate.get("path", ""),
+            "data_badge": candidate.get("data_badge", ""),
+            "observation_count": candidate.get("observation_count", ""),
+            "line_direction_changes": candidate.get("line_dir_changes", ""),
+            "return_toward_open": candidate.get("return_toward_open", ""),
+            "active_worsening_reversal": candidate.get("active_worsening_reversal", ""),
+            "whipsaw_state": whipsaw,
+            "cross_market_state": row.get("favorite_cross_market_state", ""),
+            "snapshot_id": row.get("favorite_snapshot_id", ""),
+            "whipsaw_retention_ratio": candidate.get("whipsaw_retention_ratio", ""),
+            "material_direction_changes": candidate.get("material_direction_changes", ""),
+            "whipsaw_confirmation_ready": candidate.get("whipsaw_confirmation_ready", ""),
+            "whipsaw_confirmation_minutes": candidate.get("whipsaw_confirmation_minutes", ""),
+            "shadow_cohort": cohort if cohort != "favorite_rules" else "",
+            "shadow_eligible": "true" if cohort != "favorite_rules" else "false",
+        })
+    if not records:
+        return
+    new = pd.DataFrame(records, columns=SHADOW_COLUMNS)
+    updated = new if history.empty else pd.concat(
+        [history.reindex(columns=SHADOW_COLUMNS), new], ignore_index=True,
+    )
+    updated = updated.drop_duplicates("capture_id", keep="last")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name("." + path.name + ".tmp")
+    updated.to_csv(temporary, index=False)
+    temporary.replace(path)
 
 
 def _apply_visibility_lock(
@@ -230,7 +340,7 @@ def _apply_visibility_lock(
     data_dir: Path,
     at: str,
 ) -> pd.DataFrame:
-    """Apply the two-stage T-40 review window and T-20 hard lock."""
+    """Apply the two-stage T-40 review window and T-20 display lock with safety suppression."""
     if current is None or "kickoff_iso" not in current:
         return current
     result = current.copy()
@@ -272,6 +382,11 @@ def _apply_visibility_lock(
             active = _official_active(history, key, now)
             if not active or minutes < 0:
                 continue
+            stale_reason = _freshness_failure(None, row, now)
+            if stale_reason:
+                if not _review_already_recorded(reviews, key, "late_invalidated"):
+                    review_records.append(_review_record(row, at, "late_invalidated", "removal", stale_reason))
+                continue
             if minutes > CONFIG.visibility_review_minutes:
                 reason = "Favorite market temporarily absent; awaiting a second consecutive nonqualifying scrape."
                 if _review_confirmed(reviews, key, "removal", now):
@@ -308,6 +423,13 @@ def _apply_visibility_lock(
         raw_favorite = _truthy(row.get("red_fox_favorite"))
         active = _official_active(history, key, now)
         source = _archived_row(archived, key)
+        stale_reason = _freshness_failure(row, source, now)
+        if stale_reason and (raw_favorite or active):
+            _late_invalidate_favorite(result, index, stale_reason, at)
+            _set_review(result, index, "late_invalidated", stale_reason, at)
+            if not _review_already_recorded(reviews, key, "late_invalidated"):
+                review_records.append(_review_record(row, at, "late_invalidated", "removal", stale_reason))
+            continue
 
         if minutes > CONFIG.visibility_review_minutes:
             # Additions and ordinary removals both need two consecutive
@@ -346,18 +468,27 @@ def _apply_visibility_lock(
             continue
 
         if minutes <= CONFIG.visibility_lock_minutes:
-            # At T-20 the official state becomes immutable. Continue surfacing
-            # material raw changes as warnings without changing the KPI slate.
+            # At T-20 ordinary threshold changes remain locked. A supported-side
+            # flip, cross-market contradiction, or destructive reversal can
+            # still suppress the displayed Favorite while preserving its archive.
             if active:
                 _restore_favorite(result, index, source)
                 result.at[index, "favorite_reason"] = "Official Favorite locked at T-20."
             else:
                 _clear_favorite(result, index, "Official non-Favorite state locked at T-20.")
+            if active:
+                hard, destructive, reason = _material_removal(row, source)
+                if hard or destructive:
+                    _late_invalidate_favorite(result, index, reason, at)
+                    _set_review(result, index, "late_invalidated", reason, at)
+                    if not _review_already_recorded(reviews, key, "late_invalidated"):
+                        review_records.append(_review_record(row, at, "late_invalidated", "removal", reason))
+                    continue
             if raw_favorite != active:
-                material, reason = (
-                    _material_addition(row) if raw_favorite
-                    else _material_removal(row, source)[1:]
-                )
+                if not raw_favorite and active:
+                    _, material, reason = _material_removal(row, source)
+                else:
+                    material, reason = _material_addition(row)
                 if material and not _review_already_recorded(reviews, key, "late_warning"):
                     action = "addition" if raw_favorite else "removal"
                     warning = f"Late material {action} signal; official Favorite unchanged. {reason}"
@@ -541,6 +672,28 @@ def _material_removal(row: pd.Series, source: pd.Series | None) -> tuple[bool, b
     return False, material, f"Material closing removal: market moved {against:g} against the Favorite (threshold {threshold:g})."
 
 
+def _freshness_failure(row: pd.Series | None, source: pd.Series | None, now: pd.Timestamp) -> str:
+    candidate_side = str((source.get("favorite_side", "") if source is not None else "") or (row.get("favorite_side", "") if row is not None else "") or (row.get("supported_side", "") if row is not None else "")).strip()
+    evidence_row = row if row is not None else source
+    if evidence_row is None or not candidate_side:
+        return ""
+    side = next((item for item in _sides(evidence_row) if _side_identity(item.get("flagged_side")) == _side_identity(candidate_side)), None)
+    observed = str((side or {}).get("source_latest_at", "") or evidence_row.get("source_latest_at", "")).strip()
+    source_at = pd.to_datetime(observed, errors="coerce", utc=True)
+    if pd.isna(source_at):
+        return ""
+    whipsaw = (
+        str((side or {}).get("path", "")) == "Whipsaw"
+        or _truthy((side or {}).get("whipsaw_recovered"))
+        or str(evidence_row.get("favorite_whipsaw_state", "")) in {"partial_retrace_intact", "recovered"}
+    )
+    maximum = CONFIG.whipsaw_freshness_minutes if whipsaw else CONFIG.normal_freshness_minutes
+    age = (now - source_at).total_seconds() / 60.0
+    if age > maximum:
+        return f"Favorite unavailable: latest verified market state is {age:.1f} minutes old (maximum {maximum})."
+    return ""
+
+
 def _archived_row(archived: pd.DataFrame, key: tuple[str, str, str]) -> pd.Series | None:
     if archived.empty:
         return None
@@ -570,6 +723,14 @@ def _clear_favorite(frame: pd.DataFrame, index: object, reason: str) -> None:
     frame.at[index, "favorite_rule_version"] = CONFIG.version
     frame.at[index, "favorite_state"] = "not_qualified"
     frame.at[index, "favorite_reason"] = reason
+
+
+def _late_invalidate_favorite(frame: pd.DataFrame, index: object, reason: str, at: str) -> None:
+    _clear_favorite(frame, index, reason)
+    frame.at[index, "favorite_originally_qualified"] = "true"
+    frame.at[index, "favorite_late_invalidated"] = "true"
+    frame.at[index, "favorite_late_invalidated_at"] = at
+    frame.at[index, "favorite_late_invalidated_reason"] = reason
 
 
 def _qualify_market(row: pd.Series, game_rows: pd.DataFrame | None) -> dict | None:
@@ -662,6 +823,37 @@ def _pathway(side: dict, other: dict, sport: str, market: str) -> str:
     return ""
 
 
+def _shadow_freeze_candidate(row: pd.Series, game_rows: pd.DataFrame | None) -> dict | None:
+    """Identify the approved NFL 75-79% pressure cohort without publishing a Favorite."""
+    if str(row.get("sport", "")).lower() != "nfl" or str(row.get("market_display", "")).upper() != "SPREAD":
+        return None
+    sides = _sides(row)
+    if len(sides) != 2:
+        return None
+    for pressure in sides:
+        bets = _number(pressure.get("bets_pct"))
+        money = _number(pressure.get("money_pct"))
+        if (
+            bets is None or money is None or not 75 <= bets < 80 or money < 80
+            or str(pressure.get("reaction", "")) != "Freeze"
+            or str(pressure.get("path", "")) != "Held"
+            or not str(pressure.get("key_number_pinned", "")).strip()
+            or not _base_quality(pressure)
+        ):
+            continue
+        candidate = next((side for side in sides if side is not pressure), None)
+        if candidate is None or _corresponding_moneyline_state(candidate, game_rows) == "contradiction":
+            continue
+        return {
+            "side": str(candidate.get("flagged_side", "")),
+            "reason": (
+                "Shadow only: 75-79% NFL bet pressure with at least 80% money held at a key number "
+                "without a Moneyline contradiction."
+            ),
+        }
+    return None
+
+
 def _is_favorite_resistance(side: dict, pressure: dict, sport: str, market: str) -> bool:
     """Require a clean, persistent resistance state for Favorite Path B."""
     if sport in CONFIG.freeze_disabled_sports:
@@ -725,17 +917,52 @@ def _base_quality(side: dict) -> bool:
     context = _parts(side.get("context_chips"))
     if {"Market Lag", "Feed Risk", "Split Risk", "Split Cap"} & context:
         return False
+    if _truthy(side.get("return_toward_open")):
+        return False
     if _truthy(side.get("active_worsening_reversal")):
         return False
-    # A Whipsaw is allowed when meaningful favorable movement remains at the
-    # current snapshot. Full/through-open reversals no longer report TOWARD and
-    # therefore cannot pass Paths A/C; actionable Freeze already rejects them.
+    if str(side.get("path", "")) == "Whipsaw" and not _truthy(side.get("whipsaw_recovered")):
+        retention = _number(side.get("whipsaw_retention_ratio"))
+        if retention is None:
+            current_move = _number(side.get("move_abs"))
+            maximum = _number(side.get("max_excursion"))
+            retention = current_move / maximum if current_move is not None and maximum and maximum > 0 else None
+        material_changes = _number(side.get("material_direction_changes"))
+        if material_changes is None:
+            material_changes = _number(side.get("line_dir_changes"))
+        if (
+            retention is None or retention < CONFIG.partial_whipsaw_min_retention
+            or material_changes is None
+            or material_changes > CONFIG.partial_whipsaw_max_material_direction_changes
+            or str(side.get("response_direction", "")).upper() != "TOWARD"
+            or not _has_meaningful_move(side)
+            or not _truthy(side.get("whipsaw_confirmation_ready"))
+            or (_number(side.get("whipsaw_confirmation_minutes")) or 0) < CONFIG.partial_whipsaw_confirmation_minutes
+        ):
+            return False
     return True
 
 
 def _number_is_eligible(sport: str, market: str, value: float, side: dict, game_rows: pd.DataFrame | None) -> bool:
     if market == "SPREAD":
-        return CONFIG.spread_min <= abs(value) <= CONFIG.spread_max
+        if CONFIG.spread_min <= abs(value) <= CONFIG.spread_max:
+            return True
+        bets = _number(side.get("bets_pct"))
+        money = _number(side.get("money_pct"))
+        crossed = _parts(side.get("key_numbers_crossed"))
+        extended_nfl_dog = (
+            sport == "nfl"
+            and CONFIG.spread_max < value <= CONFIG.nfl_positive_spread_max
+            and bets is not None and money is not None
+            and bets <= CONFIG.nfl_extended_spread_max_support
+            and money <= CONFIG.nfl_extended_spread_max_support
+            and (
+                (_number(side.get("line_move_abs")) or 0) >= CONFIG.nfl_extended_spread_min_move
+                or "K10" in crossed
+            )
+            and not _truthy(side.get("active_worsening_reversal"))
+        )
+        return extended_nfl_dog
     maximum = CONFIG.primary_moneyline_max if sport in CONFIG.primary_moneyline_sports else CONFIG.moneyline_max
     if not CONFIG.moneyline_min <= value <= maximum:
         return False
@@ -944,6 +1171,12 @@ def _update_freeze_candidates(current: pd.DataFrame, data_dir: Path, at: str) ->
             mask = pd.Series(True, index=updated.index)
             for column in keys:
                 mask &= updated.get(column, pd.Series("", index=updated.index)).astype(str).eq(str(row.get(column, "")))
+            if _truthy(row.get("favorite_late_invalidated")) and mask.any():
+                for column in (
+                    "favorite_originally_qualified", "favorite_late_invalidated",
+                    "favorite_late_invalidated_at", "favorite_late_invalidated_reason",
+                ):
+                    updated.loc[mask, column] = row.get(column, "")
             if _truthy(row.get("_visibility_restored")):
                 continue
             if _truthy(row.get("red_fox_favorite")):

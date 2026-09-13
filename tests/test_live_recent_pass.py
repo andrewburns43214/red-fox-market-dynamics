@@ -222,6 +222,22 @@ def test_favorite_handoff_survives_absence_from_current_board():
     assert frozen.iloc[0].freeze_method == "favorite_tracking_last_qualified_at_or_before_start"
 
 
+def test_late_invalidated_favorite_is_retained_for_audit_but_suppressed_at_handoff():
+    candidate = pd.DataFrame([{
+        "sport": "nfl", "game_id": "late-1", "market_display": "SPREAD",
+        "kickoff_iso": "2026-09-12T23:35:00Z", "state_as_of_utc": "2026-09-12T23:34:00Z",
+        "supported_side": "Arizona +9.5", "red_fox_favorite": "true",
+        "favorite_side": "Arizona +9.5", "favorite_state": "qualified",
+        "favorite_originally_qualified": "true", "favorite_late_invalidated": "true",
+        "favorite_late_invalidated_reason": "Hard removal: the confirmed supported side flipped.",
+    }])
+    frozen = live.favorite_handoff_states(candidate, datetime(2026, 9, 12, 23, 36, tzinfo=timezone.utc))
+    assert len(frozen) == 1
+    assert frozen.iloc[0].red_fox_favorite == "false"
+    assert frozen.iloc[0].favorite_state == "late_invalidated"
+    assert frozen.iloc[0].favorite_originally_qualified == "true"
+
+
 def test_visibility_invalidated_favorite_cannot_reenter_from_handoff_archive():
     candidate = pd.DataFrame([{
         "sport": "ncaaf", "game_id": "34603681", "market_display": "SPREAD",

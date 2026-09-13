@@ -35,6 +35,14 @@ check 403 "$BASE/data/l1_open_registry.csv"   "l1_open_registry.csv (internal)"
 check 403 "$BASE/data/decision_snapshots.csv" "decision_snapshots.csv (internal)"
 check 403 "$BASE/data/"                       "/data/ directory listing"
 
+# Every admin export must fail closed without an authenticated admin token.
+check 401 "$BASE/admin-data/performance_supported_sides.csv" "supported performance (admin only)"
+check 401 "$BASE/admin-data/performance_favorites.csv"       "Favorite performance (admin only)"
+check 401 "$BASE/admin-data/performance_combined.csv"        "combined performance (admin only)"
+check 401 "$BASE/admin-data/favorite_candidate_audit.csv"    "Favorite candidate audit (admin only)"
+check 401 "$BASE/admin-data/favorite_cohort_kpis.csv"         "Favorite cohort KPIs (admin only)"
+check 401 "$BASE/admin-data/red_fox_favorite_shadow.csv"      "Favorite shadow captures (admin only)"
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] && echo "All clear." || echo "ACTION REQUIRED: fix nginx config."

@@ -34,6 +34,9 @@ EMPTY_COLUMNS = [
     "favorite_final_market_read", "favorite_final_market_rank",
     "favorite_supporting_evidence", "favorite_whipsaw_state", "favorite_cross_market_state",
     "favorite_snapshot_id", "favorite_reason",
+    "favorite_shadow_freeze_side", "favorite_shadow_freeze_eligible", "favorite_shadow_freeze_reason",
+    "favorite_originally_qualified", "favorite_late_invalidated",
+    "favorite_late_invalidated_at", "favorite_late_invalidated_reason",
 ]
 SCOREBOARD_URLS = {
     "nfl": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
@@ -361,6 +364,11 @@ def favorite_handoff_states(candidates: pd.DataFrame, now: datetime) -> pd.DataF
     frozen = final_pregame_states(favorite, now)
     if not frozen.empty:
         frozen["freeze_method"] = "favorite_tracking_last_qualified_at_or_before_start"
+        invalidated = frozen.get("favorite_late_invalidated", pd.Series("false", index=frozen.index)).astype(str).str.lower().isin({"1", "true", "yes"})
+        frozen.loc[invalidated, "red_fox_favorite"] = "false"
+        frozen.loc[invalidated, "favorite_state"] = "late_invalidated"
+        reasons = frozen.get("favorite_late_invalidated_reason", pd.Series("", index=frozen.index))
+        frozen.loc[invalidated, "favorite_reason"] = reasons.loc[invalidated]
     return frozen
 
 

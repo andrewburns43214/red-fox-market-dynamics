@@ -284,7 +284,10 @@ def select_market_leaders(board_df):
         "flagged_side", "bets_pct", "money_pct", "open_line", "current_line",
         "reaction", "recorded_reaction", "path", "context_chips", "anomaly_chips", "data_badge",
         "broader_market_comparison", "line_dir_changes", "return_toward_open",
-        "line_move_abs", "price_move_pct", "observation_count", "key_numbers_crossed",
+        "material_direction_changes", "whipsaw_retention_ratio", "whipsaw_confirmation_ready",
+        "whipsaw_confirmation_minutes", "max_excursion", "move_abs", "path_min", "path_max",
+        "observed_path", "line_move_abs", "price_move_pct", "observation_count", "key_numbers_crossed",
+        "source_latest_at",
         "active_worsening_reversal",
         "action_side", "action_type", "kpi_eligible", "evidence_role", "evidence_polarity",
         "response_direction", "whipsaw_recovered", "key_number_pinned", "severity_sort",
@@ -714,6 +717,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     move_abs = _movement_abs(points, market)
 
     dir_changes = _count_direction_changes(points, market)
+    material_dir_changes = _count_material_direction_changes(points, market, move_threshold)
     max_excursion = _max_excursion(points, market)
     path_min = min(_motion_value(point, market) for point in points)
     path_max = max(_motion_value(point, market) for point in points)
@@ -794,6 +798,10 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         points, market, bets_pct, money_pct, line_hold_threshold,
     )
     whipsaw = raw_whipsaw and not whipsaw_recovered
+    whipsaw_retention_ratio = move_abs / max_excursion if max_excursion > 0 else 1.0
+    whipsaw_confirmation_ready, whipsaw_confirmation_minutes = _whipsaw_confirmation(
+        points, market, latest_row, line_hold_threshold,
+    )
     last_line_response, last_price_response = _signed_side_response(points[-2:], market, latest_row)
     active_worsening_reversal = whipsaw and (
         last_price_response < -HOLD_PRICE_MOVE_PCT
@@ -1000,6 +1008,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         "reason": reason,
         "data_badge": data_badge,
         "observation_count": observation_count,
+        "source_latest_at": points[-1]["timestamp"].isoformat(),
         "first_anomaly_seen": first_seen,
         "max_excursion": round(max_excursion, 3),
         "return_toward_open": return_to_open,
@@ -1016,6 +1025,10 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         "response_direction": "AGAINST" if adverse_response else ("TOWARD" if meaningful_toward else "LIMITED"),
         "whipsaw_recovered": whipsaw_recovered,
         "active_worsening_reversal": active_worsening_reversal,
+        "material_direction_changes": material_dir_changes,
+        "whipsaw_retention_ratio": round(whipsaw_retention_ratio, 4),
+        "whipsaw_confirmation_ready": whipsaw_confirmation_ready,
+        "whipsaw_confirmation_minutes": round(whipsaw_confirmation_minutes, 3),
         "key_number_pinned": key_number_pinned,
         "movement_unit": "implied probability points" if market == "MONEYLINE" else "line points",
         "line_dir_changes": dir_changes,
@@ -1219,6 +1232,47 @@ def _count_direction_changes(points, market):
         if left != right:
             changes += 1
     return changes
+
+
+def _count_material_direction_changes(points, market, threshold):
+    """Count reversals only when both adjoining legs clear the material threshold."""
+    if len(points) < 3:
+        return 0
+    values = [_motion_value(point, market) for point in points]
+    legs = []
+    leg_start = values[0]
+    prior = values[0]
+    direction = 0
+    for value in values[1:]:
+        delta = value - prior
+        step = 0 if math.isclose(delta, 0.0, abs_tol=1e-9) else (1 if delta > 0 else -1)
+        if step and direction and step != direction:
+            legs.append(prior - leg_start)
+            leg_start = prior
+        if step:
+            direction = step
+        prior = value
+    legs.append(values[-1] - leg_start)
+    return sum(
+        1 for left, right in zip(legs, legs[1:])
+        if left * right < 0 and abs(left) >= threshold and abs(right) >= threshold
+    )
+
+
+def _whipsaw_confirmation(points, market, latest_row, line_hold_threshold):
+    """Require a non-adverse follow-up capture at least ten minutes later."""
+    if len(points) < 2:
+        return False, 0.0
+    left, right = points[-2], points[-1]
+    minutes = (right["timestamp"] - left["timestamp"]).total_seconds() / 60.0
+    line_response, price_response = _signed_side_response(points[-2:], market, latest_row)
+    adverse = (
+        price_response < -HOLD_PRICE_MOVE_PCT
+        if market == "MONEYLINE"
+        else line_response < -line_hold_threshold
+        or (abs(line_response) <= 1e-9 and price_response < -HOLD_PRICE_MOVE_PCT)
+    )
+    return minutes >= 10.0 and not adverse, minutes
 
 
 def _max_excursion(points, market):

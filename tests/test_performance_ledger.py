@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from performance_ledger import LEDGER_COLUMNS, _utc_series, update_performance_ledger
 
@@ -50,7 +51,7 @@ def test_ingests_directional_final_state_and_grades_without_reclassification(tmp
     )
     write(pd.DataFrame([frozen_row(), descriptive, fell_off]), tmp_path / "live_recent.csv")
     write(pd.DataFrame([
-        {"recorded_at": "2026-09-08T14:00:00Z", "sport": "mlb", "game_id": "103", "market_display": "SPREAD", "favorite_state": "qualified"},
+        {"recorded_at": "2026-09-08T14:00:00Z", "sport": "mlb", "game_id": "103", "market_display": "SPREAD", "favorite_state": "qualified", "first_qualified_line": "+3.5 (-110)"},
         {"recorded_at": "2026-09-08T16:00:00Z", "sport": "mlb", "game_id": "103", "market_display": "SPREAD", "favorite_state": "not_qualified"},
     ]), tmp_path / "red_fox_favorite_tracking.csv")
     write(pd.DataFrame([
@@ -77,6 +78,17 @@ def test_ingests_directional_final_state_and_grades_without_reclassification(tmp
     assert spread["favorite_qualified"] == "no"
     assert spread["favorite_fell_off_before_kickoff"] == "yes"
     assert spread["grade"] == "L"
+    assert spread["candidate_decision"] == "rejected"
+    assert spread["falloff_count"] == "1"
+    assert spread["net_profit_units"] == "-1"
+
+    audit = pd.read_csv(tmp_path / "favorite_candidate_audit.csv", dtype=str, keep_default_na=False)
+    assert set(audit["candidate_decision"]) == {"accepted", "rejected"}
+    kpis = pd.read_csv(tmp_path / "favorite_cohort_kpis.csv", dtype=str, keep_default_na=False)
+    assert {"sport", "market", "favorite_pathway", "price_band", "spread_band", "full_cohort"}.issubset(set(kpis["dimension"]))
+    accepted_all = kpis[(kpis.dimension == "all") & (kpis.candidate_decision == "accepted")].iloc[0]
+    assert accepted_all["candidates"] == "1"
+    assert accepted_all["net_profit_units"] != ""
 
     frozen = pd.read_csv(tmp_path / "live_recent.csv", dtype=str, keep_default_na=False)
     frozen.loc[frozen.game_id.eq("101"), "supported_side"] = "MIA Marlins"
@@ -118,6 +130,27 @@ def test_visibility_invalidated_game_is_removed_from_favorite_kpi(tmp_path):
     assert favorites.empty
 
 
+def test_late_invalidated_favorite_is_audited_but_excluded_from_official_kpis(tmp_path):
+    row = frozen_row(
+        red_fox_favorite="false", favorite_state="late_invalidated",
+        favorite_originally_qualified="true", favorite_late_invalidated="true",
+        favorite_late_invalidated_at="2026-09-08T17:05:00Z",
+        favorite_late_invalidated_reason="Hard removal: the confirmed supported side flipped.",
+    )
+    write(pd.DataFrame([row]), tmp_path / "live_recent.csv")
+    result = update_performance_ledger(tmp_path, attach_results=False)
+    assert result["rows"] == 1
+    ledger = pd.read_csv(tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False)
+    record = ledger.iloc[0]
+    assert record.favorite_qualified == "no"
+    assert record.favorite_originally_qualified == "yes"
+    assert record.favorite_late_invalidated == "yes"
+    assert record.candidate_decision == "late_invalidated"
+    assert pd.read_csv(tmp_path / "performance_favorites.csv").empty
+    kpis = pd.read_csv(tmp_path / "favorite_cohort_kpis.csv", dtype=str, keep_default_na=False)
+    assert not kpis[(kpis.dimension == "all") & (kpis.candidate_decision == "late_invalidated")].empty
+
+
 def test_freeze_uses_latest_source_state_before_kickoff_and_rejects_post_start(tmp_path):
     earlier = frozen_row(supported_side="NY Mets", final_pregame_price="", final_pregame_state_at_utc="2026-09-08T17:08:00Z")
     latest = frozen_row(
@@ -154,6 +187,35 @@ def test_all_missing_source_times_remain_explicitly_utc_aware():
     assert str(parsed.dtype) == "datetime64[ns, UTC]"
 
 
+def test_roi_and_clv_use_first_qualified_price_against_final_pregame_close(tmp_path):
+    row = frozen_row(
+        market_sides=json.dumps([
+            {"flagged_side": "NY Mets", "open_line": "+130", "current_line": "+100", "reaction": "Contrarian"},
+            {"flagged_side": "MIA Marlins", "current_line": "-120"},
+        ]),
+    )
+    write(pd.DataFrame([row]), tmp_path / "live_recent.csv")
+    write(pd.DataFrame([{
+        "recorded_at": "2026-09-08T15:00:00Z", "sport": "mlb", "game_id": "101",
+        "market_display": "MONEYLINE", "favorite_state": "qualified",
+        "favorite_pathway": "low_support_contrarian", "first_qualified_line": "+120",
+    }]), tmp_path / "red_fox_favorite_tracking.csv")
+    write(pd.DataFrame([{
+        "game_id": "101", "team1": "NY Mets", "team1_score": "7",
+        "team2": "MIA Marlins", "team2_score": "5",
+    }]), tmp_path / "final_scores_history.csv")
+
+    update_performance_ledger(tmp_path)
+    audit = pd.read_csv(tmp_path / "favorite_candidate_audit.csv", dtype=str, keep_default_na=False).iloc[0]
+    assert audit["decision_price"] == "+120"
+    assert audit["closing_price"] == "+100"
+    assert audit["decision_line_source"] == "first_qualified_capture"
+    assert audit["net_profit_units"] == "1.2"
+    assert audit["roi"] == "1.2"
+    assert audit["clv_method"] == "implied_probability_points"
+    assert float(audit["clv"]) == pytest.approx(4.5455)
+
+
 def test_admin_exports_are_protected_and_engine_refresh_does_not_import_ledger():
     root = Path(__file__).resolve().parents[1]
     nginx = (root / "deploy" / "nginx-redfox.production.conf").read_text(encoding="utf-8")
@@ -161,16 +223,22 @@ def test_admin_exports_are_protected_and_engine_refresh_does_not_import_ledger()
     admin = (root / "site" / "admin-users.html").read_text(encoding="utf-8")
     refresh = (root / "refresh_anomaly_board.py").read_text(encoding="utf-8")
     runner = (root / "run_all_sports.sh").read_text(encoding="utf-8")
+    nginx_check = (root / "check_nginx.sh").read_text(encoding="utf-8")
     service = (root / "deploy" / "redfox-performance.service").read_text(encoding="utf-8")
     timer = (root / "deploy" / "redfox-performance.timer").read_text(encoding="utf-8")
     assert "location = /_internal/admin-access" in nginx
-    assert nginx.count("auth_request /_internal/admin-access;") == 3
+    assert nginx.count("auth_request /_internal/admin-access;") == 6
     assert "/verify-admin" in access and "/functions/v1/admin-users" in access
     assert "bearer_token(self.headers.get(\"Authorization\"))" in access
-    assert nginx.count("set $redfox_admin_authorization $http_authorization;") == 3
+    assert nginx.count("set $redfox_admin_authorization $http_authorization;") == 6
+    assert nginx_check.count("$BASE/admin-data/") == 6
+    assert nginx_check.count('check 401 "$BASE/admin-data/') == 6
     assert "proxy_set_header Authorization $redfox_admin_authorization;" in nginx
     assert "Download Supported Side CSV" in admin
     assert "Download Red Fox Favorite CSV" in admin
+    assert "Download Favorite candidate audit" in admin
+    assert "Download Favorite cohort KPIs" in admin
+    assert "Download Favorite shadow captures" in admin
     assert "document.cookie='redfox_access_token='+encodeURIComponent(session.access_token)" in admin
     assert "fetch(link.href,{credentials:'same-origin',headers:{'Authorization':'Bearer '+session.access_token}})" in admin
     assert "performance_ledger" not in refresh
