@@ -261,6 +261,10 @@ def update_market_candidates(rows: pd.DataFrame, path: Path = MARKET_CANDIDATES,
     if work.empty:
         return existing
     keys = ["sport", "game_id", "market_display"]
+    # Callers normally provide one synchronized capture, but selecting the
+    # latest timestamp here makes the handoff safe for a raw-history backfill.
+    latest_seen = work.groupby(keys)["_seen"].transform("max")
+    work = work.loc[work["_seen"].eq(latest_seen)].copy()
     records = []
     for _, sides in work.groupby(keys, sort=False):
         if sides["side"].astype(str).nunique() != 2:

@@ -190,6 +190,8 @@ def test_raw_recovery_pairs_both_sides_and_fills_missing_game_markets(tmp_path, 
 
 def test_compact_market_handoff_preserves_all_paired_markets_without_reclassifying(tmp_path):
     rows = pd.DataFrame([
+        {"timestamp": "2026-09-12T23:10:00Z", "sport": "ncaaf", "game_id": "9", "game": "Navy @ Florida Atlantic", "market_display": "MONEYLINE", "side": "Florida Atlantic", "bets_pct": "22", "money_pct": "24", "open_line": "Florida Atlantic @ +180", "current_line": "Florida Atlantic @ +170", "dk_start_iso": "2026-09-12T23:35:00Z"},
+        {"timestamp": "2026-09-12T23:10:00Z", "sport": "ncaaf", "game_id": "9", "game": "Navy @ Florida Atlantic", "market_display": "MONEYLINE", "side": "Navy", "bets_pct": "78", "money_pct": "76", "open_line": "Navy @ -218", "current_line": "Navy @ -205", "dk_start_iso": "2026-09-12T23:35:00Z"},
         {"timestamp": "2026-09-12T23:20:00Z", "sport": "ncaaf", "game_id": "9", "game": "Navy @ Florida Atlantic", "market_display": "MONEYLINE", "side": "Florida Atlantic", "bets_pct": "20", "money_pct": "25", "open_line": "Florida Atlantic @ +180", "current_line": "Florida Atlantic @ +164", "dk_start_iso": "2026-09-12T23:35:00Z"},
         {"timestamp": "2026-09-12T23:20:00Z", "sport": "ncaaf", "game_id": "9", "game": "Navy @ Florida Atlantic", "market_display": "MONEYLINE", "side": "Navy", "bets_pct": "80", "money_pct": "75", "open_line": "Navy @ -218", "current_line": "Navy @ -198", "dk_start_iso": "2026-09-12T23:35:00Z"},
         {"timestamp": "2026-09-12T23:20:00Z", "sport": "ncaaf", "game_id": "9", "game": "Navy @ Florida Atlantic", "market_display": "SPREAD", "side": "Florida Atlantic +4", "bets_pct": "20", "money_pct": "19", "open_line": "Florida Atlantic +6.5 @ -105", "current_line": "Florida Atlantic +4 @ -108", "dk_start_iso": "2026-09-12T23:35:00Z"},
@@ -199,6 +201,9 @@ def test_compact_market_handoff_preserves_all_paired_markets_without_reclassifyi
     candidates = live.update_market_candidates(rows, path, as_of="2026-09-12T23:20:00Z")
     assert set(candidates.market_display) == {"MONEYLINE", "SPREAD"}
     assert candidates.red_fox_favorite.eq("false").all()
+    moneyline = candidates[candidates.market_display.eq("MONEYLINE")].iloc[0]
+    assert moneyline.current_line == "Florida Atlantic @ +164"
+    assert len(json.loads(moneyline.market_sides)) == 2
     frozen = live.final_pregame_states(candidates, datetime(2026, 9, 12, 23, 36, tzinfo=timezone.utc))
     assert set(frozen.market_display) == {"MONEYLINE", "SPREAD"}
     assert all(len(json.loads(value)) == 2 for value in frozen.market_sides)
