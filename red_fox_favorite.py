@@ -363,7 +363,14 @@ def _number_is_eligible(sport: str, market: str, value: float, side: dict, game_
         return True
     spread = _matching_market_side(game_rows, "SPREAD", side.get("flagged_side"))
     spread_value = _line_value(spread.get("current_line"), "SPREAD") if spread else None
-    return spread_value is not None and abs(spread_value) <= CONFIG.secondary_moneyline_spread_max
+    if spread_value is None or abs(spread_value) > CONFIG.secondary_moneyline_spread_max:
+        return False
+    # In football and basketball, positive money is directional/cross-market
+    # evidence rather than a separately published Favorite.  A team receiving
+    # points likewise uses its independently qualified spread as the sole
+    # Favorite expression, preventing two correlated KPI results for one
+    # thesis.  Pick'em does not manufacture a positive-spread expression.
+    return value <= 0 and spread_value <= 0
 
 
 def _corresponding_moneyline_state(spread_side: dict, game_rows: pd.DataFrame | None) -> str:

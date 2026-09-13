@@ -119,10 +119,13 @@ def test_freeze_resistance_path_qualifies_when_engine_confirms_the_fade_side():
     assert frame.iloc[0].favorite_side == "Florida State +3"
 
 
-def test_primary_moneyline_ceiling_does_not_change_secondary_moneyline_ceiling():
+def test_positive_secondary_moneyline_is_confirmation_only_when_team_gets_points():
     ml = market("nfl", "MONEYLINE", pair_for(side("Away", "+124")))
     spread = market("nfl", "SPREAD", pair_for(side("Away +3", "+3 (-110)")), rank=2)
-    assert is_favorite(result([ml, spread]), 0)
+    frame = result([ml, spread])
+    assert not is_favorite(frame, 0)
+    assert is_favorite(frame, 1)
+    assert frame.iloc[1].favorite_side == "Away +3"
 
 
 def test_ufc_freeze_path_is_not_favorite_eligible_but_movement_backed_contrarian_remains_eligible():
@@ -250,12 +253,28 @@ def test_heavy_public_follow_and_nonmeaningful_move_do_not_qualify():
     assert not is_favorite(result([market("nba", "SPREAD", [moderate, other])]))
 
 
-def test_secondary_moneyline_requires_corresponding_spread_at_four_or_less():
+def test_secondary_moneyline_uses_spread_size_gate_and_routes_point_receivers_to_spread():
     ml = market("nfl", "MONEYLINE", pair_for(side("Away", "+120")))
     spread4 = market("nfl", "SPREAD", pair_for(side("Away +4", "+4 (-110)")), rank=2)
-    assert is_favorite(result([ml, spread4]), 0)
+    routed = result([ml, spread4])
+    assert not is_favorite(routed, 0)
+    assert is_favorite(routed, 1)
     spread45 = market("nfl", "SPREAD", pair_for(side("Away +4.5", "+4.5 (-110)")), rank=2)
     assert not is_favorite(result([ml, spread45]), 0)
+
+
+def test_secondary_moneyline_can_remain_favorite_when_team_is_laying_points():
+    ml = market("ncaab", "MONEYLINE", pair_for(side("Home", "-120")))
+    spread = market("ncaab", "SPREAD", pair_for(side("Home -2", "-2 (-110)")), rank=2)
+    assert is_favorite(result([ml, spread]), 0)
+
+
+def test_positive_secondary_moneyline_is_not_published_at_pickem():
+    ml = market("nba", "MONEYLINE", pair_for(side("Away", "+105")))
+    spread = market("nba", "SPREAD", pair_for(side("Away PK", "PK (-110)")), rank=2)
+    frame = result([ml, spread])
+    assert not is_favorite(frame, 0)
+    assert not is_favorite(frame, 1)
 
 
 @pytest.mark.parametrize("direction,price_move,expected,state", [
