@@ -185,6 +185,25 @@ def test_late_invalidated_favorite_is_audited_but_excluded_from_official_kpis(tm
     assert not kpis[(kpis.dimension == "all") & (kpis.candidate_decision == "late_invalidated")].empty
 
 
+def test_stale_last_qualified_handoff_is_excluded_from_official_favorites(tmp_path):
+    row = frozen_row(
+        freeze_method="favorite_tracking_last_qualified_at_or_before_start",
+        favorite_final_qualified_at="2026-09-08T15:00:00Z",
+    )
+    write(pd.DataFrame([row]), tmp_path / "live_recent.csv")
+    write(pd.DataFrame([
+        {"recorded_at": "2026-09-08T15:00:00Z", "sport": "mlb", "game_id": "101", "market_display": "MONEYLINE", "favorite_state": "qualified", "first_qualified_line": "-105"},
+        {"recorded_at": "2026-09-08T16:00:00Z", "sport": "mlb", "game_id": "101", "market_display": "MONEYLINE", "favorite_state": "not_qualified"},
+    ]), tmp_path / "red_fox_favorite_tracking.csv")
+
+    update_performance_ledger(tmp_path, attach_results=False)
+    ledger = pd.read_csv(tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False)
+
+    assert ledger.iloc[0].favorite_qualified == "no"
+    assert ledger.iloc[0].candidate_decision == "stale_handoff_invalidated"
+    assert pd.read_csv(tmp_path / "performance_favorites.csv").empty
+
+
 def test_freeze_uses_latest_source_state_before_kickoff_and_rejects_post_start(tmp_path):
     earlier = frozen_row(supported_side="NY Mets", final_pregame_price="", final_pregame_state_at_utc="2026-09-08T17:08:00Z")
     latest = frozen_row(

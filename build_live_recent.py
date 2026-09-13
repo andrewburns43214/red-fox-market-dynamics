@@ -360,7 +360,9 @@ def final_pregame_states(previous: pd.DataFrame, now: datetime) -> pd.DataFrame:
     return started.drop(columns=["_kickoff", "_state_at"])
 
 
-def favorite_handoff_states(candidates: pd.DataFrame, now: datetime) -> pd.DataFrame:
+def favorite_handoff_states(
+    candidates: pd.DataFrame, now: datetime, tracking: pd.DataFrame | None = None
+) -> pd.DataFrame:
     """Freeze previously qualified Favorites even if the live board drops them.
 
     Qualification is an auditable event, while board presence depends on a
@@ -374,6 +376,25 @@ def favorite_handoff_states(candidates: pd.DataFrame, now: datetime) -> pd.DataF
         candidates.get("red_fox_favorite", pd.Series("false", index=candidates.index))
         .astype(str).str.lower().isin({"1", "true", "yes"})
     ].copy()
+    if tracking is not None and not tracking.empty and not favorite.empty:
+        history = tracking.copy()
+        history["_recorded_at"] = utc_series(history.get("recorded_at", ""), history.index)
+        keep = []
+        for _, candidate in favorite.iterrows():
+            kickoff = pd.to_datetime(candidate.get("kickoff_iso", ""), errors="coerce", utc=True)
+            scoped = history.copy()
+            for column in ("sport", "game_id", "market_display"):
+                scoped = scoped[
+                    scoped.get(column, pd.Series("", index=scoped.index)).astype(str)
+                    .eq(str(candidate.get(column, "")))
+                ]
+            if pd.notna(kickoff):
+                scoped = scoped[scoped["_recorded_at"].notna() & (scoped["_recorded_at"] <= kickoff)]
+            scoped = scoped.sort_values("_recorded_at", kind="mergesort")
+            # A later explicit nonqualification supersedes the last-qualified
+            # archive. Missing legacy tracking does not erase valid evidence.
+            keep.append(scoped.empty or str(scoped.iloc[-1].get("favorite_state", "")) == "qualified")
+        favorite = favorite.loc[pd.Series(keep, index=favorite.index)]
     frozen = final_pregame_states(favorite, now)
     if not frozen.empty:
         frozen["freeze_method"] = "favorite_tracking_last_qualified_at_or_before_start"
@@ -569,7 +590,8 @@ def main(scores_only: bool = False) -> None:
             rows.append(started)
     candidates = read_csv_or_empty(FAVORITE_CANDIDATES)
     if not candidates.empty:
-        favorite_started = favorite_handoff_states(candidates, now)
+        tracking = read_csv_or_empty(DATA / "red_fox_favorite_tracking.csv")
+        favorite_started = favorite_handoff_states(candidates, now, tracking)
         if not favorite_started.empty:
             rows.append(favorite_started)
     market_candidates = read_csv_or_empty(MARKET_CANDIDATES)

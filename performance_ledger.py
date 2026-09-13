@@ -759,6 +759,21 @@ def update_performance_ledger(
             ledger.loc[blank_reason & ledger["candidate_decision"].eq("late_invalidated"), "favorite_late_invalidated_reason"]
             .replace("", "Originally qualified, then suppressed by a late safety invalidation.")
         )
+        final_qualified_at = _utc_series(ledger.get("favorite_final_qualified_at", ""), ledger.index)
+        last_fell_off_at = _utc_series(ledger.get("favorite_last_fell_off_at", ""), ledger.index)
+        stale_handoff = (
+            ledger.get("freeze_method", pd.Series("", index=ledger.index)).astype(str)
+            .eq("favorite_tracking_last_qualified_at_or_before_start")
+            & final_qualified_at.notna()
+            & last_fell_off_at.notna()
+            & (last_fell_off_at >= final_qualified_at)
+        )
+        ledger.loc[stale_handoff, "favorite_qualified"] = "no"
+        ledger.loc[stale_handoff, "candidate_decision"] = "stale_handoff_invalidated"
+        ledger.loc[stale_handoff, "candidate_decision_reason"] = (
+            "Excluded: the latest explicit pre-kickoff tracking state was not qualified; "
+            "a last-qualified handoff archive must not restore it."
+        )
         for index, row in ledger.iterrows():
             if not _text(row.get("decision_line")) and not _text(row.get("decision_price")):
                 lifecycle_row = pd.Series({

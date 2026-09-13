@@ -222,6 +222,42 @@ def test_favorite_handoff_survives_absence_from_current_board():
     assert frozen.iloc[0].freeze_method == "favorite_tracking_last_qualified_at_or_before_start"
 
 
+def test_favorite_handoff_rejects_a_later_explicit_prekickoff_falloff():
+    candidate = pd.DataFrame([{
+        "sport": "mlb", "game_id": "stale", "market_display": "MONEYLINE",
+        "kickoff_iso": "2026-09-13T17:40:00Z", "state_as_of_utc": "2026-09-13T11:31:00Z",
+        "red_fox_favorite": "true", "favorite_side": "HOU Astros",
+    }])
+    tracking = pd.DataFrame([
+        {"sport": "mlb", "game_id": "stale", "market_display": "MONEYLINE", "recorded_at": "2026-09-13T11:31:00Z", "favorite_state": "qualified"},
+        {"sport": "mlb", "game_id": "stale", "market_display": "MONEYLINE", "recorded_at": "2026-09-13T11:41:00Z", "favorite_state": "not_qualified"},
+    ])
+
+    frozen = live.favorite_handoff_states(
+        candidate, datetime(2026, 9, 13, 17, 41, tzinfo=timezone.utc), tracking
+    )
+
+    assert frozen.empty
+
+
+def test_favorite_handoff_keeps_a_final_requalification_after_an_earlier_falloff():
+    candidate = pd.DataFrame([{
+        "sport": "nfl", "game_id": "requalified", "market_display": "SPREAD",
+        "kickoff_iso": "2026-09-13T20:25:00Z", "state_as_of_utc": "2026-09-13T20:01:00Z",
+        "red_fox_favorite": "true", "favorite_side": "MIA Dolphins +3",
+    }])
+    tracking = pd.DataFrame([
+        {"sport": "nfl", "game_id": "requalified", "market_display": "SPREAD", "recorded_at": "2026-09-13T12:55:00Z", "favorite_state": "not_qualified"},
+        {"sport": "nfl", "game_id": "requalified", "market_display": "SPREAD", "recorded_at": "2026-09-13T20:01:00Z", "favorite_state": "qualified"},
+    ])
+
+    frozen = live.favorite_handoff_states(
+        candidate, datetime(2026, 9, 13, 20, 26, tzinfo=timezone.utc), tracking
+    )
+
+    assert len(frozen) == 1
+
+
 def test_late_invalidated_favorite_is_retained_for_audit_but_suppressed_at_handoff():
     candidate = pd.DataFrame([{
         "sport": "nfl", "game_id": "late-1", "market_display": "SPREAD",
