@@ -283,6 +283,17 @@ def test_spread_is_recorded_and_graded_at_first_confirmed_favorite_line(tmp_path
     assert record["grade"] == "W"
     assert record["clv"] == "0.5"
 
+    legacy = pd.read_csv(tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False)
+    legacy.at[0, "side"] = "Team A +3"
+    legacy.at[0, "market_result"] = "Team A +3: Push"
+    write(legacy, tmp_path / "performance_ledger.csv")
+    update_performance_ledger(tmp_path)
+    migrated = pd.read_csv(
+        tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False
+    ).iloc[0]
+    assert migrated["side"] == "Team A +3.5"
+    assert migrated["market_result"] == "Team A +3.5: Win"
+
 
 def test_admin_exports_are_protected_and_engine_refresh_does_not_import_ledger():
     root = Path(__file__).resolve().parents[1]

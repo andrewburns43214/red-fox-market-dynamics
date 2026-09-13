@@ -713,8 +713,15 @@ def update_performance_ledger(
     if not ledger.empty:
         # Migrate retained rows to the same immutable recording contract.  This
         # does not change Supported Side or the final pregame/closing line.
+        prior_side = ledger["side"].copy()
         ledger["side"] = ledger.apply(
             lambda row: _side_at_decision_line(row.get("side"), row.get("market"), row.get("decision_line")),
+            axis=1,
+        )
+        relabeled = prior_side.ne(ledger["side"]) & ledger["grade"].isin(["W", "L", "Push"])
+        ledger.loc[relabeled, "market_result"] = ledger.loc[relabeled].apply(
+            lambda row: f"{row.get('side', '')}: "
+            f"{('Win' if row.get('grade') == 'W' else 'Loss' if row.get('grade') == 'L' else 'Push')}",
             axis=1,
         )
         excluded = pd.Series(
