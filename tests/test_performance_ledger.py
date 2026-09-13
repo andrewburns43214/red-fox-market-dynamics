@@ -111,6 +111,40 @@ def test_v1_favorite_is_supported_side_only_and_unresolved_rows_remain_ungraded(
     assert favorites.empty
 
 
+def test_retroactive_system_correction_is_included_and_disclosed_in_favorite_ledger(tmp_path):
+    row = frozen_row(
+        sport="nfl", game_id="34118231", game="ARI Cardinals @ LA Chargers",
+        kickoff_iso="2026-09-13T20:25:00Z", frozen_at_utc="2026-09-13T20:26:00Z",
+        state_as_of_utc="2026-09-13T20:24:00Z",
+        final_pregame_state_at_utc="2026-09-13T20:24:00Z",
+        market_display="SPREAD", flagged_side="ARI Cardinals +8.5",
+        supported_side="ARI Cardinals +8.5", favorite_side="ARI Cardinals +8.5",
+        favorite_first_qualified_at="2026-09-13T20:24:00Z",
+        favorite_final_qualified_at="2026-09-13T20:24:00Z",
+        favorite_pathway="low_support_contrarian",
+        market_sides=json.dumps([
+            {"flagged_side": "ARI Cardinals +8.5", "open_line": "+10.5 (-110)", "current_line": "+8.5 (-110)", "reaction": "Contrarian"},
+            {"flagged_side": "LA Chargers -8.5", "open_line": "-10.5 (-110)", "current_line": "-8.5 (-110)"},
+        ]),
+        classification_correction="true",
+        classification_corrected_at_utc="2026-09-13T20:45:00Z",
+        classification_correction_reason="Retroactive system-miss correction.",
+        classification_original_publication="missed",
+        freeze_method="retroactive_system_correction_from_retained_pregame_state",
+    )
+    write(pd.DataFrame([row]), tmp_path / "live_recent.csv")
+
+    result = update_performance_ledger(tmp_path, attach_results=False)
+    ledger = pd.read_csv(tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False)
+
+    assert result["rows"] == 1
+    assert ledger.iloc[0].favorite_qualified == "yes"
+    assert ledger.iloc[0].classification_correction == "yes"
+    assert ledger.iloc[0].classification_original_publication == "missed"
+    assert ledger.iloc[0].classification_correction_reason == "Retroactive system-miss correction."
+    assert ledger.iloc[0].freeze_method == "retroactive_system_correction_from_retained_pregame_state"
+
+
 def test_visibility_invalidated_game_is_removed_from_favorite_kpi(tmp_path):
     row = frozen_row(
         sport="ncaaf", game_id="34603681", game="Jacksonville State @ Ohio",

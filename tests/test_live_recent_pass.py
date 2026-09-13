@@ -249,6 +249,30 @@ def test_visibility_invalidated_favorite_cannot_reenter_from_handoff_archive():
     assert frozen.empty
 
 
+def test_arizona_system_miss_is_retroactively_classified_with_explicit_provenance():
+    sides = [
+        {"flagged_side": "ARI Cardinals +8.5", "bets_pct": 37, "money_pct": 46, "open_line": "+10.5 (-110)", "current_line": "+8.5 (-110)", "path": "One-Way"},
+        {"flagged_side": "LA Chargers -8.5", "bets_pct": 63, "money_pct": 54, "open_line": "-10.5 (-110)", "current_line": "-8.5 (-110)", "path": "One-Way"},
+    ]
+    frozen = pd.DataFrame([{
+        "sport": "nfl", "game_id": "34118231", "market_display": "SPREAD",
+        "market_sides": json.dumps(sides), "state_as_of_utc": "2026-09-13T20:24:00Z",
+        "final_pregame_state_at_utc": "2026-09-13T20:24:00Z",
+        "red_fox_favorite": "false", "supported_side": "",
+    }])
+
+    corrected = live.apply_classification_corrections(frozen).iloc[0]
+
+    assert corrected.red_fox_favorite == "true"
+    assert corrected.favorite_side == "ARI Cardinals +8.5"
+    assert corrected.supported_side == "ARI Cardinals +8.5"
+    assert corrected.favorite_state == "qualified_retroactive_system_correction"
+    assert corrected.classification_correction == "true"
+    assert corrected.classification_original_publication == "missed"
+    assert corrected.favorite_first_qualified_at == "2026-09-13T20:24:00Z"
+    assert corrected.freeze_method == "retroactive_system_correction_from_retained_pregame_state"
+
+
 def test_one_minute_worker_expires_started_board_only_after_freeze_window(tmp_path, monkeypatch):
     board_path = tmp_path / "anomaly_board.csv"
     monkeypatch.setattr(live, "BOARD", board_path)

@@ -37,7 +37,20 @@ EMPTY_COLUMNS = [
     "favorite_shadow_freeze_side", "favorite_shadow_freeze_eligible", "favorite_shadow_freeze_reason",
     "favorite_originally_qualified", "favorite_late_invalidated",
     "favorite_late_invalidated_at", "favorite_late_invalidated_reason",
+    "classification_correction", "classification_corrected_at_utc",
+    "classification_correction_reason", "classification_original_publication",
 ]
+CLASSIFICATION_CORRECTIONS = {
+    ("nfl", "34118231", "SPREAD"): {
+        "side_prefix": "ari cardinals",
+        "recorded_at": "2026-09-13T20:45:00+00:00",
+        "reason": (
+            "Retroactive system-miss correction: Arizona satisfied the corrected extended "
+            "NFL-underdog Favorite pathway before kickoff, but the former shared 40% "
+            "tickets/money ceiling incorrectly demoted the market as splits updated."
+        ),
+    },
+}
 SCOREBOARD_URLS = {
     "nfl": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
     "nba": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard",
@@ -397,6 +410,79 @@ def apply_favorite_exclusions(frame: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def apply_classification_corrections(frame: pd.DataFrame) -> pd.DataFrame:
+    """Apply bounded, disclosed corrections to retained pregame source states.
+
+    Corrections never alter the source timestamp, line, splits, or market path.
+    They only repair the classification fields and carry explicit provenance so
+    the result cannot be mistaken for an originally published designation.
+    """
+    result = ensure_output_columns(frame)
+    if result.empty or not {"sport", "game_id", "market_display", "market_sides"}.issubset(result.columns):
+        return result
+    for index, row in result.iterrows():
+        key = (
+            str(row.get("sport", "")).strip().lower(),
+            str(row.get("game_id", "")).strip(),
+            str(row.get("market_display", "")).strip().upper(),
+        )
+        correction = CLASSIFICATION_CORRECTIONS.get(key)
+        if not correction:
+            continue
+        try:
+            sides = [item for item in json.loads(str(row.get("market_sides", "")) or "[]") if isinstance(item, dict)]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        side = next(
+            (
+                item for item in sides
+                if str(item.get("flagged_side", "")).strip().lower().startswith(correction["side_prefix"])
+            ),
+            None,
+        )
+        if side is None:
+            continue
+        supported = str(side.get("flagged_side", "")).strip()
+        source_at = str(row.get("final_pregame_state_at_utc", "")).strip() or str(row.get("state_as_of_utc", "")).strip()
+        side.update({
+            "reaction": "Contrarian",
+            "kpi_eligible": True,
+            "action_type": "CONTRARIAN CANDIDATE",
+            "action_side": supported,
+        })
+        evidence = {
+            "retroactive_system_correction": True,
+            "reaction": "Contrarian",
+            "path": str(side.get("path", "")),
+            "bets_pct": side.get("bets_pct", ""),
+            "money_pct": side.get("money_pct", ""),
+            "open_line": str(side.get("open_line", "")),
+            "current_line": str(side.get("current_line", "")),
+            "source_state_at": source_at,
+        }
+        result.at[index, "market_sides"] = json.dumps(sides, separators=(",", ":"))
+        result.at[index, "read_anchor_side"] = supported
+        result.at[index, "supported_side"] = supported
+        result.at[index, "directional_lean_side"] = supported
+        result.at[index, "red_fox_favorite"] = "true"
+        result.at[index, "favorite_side"] = supported
+        result.at[index, "favorite_pathway"] = "low_support_contrarian"
+        result.at[index, "favorite_rule_version"] = "red_fox_favorite_v2"
+        result.at[index, "favorite_first_qualified_at"] = source_at
+        result.at[index, "favorite_final_qualified_at"] = source_at
+        result.at[index, "favorite_state"] = "qualified_retroactive_system_correction"
+        result.at[index, "favorite_final_market_read"] = "Contrarian"
+        result.at[index, "favorite_supporting_evidence"] = json.dumps(evidence, separators=(",", ":"))
+        result.at[index, "favorite_reason"] = correction["reason"]
+        result.at[index, "favorite_originally_qualified"] = "false"
+        result.at[index, "classification_correction"] = "true"
+        result.at[index, "classification_corrected_at_utc"] = correction["recorded_at"]
+        result.at[index, "classification_correction_reason"] = correction["reason"]
+        result.at[index, "classification_original_publication"] = "missed"
+        result.at[index, "freeze_method"] = "retroactive_system_correction_from_retained_pregame_state"
+    return result
+
+
 def expire_started_board_rows(now: datetime, grace_minutes: int = 5) -> int:
     """Atomically remove started games from the pregame board.
 
@@ -527,6 +613,7 @@ def main(scores_only: bool = False) -> None:
             ascending=[True, False], na_position="last",
         ).drop_duplicates(key_columns, keep="last")
         live = live.drop(columns=["_favorite_priority"])
+    live = apply_classification_corrections(live)
     if scores_only:
         for sport, indices in live.groupby("sport").groups.items():
             scores, provider_state = fetch_scoreboard(str(sport).lower(), now)
