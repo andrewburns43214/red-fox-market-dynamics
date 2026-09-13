@@ -1047,21 +1047,29 @@ def _build_history_points(history_rows, market):
     if history_rows is None or history_rows.empty:
         return []
 
+    columns = {column: index for index, column in enumerate(history_rows.columns)}
+    current_index = columns.get("current_line")
+    timestamp_index = columns.get("timestamp")
+    bets_index = columns.get("bets_pct")
+    money_index = columns.get("money_pct")
+    if current_index is None or timestamp_index is None:
+        return []
+
     points = []
-    for _, row in history_rows.iterrows():
-        raw_line = row.get("current_line", "")
+    for row in history_rows.itertuples(index=False, name=None):
+        raw_line = row[current_index]
         parsed = _parse_snapshot_value(raw_line, market)
         if parsed["value"] is None:
             continue
         points.append({
-            "timestamp": _coerce_ts(row.get("timestamp")),
+            "timestamp": _coerce_ts(row[timestamp_index]),
             "value": parsed["value"],
             "display": parsed["display"],
             "base_display": parsed.get("base_display", parsed["display"]),
             "odds": parsed.get("odds"),
             "implied_pct": parsed.get("implied_pct"),
-            "bets_pct": _num(row.get("bets_pct")),
-            "money_pct": _num(row.get("money_pct")),
+            "bets_pct": _num(row[bets_index]) if bets_index is not None else 0.0,
+            "money_pct": _num(row[money_index]) if money_index is not None else 0.0,
         })
 
     points = [point for point in points if point["timestamp"] is not None]

@@ -351,9 +351,10 @@ def _refresh(coverage):
         newest_snapshot = coverage.now
     active = snapshots[snapshots["timestamp"] >= newest_snapshot - pd.Timedelta(hours=2)].copy()
     coverage.stage(snapshots, active, "STALE_CAPTURE")
-    active["side_key"] = active.apply(
-        lambda row: normalize_side_key(row.get("sport", ""), row["market_display"], row.get("side", "")), axis=1
-    ) if len(active) else pd.Series(dtype=str)
+    active["side_key"] = [
+        normalize_side_key(sport, market, side)
+        for sport, market, side in zip(active["sport"], active["market_display"], active["side"])
+    ] if len(active) else pd.Series(dtype=str)
     dashboard = latest_synchronized_market_rows(active)
     coverage.stage(active, dashboard, "AWAITING_COMPLETE_PAIR")
     coverage.pairs(dashboard)
@@ -365,9 +366,10 @@ def _refresh(coverage):
     # each live publish while preserving the full opener/timeline for the board.
     history_keys = dashboard[["sport", "game_id", "market_display"]].drop_duplicates()
     history = snapshots.merge(history_keys, on=["sport", "game_id", "market_display"], how="inner")
-    history["side_key"] = history.apply(
-        lambda row: normalize_side_key(row.get("sport", ""), row["market_display"], row.get("side", "")), axis=1
-    ) if len(history) else pd.Series(dtype=str)
+    history["side_key"] = [
+        normalize_side_key(sport, market, side)
+        for sport, market, side in zip(history["sport"], history["market_display"], history["side"])
+    ] if len(history) else pd.Series(dtype=str)
     complete_market_count = dashboard[["sport", "game_id", "market_display"]].drop_duplicates().shape[0]
     print(f"[ok] kept {complete_market_count} complete customer-inspectable same-snapshot markets")
     before_freshness = len(dashboard)
