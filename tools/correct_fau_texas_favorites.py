@@ -6,9 +6,11 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import shutil
+import sys
 
 import pandas as pd
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from performance_ledger import update_performance_ledger
 
 
