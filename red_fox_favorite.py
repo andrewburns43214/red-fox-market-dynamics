@@ -25,7 +25,8 @@ class FavoriteConfig:
     spread_min: float = 1.0
     spread_max: float = 8.0
     nfl_positive_spread_max: float = 10.0
-    nfl_extended_spread_max_support: float = 40.0
+    nfl_extended_spread_max_bets: float = 40.0
+    nfl_extended_spread_max_money: float = 49.999
     nfl_extended_spread_min_move: float = 1.0
     secondary_moneyline_spread_max: float = 4.0
     moneyline_min: int = -165
@@ -807,7 +808,17 @@ def _pathway(side: dict, other: dict, sport: str, market: str) -> str:
     other_bets, other_money = _number(other.get("bets_pct")), _number(other.get("money_pct"))
     if None in {bets, money, other_bets, other_money}:
         return ""
-    low = bets <= CONFIG.low_support_max and money <= CONFIG.low_support_max and bets < other_bets and money < other_money
+    extended_nfl_dog = (
+        sport == "nfl"
+        and market == "SPREAD"
+        and (_line_value(side.get("current_line"), market) or 0) > CONFIG.spread_max
+        and bets <= CONFIG.nfl_extended_spread_max_bets
+        and money <= CONFIG.nfl_extended_spread_max_money
+    )
+    low = (
+        (bets <= CONFIG.low_support_max and money <= CONFIG.low_support_max)
+        or extended_nfl_dog
+    ) and bets < other_bets and money < other_money
     toward = str(side.get("response_direction", "")).upper() == "TOWARD"
     reaction = str(side.get("reaction", ""))
     if low and reaction == "Contrarian" and toward and _truthy(side.get("kpi_eligible")):
@@ -954,8 +965,8 @@ def _number_is_eligible(sport: str, market: str, value: float, side: dict, game_
             sport == "nfl"
             and CONFIG.spread_max < value <= CONFIG.nfl_positive_spread_max
             and bets is not None and money is not None
-            and bets <= CONFIG.nfl_extended_spread_max_support
-            and money <= CONFIG.nfl_extended_spread_max_support
+            and bets <= CONFIG.nfl_extended_spread_max_bets
+            and money <= CONFIG.nfl_extended_spread_max_money
             and (
                 (_number(side.get("line_move_abs")) or 0) >= CONFIG.nfl_extended_spread_min_move
                 or "K10" in crossed

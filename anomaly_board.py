@@ -770,7 +770,19 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
     # A side can still be meaningfully low-support when tickets are in the low
     # forties but money is materially lower. Avoid erasing a valid move on a
     # one-point ticket-share change.
-    low_support = bets_pct <= 45 and money_pct <= 45
+    # NFL underdogs between +8 and +10 remain a minority-supported side when
+    # tickets are at most 40% and money is still below 50%.  Treating the
+    # generic 45% money boundary as absolute created a classification gap for
+    # clean moves through key ten (for example +10.5 to +8.5): the move became
+    # stronger while a small split update demoted the side to Watch.
+    extended_nfl_dog_support = (
+        sport == "nfl"
+        and market == "SPREAD"
+        and 8 < current_value <= 10
+        and bets_pct <= 40
+        and money_pct < 50
+    )
+    low_support = (bets_pct <= 45 and money_pct <= 45) or extended_nfl_dog_support
     very_low_support = bets_pct <= 35 and money_pct <= 40
     ticket_heavy = bets_pct >= 70
     public_support = ticket_heavy and money_pct >= 55

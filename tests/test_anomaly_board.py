@@ -550,6 +550,25 @@ class TestAnomalyBoard(unittest.TestCase):
         self.assertIn("Developing Read", row["context_chips"])
         self.assertIn("below the confirmed signal threshold", row["reason"])
 
+    def test_extended_nfl_dog_stays_contrarian_as_line_strengthens_with_minority_money(self):
+        latest = pd.DataFrame([
+            {"sport": "nfl", "game_id": "ari-lac", "market_display": "SPREAD", "side_key": "ARI", "side": "ARI Cardinals +8.5", "game": "ARI Cardinals @ LA Chargers", "bets_pct": 37, "money_pct": 46, "open_line": "ARI Cardinals +10.5 @ -110", "current_line": "ARI Cardinals +8.5 @ -110", "_sort_time": _ts(22, 0)},
+            {"sport": "nfl", "game_id": "ari-lac", "market_display": "SPREAD", "side_key": "LAC", "side": "LA Chargers -8.5", "game": "ARI Cardinals @ LA Chargers", "bets_pct": 63, "money_pct": 54, "open_line": "LA Chargers -10.5 @ -110", "current_line": "LA Chargers -8.5 @ -110", "_sort_time": _ts(22, 0)},
+        ])
+        history = pd.DataFrame([
+            {"timestamp": _ts(18, 0), "sport": "nfl", "game_id": "ari-lac", "market_display": "SPREAD", "side_key": "ARI", "current_line": "ARI Cardinals +10.5 @ -110", "bets_pct": 35, "money_pct": 38},
+            {"timestamp": _ts(20, 0), "sport": "nfl", "game_id": "ari-lac", "market_display": "SPREAD", "side_key": "ARI", "current_line": "ARI Cardinals +8.5 @ -110", "bets_pct": 37, "money_pct": 46},
+            {"timestamp": _ts(18, 0), "sport": "nfl", "game_id": "ari-lac", "market_display": "SPREAD", "side_key": "LAC", "current_line": "LA Chargers -10.5 @ -110", "bets_pct": 65, "money_pct": 62},
+            {"timestamp": _ts(20, 0), "sport": "nfl", "game_id": "ari-lac", "market_display": "SPREAD", "side_key": "LAC", "current_line": "LA Chargers -8.5 @ -110", "bets_pct": 63, "money_pct": 54},
+        ])
+
+        board, _ = build_anomaly_outputs(latest, history, pd.DataFrame(), as_of=_ts(17, 0))
+
+        row = board.loc[board["flagged_side"].str.contains("ARI Cardinals")].iloc[0]
+        leader = select_market_leaders(board).iloc[0]
+        self.assertEqual(row["reaction"], "Contrarian")
+        self.assertEqual(leader["supported_side"], "ARI Cardinals +8.5")
+
     def test_timeline_keeps_one_latest_observation_per_timestamp(self):
         latest = pd.DataFrame([
             {"sport": "nfl", "game_id": "g8", "market_display": "TOTAL", "side_key": "Over", "side": "Over 44.5", "game": "A @ B", "bets_pct": 50, "money_pct": 50, "open_line": "Over 44.5 @ -110", "current_line": "Over 45 @ -110", "_sort_time": _ts(22, 0)},

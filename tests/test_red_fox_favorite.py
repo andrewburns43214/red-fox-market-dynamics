@@ -80,13 +80,23 @@ def test_nfl_positive_spread_exception_qualifies_through_plus_ten_only_with_stri
     assert is_favorite(result([market("nfl", "SPREAD", pair_for(arizona), supported_side="Arizona +9.5")]))
 
     for change in (
-        {"bets_pct": 41}, {"money_pct": 41}, {"line_move_abs": 0.5},
+        {"bets_pct": 41}, {"money_pct": 50}, {"line_move_abs": 0.5},
         {"active_worsening_reversal": True},
     ):
         blocked = dict(arizona, **change)
         assert not is_favorite(result([market("nfl", "SPREAD", pair_for(blocked), supported_side="Arizona +9.5")]))
     assert not is_favorite(result([market("ncaaf", "SPREAD", pair_for(arizona), supported_side="Arizona +9.5")]))
     assert not is_favorite(result([market("nfl", "SPREAD", pair_for(arizona), supported_side="Opponent -4.5")]))
+
+
+def test_nfl_extended_dog_remains_eligible_when_money_is_minoritarian_but_above_legacy_low_support_cap():
+    arizona = side(
+        "Arizona +8.5", "+8.5 (-110)", bets=37, money=46,
+        open_line="+10.5 (-110)", line_move=2.0,
+    )
+    assert is_favorite(result([
+        market("nfl", "SPREAD", pair_for(arizona), supported_side="Arizona +8.5")
+    ]))
 
 
 def test_nfl_positive_spread_exception_accepts_a_crossing_of_key_ten():
