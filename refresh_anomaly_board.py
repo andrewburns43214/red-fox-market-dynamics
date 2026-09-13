@@ -361,15 +361,6 @@ def _refresh(coverage):
     complete = complete_public_market_rows(dashboard)
     coverage.stage(dashboard, complete, "INCOMPLETE_MARKET_DATA")
     dashboard = complete
-    # Only currently represented markets need their retained lifetime path.
-    # Filtering first avoids normalizing every side in unrelated old games on
-    # each live publish while preserving the full opener/timeline for the board.
-    history_keys = dashboard[["sport", "game_id", "market_display"]].drop_duplicates()
-    history = snapshots.merge(history_keys, on=["sport", "game_id", "market_display"], how="inner")
-    history["side_key"] = [
-        normalize_side_key(sport, market, side)
-        for sport, market, side in zip(history["sport"], history["market_display"], history["side"])
-    ] if len(history) else pd.Series(dtype=str)
     complete_market_count = dashboard[["sport", "game_id", "market_display"]].drop_duplicates().shape[0]
     print(f"[ok] kept {complete_market_count} complete customer-inspectable same-snapshot markets")
     before_freshness = len(dashboard)
@@ -396,6 +387,17 @@ def _refresh(coverage):
     coverage.stage(dashboard, in_window, "OUTSIDE_PUBLICATION_WINDOW")
     dashboard = in_window
     print(f"[ok] kept {len(dashboard)}/{before_window} markets after rolling football publication window")
+
+    # Expand lifetime paths only for markets that survived every existing
+    # publication gate.  Previously the engine normalized and evaluated the
+    # full history of games it discarded immediately afterward.  This changes
+    # no gate or retained observation; it only avoids dead work.
+    history_keys = dashboard[["sport", "game_id", "market_display"]].drop_duplicates()
+    history = snapshots.merge(history_keys, on=["sport", "game_id", "market_display"], how="inner")
+    history["side_key"] = [
+        normalize_side_key(sport, market, side)
+        for sport, market, side in zip(history["sport"], history["market_display"], history["side"])
+    ] if len(history) else pd.Series(dtype=str)
 
     l2 = load_current_l2(DATA, newest_snapshot)
     # Evaluate timing against the latest source capture, not the web server's
