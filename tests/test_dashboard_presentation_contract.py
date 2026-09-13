@@ -426,3 +426,18 @@ def test_mobile_board_refresh_uses_safe_refresh_with_double_trigger_guard():
     assert "button.setAttribute('aria-busy','true')" in BOARD
     assert "button.removeAttribute('aria-busy')" in BOARD
     assert 'overscroll-behavior:none' not in BOARD.replace(' ', '').lower()
+
+
+def test_live_recent_green_is_reserved_for_the_exact_favorite_market_side():
+    assert "const favoriteIdentities=new Set(sides.map(item=>isRedFoxFavorite(item.row)" in BOARD
+    assert "marketSideIdentity({flagged_side:item.row.favorite_side},item.row)" in BOARD
+    assert "supported:Boolean(favoriteIdentity)&&marketSideIdentity(item.side,item.row)===favoriteIdentity" in BOARD
+
+
+def test_material_closing_changes_have_a_visible_review_queue():
+    assert 'id="favorite-review-queue"' in BOARD
+    assert "function renderFavoriteReviewQueue()" in BOARD
+    assert "'pending_addition','pending_removal','late_warning','applied_addition','applied_removal'" in BOARD
+    assert "renderFavoriteReviewQueue();" in BOARD
+    assert "From 40 to 20 minutes before kickoff" in BOARD
+    assert "At 20 minutes, the official Favorite and KPI state lock" in BOARD

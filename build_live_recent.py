@@ -20,6 +20,7 @@ SCORE_COVERAGE_OUT = DATA / "live_score_coverage.json"
 BOARD = DATA / "anomaly_board.csv"
 SNAPSHOTS = DATA / "snapshots.csv"
 FAVORITE_CANDIDATES = DATA / "red_fox_favorite_freeze_candidates.csv"
+MARKET_CANDIDATES = DATA / "live_recent_market_candidates.csv"
 FINAL_RETENTION_HOURS = 10
 UNRESOLVED_RETENTION_HOURS = 8
 SCORE_STALE_MINUTES = 3
@@ -210,9 +211,25 @@ def bootstrap_started_records(now: datetime) -> pd.DataFrame:
     if window.empty:
         return pd.DataFrame()
     window["market_display"] = window["side"].map(market_type)
-    latest = window.sort_values("_seen").groupby(["sport", "game_id", "market_display", "side"], as_index=False).tail(1).copy()
-    latest["_split_gap"] = (pd.to_numeric(latest["money_pct"], errors="coerce") - pd.to_numeric(latest["bets_pct"], errors="coerce")).abs()
-    latest = latest.sort_values("_split_gap", ascending=False).drop_duplicates(["sport", "game_id", "market_display"], keep="first")
+    market_keys = ["sport", "game_id", "market_display"]
+    latest_seen = window.groupby(market_keys)["_seen"].transform("max")
+    paired = window.loc[window["_seen"].eq(latest_seen)].copy()
+    paired["_split_gap"] = (pd.to_numeric(paired["money_pct"], errors="coerce") - pd.to_numeric(paired["bets_pct"], errors="coerce")).abs()
+    latest = paired.sort_values("_split_gap", ascending=False).drop_duplicates(market_keys, keep="first").copy()
+    pair_map = {}
+    for key, sides in paired.groupby(market_keys, sort=False):
+        pair_map[tuple(str(value) for value in key)] = json.dumps([
+            {
+                "flagged_side": side.get("side", ""), "bets_pct": side.get("bets_pct", ""),
+                "money_pct": side.get("money_pct", ""), "open_line": side.get("open_line", ""),
+                "current_line": side.get("current_line", ""), "reaction": "Observed",
+                "path": "Pregame snapshot", "anomaly_chips": "Observed pregame market",
+            }
+            for _, side in sides.iterrows()
+        ], separators=(",", ":"))
+    latest["market_sides"] = latest.apply(
+        lambda row: pair_map.get(tuple(str(row.get(column, "")) for column in market_keys), "[]"), axis=1
+    )
     latest = latest.rename(columns={"side": "flagged_side", "dk_start_iso": "kickoff_iso"})
     latest["reaction"] = "Observed"
     latest["path"] = "Pregame snapshot"
@@ -224,6 +241,69 @@ def bootstrap_started_records(now: datetime) -> pd.DataFrame:
     # score screen but never reconstructs Red Fox classifications.
     latest["freeze_method"] = "raw_snapshot_recovery_no_classification"
     return latest
+
+
+def update_market_candidates(rows: pd.DataFrame, path: Path = MARKET_CANDIDATES, as_of=None) -> pd.DataFrame:
+    """Retain a compact, paired all-market handoff for Live & Recent."""
+    existing = read_csv_or_empty(path)
+    if rows is None or rows.empty:
+        return existing
+    work = rows.copy()
+    required = {"sport", "game_id", "game", "market_display", "side", "bets_pct", "money_pct", "open_line", "current_line", "dk_start_iso"}
+    if not required.issubset(work.columns):
+        return existing
+    now = pd.Timestamp.now(tz="UTC") if as_of is None else pd.Timestamp(as_of)
+    now = now.tz_localize("UTC") if now.tzinfo is None else now.tz_convert("UTC")
+    work["_kickoff"] = pd.to_datetime(work["dk_start_iso"], errors="coerce", utc=True)
+    seen_values = work["timestamp"] if "timestamp" in work else pd.Series(now, index=work.index)
+    work["_seen"] = pd.to_datetime(seen_values, errors="coerce", utc=True)
+    work = work[work["_kickoff"].notna() & work["_seen"].notna() & (work["_seen"] <= work["_kickoff"])].copy()
+    if work.empty:
+        return existing
+    keys = ["sport", "game_id", "market_display"]
+    records = []
+    for _, sides in work.groupby(keys, sort=False):
+        if sides["side"].astype(str).nunique() != 2:
+            continue
+        representative = sides.assign(
+            _gap=(pd.to_numeric(sides["money_pct"], errors="coerce") - pd.to_numeric(sides["bets_pct"], errors="coerce")).abs()
+        ).sort_values("_gap", ascending=False).iloc[0].copy()
+        representative["flagged_side"] = representative.get("side", "")
+        representative["kickoff_iso"] = representative.get("dk_start_iso", "")
+        representative["reaction"] = "Observed"
+        representative["path"] = "Pregame snapshot"
+        representative["reason"] = "Frozen from the final available paired pregame market."
+        representative["state_as_of_utc"] = representative["_seen"].isoformat()
+        representative["final_pregame_state_at_utc"] = representative["state_as_of_utc"]
+        representative["freeze_method"] = "paired_raw_market_handoff_no_classification"
+        representative["red_fox_favorite"] = "false"
+        representative["favorite_state"] = "not_qualified"
+        representative["market_sides"] = json.dumps([
+            {
+                "flagged_side": side.get("side", ""), "bets_pct": side.get("bets_pct", ""),
+                "money_pct": side.get("money_pct", ""), "open_line": side.get("open_line", ""),
+                "current_line": side.get("current_line", ""), "reaction": "Observed",
+                "path": "Pregame snapshot", "anomaly_chips": "Observed pregame market",
+            }
+            for _, side in sides.iterrows()
+        ], separators=(",", ":"))
+        records.append(representative.drop(labels=["_gap", "_kickoff", "_seen"], errors="ignore"))
+    if not records:
+        return existing
+    current = pd.DataFrame(records)
+    updated = current if existing.empty else pd.concat([existing, current], ignore_index=True, sort=False)
+    updated["_state"] = pd.to_datetime(updated.get("state_as_of_utc", ""), errors="coerce", utc=True)
+    updated["_kickoff"] = pd.to_datetime(updated.get("kickoff_iso", ""), errors="coerce", utc=True)
+    # The handoff only bridges the pregame board into the short Live & Recent
+    # window. Prune old candidates so this compact safety cache stays bounded.
+    updated = updated[updated["_kickoff"].isna() | (updated["_kickoff"] >= now - pd.Timedelta(hours=12))].copy()
+    updated = updated.sort_values("_state", kind="mergesort").drop_duplicates(keys, keep="last")
+    updated = updated.drop(columns=["_state", "_kickoff"], errors="ignore")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name("." + path.name + ".tmp")
+    updated.to_csv(temporary, index=False)
+    temporary.replace(path)
+    return updated
 
 
 def _text(value: object) -> str:
@@ -394,6 +474,12 @@ def main(scores_only: bool = False) -> None:
         favorite_started = favorite_handoff_states(candidates, now)
         if not favorite_started.empty:
             rows.append(favorite_started)
+    market_candidates = read_csv_or_empty(MARKET_CANDIDATES)
+    if not market_candidates.empty:
+        market_started = final_pregame_states(market_candidates, now)
+        if not market_started.empty:
+            market_started["freeze_method"] = "paired_raw_market_handoff_no_classification"
+            rows.append(market_started)
     if not rows:
         recovered = bootstrap_started_records(now)
         if recovered.empty:

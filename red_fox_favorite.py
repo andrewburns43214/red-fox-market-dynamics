@@ -45,8 +45,10 @@ class FavoriteConfig:
     football_favorite_max_direction_changes: int = 4
     freeze_disabled_sports: frozenset[str] = frozenset({"ufc"})
     visibility_lock_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
-    visibility_lock_minutes: int = 60
+    visibility_review_minutes: int = 40
+    visibility_lock_minutes: int = 20
     visibility_confirmations: int = 2
+    visibility_confirmation_gap_minutes: int = 15
 
 
 CONFIG = FavoriteConfig()
@@ -68,6 +70,11 @@ TRACKING_COLUMNS = [
     "whipsaw_state", "cross_market_state", "supporting_evidence", "snapshot_id",
     "disappearance_reason", "closing_line", "clv", "result",
 ]
+REVIEW_COLUMNS = [
+    "recorded_at", "sport", "game_id", "game", "market_display", "kickoff_iso",
+    "review_state", "review_action", "favorite_side", "current_line", "reason",
+]
+REVIEW_BOARD_COLUMNS = ["favorite_review_state", "favorite_review_reason", "favorite_review_at"]
 
 
 def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
@@ -213,7 +220,7 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
         updated.to_csv(temporary, index=False)
         temporary.replace(path)
     _update_freeze_candidates(current, Path(data_dir), at)
-    return current
+    return current.drop(columns=["_visibility_restored"], errors="ignore")
 
 
 def _apply_visibility_lock(
@@ -222,15 +229,12 @@ def _apply_visibility_lock(
     data_dir: Path,
     at: str,
 ) -> pd.DataFrame:
-    """Lock the official Favorite slate one hour before scheduled start.
-
-    Two consecutive qualifying captures at or before T-60 prove the play was
-    stable and realistically visible. Inside the final hour the lock prevents
-    both new additions and late removals while raw market reads keep updating.
-    """
+    """Apply the two-stage T-40 review window and T-20 hard lock."""
     if current is None or "kickoff_iso" not in current:
         return current
     result = current.copy()
+    for column in REVIEW_BOARD_COLUMNS:
+        result[column] = ""
     now = pd.Timestamp(at)
     now = now.tz_localize("UTC") if now.tzinfo is None else now.tz_convert("UTC")
     archived_path = data_dir / "red_fox_favorite_freeze_candidates.csv"
@@ -242,6 +246,9 @@ def _apply_visibility_lock(
         )
     except (OSError, pd.errors.EmptyDataError):
         archived = pd.DataFrame()
+    review_path = data_dir / "red_fox_favorite_review.csv"
+    reviews = _read_review(review_path)
+    review_records: list[dict] = []
 
     keys = ("sport", "game_id", "market_display")
     current_keys = {
@@ -261,9 +268,10 @@ def _apply_visibility_lock(
             if pd.isna(kickoff):
                 continue
             minutes = (kickoff - now).total_seconds() / 60
-            if 0 <= minutes <= CONFIG.visibility_lock_minutes and _locked_favorite(history, key, kickoff):
+            if 0 <= minutes <= CONFIG.visibility_review_minutes and _official_active(history, key, now):
                 held = row.copy()
-                held["favorite_reason"] = "Official Favorite slate locked at T-60."
+                held["favorite_reason"] = "Favorite retained through the closing review window."
+                held["_visibility_restored"] = "true"
                 additions.append(held)
         if additions:
             result = pd.concat([result, pd.DataFrame(additions)], ignore_index=True, sort=False)
@@ -273,8 +281,6 @@ def _apply_visibility_lock(
         if pd.isna(kickoff):
             continue
         minutes = (kickoff - now).total_seconds() / 60
-        if not 0 <= minutes <= CONFIG.visibility_lock_minutes:
-            continue
         key = tuple(str(row.get(column, "")) for column in keys)
         identity = (key[0].lower(), key[1], key[2].upper())
         if identity in VISIBILITY_INVALIDATED_FAVORITES:
@@ -282,38 +288,221 @@ def _apply_visibility_lock(
             continue
         if identity[0] not in CONFIG.visibility_lock_sports:
             continue
-        if _locked_favorite(history, key, kickoff):
-            if not _truthy(row.get("red_fox_favorite")):
-                source = _archived_row(archived, key)
-                if source is not None:
-                    for column in FAVORITE_COLUMNS:
-                        result.at[index, column] = source.get(column, "")
-                    result.at[index, "red_fox_favorite"] = "true"
-                    result.at[index, "favorite_state"] = "qualified"
-            result.at[index, "favorite_reason"] = "Official Favorite slate locked at T-60."
+        raw_favorite = _truthy(row.get("red_fox_favorite"))
+        active = _official_active(history, key, now)
+        source = _archived_row(archived, key)
+
+        if minutes > CONFIG.visibility_review_minutes:
+            # A brand-new designation needs two consecutive ten-minute pulls.
+            if raw_favorite and not active:
+                reason = "Awaiting a second consecutive qualifying scrape."
+                if _review_confirmed(reviews, key, "addition", now):
+                    review_records.append(_review_record(row, at, "applied", "addition", reason))
+                else:
+                    _clear_favorite(result, index, reason)
+                    _set_review(result, index, "pending_addition", reason, at)
+                    review_records.append(_review_record(row, at, "pending", "addition", reason))
+            elif not raw_favorite and not active:
+                _clear_pending_review(reviews, review_records, row, key, at)
+            continue
+
+        if not 0 <= minutes <= CONFIG.visibility_review_minutes:
+            continue
+
+        if minutes <= CONFIG.visibility_lock_minutes:
+            # At T-20 the official state becomes immutable. Continue surfacing
+            # material raw changes as warnings without changing the KPI slate.
+            if active:
+                _restore_favorite(result, index, source)
+                result.at[index, "favorite_reason"] = "Official Favorite locked at T-20."
+            else:
+                _clear_favorite(result, index, "Official non-Favorite state locked at T-20.")
+            if raw_favorite != active:
+                material, reason = (
+                    _material_addition(row) if raw_favorite
+                    else _material_removal(row, source)[1:]
+                )
+                if material and not _review_already_recorded(reviews, key, "late_warning"):
+                    action = "addition" if raw_favorite else "removal"
+                    warning = f"Late material {action} signal; official Favorite unchanged. {reason}"
+                    _set_review(result, index, "late_warning", warning, at)
+                    review_records.append(_review_record(row, at, "late_warning", action, warning))
+            continue
+
+        # T-40 through T-20: ordinary threshold flicker cannot change the
+        # official slate. A material change needs two consecutive scrapes;
+        # a confirmed opposite-side contradiction can remove immediately.
+        if raw_favorite == active:
+            _clear_pending_review(reviews, review_records, row, key, at)
+            continue
+        if raw_favorite:
+            material, reason = _material_addition(row)
+            if material and _review_confirmed(reviews, key, "addition", now):
+                _set_review(result, index, "applied_addition", reason, at)
+                review_records.append(_review_record(row, at, "applied", "addition", reason))
+            else:
+                _clear_favorite(result, index, "Closing-window addition withheld pending material confirmation.")
+                if material:
+                    _set_review(result, index, "pending_addition", reason, at)
+                    review_records.append(_review_record(row, at, "pending", "addition", reason))
         else:
-            _clear_favorite(result, index, "Not eligible: absent from the confirmed T-60 Favorite slate.")
+            hard, material, reason = _material_removal(row, source)
+            confirmed = _review_confirmed(reviews, key, "removal", now)
+            if confirmed:
+                reason = _latest_review_reason(reviews, key) or reason
+            if hard or confirmed:
+                _clear_favorite(result, index, reason)
+                _set_review(result, index, "applied_removal", reason, at)
+                review_records.append(_review_record(row, at, "applied", "removal", reason))
+            else:
+                _restore_favorite(result, index, source)
+                result.at[index, "favorite_reason"] = "Favorite held through non-material closing-window change."
+                if material:
+                    _set_review(result, index, "pending_removal", reason, at)
+                    review_records.append(_review_record(row, at, "pending", "removal", reason))
+    _write_review(review_path, reviews, review_records)
     return result
 
 
-def _locked_favorite(history: pd.DataFrame, key: tuple[str, str, str], kickoff: pd.Timestamp) -> bool:
+def _history_for_key(history: pd.DataFrame, key: tuple[str, str, str], through: pd.Timestamp) -> pd.DataFrame:
     if history.empty:
-        return False
+        return pd.DataFrame()
     mask = pd.Series(True, index=history.index)
     for column, value in zip(("sport", "game_id", "market_display"), key):
         if column not in history:
-            return False
+            return pd.DataFrame()
         mask &= history[column].astype(str).eq(value)
     scoped = history.loc[mask].copy()
     if scoped.empty:
-        return False
+        return scoped
     scoped["_at"] = pd.to_datetime(scoped["recorded_at"], errors="coerce", utc=True)
-    cutoff = kickoff - pd.Timedelta(minutes=CONFIG.visibility_lock_minutes)
-    scoped = scoped.loc[scoped["_at"].notna() & (scoped["_at"] <= cutoff)].sort_values("_at", kind="mergesort")
-    if len(scoped) < CONFIG.visibility_confirmations:
+    return scoped.loc[scoped["_at"].notna() & (scoped["_at"] <= through)].sort_values("_at", kind="mergesort")
+
+
+def _official_active(history: pd.DataFrame, key: tuple[str, str, str], through: pd.Timestamp) -> bool:
+    scoped = _history_for_key(history, key, through)
+    return bool(not scoped.empty and str(scoped.iloc[-1].get("favorite_state", "")) == "qualified")
+
+
+def _read_review(path: Path) -> pd.DataFrame:
+    try:
+        return pd.read_csv(path, dtype=str, keep_default_na=False) if path.exists() and path.stat().st_size else pd.DataFrame(columns=REVIEW_COLUMNS)
+    except (OSError, pd.errors.EmptyDataError):
+        return pd.DataFrame(columns=REVIEW_COLUMNS)
+
+
+def _write_review(path: Path, history: pd.DataFrame, records: list[dict]) -> None:
+    if not records:
+        return
+    updated = pd.concat([history, pd.DataFrame(records)], ignore_index=True, sort=False).reindex(columns=REVIEW_COLUMNS)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name("." + path.name + ".tmp")
+    updated.to_csv(temporary, index=False)
+    temporary.replace(path)
+
+
+def _review_rows(history: pd.DataFrame, key: tuple[str, str, str]) -> pd.DataFrame:
+    if history.empty:
+        return history
+    mask = pd.Series(True, index=history.index)
+    for column, value in zip(("sport", "game_id", "market_display"), key):
+        mask &= history.get(column, pd.Series("", index=history.index)).astype(str).eq(value)
+    return history.loc[mask].sort_values("recorded_at", kind="mergesort")
+
+
+def _review_confirmed(history: pd.DataFrame, key: tuple[str, str, str], action: str, now: pd.Timestamp) -> bool:
+    scoped = _review_rows(history, key)
+    if scoped.empty:
         return False
-    states = scoped.tail(CONFIG.visibility_confirmations)["favorite_state"].astype(str)
-    return bool(states.eq("qualified").all())
+    prior = scoped.iloc[-1]
+    prior_at = pd.to_datetime(prior.get("recorded_at", ""), errors="coerce", utc=True)
+    return bool(
+        prior.get("review_state") == "pending"
+        and prior.get("review_action") == action
+        and pd.notna(prior_at)
+        and 0 <= (now - prior_at).total_seconds() / 60 <= CONFIG.visibility_confirmation_gap_minutes
+    )
+
+
+def _review_already_recorded(history: pd.DataFrame, key: tuple[str, str, str], state: str) -> bool:
+    scoped = _review_rows(history, key)
+    return bool(not scoped.empty and str(scoped.iloc[-1].get("review_state", "")) == state)
+
+
+def _latest_review_reason(history: pd.DataFrame, key: tuple[str, str, str]) -> str:
+    scoped = _review_rows(history, key)
+    return str(scoped.iloc[-1].get("reason", "")) if not scoped.empty else ""
+
+
+def _review_record(row: pd.Series, at: str, state: str, action: str, reason: str) -> dict:
+    return {
+        "recorded_at": at, "sport": row.get("sport", ""), "game_id": row.get("game_id", ""),
+        "game": row.get("game", ""), "market_display": row.get("market_display", ""),
+        "kickoff_iso": row.get("kickoff_iso", ""), "review_state": state,
+        "review_action": action, "favorite_side": row.get("favorite_side", ""),
+        "current_line": row.get("current_line", ""), "reason": reason,
+    }
+
+
+def _clear_pending_review(history: pd.DataFrame, records: list[dict], row: pd.Series, key: tuple[str, str, str], at: str) -> None:
+    scoped = _review_rows(history, key)
+    if not scoped.empty and str(scoped.iloc[-1].get("review_state", "")) == "pending":
+        records.append(_review_record(row, at, "cleared", str(scoped.iloc[-1].get("review_action", "")), "Pending review condition cleared."))
+
+
+def _set_review(frame: pd.DataFrame, index: object, state: str, reason: str, at: str) -> None:
+    frame.at[index, "favorite_review_state"] = state
+    frame.at[index, "favorite_review_reason"] = reason
+    frame.at[index, "favorite_review_at"] = at
+
+
+def _material_addition(row: pd.Series) -> tuple[bool, str]:
+    try:
+        evidence = json.loads(str(row.get("favorite_supporting_evidence", "{}")))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        evidence = {}
+    bets = _number(evidence.get("bets_pct"))
+    money = _number(evidence.get("money_pct"))
+    if bets is None or money is None or bets > 35 or money > 35:
+        return False, "Closing support is not sufficiently low (requires no more than 35% bets and money)."
+    market = str(row.get("market_display", "")).upper()
+    sport = str(row.get("sport", "")).lower()
+    opened = _line_value(evidence.get("open_line"), market)
+    current = _line_value(evidence.get("current_line"), market)
+    move = abs(current - opened) if opened is not None and current is not None else 0
+    if market == "MONEYLINE":
+        material = move >= 15
+        threshold = "15-cent Moneyline move"
+    elif sport in {"nba", "ncaab", "cbb"}:
+        material = move >= 1.5
+        threshold = "1.5-point basketball move"
+    else:
+        crossed = set(re.findall(r"\d+(?:\.\d+)?", str(row.get("key_numbers_crossed", ""))))
+        material = move >= 1.0 or bool(crossed & {"3", "7"})
+        threshold = "one-point football move or key-number crossing"
+    return material, f"Material closing addition: {threshold}; observed move {move:g}."
+
+
+def _material_removal(row: pd.Series, source: pd.Series | None) -> tuple[bool, bool, str]:
+    if source is None:
+        return False, False, "No prior frozen Favorite evidence was available."
+    favorite_identity = _side_identity(source.get("favorite_side", ""))
+    supported_identity = _side_identity(row.get("supported_side", ""))
+    if supported_identity and supported_identity != favorite_identity:
+        return True, True, "Hard removal: the confirmed supported side flipped."
+    if _truthy(row.get("cross_market_mismatch")) or _truthy(row.get("cross_market_opener_mismatch_verified")):
+        return True, True, "Hard removal: a confirmed cross-market contradiction appeared."
+    market = str(row.get("market_display", "")).upper()
+    side = next((item for item in _sides(row) if _side_identity(item.get("flagged_side")) == favorite_identity), None)
+    if side is None:
+        return False, False, "The Favorite side was temporarily unavailable on one scrape."
+    previous = _line_value(source.get("current_line", ""), market)
+    current = _line_value(side.get("current_line", ""), market)
+    against = (current - previous) if previous is not None and current is not None else 0
+    sport = str(row.get("sport", "")).lower()
+    threshold = 15 if market == "MONEYLINE" else (1.5 if sport in {"nba", "ncaab", "cbb"} else 1.0)
+    material = against >= threshold
+    return False, material, f"Material closing removal: market moved {against:g} against the Favorite (threshold {threshold:g})."
 
 
 def _archived_row(archived: pd.DataFrame, key: tuple[str, str, str]) -> pd.Series | None:
@@ -326,6 +515,16 @@ def _archived_row(archived: pd.DataFrame, key: tuple[str, str, str]) -> pd.Serie
         mask &= archived[column].astype(str).eq(value)
     matches = archived.loc[mask]
     return matches.iloc[-1] if not matches.empty else None
+
+
+def _restore_favorite(frame: pd.DataFrame, index: object, source: pd.Series | None) -> None:
+    if source is None:
+        return
+    for column in FAVORITE_COLUMNS:
+        frame.at[index, column] = source.get(column, "")
+    frame.at[index, "red_fox_favorite"] = "true"
+    frame.at[index, "favorite_state"] = "qualified"
+    frame.at[index, "_visibility_restored"] = "true"
 
 
 def _clear_favorite(frame: pd.DataFrame, index: object, reason: str) -> None:
@@ -709,6 +908,8 @@ def _update_freeze_candidates(current: pd.DataFrame, data_dir: Path, at: str) ->
             mask = pd.Series(True, index=updated.index)
             for column in keys:
                 mask &= updated.get(column, pd.Series("", index=updated.index)).astype(str).eq(str(row.get(column, "")))
+            if _truthy(row.get("_visibility_restored")):
+                continue
             if _truthy(row.get("red_fox_favorite")):
                 updated = updated.loc[~mask].copy()
                 updated = pd.concat([updated, row.to_frame().T], ignore_index=True, sort=False)

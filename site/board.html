@@ -1344,6 +1344,9 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .live-market-side-row:hover { background:#f6fbfa; }
 .live-market-side-row.is-supported { background:linear-gradient(90deg,rgba(21,134,106,.10),rgba(21,134,106,0)); }
 .live-market-side-row.is-supported:hover { background:linear-gradient(90deg,rgba(21,134,106,.13),rgba(21,134,106,.03)); }
+.favorite-review-queue{margin:0 0 10px;padding:10px 12px;border:1px solid rgba(189,123,43,.35);border-radius:8px;background:rgba(189,123,43,.07)}
+.favorite-review-title{margin-bottom:6px;color:var(--gold);font:700 10px var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.favorite-review-item{display:flex;gap:8px;align-items:baseline;padding:4px 0;color:var(--text2);font-size:11px}.favorite-review-item strong{color:var(--text)}
 .live-market-side-row:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .live-market-side { min-width:0; font-size:12px; font-weight:700; line-height:1.25; }
 .live-market-meta { min-width:0; color:var(--text3); font:600 9px/1.35 var(--mono); text-align:left; overflow-wrap:anywhere; }
@@ -1833,6 +1836,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
           <div class="board-sort-menu" id="desktop-sort-menu" role="menu" hidden></div>
           <div class="favorite-performance favorite-performance-desktop" data-favorite-performance hidden></div>
         </div>
+        <div class="favorite-review-queue" id="favorite-review-queue" hidden aria-live="polite"></div>
         <div class="tscroll">
           <table>
             <thead>
@@ -2394,6 +2398,7 @@ function redFoxFavoriteGuideSection(includeHeading=true){
     '<p>A selective designation for a confirmed Supported Side that matches Red Fox’s preferred wager profile, including a reasonably actionable range and reliable data.</p>'+
     '<p>Examples of qualifying structures include:</p>'+
     '<ul><li><strong>Lower-support Contrarian</strong> — the lower-supported side receives meaningful movement in its favor.</li><li><strong>Lower-support Freeze / Fade</strong> — concentrated pressure fails to earn the expected response, and Red Fox may support the opposing side as the fade.</li><li><strong>Confirmed Follow</strong> — aligned positioning and movement provide sufficient confirmation in an eligible market.</li></ul>'+
+    '<p>For football and basketball, new Favorites require two consecutive qualifying captures. From 40 to 20 minutes before kickoff, only a confirmed material move can add or remove a Favorite. At 20 minutes, the official Favorite and KPI state lock; later material changes appear in the Favorite review queue without rewriting the play.</p>'+
     '<p>Red Fox Favorite is a binary, selective designation. It requires a confirmed Supported Side and a qualifying, reliable market setup. Reversals, integrity conflicts, stale data, or other reliability concerns can prevent Favorite status, although Whipsaw alone does not automatically disqualify a market.</p>'+favoritePerformanceFooter()+
     '</div></div>';
 }
@@ -2956,9 +2961,12 @@ function liveMarketSections(rows){
     return marketPresentationRank(a[0])-marketPresentationRank(b[0]);
   }).map(function(entry){
     const sides=[...entry[1].values()];
-    const confirmed=new Set(sides.map(item=>String(item.row.supported_side||'').trim()?marketSideIdentity({flagged_side:item.row.supported_side},item.row):'').filter(Boolean));
-    const supportedIdentity=confirmed.size===1?[...confirmed][0]:'';
-    return {market:entry[0],sides:sides.map(item=>({...item,supported:Boolean(supportedIdentity)&&marketSideIdentity(item.side,item.row)===supportedIdentity}))};
+    // Green means an endorsed frozen Favorite on Live & Recent. Ordinary
+    // supported Market Reads remain available in drilldown but are neutral on
+    // the post-kickoff card; the pregame dashboard keeps its existing meaning.
+    const favoriteIdentities=new Set(sides.map(item=>isRedFoxFavorite(item.row)&&String(item.row.favorite_side||'').trim()?marketSideIdentity({flagged_side:item.row.favorite_side},item.row):'').filter(Boolean));
+    const favoriteIdentity=favoriteIdentities.size===1?[...favoriteIdentities][0]:'';
+    return {market:entry[0],sides:sides.map(item=>({...item,supported:Boolean(favoriteIdentity)&&marketSideIdentity(item.side,item.row)===favoriteIdentity}))};
   });
 }
 
@@ -3210,6 +3218,7 @@ function showMoreBoardRows(){
   renderBoard(false);
 }
 function renderBoard(resetPage=true){
+  renderFavoriteReviewQueue();
   const marketRows=filtered();
   const grouped=new Map();
   marketRows.forEach(row=>{ const id=boardGameKey(row)||'?'; if(!grouped.has(id))grouped.set(id,[]); grouped.get(id).push(row); });
@@ -3273,6 +3282,14 @@ function renderBoard(resetPage=true){
     if(button && !more.hidden) button.textContent=`Load ${Math.min(boardPageSize(),games.length-_visibleBoardRows)} more games`;
   }
   _boardHasRendered=true;
+}
+
+function renderFavoriteReviewQueue(){
+  const host=document.getElementById('favorite-review-queue'); if(!host)return;
+  const active=allDash.filter(row=>['pending_addition','pending_removal','late_warning','applied_addition','applied_removal'].includes(String(row.favorite_review_state||'')));
+  host.hidden=!active.length;
+  if(!active.length){host.innerHTML='';return;}
+  host.innerHTML='<div class="favorite-review-title">Favorite review queue</div>'+active.map(row=>`<div class="favorite-review-item"><strong>${escHtml(row.game||'Game')} · ${escHtml(row.market_display||'Market')}</strong><span>${escHtml(row.favorite_review_reason||'Material closing-window change under review.')}</span></div>`).join('');
 }
 
 function actionLens(r){

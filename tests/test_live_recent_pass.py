@@ -99,13 +99,13 @@ def test_live_recent_controls_and_sort_modes_use_frozen_canonical_state():
     assert "Math.min(...favorites.map(frozenFavoriteRank))" in BOARD
 
 
-def test_live_recent_cards_present_persisted_favorite_supported_and_saved_state():
+def test_live_recent_cards_highlight_only_persisted_favorite_market_and_saved_state():
     assert "const favorites=gameRows.filter(isRedFoxFavorite);" in BOARD
     assert "favoriteMarkets" in BOARD
     assert 'class="live-game-badges"' in BOARD
     assert 'title="Red Fox Favorite pregame market:' in BOARD
-    assert "const confirmed=new Set(sides.map(item=>String(item.row.supported_side||'').trim()" in BOARD
-    assert "confirmed.size===1" in BOARD
+    assert "const favoriteIdentities=new Set(sides.map(item=>isRedFoxFavorite(item.row)" in BOARD
+    assert "favoriteIdentities.size===1" in BOARD
     assert "item.supported?' is-supported':''" in BOARD
     assert ".live-market-side-row.is-supported { background:linear-gradient(90deg,rgba(21,134,106,.10)" in BOARD
     assert 'class="live-save"' in BOARD
@@ -170,6 +170,38 @@ def test_final_pregame_state_rejects_source_observed_after_kickoff():
         "state_as_of_utc": "2026-09-08T22:40:01Z",
     }])
     assert live.final_pregame_states(board, datetime(2026, 9, 8, 22, 42, tzinfo=timezone.utc)).empty
+
+
+def test_raw_recovery_pairs_both_sides_and_fills_missing_game_markets(tmp_path, monkeypatch):
+    snapshots = pd.DataFrame([
+        {"timestamp": "2026-09-12T23:20:00Z", "sport": "ncaaf", "game_id": "9", "game": "Navy @ Florida Atlantic", "side": "Florida Atlantic", "bets_pct": "20", "money_pct": "25", "open_line": "Florida Atlantic @ +180", "current_line": "Florida Atlantic @ +164", "dk_start_iso": "2026-09-12T23:35:00Z"},
+        {"timestamp": "2026-09-12T23:20:00Z", "sport": "ncaaf", "game_id": "9", "game": "Navy @ Florida Atlantic", "side": "Navy", "bets_pct": "80", "money_pct": "75", "open_line": "Navy @ -218", "current_line": "Navy @ -198", "dk_start_iso": "2026-09-12T23:35:00Z"},
+        {"timestamp": "2026-09-12T23:20:00Z", "sport": "ncaaf", "game_id": "9", "game": "Navy @ Florida Atlantic", "side": "Florida Atlantic +4", "bets_pct": "20", "money_pct": "19", "open_line": "Florida Atlantic +6.5 @ -105", "current_line": "Florida Atlantic +4 @ -108", "dk_start_iso": "2026-09-12T23:35:00Z"},
+        {"timestamp": "2026-09-12T23:20:00Z", "sport": "ncaaf", "game_id": "9", "game": "Navy @ Florida Atlantic", "side": "Navy -4", "bets_pct": "80", "money_pct": "81", "open_line": "Navy -6.5 @ -115", "current_line": "Navy -4 @ -112", "dk_start_iso": "2026-09-12T23:35:00Z"},
+    ])
+    path = tmp_path / "snapshots.csv"
+    snapshots.to_csv(path, index=False)
+    monkeypatch.setattr(live, "SNAPSHOTS", path)
+    recovered = live.bootstrap_started_records(datetime(2026, 9, 12, 23, 40, tzinfo=timezone.utc))
+    assert set(recovered.market_display) == {"MONEYLINE", "SPREAD"}
+    for value in recovered.market_sides:
+        assert len(json.loads(value)) == 2
+
+
+def test_compact_market_handoff_preserves_all_paired_markets_without_reclassifying(tmp_path):
+    rows = pd.DataFrame([
+        {"timestamp": "2026-09-12T23:20:00Z", "sport": "ncaaf", "game_id": "9", "game": "Navy @ Florida Atlantic", "market_display": "MONEYLINE", "side": "Florida Atlantic", "bets_pct": "20", "money_pct": "25", "open_line": "Florida Atlantic @ +180", "current_line": "Florida Atlantic @ +164", "dk_start_iso": "2026-09-12T23:35:00Z"},
+        {"timestamp": "2026-09-12T23:20:00Z", "sport": "ncaaf", "game_id": "9", "game": "Navy @ Florida Atlantic", "market_display": "MONEYLINE", "side": "Navy", "bets_pct": "80", "money_pct": "75", "open_line": "Navy @ -218", "current_line": "Navy @ -198", "dk_start_iso": "2026-09-12T23:35:00Z"},
+        {"timestamp": "2026-09-12T23:20:00Z", "sport": "ncaaf", "game_id": "9", "game": "Navy @ Florida Atlantic", "market_display": "SPREAD", "side": "Florida Atlantic +4", "bets_pct": "20", "money_pct": "19", "open_line": "Florida Atlantic +6.5 @ -105", "current_line": "Florida Atlantic +4 @ -108", "dk_start_iso": "2026-09-12T23:35:00Z"},
+        {"timestamp": "2026-09-12T23:20:00Z", "sport": "ncaaf", "game_id": "9", "game": "Navy @ Florida Atlantic", "market_display": "SPREAD", "side": "Navy -4", "bets_pct": "80", "money_pct": "81", "open_line": "Navy -6.5 @ -115", "current_line": "Navy -4 @ -112", "dk_start_iso": "2026-09-12T23:35:00Z"},
+    ])
+    path = tmp_path / "live_recent_market_candidates.csv"
+    candidates = live.update_market_candidates(rows, path, as_of="2026-09-12T23:20:00Z")
+    assert set(candidates.market_display) == {"MONEYLINE", "SPREAD"}
+    assert candidates.red_fox_favorite.eq("false").all()
+    frozen = live.final_pregame_states(candidates, datetime(2026, 9, 12, 23, 36, tzinfo=timezone.utc))
+    assert set(frozen.market_display) == {"MONEYLINE", "SPREAD"}
+    assert all(len(json.loads(value)) == 2 for value in frozen.market_sides)
 
 
 def test_favorite_handoff_survives_absence_from_current_board():
