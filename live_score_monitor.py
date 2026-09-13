@@ -42,6 +42,7 @@ def main() -> None:
         "unmatched": payload.get("unmatched", 0),
         "stale": payload.get("stale", 0),
         "provider_unavailable": payload.get("provider_unavailable", 0),
+        "unsupported": payload.get("unsupported", 0),
     }
     print(json.dumps(output, sort_keys=True))
     raise SystemExit(1 if issues else 0)

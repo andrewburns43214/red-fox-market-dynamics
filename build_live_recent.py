@@ -56,6 +56,7 @@ SCOREBOARD_TEAM_ALIASES = {
     # Score-feed-only college identities observed in the live inventory.
     "mississippi valley": "mississippi valley st",
     "mvsu": "mississippi valley st",
+    "southern university": "southern",
     "ulm": "ul monroe",
 }
 COMPOUND_NICKNAMES = (
@@ -300,7 +301,8 @@ def write_score_coverage(live: pd.DataFrame, now: datetime) -> dict:
         "receiving_score": int((match.eq("matched") & has_score & ~stale).sum()),
         "unmatched": int(match.eq("unmatched").sum()),
         "stale": int(stale.sum()),
-        "provider_unavailable": int(match.isin(["provider_unavailable", "unsupported"]).sum()),
+        "provider_unavailable": int(match.eq("provider_unavailable").sum()),
+        "unsupported": int(match.eq("unsupported").sum()),
         "games": [
             {
                 "sport": _text(row.get("sport")), "game_id": _text(row.get("game_id")),
@@ -321,7 +323,8 @@ def write_score_coverage(live: pd.DataFrame, now: datetime) -> dict:
         f"{payload['matched']}/{payload['active_live_games']} matched, "
         f"{payload['receiving_score']}/{payload['active_live_games']} current, "
         f"{payload['unmatched']} unmatched, {payload['stale']} stale, "
-        f"{payload['provider_unavailable']} provider unavailable"
+        f"{payload['provider_unavailable']} provider unavailable, "
+        f"{payload['unsupported']} unsupported"
     )
     return payload
 

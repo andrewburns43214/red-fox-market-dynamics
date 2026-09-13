@@ -42,6 +42,22 @@ def test_app_state_provider_brand_matches_appalachian_state_board_identity():
     assert live.game_key("Appalachian State @ East Carolina", "ncaaf") in live.provider_game_keys(away, home, "ncaaf")
 
 
+def test_southern_university_matches_espn_southern_identity():
+    away = {
+        "displayName": "Southern Jaguars",
+        "location": "Southern",
+        "shortDisplayName": "Southern",
+        "abbreviation": "SOU",
+    }
+    home = {
+        "displayName": "Houston Cougars",
+        "location": "Houston",
+        "shortDisplayName": "Houston",
+        "abbreviation": "HOU",
+    }
+    assert live.game_key("Southern University @ Houston", "ncaaf") in live.provider_game_keys(away, home, "ncaaf")
+
+
 def test_score_coverage_counts_canonical_states_and_failure_stages(tmp_path, monkeypatch):
     monkeypatch.setattr(live, "SCORE_COVERAGE_OUT", tmp_path / "live_score_coverage.json")
     now = datetime.now(timezone.utc)
@@ -56,12 +72,13 @@ def test_score_coverage_counts_canonical_states_and_failure_stages(tmp_path, mon
     assert payload["matched"] == 1
     assert payload["receiving_score"] == 1
     assert payload["unmatched"] == 1
-    assert payload["provider_unavailable"] == 1
+    assert payload["provider_unavailable"] == 0
+    assert payload["unsupported"] == 1
     assert payload["retention"] == {"final_hours": 10, "unresolved_hours": 8}
     monitored, issues = evaluate(tmp_path / "live_score_coverage.json")
     assert monitored == payload
     assert "unmatched 1" in issues
-    assert "provider unavailable 1" in issues
+    assert not any("provider unavailable" in issue for issue in issues)
 
 
 def test_live_recent_controls_and_sort_modes_use_frozen_canonical_state():
