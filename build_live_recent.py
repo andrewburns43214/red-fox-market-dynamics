@@ -18,6 +18,7 @@ OUT = DATA / "live_recent.csv"
 SCORE_COVERAGE_OUT = DATA / "live_score_coverage.json"
 BOARD = DATA / "anomaly_board.csv"
 SNAPSHOTS = DATA / "snapshots.csv"
+FAVORITE_CANDIDATES = DATA / "red_fox_favorite_freeze_candidates.csv"
 FINAL_RETENTION_HOURS = 10
 UNRESOLVED_RETENTION_HOURS = 8
 SCORE_STALE_MINUTES = 3
@@ -258,6 +259,25 @@ def final_pregame_states(previous: pd.DataFrame, now: datetime) -> pd.DataFrame:
     return started.drop(columns=["_kickoff", "_state_at"])
 
 
+def favorite_handoff_states(candidates: pd.DataFrame, now: datetime) -> pd.DataFrame:
+    """Freeze previously qualified Favorites even if the live board drops them.
+
+    Qualification is an auditable event, while board presence depends on a
+    short source-freshness window.  Keeping those concepts separate prevents a
+    single missed scrape from erasing the Favorite at kickoff.
+    """
+    if candidates.empty:
+        return pd.DataFrame()
+    favorite = candidates[
+        candidates.get("red_fox_favorite", pd.Series("false", index=candidates.index))
+        .astype(str).str.lower().isin({"1", "true", "yes"})
+    ].copy()
+    frozen = final_pregame_states(favorite, now)
+    if not frozen.empty:
+        frozen["freeze_method"] = "favorite_tracking_last_qualified_at_or_before_start"
+    return frozen
+
+
 def expire_started_board_rows(now: datetime, grace_minutes: int = 5) -> int:
     """Atomically remove started games from the pregame board.
 
@@ -342,6 +362,11 @@ def main(scores_only: bool = False) -> None:
         started = final_pregame_states(previous, now)
         if not started.empty:
             rows.append(started)
+    candidates = read_csv_or_empty(FAVORITE_CANDIDATES)
+    if not candidates.empty:
+        favorite_started = favorite_handoff_states(candidates, now)
+        if not favorite_started.empty:
+            rows.append(favorite_started)
     if not rows:
         recovered = bootstrap_started_records(now)
         if recovered.empty:
@@ -364,9 +389,19 @@ def main(scores_only: bool = False) -> None:
     cutoff_unresolved = now_naive - pd.Timedelta(hours=UNRESOLVED_RETENTION_HOURS)
     final = state.eq("post")
     live = live[live["_kickoff"].notna() & (((final) & (live["_kickoff"] >= cutoff_final)) | ((~final) & (live["_kickoff"] >= cutoff_unresolved)))].copy()
-    key_columns = [column for column in ("sport", "game_id", "market_display", "flagged_side") if column in live]
+    key_columns = [column for column in ("sport", "game_id", "market_display") if column in live]
     if key_columns:
-        live = live.sort_values("frozen_at_utc", na_position="last").drop_duplicates(key_columns, keep="first")
+        # Within a market, a retained Favorite qualification outranks a
+        # descriptive non-Favorite freeze. Among equal classifications retain
+        # the earliest immutable kickoff freeze rather than a later timer pass.
+        live["_favorite_priority"] = live.get(
+            "red_fox_favorite", pd.Series("false", index=live.index)
+        ).astype(str).str.lower().isin({"1", "true", "yes"}).astype(int)
+        live = live.sort_values(
+            ["_favorite_priority", "frozen_at_utc"],
+            ascending=[True, False], na_position="last",
+        ).drop_duplicates(key_columns, keep="last")
+        live = live.drop(columns=["_favorite_priority"])
     if scores_only:
         for sport, indices in live.groupby("sport").groups.items():
             scores, provider_state = fetch_scoreboard(str(sport).lower(), now)

@@ -269,6 +269,38 @@ def test_secondary_moneyline_can_remain_favorite_when_team_is_laying_points():
     assert is_favorite(result([ml, spread]), 0)
 
 
+def test_negative_money_football_favorite_requires_strong_cross_market_final_state():
+    texas_ml = market("ncaaf", "MONEYLINE", [
+        side("Texas", "-142", bets=39, money=45, path="Whipsaw", line_dir_changes=13,
+             return_toward_open=True),
+        side("Ohio State", "+105", bets=61, money=55, reaction="Watch", direction="AGAINST", kpi=False),
+    ], game_id="texas", game="Ohio State @ Texas", supported_side="Texas")
+    texas_spread = market("ncaaf", "SPREAD", [
+        side("Texas -2.5", "-2.5 (-112)", bets=49, money=60, path="Whipsaw", line_dir_changes=13,
+             return_toward_open=True),
+        side("Ohio State +2.5", "+2.5 (-108)", bets=51, money=40, reaction="Watch", direction="AGAINST", kpi=False),
+    ], game_id="texas", game="Ohio State @ Texas", rank=2, supported_side="Texas -2.5")
+    assert not is_favorite(result([texas_ml, texas_spread]), 0)
+
+    houston_ml = market("nfl", "MONEYLINE", [
+        side("HOU Texans", "-110", bets=24, money=27),
+        side("BUF Bills", "+100", bets=76, money=73, reaction="Watch", direction="AGAINST", kpi=False),
+    ], game_id="houston", game="BUF Bills @ HOU Texans", supported_side="HOU Texans")
+    houston_spread = market("nfl", "SPREAD", [
+        side("HOU Texans -1.5", "-1.5 (+102)", bets=24, money=28),
+        side("BUF Bills +1.5", "+1.5 (-122)", bets=76, money=72, reaction="Watch", direction="AGAINST", kpi=False),
+    ], game_id="houston", game="BUF Bills @ HOU Texans", rank=2, supported_side="HOU Texans -1.5")
+    assert is_favorite(result([houston_ml, houston_spread]), 0)
+
+
+def test_tighter_moneyline_favorite_gate_does_not_change_point_taking_spreads():
+    candidate = side("Appalachian State +6.5", "+6.5 (-108)", bets=41, money=19, path="Whipsaw")
+    opponent = side("East Carolina -6.5", "-6.5 (-112)", bets=59, money=81,
+                    reaction="Watch", direction="AGAINST", kpi=False)
+    assert is_favorite(result([market("ncaaf", "SPREAD", [candidate, opponent],
+                                      game="Appalachian State @ East Carolina")]))
+
+
 def test_positive_secondary_moneyline_is_not_published_at_pickem():
     ml = market("nba", "MONEYLINE", pair_for(side("Away", "+105")))
     spread = market("nba", "SPREAD", pair_for(side("Away PK", "PK (-110)")), rank=2)
@@ -345,6 +377,20 @@ def test_tracking_persists_first_qualification_and_records_subsequent_snapshots(
     ledger = pd.read_csv(tmp_path / "red_fox_favorite_tracking.csv", dtype=str)
     assert len(ledger) == 2
     assert set(ledger.favorite_rule_version) == {CONFIG.version}
+
+
+def test_tracking_retains_full_favorite_handoff_candidate_after_board_disappearance(tmp_path: Path):
+    source = market("ncaaf", "SPREAD", pair_for(side("Florida Atlantic +4", "+4 (-108)", bets=20, money=19)),
+                    game_id="34603696", game="Navy @ Florida Atlantic")
+    source["kickoff_iso"] = "2026-09-12T23:35:00Z"
+    source["state_as_of_utc"] = "2026-09-12T23:11:03Z"
+    qualified = result([source])
+    update_favorite_tracking(qualified, tmp_path, as_of="2026-09-12T23:11:50Z")
+    update_favorite_tracking(pd.DataFrame(columns=qualified.columns), tmp_path, as_of="2026-09-12T23:21:43Z")
+    candidates = pd.read_csv(tmp_path / "red_fox_favorite_freeze_candidates.csv", dtype=str, keep_default_na=False)
+    assert len(candidates) == 1
+    assert candidates.iloc[0].favorite_side == "Florida Atlantic +4"
+    assert candidates.iloc[0].state_as_of_utc == "2026-09-12T23:11:03Z"
 
 
 def test_tracking_records_when_a_current_market_loses_favorite_status(tmp_path: Path):

@@ -410,7 +410,6 @@ def _refresh(coverage):
     board = apply_cross_market_integrity(board, history, as_of=newest_snapshot)
     board = apply_cross_market_split(board)
     board = apply_red_fox_favorites(board, as_of=newest_snapshot)
-    board = update_favorite_tracking(board, DATA, as_of=newest_snapshot)
     # Persist the source observation time used for each published market.  The
     # downstream freeze worker can then select/validate the final state by
     # source time rather than by the minute at which its timer happens to run.
@@ -429,6 +428,9 @@ def _refresh(coverage):
         ).map(lambda value: value.isoformat() if pd.notna(value) else "")
     else:
         board["state_as_of_utc"] = ""
+    # Tracking and the immutable kickoff handoff archive must receive the
+    # precise source timestamp attached above, not just publication wall time.
+    board = update_favorite_tracking(board, DATA, as_of=newest_snapshot)
     detail_count = write_event_detail_files(board, events, details_dir=DATA / "anomaly_event_details")
     # Replace each public file only after its complete export is ready for Nginx.
     for frame, name in ((board, "anomaly_board.csv"), (events, "anomaly_events.csv")):

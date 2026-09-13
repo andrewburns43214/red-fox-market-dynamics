@@ -37,6 +37,12 @@ class FavoriteConfig:
     resistance_min_bets: float = 80.0
     resistance_min_money: float = 60.0
     resistance_max_direction_changes: int = 4
+    football_favorite_max_bets: float = 40.0
+    football_favorite_max_money: float = 39.999
+    football_favorite_max_spread_money: float = 49.999
+    football_short_home_max_money: float = 35.0
+    football_short_home_max_spread_money: float = 40.0
+    football_favorite_max_direction_changes: int = 4
     freeze_disabled_sports: frozenset[str] = frozenset({"ufc"})
 
 
@@ -189,6 +195,7 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
         temporary = path.with_name("." + path.name + ".tmp")
         updated.to_csv(temporary, index=False)
         temporary.replace(path)
+    _update_freeze_candidates(current, Path(data_dir), at)
     return current
 
 
@@ -370,7 +377,48 @@ def _number_is_eligible(sport: str, market: str, value: float, side: dict, game_
     # points likewise uses its independently qualified spread as the sole
     # Favorite expression, preventing two correlated KPI results for one
     # thesis.  Pick'em does not manufacture a positive-spread expression.
-    return value <= 0 and spread_value <= 0
+    if value > 0 or spread_value > 0:
+        return False
+    if sport in {"nfl", "ncaaf", "cfb"} and not _football_favorite_moneyline_gate(
+        side, spread, spread_value
+    ):
+        return False
+    return True
+
+
+def _football_favorite_moneyline_gate(side: dict, spread: dict, spread_value: float) -> bool:
+    """Apply the stronger final-state standard to negative-money football Favorites.
+
+    This is deliberately scoped away from point-taking spread Favorites.  It
+    prevents a broadly supported, unstable home favorite such as Texas from
+    becoming a contrarian Favorite merely because its moneyline split is just
+    under the legacy 45 percent ceiling.
+    """
+    bets = _number(side.get("bets_pct"))
+    money = _number(side.get("money_pct"))
+    spread_money = _number(spread.get("money_pct"))
+    if bets is None or money is None or spread_money is None:
+        return False
+    if bets > CONFIG.football_favorite_max_bets or money > CONFIG.football_favorite_max_money:
+        return False
+    if spread_money > CONFIG.football_favorite_max_spread_money:
+        return False
+    if _truthy(side.get("return_toward_open")) or _truthy(spread.get("return_toward_open")):
+        return False
+    direction_changes = max(
+        int(_number(side.get("line_dir_changes")) or 0),
+        int(_number(spread.get("line_dir_changes")) or 0),
+    )
+    if direction_changes > CONFIG.football_favorite_max_direction_changes:
+        return False
+    # A true home favorite can be shorter than the key number three, but that
+    # weaker market position must be accompanied by exceptional split support.
+    if -3 < spread_value < 0:
+        if money > CONFIG.football_short_home_max_money:
+            return False
+        if spread_money > CONFIG.football_short_home_max_spread_money:
+            return False
+    return True
 
 
 def _corresponding_moneyline_state(spread_side: dict, game_rows: pd.DataFrame | None) -> str:
@@ -491,6 +539,56 @@ def _first_qualification_time(history: pd.DataFrame, key: tuple[str, str, str]) 
         mask &= history[column].astype(str).eq(value)
     qualified = history[mask & history["favorite_state"].eq("qualified")]
     return str(qualified.iloc[0]["recorded_at"]) if not qualified.empty else ""
+
+
+def _update_freeze_candidates(current: pd.DataFrame, data_dir: Path, at: str) -> None:
+    """Retain the last qualified full board row independently of board freshness.
+
+    The public pregame board is intentionally transient.  This archive is the
+    immutable handoff source used at kickoff when a qualified market vanishes
+    from one scrape or crosses the board freshness boundary.
+    """
+    path = data_dir / "red_fox_favorite_freeze_candidates.csv"
+    try:
+        archived = pd.read_csv(path, dtype=str, keep_default_na=False) if path.exists() and path.stat().st_size else pd.DataFrame()
+    except (OSError, pd.errors.EmptyDataError):
+        archived = pd.DataFrame()
+    if current.empty:
+        return
+    keys = ["sport", "game_id", "market_display"]
+    if not all(column in current.columns for column in keys):
+        return
+    current = current.copy()
+    if "state_as_of_utc" not in current:
+        current["state_as_of_utc"] = at
+    current["candidate_recorded_at_utc"] = at
+    if archived.empty:
+        favorite_values = current.get("red_fox_favorite", pd.Series("false", index=current.index))
+        updated = current[favorite_values.map(_truthy)].copy()
+    else:
+        updated = archived.copy()
+        for _, row in current.iterrows():
+            mask = pd.Series(True, index=updated.index)
+            for column in keys:
+                mask &= updated.get(column, pd.Series("", index=updated.index)).astype(str).eq(str(row.get(column, "")))
+            if _truthy(row.get("red_fox_favorite")):
+                updated = updated.loc[~mask].copy()
+                updated = pd.concat([updated, row.to_frame().T], ignore_index=True, sort=False)
+            elif mask.any():
+                # Kickoff providers can revise a start time after qualification.
+                # Keep the classification frozen while carrying the latest
+                # schedule identity into the eventual handoff.
+                for column in ("kickoff_iso", "kickoff_time", "kickoff_sort", "game"):
+                    value = str(row.get(column, "")).strip()
+                    if value:
+                        updated.loc[mask, column] = value
+    if updated.empty:
+        return
+    updated = updated.sort_values("candidate_recorded_at_utc", kind="mergesort").drop_duplicates(keys, keep="last")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name("." + path.name + ".tmp")
+    updated.to_csv(temporary, index=False)
+    temporary.replace(path)
 
 
 def _tracking_record(row: pd.Series, at: str, first_line: str) -> dict:

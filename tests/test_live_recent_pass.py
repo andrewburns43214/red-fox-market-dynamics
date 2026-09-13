@@ -172,6 +172,19 @@ def test_final_pregame_state_rejects_source_observed_after_kickoff():
     assert live.final_pregame_states(board, datetime(2026, 9, 8, 22, 42, tzinfo=timezone.utc)).empty
 
 
+def test_favorite_handoff_survives_absence_from_current_board():
+    candidate = pd.DataFrame([{
+        "sport": "ncaaf", "game_id": "34603696", "market_display": "SPREAD",
+        "kickoff_iso": "2026-09-12T23:35:00Z", "state_as_of_utc": "2026-09-12T23:11:03Z",
+        "supported_side": "Florida Atlantic +4", "red_fox_favorite": "true",
+        "favorite_side": "Florida Atlantic +4",
+    }])
+    frozen = live.favorite_handoff_states(candidate, datetime(2026, 9, 12, 23, 36, tzinfo=timezone.utc))
+    assert len(frozen) == 1
+    assert frozen.iloc[0].favorite_side == "Florida Atlantic +4"
+    assert frozen.iloc[0].freeze_method == "favorite_tracking_last_qualified_at_or_before_start"
+
+
 def test_one_minute_worker_expires_started_board_only_after_freeze_window(tmp_path, monkeypatch):
     board_path = tmp_path / "anomaly_board.csv"
     monkeypatch.setattr(live, "BOARD", board_path)
