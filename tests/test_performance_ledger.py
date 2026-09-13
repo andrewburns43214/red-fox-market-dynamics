@@ -250,6 +250,40 @@ def test_roi_and_clv_use_first_qualified_price_against_final_pregame_close(tmp_p
     assert float(audit["clv"]) == pytest.approx(4.5455)
 
 
+def test_spread_is_recorded_and_graded_at_first_confirmed_favorite_line(tmp_path):
+    row = frozen_row(
+        sport="ncaaf", game_id="line-lock", game="Team A @ Team B",
+        market_display="SPREAD", supported_side="Team A +3", favorite_side="Team A +3",
+        market_sides=json.dumps([
+            {"flagged_side": "Team A +3", "open_line": "+4 (-110)", "current_line": "+3 (-110)", "reaction": "Contrarian"},
+            {"flagged_side": "Team B -3", "open_line": "-4 (-110)", "current_line": "-3 (-110)"},
+        ]),
+    )
+    write(pd.DataFrame([row]), tmp_path / "live_recent.csv")
+    write(pd.DataFrame([{
+        "recorded_at": "2026-09-08T15:00:00Z", "sport": "ncaaf", "game_id": "line-lock",
+        "market_display": "SPREAD", "favorite_state": "qualified",
+        "favorite_pathway": "low_support_contrarian", "first_qualified_line": "+3.5 (-110)",
+    }]), tmp_path / "red_fox_favorite_tracking.csv")
+    write(pd.DataFrame([{
+        "game_id": "line-lock", "team1": "Team A", "team1_score": "20",
+        "team2": "Team B", "team2_score": "23",
+    }]), tmp_path / "final_scores_history.csv")
+
+    update_performance_ledger(tmp_path)
+    record = pd.read_csv(
+        tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False
+    ).iloc[0]
+
+    assert record["supported_side"] == "Team A +3"
+    assert record["side"] == "Team A +3.5"
+    assert record["decision_line"] == "+3.5"
+    assert record["final_pregame_line"] == "+3"
+    assert record["closing_line"] == "+3"
+    assert record["grade"] == "W"
+    assert record["clv"] == "0.5"
+
+
 def test_admin_exports_are_protected_and_engine_refresh_does_not_import_ledger():
     root = Path(__file__).resolve().parents[1]
     nginx = (root / "deploy" / "nginx-redfox.production.conf").read_text(encoding="utf-8")

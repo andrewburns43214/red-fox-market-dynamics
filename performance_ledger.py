@@ -153,6 +153,20 @@ def _line_and_price(market: str, side: str, display: object) -> tuple[str, str]:
     return (number.group(1) if number else "", price_match.group(1) if price_match else "")
 
 
+def _side_at_decision_line(side: object, market: str, decision_line: object) -> str:
+    """Return the immutable grading side at first confirmed qualification.
+
+    ``supported_side`` describes the final pregame market state and may move.
+    ``side`` is the official performance record, so spread grading must use the
+    line captured when the Favorite first became confirmed.
+    """
+    value = _text(side)
+    if _text(market).upper() != "SPREAD" or not _text(decision_line):
+        return value
+    team = re.sub(r"\s[+-]\d+(?:\.\d+)?(?:\s.*)?$", "", value).strip()
+    return f"{team} {_text(decision_line)}" if team else value
+
+
 def _number(value: object) -> float | None:
     match = re.search(r"[+-]?\d+(?:\.\d+)?", _text(value).replace(",", ""))
     try:
@@ -408,6 +422,7 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         if not tracked_decision and favorite:
             decision_line, decision_price = line, price
         decision_source = "first_qualified_capture" if tracked_decision else ("final_pregame_fallback" if favorite else "")
+        recorded_side = _side_at_decision_line(supported, market, decision_line)
         movement_start = _number(open_price if market == "MONEYLINE" else open_line)
         movement_end = _number(price if market == "MONEYLINE" else line)
         line_move = "" if movement_start is None or movement_end is None else str(round(movement_end - movement_start, 4))
@@ -432,7 +447,7 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
             "ledger_id": ledger_id,
             "event_id": _text(row.get("game_id")), "game": _text(row.get("game")),
             "sport": _text(row.get("sport")), "scheduled_start": _text(row.get("kickoff_iso")),
-            "market": market, "side": supported, "open_line": open_line, "open_price": open_price,
+            "market": market, "side": recorded_side, "open_line": open_line, "open_price": open_price,
             "decision_line": decision_line, "decision_price": decision_price,
             "decision_line_source": decision_source,
             "final_pregame_line": line,
@@ -696,6 +711,12 @@ def update_performance_ledger(
     if new_records:
         ledger = pd.concat([ledger, pd.DataFrame(new_records)], ignore_index=True, sort=False)
     if not ledger.empty:
+        # Migrate retained rows to the same immutable recording contract.  This
+        # does not change Supported Side or the final pregame/closing line.
+        ledger["side"] = ledger.apply(
+            lambda row: _side_at_decision_line(row.get("side"), row.get("market"), row.get("decision_line")),
+            axis=1,
+        )
         excluded = pd.Series(
             [
                 (_text(row.get("event_id")), _text(row.get("market")).upper())
