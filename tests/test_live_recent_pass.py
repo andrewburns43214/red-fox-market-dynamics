@@ -258,6 +258,46 @@ def test_favorite_handoff_keeps_a_final_requalification_after_an_earlier_falloff
     assert len(frozen) == 1
 
 
+def test_existing_live_recent_card_loses_badge_after_later_prekickoff_falloff():
+    existing = pd.DataFrame([{
+        "sport": "mlb", "game_id": "stale", "market_display": "MONEYLINE",
+        "kickoff_iso": "2026-09-13T17:40:00Z",
+        "freeze_method": "favorite_tracking_last_qualified_at_or_before_start",
+        "red_fox_favorite": "true", "favorite_side": "HOU Astros",
+        "favorite_state": "qualified", "favorite_originally_qualified": "true",
+    }])
+    tracking = pd.DataFrame([
+        {"sport": "mlb", "game_id": "stale", "market_display": "MONEYLINE", "recorded_at": "2026-09-13T11:31:00Z", "favorite_state": "qualified"},
+        {"sport": "mlb", "game_id": "stale", "market_display": "MONEYLINE", "recorded_at": "2026-09-13T11:41:00Z", "favorite_state": "not_qualified"},
+    ])
+
+    cleaned = live.suppress_stale_retained_favorites(existing, tracking).iloc[0]
+
+    assert cleaned.red_fox_favorite == "false"
+    assert cleaned.favorite_state == "not_qualified"
+    assert cleaned.favorite_originally_qualified == "true"
+    assert "later explicit pregame falloff" in cleaned.favorite_reason
+
+
+def test_existing_live_recent_card_keeps_badge_after_final_requalification():
+    existing = pd.DataFrame([{
+        "sport": "nfl", "game_id": "requalified", "market_display": "SPREAD",
+        "kickoff_iso": "2026-09-13T20:25:00Z",
+        "freeze_method": "favorite_tracking_last_qualified_at_or_before_start",
+        "red_fox_favorite": "true", "favorite_side": "MIA Dolphins +3",
+        "favorite_state": "qualified",
+    }])
+    tracking = pd.DataFrame([
+        {"sport": "nfl", "game_id": "requalified", "market_display": "SPREAD", "recorded_at": "2026-09-13T12:55:00Z", "favorite_state": "not_qualified"},
+        {"sport": "nfl", "game_id": "requalified", "market_display": "SPREAD", "recorded_at": "2026-09-13T20:01:00Z", "favorite_state": "qualified"},
+    ])
+
+    cleaned = live.suppress_stale_retained_favorites(existing, tracking).iloc[0]
+
+    assert cleaned.red_fox_favorite == "true"
+    assert cleaned.favorite_state == "qualified"
+
+
 def test_late_invalidated_favorite_is_retained_for_audit_but_suppressed_at_handoff():
     candidate = pd.DataFrame([{
         "sport": "nfl", "game_id": "late-1", "market_display": "SPREAD",

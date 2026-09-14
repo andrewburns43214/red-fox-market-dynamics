@@ -406,6 +406,58 @@ def favorite_handoff_states(
     return frozen
 
 
+def suppress_stale_retained_favorites(
+    frame: pd.DataFrame, tracking: pd.DataFrame | None
+) -> pd.DataFrame:
+    """Remove Favorite badges already frozen before a later pregame falloff.
+
+    ``live_recent.csv`` is intentionally retained across worker runs.  Without
+    this reconciliation, fixing the handoff selector prevents new bad freezes
+    but leaves an older stale Favorite badge customer-visible until retention
+    expires.
+    """
+    if frame.empty or tracking is None or tracking.empty:
+        return frame
+    required = {"sport", "game_id", "market_display", "kickoff_iso"}
+    if not required.issubset(frame.columns) or "recorded_at" not in tracking:
+        return frame
+
+    result = frame.copy()
+    favorite = result.get(
+        "red_fox_favorite", pd.Series("false", index=result.index)
+    ).astype(str).str.lower().isin({"1", "true", "yes"})
+    archived_handoff = result.get(
+        "freeze_method", pd.Series("", index=result.index)
+    ).astype(str).eq("favorite_tracking_last_qualified_at_or_before_start")
+    candidates = result.index[favorite & archived_handoff]
+    if candidates.empty:
+        return result
+
+    history = tracking.copy()
+    history["_recorded_at"] = utc_series(history["recorded_at"], history.index)
+    for index in candidates:
+        row = result.loc[index]
+        kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
+        scoped = history
+        for column in ("sport", "game_id", "market_display"):
+            scoped = scoped[
+                scoped.get(column, pd.Series("", index=scoped.index)).astype(str)
+                .eq(str(row.get(column, "")))
+            ]
+        if pd.notna(kickoff):
+            scoped = scoped[scoped["_recorded_at"].notna() & (scoped["_recorded_at"] <= kickoff)]
+        scoped = scoped.sort_values("_recorded_at", kind="mergesort")
+        if scoped.empty or str(scoped.iloc[-1].get("favorite_state", "")) == "qualified":
+            continue
+        result.at[index, "red_fox_favorite"] = "false"
+        result.at[index, "favorite_state"] = "not_qualified"
+        result.at[index, "favorite_reason"] = (
+            "Favorite removed: a later explicit pregame falloff superseded the "
+            "archived qualified snapshot."
+        )
+    return result
+
+
 def apply_favorite_exclusions(frame: pd.DataFrame) -> pd.DataFrame:
     """Prevent audited visibility failures from re-entering frozen displays."""
     if frame.empty or not all(column in frame for column in ("sport", "game_id", "market_display")):
@@ -577,7 +629,8 @@ def write_score_coverage(live: pd.DataFrame, now: datetime) -> dict:
 
 def main(scores_only: bool = False) -> None:
     now = datetime.now(timezone.utc)
-    existing = read_csv_or_empty(OUT)
+    tracking = read_csv_or_empty(DATA / "red_fox_favorite_tracking.csv")
+    existing = suppress_stale_retained_favorites(read_csv_or_empty(OUT), tracking)
     # The one-minute worker also reads the already-published pregame board so
     # a record is frozen at kickoff instead of waiting for the next snapshot run.
     previous = read_csv_or_empty(BOARD)
@@ -590,7 +643,6 @@ def main(scores_only: bool = False) -> None:
             rows.append(started)
     candidates = read_csv_or_empty(FAVORITE_CANDIDATES)
     if not candidates.empty:
-        tracking = read_csv_or_empty(DATA / "red_fox_favorite_tracking.csv")
         favorite_started = favorite_handoff_states(candidates, now, tracking)
         if not favorite_started.empty:
             rows.append(favorite_started)
@@ -609,6 +661,7 @@ def main(scores_only: bool = False) -> None:
             return
         rows.append(recovered)
     live = apply_favorite_exclusions(ensure_output_columns(pd.concat(rows, ignore_index=True, sort=False)))
+    live = suppress_stale_retained_favorites(live, tracking)
     # Compare in one timezone-free representation; CSVs can contain a mix of
     # offset-aware and legacy naive kickoff values.
     kickoff_values = live["kickoff_iso"] if "kickoff_iso" in live.columns else pd.Series(pd.NaT, index=live.index)
