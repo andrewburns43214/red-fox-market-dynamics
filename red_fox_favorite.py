@@ -395,7 +395,9 @@ def _apply_visibility_lock(
             if key in current_keys:
                 continue
             identity = (key[0].lower(), key[1], key[2].upper())
-            if identity in VISIBILITY_INVALIDATED_FAVORITES or identity[0] not in CONFIG.visibility_lock_sports:
+            if (identity in VISIBILITY_INVALIDATED_FAVORITES
+                    or _manual_favorite_exclusion(row)
+                    or identity[0] not in CONFIG.visibility_lock_sports):
                 continue
             kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
             if pd.isna(kickoff):
@@ -439,6 +441,10 @@ def _apply_visibility_lock(
         identity = (key[0].lower(), key[1], key[2].upper())
         if identity in VISIBILITY_INVALIDATED_FAVORITES:
             _clear_favorite(result, index, "Favorite qualification withheld: audited final-hour visibility failure.")
+            continue
+        manual_exclusion = _manual_favorite_exclusion(row)
+        if manual_exclusion:
+            _clear_favorite(result, index, manual_exclusion)
             continue
         if identity[0] not in CONFIG.visibility_lock_sports:
             continue

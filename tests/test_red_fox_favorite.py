@@ -74,6 +74,24 @@ def test_seahawks_cardinals_injury_override_is_event_scoped():
     assert is_favorite(result([later]))
 
 
+def test_injury_override_cannot_be_restored_by_visibility_lock(tmp_path: Path):
+    candidate = side("Arizona Cardinals +3.5", "+3.5 (-110)")
+    original = market("nfl", "SPREAD", pair_for(candidate), game_id="34118115")
+    original["kickoff_iso"] = "2026-09-20T20:25:00Z"
+    for captured in ("2026-09-17T02:00:00Z", "2026-09-17T02:10:00Z"):
+        update_favorite_tracking(
+            apply_red_fox_favorites(pd.DataFrame([original]), as_of=captured),
+            tmp_path, as_of=captured,
+        )
+    corrected = dict(original, game="SEA Seahawks @ ARI Cardinals")
+    raw = apply_red_fox_favorites(pd.DataFrame([corrected]), as_of="2026-09-17T02:20:00Z")
+    assert raw.iloc[0].red_fox_favorite == "false"
+    published = update_favorite_tracking(raw, tmp_path, as_of="2026-09-17T02:20:00Z")
+    assert published.iloc[0].red_fox_favorite == "false"
+    assert published.iloc[0].supported_side == "Arizona Cardinals +3.5"
+    assert "Darnold injury" in published.iloc[0].favorite_reason
+
+
 @pytest.mark.parametrize("name,current", [("Dog +1", "+1 (-110)"), ("Dog +8", "+8 (-110)"),
                                             ("Small favorite -2.5", "-2.5 (-110)")])
 def test_spread_contrarian_paths_and_boundaries_qualify(name, current):
