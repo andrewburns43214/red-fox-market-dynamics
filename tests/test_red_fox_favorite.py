@@ -61,6 +61,19 @@ def is_favorite(frame, index=0):
     return frame.iloc[index].red_fox_favorite == "true"
 
 
+def test_seahawks_cardinals_injury_override_is_event_scoped():
+    candidate = side("Arizona Cardinals +4.5", "+4.5 (-110)")
+    game = market("nfl", "SPREAD", pair_for(candidate), game="Seattle Seahawks @ Arizona Cardinals")
+    game["kickoff_iso"] = "2026-09-20T20:00:00Z"
+    excluded = result([game])
+    assert not is_favorite(excluded)
+    assert "Darnold injury" in excluded.iloc[0].favorite_reason
+    assert excluded.iloc[0].supported_side == "Arizona Cardinals +4.5"
+
+    later = dict(game, kickoff_iso="2026-11-01T20:00:00Z")
+    assert is_favorite(result([later]))
+
+
 @pytest.mark.parametrize("name,current", [("Dog +1", "+1 (-110)"), ("Dog +8", "+8 (-110)"),
                                             ("Small favorite -2.5", "-2.5 (-110)")])
 def test_spread_contrarian_paths_and_boundaries_qualify(name, current):

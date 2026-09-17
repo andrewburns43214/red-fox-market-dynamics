@@ -64,6 +64,23 @@ CONFIG = FavoriteConfig()
 VISIBILITY_INVALIDATED_FAVORITES = frozenset({
     ("ncaaf", "34603681", "SPREAD"),  # Jacksonville State @ Ohio, 2026-09-12
 })
+
+
+def _manual_favorite_exclusion(row: pd.Series) -> str:
+    """Event-scoped editorial exclusions from Favorite qualification."""
+    game = str(row.get("game", "")).lower()
+    kickoff = pd.to_datetime(
+        row.get("kickoff_iso") or row.get("kickoff_sort"), errors="coerce", utc=True,
+    )
+    if (
+        str(row.get("sport", "")).lower() == "nfl"
+        and "seahawks" in game
+        and "cardinals" in game
+        and pd.notna(kickoff)
+        and kickoff.date().isoformat() == "2026-09-20"
+    ):
+        return "Favorite withheld: Seattle QB Sam Darnold injury affected this game's line movement."
+    return ""
 FAVORITE_COLUMNS = [
     "red_fox_favorite", "favorite_side", "favorite_pathway", "favorite_rule_version",
     "favorite_first_qualified_at", "favorite_final_qualified_at", "favorite_state",
@@ -137,6 +154,10 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
             result.at[index, "favorite_reason"] = (
                 "Favorite qualification withheld: audited final-hour visibility failure."
             )
+            continue
+        manual_exclusion = _manual_favorite_exclusion(row)
+        if manual_exclusion:
+            result.at[index, "favorite_reason"] = manual_exclusion
             continue
         decision = _qualify_market(row, groups.get((str(row.get("sport", "")).lower(), str(row.get("game_id", "")))))
         if not decision:
