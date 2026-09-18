@@ -3,7 +3,6 @@
 import json
 import os
 from pathlib import Path
-import time
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -20,22 +19,6 @@ from red_fox_favorite import FAVORITE_COLUMNS, REVIEW_BOARD_COLUMNS, apply_red_f
 
 
 DATA = Path(os.environ.get("REDFOX_DATA_DIR", "data"))
-
-
-def _temporary_publication_probe(stage, started, **counts):
-    """Temporary aggregate-only production timing marker for the MLB outage."""
-    if Path.cwd() != Path("/opt/red-fox-market-dynamics"):
-        return
-    try:
-        target = Path("site/mlb-refresh-stage-20260918.json")
-        temporary = target.with_suffix(".tmp")
-        temporary.write_text(json.dumps({
-            "stage": stage, "elapsed_seconds": round(time.monotonic() - started, 2),
-            "at": pd.Timestamp.now(tz="UTC").isoformat(), **counts,
-        }), encoding="utf-8")
-        temporary.replace(target)
-    except OSError:
-        pass
 
 
 PUBLIC_TIMEZONE = ZoneInfo("America/New_York")
@@ -388,21 +371,16 @@ def main():
 
 
 def _refresh(coverage):
-    started = time.monotonic()
-    _temporary_publication_probe("start", started)
     DATA.mkdir(parents=True, exist_ok=True)
     # Capture any just-started games from the prior pregame export before this
     # run replaces it. The separate file is the only source for Live & Recent.
     if DATA == Path("data"):
         build_live_recent()
-    _temporary_publication_probe("live_recent", started)
     snapshot_path = DATA / "snapshots.csv"
     snapshots = load_current_snapshots(snapshot_path)
-    _temporary_publication_probe("snapshots_read", started, snapshot_rows=len(snapshots))
 
     snapshots["market_display"] = markets_for(snapshots)
     coverage.seed(snapshots)
-    _temporary_publication_probe("coverage_seed", started)
     supported = snapshots[snapshots["market_display"].isin(["MONEYLINE", "SPREAD", "TOTAL"])].copy()
     coverage.stage(snapshots, supported, "NORMALIZATION_FAILED")
     snapshots = coverage.validated(supported)
@@ -449,7 +427,6 @@ def _refresh(coverage):
     coverage.stage(dashboard, in_window, "OUTSIDE_PUBLICATION_WINDOW")
     dashboard = in_window
     print(f"[ok] kept {len(dashboard)}/{before_window} markets after rolling football publication window")
-    _temporary_publication_probe("publication_gates", started, side_rows=len(dashboard))
 
     # Expand lifetime paths only for markets that survived every existing
     # publication gate.  Previously the engine normalized and evaluated the
@@ -457,7 +434,6 @@ def _refresh(coverage):
     # no gate or retained observation; it only avoids dead work.
     history_keys = dashboard[["sport", "game_id", "market_display"]].drop_duplicates()
     history = load_market_history(snapshot_path, history_keys)
-    _temporary_publication_probe("history_join", started, history_rows=len(history))
     history["side_key"] = [
         normalize_side_key(sport, market, side)
         for sport, market, side in zip(history["sport"], history["market_display"], history["side"])
@@ -468,20 +444,17 @@ def _refresh(coverage):
     # wall clock. This keeps Late deterministic and prevents historical data
     # or a delayed refresh from being mislabeled as a closing-window move.
     board, events = build_anomaly_outputs(dashboard, history, l2, as_of=newest_snapshot.to_pydatetime())
-    _temporary_publication_probe("anomaly_evaluation", started, board_rows=len(board))
     # The evaluator's existing history requirement is unchanged. Every input
     # market omitted by it receives an explicit terminal state.
     coverage.stage(dashboard, board, "INSUFFICIENT_HISTORY")
     from publication_coverage import keys as coverage_keys
     coverage.gate_ready = coverage_keys(board)
     action_count = update_action_ledger(board, DATA, newest_snapshot.to_pydatetime())
-    _temporary_publication_probe("action_ledger", started)
     board = apply_recorded_signals(board, DATA)
     board = select_market_leaders(board)
     board = apply_cross_market_integrity(board, history, as_of=newest_snapshot)
     board = apply_cross_market_split(board)
     board = apply_red_fox_favorites(board, as_of=newest_snapshot)
-    _temporary_publication_probe("favorite_rules", started, board_rows=len(board))
     # Persist the source observation time used for each published market.  The
     # downstream freeze worker can then select/validate the final state by
     # source time rather than by the minute at which its timer happens to run.
@@ -503,9 +476,7 @@ def _refresh(coverage):
     # Tracking and the immutable kickoff handoff archive must receive the
     # precise source timestamp attached above, not just publication wall time.
     board = update_favorite_tracking(board, DATA, as_of=newest_snapshot)
-    _temporary_publication_probe("favorite_tracking", started)
     detail_count = write_event_detail_files(board, events, details_dir=DATA / "anomaly_event_details")
-    _temporary_publication_probe("event_details", started)
     # Replace each public file only after its complete export is ready for Nginx.
     for frame, name in ((board, "anomaly_board.csv"), (events, "anomaly_events.csv")):
         temporary = DATA / f".{name}.tmp"
@@ -516,7 +487,6 @@ def _refresh(coverage):
         output.to_csv(temporary, index=False)
         temporary.replace(DATA / name)
     coverage_summary = coverage.publish(board, DATA / "anomaly_board.csv", filter_publication_eligible_markets)
-    _temporary_publication_probe("coverage_publish", started)
     print("[coverage] " + json.dumps(coverage_summary["sports"], sort_keys=True))
     # ``coverage.now`` is the deterministic evaluation clock captured at run
     # start.  Customer-facing publish age must record when the completed files
