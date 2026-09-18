@@ -94,6 +94,9 @@ fi
 
 # publish (nginx serves directly from project dir)
 
+# Temporary aggregate-only MLB visibility probe; no market or customer data.
+"$PY" ops/mlb_status_probe.py || true
+
 # Coverage health is independent of ranking/scoring and never changes the board.
 if ! "$PY" coverage_monitor.py >> "$LOG" 2>&1; then
   echo "--- $(date) COVERAGE ALERT: inspect publication_coverage.json ---" >> "$LOG"
