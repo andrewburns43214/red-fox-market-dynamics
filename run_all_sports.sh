@@ -21,9 +21,6 @@ cd /opt/red-fox-market-dynamics
 LOG=/var/log/redfox_update.log
 PY="/opt/red-fox-market-dynamics/.venv/bin/python"
 
-# Remove the temporary aggregate probes used to diagnose the MLB outage.
-rm -f site/mlb-status-20260918.json site/mlb-refresh-stage-20260918.json
-
 echo "===== $(date) RUN START =====" >> "$LOG"
 
 # Auto-detect active sports by month+day (skips preseason)
