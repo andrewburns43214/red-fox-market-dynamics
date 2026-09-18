@@ -21,6 +21,9 @@ cd /opt/red-fox-market-dynamics
 LOG=/var/log/redfox_update.log
 PY="/opt/red-fox-market-dynamics/.venv/bin/python"
 
+# Record the previous publication state as soon as a scheduled run starts.
+"$PY" ops/mlb_status_probe.py || true
+
 echo "===== $(date) RUN START =====" >> "$LOG"
 
 # Auto-detect active sports by month+day (skips preseason)
