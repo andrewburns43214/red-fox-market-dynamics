@@ -82,7 +82,7 @@ echo "--- $(date) refresh anomaly board ---" >> "$LOG"
 # Production reached the former 120-second watchdog while publishing a valid
 # high-volume two-sided event set.  Keep the watchdog (and atomic publisher),
 # but allow measured production headroom.  Operators may lower it explicitly.
-REFRESH_TIMEOUT_SECONDS="${REDFOX_REFRESH_TIMEOUT_SECONDS:-300}"
+REFRESH_TIMEOUT_SECONDS="${REDFOX_REFRESH_TIMEOUT_SECONDS:-420}"
 if timeout "$REFRESH_TIMEOUT_SECONDS" "$PY" refresh_anomaly_board.py >> "$LOG" 2>&1; then
   # The public board consumes anomaly_board.csv directly. Only mark the engine
   # fresh after its complete live export is atomically available to Nginx.
