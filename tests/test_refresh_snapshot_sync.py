@@ -8,10 +8,31 @@ from refresh_anomaly_board import (
     filter_fresh_market_rows,
     filter_publication_eligible_markets,
     latest_synchronized_market_rows,
+    load_current_snapshots,
+    load_market_history,
     write_board_freshness,
     market_for,
     markets_for,
 )
+
+
+def test_current_window_is_bounded_while_eligible_market_keeps_lifetime_history(tmp_path):
+    path = tmp_path / "snapshots.csv"
+    rows = [
+        {"sport": "mlb", "game_id": "today", "side": "Home", "current_line": "Home @ -120", "timestamp": "2026-09-18T12:00:00Z"},
+        {"sport": "mlb", "game_id": "old", "side": "Home", "current_line": "Home @ -120", "timestamp": "2026-09-18T12:00:00Z"},
+        {"sport": "mlb", "game_id": "today", "side": "Home", "current_line": "Home @ -125", "timestamp": "2026-09-18T20:00:00Z"},
+        {"sport": "mlb", "game_id": "today", "side": "Away", "current_line": "Away @ +105", "timestamp": "2026-09-18T20:00:00Z"},
+    ]
+    pd.DataFrame(rows).to_csv(path, index=False)
+    current = load_current_snapshots(path)
+    assert len(current) == 2
+    assert set(current.game_id) == {"today"}
+    keys = pd.DataFrame([{"sport": "mlb", "game_id": "today", "market_display": "MONEYLINE"}])
+    history = load_market_history(path, keys, chunksize=2)
+    assert len(history) == 3
+    assert set(history.game_id) == {"today"}
+    assert set(history.timestamp) == {"2026-09-18T12:00:00Z", "2026-09-18T20:00:00Z"}
 
 
 def test_refresh_watchdog_keeps_atomic_failure_protection_with_measured_headroom():

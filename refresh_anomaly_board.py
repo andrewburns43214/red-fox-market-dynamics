@@ -272,6 +272,45 @@ def markets_for(frame):
     return result
 
 
+def load_current_snapshots(path, window_hours=2):
+    """Keep the current capture window before normalizing the lifetime archive."""
+    if not path.exists():
+        return pd.DataFrame(columns=[
+            "sport", "game_id", "game", "side", "current_line", "open_line",
+            "bets_pct", "money_pct", "dk_start_iso", "timestamp",
+        ])
+    rows = pd.read_csv(path, dtype=str, keep_default_na=False)
+    captured = pd.to_datetime(rows["timestamp"], utc=True, errors="coerce")
+    newest = captured.max()
+    if pd.isna(newest):
+        return rows
+    # Retain malformed timestamps for the existing explicit coverage gate.
+    recent = captured.isna() | (captured >= newest - pd.Timedelta(hours=window_hours))
+    return rows.loc[recent].copy()
+
+
+def load_market_history(path, market_keys, chunksize=100_000):
+    """Read lifetime paths only for markets that survived publication gates."""
+    if not path.exists():
+        return pd.DataFrame(columns=["sport", "game_id", "market_display", "side", "timestamp"])
+    empty = pd.read_csv(path, dtype=str, keep_default_na=False, nrows=0)
+    empty["market_display"] = pd.Series(dtype=str)
+    if market_keys.empty:
+        return empty
+    games = market_keys[["sport", "game_id"]].drop_duplicates()
+    wanted = pd.MultiIndex.from_frame(games)
+    selected = []
+    for chunk in pd.read_csv(path, dtype=str, keep_default_na=False, chunksize=chunksize):
+        matches = pd.MultiIndex.from_frame(chunk[["sport", "game_id"]]).isin(wanted)
+        if matches.any():
+            selected.append(chunk.loc[matches].copy())
+    if not selected:
+        return empty
+    history = pd.concat(selected, ignore_index=True)
+    history["market_display"] = markets_for(history)
+    return history.merge(market_keys, on=["sport", "game_id", "market_display"], how="inner")
+
+
 def latest_synchronized_market_rows(active):
     """Return only the latest complete, same-timestamp two-side market states.
 
@@ -358,8 +397,7 @@ def _refresh(coverage):
         build_live_recent()
     _temporary_publication_probe("live_recent", started)
     snapshot_path = DATA / "snapshots.csv"
-    snapshots = pd.read_csv(snapshot_path, dtype=str, keep_default_na=False) if snapshot_path.exists() else pd.DataFrame(
-        columns=["sport", "game_id", "game", "side", "current_line", "open_line", "bets_pct", "money_pct", "dk_start_iso", "timestamp"])
+    snapshots = load_current_snapshots(snapshot_path)
     _temporary_publication_probe("snapshots_read", started, snapshot_rows=len(snapshots))
 
     snapshots["market_display"] = markets_for(snapshots)
@@ -418,7 +456,7 @@ def _refresh(coverage):
     # full history of games it discarded immediately afterward.  This changes
     # no gate or retained observation; it only avoids dead work.
     history_keys = dashboard[["sport", "game_id", "market_display"]].drop_duplicates()
-    history = snapshots.merge(history_keys, on=["sport", "game_id", "market_display"], how="inner")
+    history = load_market_history(snapshot_path, history_keys)
     _temporary_publication_probe("history_join", started, history_rows=len(history))
     history["side_key"] = [
         normalize_side_key(sport, market, side)
