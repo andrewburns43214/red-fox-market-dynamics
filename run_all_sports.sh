@@ -64,8 +64,12 @@ if in_season 1001 415; then SPORTS="ncaab $SPORTS"; fi
 echo "--- active sports: $SPORTS ---" >> "$LOG"
 SNAPSHOT_TIMEOUT_SECONDS="${REDFOX_SNAPSHOT_TIMEOUT_SECONDS:-120}"
 for SPORT in $SPORTS; do
+  SPORT_TIMEOUT_SECONDS="$SNAPSHOT_TIMEOUT_SECONDS"
+  if [ "$SPORT" = "mlb" ]; then
+    SPORT_TIMEOUT_SECONDS="${REDFOX_MLB_SNAPSHOT_TIMEOUT_SECONDS:-180}"
+  fi
   echo "--- $(date) snapshot --sport $SPORT ---" >> "$LOG"
-  if timeout "$SNAPSHOT_TIMEOUT_SECONDS" "$PY" main.py snapshot --sport "$SPORT" >> "$LOG" 2>&1;
+  if timeout "$SPORT_TIMEOUT_SECONDS" "$PY" main.py snapshot --sport "$SPORT" >> "$LOG" 2>&1;
   then
   echo "--- $(date) snapshot DONE --sport $SPORT ---" >> "$LOG"
   else

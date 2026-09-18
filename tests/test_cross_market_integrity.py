@@ -108,6 +108,13 @@ def test_observations_more_than_fifteen_minutes_apart_do_not_pair():
     assert set(result.cross_market_mismatch) == {"false"}
 
 
+def test_nearby_asynchronous_captures_still_pair():
+    history = history_rows(times=(0, 5, 10), spread_a=3, ml_a=-135, ml_b=115, ml_start=1)
+    result = apply_cross_market_integrity(board_pair(3, -135), history, as_of="2026-09-07T12:11:00Z")
+    assert result.iloc[0].cross_market_mismatch == "true"
+    assert result.iloc[0].cross_market_observation_count == "3"
+
+
 def test_single_conflict_does_not_confirm_but_three_observations_do():
     single = apply_cross_market_integrity(board_pair(3, -135), history_rows(times=(0,), spread_a=3, ml_a=-135, ml_b=115), as_of="2026-09-07T12:00:00Z")
     three = apply_cross_market_integrity(board_pair(3, -135), history_rows(times=(0, 5, 10), spread_a=3, ml_a=-135, ml_b=115), as_of="2026-09-07T12:10:00Z")

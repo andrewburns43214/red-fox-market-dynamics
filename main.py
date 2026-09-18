@@ -455,7 +455,7 @@ def _norm_game_key(s: str) -> str:
 
     return s
 
-def _espn_kickoff_map_date_range(scoreboard_url_base: str, games: list[str], days: int = 5) -> dict[str, str]:
+def _espn_kickoff_map_date_range(scoreboard_url_base: str, games: list[str], days: int = 5, dates: list[str] | None = None) -> dict[str, str]:
     """
     Returns DK-game-keyed kickoff ISO map by querying ESPN scoreboard across a date range.
     Robust matching across NFL/NBA/NHL/CFB/CBB/MLB.
@@ -465,8 +465,8 @@ def _espn_kickoff_map_date_range(scoreboard_url_base: str, games: list[str], day
     sport = next((key for key, value in ESPN_SCOREBOARD_BASE.items() if value == scoreboard_url_base), "")
     events = []
     start = datetime.now() - timedelta(days=2)
-    for i in range(days + 3):
-        ymd = (start + timedelta(days=i)).strftime("%Y%m%d")
+    requested_dates = dates if dates else [(start + timedelta(days=i)).strftime("%Y%m%d") for i in range(days + 3)]
+    for ymd in requested_dates:
         url = f"{scoreboard_url_base}?dates={ymd}{_espn_scoreboard_extra_params(scoreboard_url_base)}"
         events.extend(_fetch_espn_scoreboard_json(url).get("events", []))
     return match_games(games, events, sport)
@@ -474,7 +474,7 @@ def _espn_kickoff_map_date_range(scoreboard_url_base: str, games: list[str], day
 
 import re
 
-def get_espn_kickoff_map(sport: str, games: list[str]) -> dict[str, str]:
+def get_espn_kickoff_map(sport: str, games: list[str], dates: list[str] | None = None) -> dict[str, str]:
     """
     Generic ESPN kickoff resolver.
     Returns DK-game-keyed kickoff ISO map.
@@ -487,7 +487,7 @@ def get_espn_kickoff_map(sport: str, games: list[str]) -> dict[str, str]:
 
     try:
         # DK pages can surface upcoming slates well beyond one week, especially NFL.
-        km = _espn_kickoff_map_date_range(base, games, days=21)
+        km = _espn_kickoff_map_date_range(base, games, days=21, dates=dates)
         return km if isinstance(km, dict) else {}
 
     except Exception as e:
@@ -1849,7 +1849,19 @@ def validate_snapshot_rows(rows: list[dict], sport: str) -> tuple[list[dict], st
     if sport_key in ESPN_SCOREBOARD_BASE:
         from game_identity import game_identity, team_identity
         try:
-            kickoff_map = get_espn_kickoff_map(sport_key, games)
+            if sport_key == "mlb":
+                # The DK MLB page carries the actual kickoff for every game.
+                # Query those dates with a one-day boundary margin instead of
+                # 24 ESPN scoreboards on every five-minute capture.
+                game_dates = set()
+                for row in rows:
+                    kickoff = pd.to_datetime(row.get("dk_start_iso", ""), errors="coerce", utc=True)
+                    if pd.notna(kickoff):
+                        day = kickoff.tz_convert("America/New_York").normalize()
+                        game_dates.update((day + pd.Timedelta(days=offset)).strftime("%Y%m%d") for offset in (-1, 0, 1))
+                kickoff_map = get_espn_kickoff_map(sport_key, games, sorted(game_dates) or None)
+            else:
+                kickoff_map = get_espn_kickoff_map(sport_key, games)
             states = getattr(kickoff_map, "states", {})
         except Exception:
             kickoff_map, states = {}, {g: "ESPN_UNAVAILABLE" for g in games}

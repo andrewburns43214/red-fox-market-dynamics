@@ -32,6 +32,21 @@ def test_exact_extreme_moneyline_patterns_preserve_both_sides(favorite, price, o
     assert latest_synchronized_market_rows(pd.DataFrame(rows[:1])).empty
 
 
+def test_mlb_snapshot_validates_only_the_source_kickoff_dates(monkeypatch):
+    captured = {}
+    def kickoff_map(sport, games, dates):
+        captured.update(sport=sport, games=games, dates=dates)
+        return {}
+    monkeypatch.setattr("main.get_espn_kickoff_map", kickoff_map)
+    rows = [dict(game="NY Yankees @ BOS Red Sox", game_id="1", side=side,
+                 current=f"{side} @ {odds}", dk_start_iso="2026-09-19T00:10:00Z",
+                 _source_league_verified=True)
+            for side, odds in (("NY Yankees", "-120"), ("BOS Red Sox", "+105"))]
+    validate_snapshot_rows(rows, "mlb")
+    assert captured["sport"] == "mlb"
+    assert captured["dates"] == ["20260917", "20260918", "20260919"]
+
+
 @pytest.mark.parametrize("odds", ["0", "-99", "+99999999999", "-100000oops", "-100000.1"])
 def test_extreme_price_fix_does_not_accept_malformed_odds(odds):
     assert infer_market_type("Utah", f"Utah @ {odds}") == ""

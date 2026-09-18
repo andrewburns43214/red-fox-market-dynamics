@@ -8,6 +8,7 @@ about which team is favored and that disagreement is persistent.
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 import json
 import re
@@ -85,7 +86,7 @@ def apply_cross_market_integrity(board: pd.DataFrame, history: pd.DataFrame, as_
         if not _board_pair_reliable(game_rows):
             continue
         game_history = history_groups.get((str(sport).lower(), str(game_id)), prepared.iloc[0:0])
-        evaluation = evaluate_cross_market_history(game_history, as_of=captured_at)
+        evaluation = evaluate_cross_market_history(game_history, as_of=captured_at, _prepared=True)
         pair_mask = result.index.isin(indexes) & result["market_display"].astype(str).str.upper().isin(["SPREAD", "MONEYLINE"])
         if evaluation["opener_verified"]:
             result.loc[pair_mask, "cross_market_opener_mismatch_verified"] = "true"
@@ -116,7 +117,7 @@ def apply_cross_market_integrity(board: pd.DataFrame, history: pd.DataFrame, as_
     return result
 
 
-def evaluate_cross_market_history(history: pd.DataFrame, as_of=None) -> dict:
+def evaluate_cross_market_history(history: pd.DataFrame, as_of=None, _prepared=False) -> dict:
     """Return a deterministic current and opener integrity evaluation."""
     empty = {
         "confirmed": False, "explanation": "", "team": "", "probability": None,
@@ -127,7 +128,7 @@ def evaluate_cross_market_history(history: pd.DataFrame, as_of=None) -> dict:
     }
     if history is None or history.empty:
         return empty
-    prepared = _prepare_history(history)
+    prepared = history if _prepared else _prepare_history(history)
     spread = _market_observations(prepared, "SPREAD")
     moneyline = _market_observations(prepared, "MONEYLINE")
     pairs = _pair_observations(spread, moneyline)
@@ -225,10 +226,13 @@ def _pair_observations(spread: list[dict], moneyline: list[dict]) -> list[dict]:
     pairs, unused = [], set(range(len(moneyline)))
     exact = defaultdict(deque)
     by_teams = defaultdict(list)
+    by_team_times = defaultdict(list)
     for index, observation in enumerate(moneyline):
         teams = tuple(sorted(observation["current"]))
         exact[(teams, observation["time"])].append(index)
         by_teams[teams].append(index)
+        by_team_times[teams].append(observation["time"])
+    window = pd.Timedelta(minutes=CONFIG.max_pair_minutes)
     for spread_observation in spread:
         teams = tuple(sorted(spread_observation["current"]))
         queue = exact.get((teams, spread_observation["time"]))
@@ -237,11 +241,12 @@ def _pair_observations(spread: list[dict], moneyline: list[dict]) -> list[dict]:
         if queue:
             index = queue.popleft()
         else:
+            times = by_team_times.get(teams, ())
+            first = bisect_left(times, spread_observation["time"] - window)
+            last = bisect_right(times, spread_observation["time"] + window)
             candidates = [
-                candidate for candidate in by_teams.get(teams, ())
+                candidate for candidate in by_teams.get(teams, ())[first:last]
                 if candidate in unused
-                and abs(spread_observation["time"] - moneyline[candidate]["time"])
-                <= pd.Timedelta(minutes=CONFIG.max_pair_minutes)
             ]
             if not candidates:
                 continue

@@ -59,7 +59,8 @@ def test_customer_freshness_threshold_includes_the_scheduled_processing_window()
 def test_snapshot_watchdog_is_bounded_and_runner_does_not_stamp_dk_wall_clock():
     script = (Path(__file__).resolve().parents[1] / "run_all_sports.sh").read_text(encoding="utf-8")
     assert 'SNAPSHOT_TIMEOUT_SECONDS="${REDFOX_SNAPSHOT_TIMEOUT_SECONDS:-120}"' in script
-    assert 'timeout "$SNAPSHOT_TIMEOUT_SECONDS" "$PY" main.py snapshot' in script
+    assert 'timeout "$SPORT_TIMEOUT_SECONDS" "$PY" main.py snapshot' in script
+    assert 'REDFOX_MLB_SNAPSHOT_TIMEOUT_SECONDS:-180' in script
     assert "f['dk_ts'] = datetime.now" not in script
 
 
