@@ -56,6 +56,17 @@ def main():
     except (OSError, ValueError) as error:
         result["freshness_error"] = type(error).__name__
 
+    try:
+        log_path = Path("/var/log/redfox_update.log")
+        with log_path.open("rb") as source:
+            source.seek(max(0, log_path.stat().st_size - 262144))
+            lines = source.read().decode("utf-8", "replace").splitlines()
+        markers = ("RUN START", "RUN END", "snapshot --sport", "snapshot DONE", "snapshot ERROR",
+                   "refresh anomaly board", "[ok] kept", "[ok] wrote", "[coverage]")
+        result["runner_events"] = [line[:200] for line in lines if any(mark in line for mark in markers)][-35:]
+    except OSError as error:
+        result["log_error"] = type(error).__name__
+
     temporary = TARGET.with_suffix(".tmp")
     temporary.write_text(json.dumps(result, sort_keys=True), encoding="utf-8")
     temporary.replace(TARGET)
