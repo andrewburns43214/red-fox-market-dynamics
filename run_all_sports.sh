@@ -13,6 +13,13 @@ export RF_DISABLE_BASELINE_LOG=1
 # Flush stage output immediately so a watchdog termination still records the
 # exact phase that exhausted its budget.
 export PYTHONUNBUFFERED=1
+# Optional root-owned credential file. Keep provider secrets outside Git and
+# the web root; absence simply leaves the display-only subsystem unavailable.
+if [ -r /etc/redfox-propline.env ]; then
+  set -a
+  . /etc/redfox-propline.env
+  set +a
+fi
 mkdir -p "$TMPDIR"
 chmod 700 "$TMPDIR"
 
@@ -74,6 +81,15 @@ for SPORT in $SPORTS; do
   fi
   sleep 3
 done
+
+# Player props are a separate, quota-aware display-only subsystem. A timeout,
+# provider outage, missing key, or coverage failure can never block RF refresh.
+echo "--- $(date) prop projection refresh ---" >> "$LOG"
+if timeout "${REDFOX_PROP_TIMEOUT_SECONDS:-120}" "$PY" prop_projection_service.py collect >> "$LOG" 2>&1; then
+  echo "--- $(date) prop projection refresh DONE ---" >> "$LOG"
+else
+  echo "--- $(date) prop projection refresh UNAVAILABLE (continuing) ---" >> "$LOG"
+fi
 
 echo "--- $(date) refresh anomaly board ---" >> "$LOG"
 # Production reached the former 120-second watchdog while publishing a valid

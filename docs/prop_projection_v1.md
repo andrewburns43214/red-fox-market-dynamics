@@ -1,0 +1,101 @@
+# Red Fox Market Intelligence — Props-Only Projection v1
+
+## Isolation contract
+
+The subsystem reads PropLine player props, official roster sources, MLB game
+context, and final scores. It does not read `snapshots.csv`, spread, moneyline,
+game total, team total, public splits, Market Read, Supported Side, Market Rank,
+or Red Fox Favorite. Its only public artifact is `data/prop_projections.json`.
+Failure, timeout, missing credentials, or inadequate coverage produces an
+unavailable state and cannot block the normal Red Fox refresh.
+
+The API key is read only from `PROPLINE_API_KEY` and is sent only in the
+`X-API-Key` request header. It is never serialized, logged, published, or
+included in a URL.
+
+## Versioned model pipeline
+
+1. Reject wrong-event players, players not on an official current roster,
+   ambiguous identities, suspended legs, stale legs, malformed prices, and
+   one-sided Over/Under markets.
+2. Pair Over and Under at `(event, book, player, stat, threshold)` and remove
+   the book hold: `p_over_fair = p_over / (p_over + p_under)`.
+3. Choose one canonical threshold per player/stat: most traditional books,
+   then closest to the center of observed thresholds, then lower threshold as
+   a deterministic tie-break. Alternate and milestone markets are excluded.
+4. Convert the canonical threshold to an expected player stat with
+   `mean = threshold + sigma_stat * NormalInverse(p_over_fair)`. Fixed sigma
+   values live in `prop_projection_config.py` and change only with a new model
+   version.
+5. Aggregate player production once per statistical family. Correlated markets
+   validate or form a blended estimator; they are never independently summed.
+6. Convert team production to a team-score mean, then round only for display.
+   The unrounded means and version remain in the audit ledger.
+
+### NFL / NCAAF: `prop_projection_nfl_v1`, `prop_projection_ncaaf_v1`
+
+- Passing TD expectation is the primary passing scoring component.
+- Rushing TD props are summed once. If absent, verified rushing-yard means use
+  the explicit fallback `rush_yards / 92`.
+- Receiving TDs validate passing TDs and are not added again.
+- Kicking points are used directly. If absent, `3 * field_goals + PATs` is the
+  non-overlapping fallback.
+- Team mean: `6 * (passing_TD + rushing_TD) + kicking_points`, bounded to
+  6–45. Yardage, receptions, attempts, and targets drive coverage and
+  validation but do not duplicate direct scoring props.
+- Score standard deviation: 6.8 points per team.
+
+### MLB: `prop_projection_mlb_v1`
+
+Four non-additive run estimators are constructed when their required inputs
+exist:
+
+- `1.12 * sum(batter runs)`
+- `1.06 * sum(batter RBI)`
+- `0.17*H + 0.13*TB + 0.42*HR + 0.22*BB`
+- opposing starter earned runs plus `0.465` runs per projected bullpen inning,
+  where bullpen innings are `9 - pitcher_outs/3`
+
+The team mean is the median of available estimators, bounded to 1–10. This
+prevents hits, total bases, home runs, runs, RBI, and pitcher earned runs from
+being naively added together. Score standard deviation is 2.1 runs per team.
+
+## Market policy
+
+| Sport | Core | Supplemental | Correlated / validation | Low value / excluded |
+|---|---|---|---|---|
+| NFL/NCAAF | pass yards/TD/INT, rush yards, receiving yards/receptions, rush/receiving TD, kicking points | attempts, completions, carries, targets, FG, PAT | receiving TD vs pass TD; receiving yards vs receptions/targets | longest, first TD, 2+/3+ milestones, combo markets, defense props |
+| MLB | pitcher outs/hits/walks/ER; hitter hits/TB/HR/runs/RBI | pitcher K, batter K/BB/SB | H/TB/HR and runs/RBI/pitcher ER blended estimators | H+R+RBI, singles/doubles/triples as independent totals, milestones |
+| NBA/NCAAB (disabled) | points, rebounds, assists, 3PM, FG, FT | turnovers, steals, blocks | combo markets | alternates and milestones |
+| NHL (disabled) | goalie saves, shots, goals, assists, points | power-play points, blocks | goal scorer markets | alternates and milestones |
+
+## Coverage gate
+
+Thresholds are intentionally conservative and may be tightened without
+changing scoring coefficients.
+
+- Football moderate: each team has at least four verified players, two books,
+  three families, pass-TD coverage, and a kicking component. High additionally
+  requires seven players, three books, and four families per team.
+- MLB moderate: both probable pitchers are verified, each team has at least
+  seven represented batters, two books, and three families. High additionally
+  requires a confirmed lineup, eight batters, three books, and four families.
+- Anything below moderate is `INSUFFICIENT`; no projected score is published.
+  NCAAF uses the same gate as NFL and never receives a weaker exception.
+
+## Collection and storage
+
+- One bulk sport request is used when a sport is due.
+- More than 6 hours out: hourly. Six to one hours: every 30 minutes. Final
+  hour: every 12 minutes. Collection stops at start.
+- The local hard cap is 190 PropLine requests per UTC day. Provider quota
+  headers are persisted after every request. During dense overlapping months,
+  the expected event-aware range is about 80–150 requests/day, with the hard
+  stop preventing a runaway loop.
+- MLB context is cached for six hours, then 30 minutes in the final hour.
+- Raw event observations are SHA-256 hashed and appended only on change.
+- Public projections are atomic JSON. Raw/canonical lines, projection ledger,
+  quota state, and resolution performance remain under the private data tree.
+- Final scores resolve projected home/away error, MAE, and bias privately every
+  six hours when unresolved games exist.
+
