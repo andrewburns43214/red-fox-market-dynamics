@@ -1238,6 +1238,18 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .game-detail-content { max-width:980px; margin:0 auto; white-space:normal; }
 .detail-game-heading { font-family:var(--sans); font-size:18px; font-weight:800; letter-spacing:-.025em; line-height:1.2; color:var(--text); }
 .detail-game-meta { margin-top:3px; font-size:11px; color:var(--text3); }
+.detail-game-header { display:flex; align-items:flex-start; gap:10px; margin-bottom:16px; padding-bottom:12px; border-bottom:2px solid var(--border); }
+.detail-game-identity { min-width:0; flex:1; }
+.prop-score { margin-left:auto; min-width:210px; padding:9px 11px; border:1px solid #c9dedb; border-radius:9px; background:#f1f8f7; text-align:right; }
+.prop-score-label { color:var(--text3); font:800 8px/1.2 var(--sans); letter-spacing:.08em; text-transform:uppercase; }
+.prop-score-value { margin-top:2px; color:#165f5a; font:800 16px/1.2 var(--mono); font-variant-numeric:tabular-nums; }
+.prop-score-meta { margin-top:3px; color:var(--text3); font:700 8px/1.25 var(--sans); }
+.prop-score details { margin-top:4px; }
+.prop-score summary { color:var(--accent); font:700 9px/1.2 var(--sans); cursor:pointer; list-style:none; }
+.prop-score summary::-webkit-details-marker { display:none; }
+.prop-score-why { margin-top:6px; color:var(--text2); font:600 9px/1.35 var(--sans); text-align:left; }
+.prop-score-unavailable { background:#f5f6f7; border-color:var(--border); }
+.prop-score-unavailable .prop-score-value { color:var(--text2); font:750 11px/1.3 var(--sans); }
 .detail-market-switcher { margin-top:11px; }
 .detail-market-switcher .movement-tabs { justify-content:flex-start; }
 .detail-rationale,.detail-rank-note { white-space:normal; overflow-wrap:anywhere; word-break:normal; }
@@ -1372,6 +1384,8 @@ td:last-child { border-radius: 0 8px 8px 0; }
   .board-tools { flex:1 1 100%; } .board-tools input { width:100%; min-width:0; }
   .movement-chart-head { display:block; } .movement-tabs { justify-content:flex-start; margin-top:8px; }
   .movement-facts { grid-template-columns:1fr 1fr; }
+  .detail-game-header { flex-wrap:wrap; }
+  .detail-game-header .prop-score { order:3; flex:1 1 100%; width:100%; margin:8px 0 0; text-align:left; }
   .live-recent { padding:14px 10px 28px; } .live-recent-grid { grid-template-columns:1fr; gap:10px; } .live-game-card { padding:12px; }
   .live-control-row-secondary { align-items:flex-start; gap:8px; } .live-sort-control { margin-left:auto; } .live-sort-control span { display:none; } .live-sort-control select { max-width:148px; min-height:32px; }
   /* A selected game is an analysis screen on phones, not a small desktop dialog. */
@@ -2108,6 +2122,8 @@ const RESULTS_URL = '/data/results_resolved.csv';
 const FREEZE_URL  = '/data/decision_freeze_ledger.csv';
 const LIVE_RECENT_URL = '/data/live_recent.csv';
 const FAVORITE_PERFORMANCE_URL = '/data/favorite_performance.json';
+const PROP_PROJECTION_URL = '/data/prop_projections.json';
+let propProjections=[];
 
 const MOCK_DASH = [
   {sport:'nba',game_id:'101',market_display:'TOTAL',game:'CLE Cavaliers @ DET Pistons',favored_side:'Under 226.5',game_confidence:66.4,net_edge:10.0,game_decision:'LEAN',_game_time:'2026-02-27T19:10:00-05:00',bets_pct:38,money_pct:62,open_line:'226.5',current_line:'224.5',timing_bucket:'MID'},
@@ -4912,6 +4928,30 @@ function detailCoverageRange(rows){
   const last=detailCoverageTime(rows[rows.length-1].timestamp);
   return first===last?first:`${first} → ${last}`;
 }
+function propTeamKey(value){
+  return String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').trim().split(/\s+/).filter(Boolean);
+}
+function propTeamMatches(boardTeam,providerTeam){
+  const a=propTeamKey(boardTeam), b=propTeamKey(providerTeam); if(!a.length||!b.length)return false;
+  const compactA=a.join(''), compactB=b.join('');
+  return compactA===compactB || compactA.endsWith(compactB) || compactB.endsWith(compactA) || a[a.length-1]===b[b.length-1];
+}
+function gamePropProjection(row){
+  const sport=normSportKey(row.sport); const parts=String(row.game||'').split(/\s+@\s+/); if(parts.length!==2)return null;
+  const kickoff=new Date(row.kickoff_iso||row._game_time||row.kickoff_time||'');
+  const matches=propProjections.filter(item=>normSportKey(item.sport)===sport&&propTeamMatches(parts[0],item.away_team)&&propTeamMatches(parts[1],item.home_team));
+  if(matches.length<=1)return matches[0]||null;
+  if(Number.isNaN(kickoff.getTime()))return null;
+  return matches.sort((a,b)=>Math.abs(new Date(a.commence_time)-kickoff)-Math.abs(new Date(b.commence_time)-kickoff))[0]||null;
+}
+function propScoreHtml(row){
+  const supported=['nfl','ncaaf','mlb','nba','ncaab','nhl'].includes(normSportKey(row.sport)); if(!supported)return '';
+  const prop=gamePropProjection(row);
+  if(!prop||prop.status!=='AVAILABLE') return '<aside class="prop-score prop-score-unavailable" aria-label="Prop projection unavailable"><div class="prop-score-label">Props-only projection</div><div class="prop-score-value">Prop Score unavailable</div><div class="prop-score-meta">Verified coverage gate not met</div></aside>';
+  const books=(prop.coverage?.books||[]).length, players=Object.values(prop.players||{}).reduce((sum,value)=>sum+Number(value||0),0), families=(prop.families||[]).join(', ')||'--';
+  const age=Number(prop.oldest_observation_age_minutes); const ageText=Number.isFinite(age)?Math.round(age)+'m':'--';
+  return '<aside class="prop-score" aria-label="Props-only projected score"><div class="prop-score-label">Props-only projection</div><div class="prop-score-value">'+escHtml(prop.away_team)+' '+escHtml(String(prop.away_score))+' · '+escHtml(prop.home_team)+' '+escHtml(String(prop.home_score))+'</div><div class="prop-score-meta">'+escHtml(prop.confidence)+' confidence · '+escHtml(prop.model_version)+'</div><details><summary>Why?</summary><div class="prop-score-why">'+players+' verified players · '+books+' books · '+escHtml(families)+' · oldest line '+escHtml(ageText)+' old. Independent display-only model; no spread, total, moneyline, Market Read, rank, or Favorite input.</div></details></aside>';
+}
 function renderGameDetail(){
   const state=window._gameDetailState; if(!state) return;
   const r=state.row, sides=marketSides(r), side=sides[Math.max(0,Math.min(state.sideIndex,sides.length-1))]||r;
@@ -4934,7 +4974,7 @@ function renderGameDetail(){
   const isClean=String(r.data_badge||'').trim().toUpperCase()==='CLEAN';
   let html='<div class="game-detail-content" style="padding:16px 20px">';
   const frozenStatus=state.frozenPregame?'<div class="detail-frozen-status">Frozen pregame market'+(frozenSnapshotLabel(state.frozenAt)?' · Last snapshot '+escHtml(frozenSnapshotLabel(state.frozenAt)):'')+'</div>':'';
-  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--border)">'+spChip(r.sport)+'<div><div class="detail-game-heading">'+escHtml(r.game||'--')+'</div><div class="detail-game-meta">'+escHtml(r.kickoff_time||'--')+'</div>'+frozenStatus+marketSwitcher+'</div></div>';
+  html+='<div class="detail-game-header">'+spChip(r.sport)+'<div class="detail-game-identity"><div class="detail-game-heading">'+escHtml(r.game||'--')+'</div><div class="detail-game-meta">'+escHtml(r.kickoff_time||'--')+'</div>'+frozenStatus+marketSwitcher+'</div>'+propScoreHtml(r)+'</div>';
   html+='<section style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px">'+sideToggle;
   html+='<div class="detail-current-read"><div><div class="detail-current-line">'+escHtml(selected.current_line||'--')+'</div>'+(currentMovement?'<div class="detail-current-movement">'+currentMovement+'</div>':'')+'<div class="detail-current-splits"><span>'+escHtml(detailPct(selected.bets_pct,'Bets'))+'</span><span>'+escHtml(detailPct(selected.money_pct,'Money'))+'</span></div></div><div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">'+signals.map(anomalyBadge).join('')+'</div></div>';
   html+=movementChart(detailRows,r.market_display,state.selectedJourneyTimestamp,selected.flagged_side||sideLabel(selected,r));
@@ -5028,11 +5068,13 @@ async function loadAll({forceRender=false}={}){
   let freshJson=null;
   try{ const r=await fetch('/data/freshness.json?_='+Date.now()); if(r.ok) freshJson=await r.json(); } catch(e){}
   _boardFreshness=freshJson;
-  const[dash,results,kpi]=await Promise.all([
+  const[dash,results,kpi,props]=await Promise.all([
     loadCSV(DASH_URL),
     loadCSV(RESULTS_URL),
     loadCSV('/data/kpi_master_dataset.csv'),
+    fetch(PROP_PROJECTION_URL+'?_='+Date.now(),{cache:'no-store'}).then(response=>response.ok?response.json():null).catch(()=>null),
   ]);
+  propProjections=Array.isArray(props?.projections)?props.projections:[];
   updateFreshness(freshJson);
   const dashRaw=(dash&&dash.length)?dash:[];
   allResults=results||MOCK_RESULTS;
