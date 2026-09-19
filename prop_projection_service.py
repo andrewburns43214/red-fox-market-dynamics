@@ -234,6 +234,22 @@ def _append_changed(path, payload, digest, prior_digest):
     return True
 
 
+def _event_change_summary(event, sport, digest, captured_at):
+    markets = 0
+    outcomes = 0
+    for book in event.get("bookmakers") or []:
+        for market in book.get("markets") or []:
+            markets += 1
+            outcomes += len(market.get("outcomes") or [])
+    return {
+        "captured_at": captured_at.isoformat(), "sport": sport, "hash": digest,
+        "event_id": str(event.get("id") or ""), "commence_time": event.get("commence_time"),
+        "away_team": event.get("away_team"), "home_team": event.get("home_team"),
+        "book_count": len(event.get("bookmakers") or []), "market_blocks": markets,
+        "outcome_count": outcomes,
+    }
+
+
 def _retain_final_pregame(state, current, now):
     published = state.setdefault("published", {})
     for item in current:
@@ -253,7 +269,7 @@ def _retain_final_pregame(state, current, now):
 def run_collection(client=None, resolver=None, force=False, now=None):
     now, client, resolver = now or utc_now(), client or PropLineClient(), resolver or RosterResolver()
     state_path = DATA_ROOT / "state.json"
-    state = _read_json(state_path, {"sports": {}, "event_hashes": {}, "contexts": {}})
+    state = _read_json(state_path, {"sports": {}, "event_hashes": {}, "event_seen": {}, "contexts": {}})
     projections = []
     for sport, config in SPORTS.items():
         if not config["enabled"]:
@@ -280,8 +296,9 @@ def run_collection(client=None, resolver=None, force=False, now=None):
                 continue
             digest = observation_hash(event)
             event_key = f"{sport}:{event.get('id')}"
-            _append_changed(DATA_ROOT / "observations.jsonl", {"captured_at": now.isoformat(), "sport": sport, "hash": digest, "event": event}, digest, state["event_hashes"].get(event_key))
+            _append_changed(DATA_ROOT / "observations.jsonl", _event_change_summary(event, sport, digest, now), digest, state["event_hashes"].get(event_key))
             state["event_hashes"][event_key] = digest
+            state.setdefault("event_seen", {})[event_key] = now.isoformat()
             context = state.get("contexts", {}).get(event_key, {})
             # MLB context is refreshed at most once per six hours and once in
             # the final hour, which keeps a full slate economical.
@@ -313,6 +330,16 @@ def run_collection(client=None, resolver=None, force=False, now=None):
             _append_changed(DATA_ROOT / "projection_ledger.jsonl", audit, projection_digest, state.get("projection_hashes", {}).get(event_key))
             state.setdefault("projection_hashes", {})[event_key] = projection_digest
             projections.append(public_projection(projection))
+    # Keep hash/context state bounded; long-run model evaluation lives in the
+    # compact projection/resolution ledgers, not in an ever-growing raw cache.
+    cutoff = now.timestamp() - 14 * 86400
+    for event_key, seen in list(state.get("event_seen", {}).items()):
+        parsed = parse_time(seen)
+        if not parsed or parsed.timestamp() < cutoff:
+            state["event_seen"].pop(event_key, None)
+            state.get("event_hashes", {}).pop(event_key, None)
+            state.get("contexts", {}).pop(event_key, None)
+            state.get("projection_hashes", {}).pop(event_key, None)
     projections = _retain_final_pregame(state, projections, now)
     payload = {"schema_version": 1, "generated_at": now.isoformat(), "projections": projections}
     _atomic_json(PUBLIC_PATH, payload)

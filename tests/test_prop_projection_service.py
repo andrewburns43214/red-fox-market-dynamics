@@ -72,6 +72,15 @@ def test_change_hash_avoids_duplicate_observation(tmp_path):
     assert len(path.read_text().splitlines()) == 1
 
 
+def test_change_audit_is_compact_and_does_not_embed_raw_event():
+    event = {"id": "1", "away_team": "A", "home_team": "B", "commence_time": NOW.isoformat(), "bookmakers": [{"key": "draftkings", "markets": [{"key": "x", "outcomes": [{}, {}]}]}]}
+    summary = service._event_change_summary(event, "nfl", "abc", NOW)
+    assert "event" not in summary
+    assert summary["book_count"] == 1
+    assert summary["market_blocks"] == 1
+    assert summary["outcome_count"] == 2
+
+
 def test_provider_outage_uses_cache_and_never_raises(monkeypatch, tmp_path):
     data = tmp_path / "private"
     public = tmp_path / "public.json"

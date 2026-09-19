@@ -93,9 +93,11 @@ changing scoring coefficients.
   the expected event-aware range is about 80–150 requests/day, with the hard
   stop preventing a runaway loop.
 - MLB context is cached for six hours, then 30 minutes in the final hour.
-- Raw event observations are SHA-256 hashed and appended only on change.
+- Raw event observations are SHA-256 hashed. The latest bulk response is
+  overwritten per sport; the append-only audit records only compact event
+  metadata and the hash when it changes. Hash/context state expires after 14
+  days, avoiding a duplicate raw-payload archive.
 - Public projections are atomic JSON. Raw/canonical lines, projection ledger,
   quota state, and resolution performance remain under the private data tree.
 - Final scores resolve projected home/away error, MAE, and bias privately every
   six hours when unresolved games exist.
-
