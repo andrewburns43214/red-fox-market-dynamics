@@ -121,6 +121,8 @@ def test_provider_outage_uses_cache_and_never_raises(monkeypatch, tmp_path):
     payload = service.run_collection(client=Client(), resolver=Resolver(), force=True, now=NOW)
     assert payload["projections"][0]["status"] == "NOT_OPEN"
     assert payload["projections"][0]["display_status"] == "Props not open yet"
+    assert "shadow" not in json.loads(public.read_text())["projections"][0]
+    assert (data / "projection_v2_shadow_ledger.jsonl").exists()
     assert public.exists()
     state = json.loads((data / "state.json").read_text())
     assert state["sports"]["nfl"]["last_poll"] == NOW.isoformat()

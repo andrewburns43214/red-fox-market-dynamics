@@ -18,6 +18,7 @@ import requests
 
 from prop_projection import normalized_name, observation_hash, parse_time, project_event, public_projection, utc_now
 from prop_projection_config import API_BASE, LOCAL_DAILY_REQUEST_CAP, REQUEST_TIMEOUT_SECONDS, SPORTS
+from prop_projection_v2 import project_event_v2
 
 
 DATA_ROOT = Path(os.environ.get("REDFOX_PROP_DATA_DIR", "data/prop_projection"))
@@ -358,6 +359,34 @@ def run_collection(client=None, resolver=None, force=False, now=None):
             projection_digest = hashlib.sha256(json.dumps({"projection": hashable_projection, "canonical_lines": private_lines}, sort_keys=True, default=str).encode()).hexdigest()
             _append_changed(DATA_ROOT / "projection_ledger.jsonl", audit, projection_digest, state.get("projection_hashes", {}).get(event_key))
             state.setdefault("projection_hashes", {})[event_key] = projection_digest
+            # v2 is private shadow research. It reuses the exact v1 canonical
+            # lines, makes no provider request, and never enters PUBLIC_PATH.
+            try:
+                shadow = project_event_v2(sport, projection, private_lines, context=context, now=now)
+                hashable_shadow = {key: value for key, value in shadow.items() if key != "generated_at"}
+                shadow_digest = hashlib.sha256(json.dumps(hashable_shadow, sort_keys=True, default=str).encode()).hexdigest()
+                _append_changed(
+                    DATA_ROOT / "projection_v2_shadow_ledger.jsonl",
+                    {"projection": shadow},
+                    shadow_digest,
+                    state.get("v2_projection_hashes", {}).get(event_key),
+                )
+                state.setdefault("v2_projection_hashes", {})[event_key] = shadow_digest
+            except Exception as error:
+                # Shadow-model defects must never affect v1 or the RF runner.
+                shadow_failure = {
+                    "shadow": True, "customer_facing": False, "sport": sport,
+                    "event_id": str(event.get("id") or ""), "generated_at": now.isoformat(),
+                    "status": "SHADOW_ERROR", "reason": type(error).__name__,
+                }
+                failure_hashable = {key: value for key, value in shadow_failure.items() if key != "generated_at"}
+                failure_digest = hashlib.sha256(json.dumps(failure_hashable, sort_keys=True).encode()).hexdigest()
+                _append_changed(
+                    DATA_ROOT / "projection_v2_shadow_errors.jsonl",
+                    {"projection": shadow_failure}, failure_digest,
+                    state.get("v2_error_hashes", {}).get(event_key),
+                )
+                state.setdefault("v2_error_hashes", {})[event_key] = failure_digest
             projections.append(public_projection(projection))
     # Keep hash/context state bounded; long-run model evaluation lives in the
     # compact projection/resolution ledgers, not in an ever-growing raw cache.
@@ -369,6 +398,8 @@ def run_collection(client=None, resolver=None, force=False, now=None):
             state.get("event_hashes", {}).pop(event_key, None)
             state.get("contexts", {}).pop(event_key, None)
             state.get("projection_hashes", {}).pop(event_key, None)
+            state.get("v2_projection_hashes", {}).pop(event_key, None)
+            state.get("v2_error_hashes", {}).pop(event_key, None)
     projections = _retain_final_pregame(state, projections, now)
     payload = {"schema_version": 1, "generated_at": now.isoformat(), "projections": projections}
     # Nginx serves only this compact projection payload. Keep credentials,
@@ -392,6 +423,107 @@ def _jsonl(path):
     return rows
 
 
+def _shadow_digest(projection):
+    hashable = {key: value for key, value in projection.items() if key != "generated_at"}
+    return hashlib.sha256(json.dumps(hashable, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def run_shadow_backfill():
+    """Build v2 history from the existing v1 canonical ledger without API calls."""
+    source = _jsonl(DATA_ROOT / "projection_ledger.jsonl")
+    target_path = DATA_ROOT / "projection_v2_shadow_ledger.jsonl"
+    existing = _jsonl(target_path)
+    existing_digests = {
+        _shadow_digest(entry.get("projection", {}))
+        for entry in existing
+        if entry.get("projection")
+    }
+    state_path = DATA_ROOT / "state.json"
+    state = _read_json(state_path, {})
+    contexts = state.get("contexts", {})
+    appended, skipped, failures = 0, 0, 0
+    newest = {}
+    for entry in source:
+        v1 = entry.get("projection", {})
+        lines = entry.get("canonical_lines", [])
+        if v1.get("status") != "AVAILABLE" or not lines:
+            continue
+        event_key = f"{v1.get('sport')}:{v1.get('event_id')}"
+        try:
+            shadow = project_event_v2(v1.get("sport"), v1, lines, context=contexts.get(event_key, {}))
+        except Exception:
+            failures += 1
+            continue
+        digest = _shadow_digest(shadow)
+        if digest in existing_digests:
+            skipped += 1
+        else:
+            _append_changed(target_path, {"projection": shadow}, digest, None)
+            existing_digests.add(digest)
+            appended += 1
+        generated = parse_time(shadow.get("generated_at"))
+        prior = newest.get(event_key)
+        if not prior or (generated and generated > prior[0]):
+            newest[event_key] = (generated, digest)
+    for event_key, (_, digest) in newest.items():
+        state.setdefault("v2_projection_hashes", {})[event_key] = digest
+    _atomic_json(state_path, state)
+    return {"appended": appended, "skipped": skipped, "failures": failures}
+
+
+def _shadow_performance(rows):
+    metrics = {}
+    sports = sorted({row["sport"] for row in rows})
+    for sport in sports:
+        sport_rows = [row for row in rows if row["sport"] == sport]
+        variants = sorted({name for row in sport_rows for name in row.get("variants", {})})
+        if any(row.get("v1_benchmark", {}).get("away_score") is not None for row in sport_rows):
+            variants = ["v1_customer_model", *variants]
+        metrics[sport] = {}
+        for name in variants:
+            if name == "v1_customer_model":
+                samples = [
+                    (row, row["v1_benchmark"])
+                    for row in sport_rows
+                    if row.get("v1_benchmark", {}).get("away_score") is not None
+                    and row.get("v1_benchmark", {}).get("home_score") is not None
+                ]
+            else:
+                samples = [(row, row["variants"][name]) for row in sport_rows if name in row.get("variants", {})]
+            team_errors = [
+                projected - actual
+                for row, variant in samples
+                for projected, actual in (
+                    (variant["away_score"], row["actual_away"]),
+                    (variant["home_score"], row["actual_home"]),
+                )
+            ]
+            total_errors = [
+                variant["away_score"] + variant["home_score"] - row["actual_away"] - row["actual_home"]
+                for row, variant in samples
+            ]
+            margin_errors = [
+                (variant["home_score"] - variant["away_score"]) - (row["actual_home"] - row["actual_away"])
+                for row, variant in samples
+            ]
+            decisive = [
+                ((variant["home_score"] > variant["away_score"]) == (row["actual_home"] > row["actual_away"]))
+                for row, variant in samples
+                if variant["home_score"] != variant["away_score"] and row["actual_home"] != row["actual_away"]
+            ]
+            metrics[sport][name] = {
+                "games": len(samples),
+                "team_score_mae": round(sum(abs(value) for value in team_errors) / len(team_errors), 4),
+                "team_score_bias": round(sum(team_errors) / len(team_errors), 4),
+                "total_mae": round(sum(abs(value) for value in total_errors) / len(total_errors), 4),
+                "total_bias": round(sum(total_errors) / len(total_errors), 4),
+                "margin_mae": round(sum(abs(value) for value in margin_errors) / len(margin_errors), 4),
+                "decisive_winner_accuracy": round(sum(decisive) / len(decisive), 4) if decisive else None,
+                "decisive_games": len(decisive),
+            }
+    return metrics
+
+
 def run_resolution(client=None, now=None, force=False):
     """Privately join frozen pregame projections to final team scores."""
     now, client = now or utc_now(), client or PropLineClient()
@@ -401,13 +533,28 @@ def run_resolution(client=None, now=None, force=False):
         projection = entry.get("projection", {})
         if projection.get("status") == "AVAILABLE":
             latest[f"{projection.get('sport')}:{projection.get('event_id')}"] = projection
+    shadow_latest = {}
+    for entry in _jsonl(DATA_ROOT / "projection_v2_shadow_ledger.jsonl"):
+        projection = entry.get("projection", {})
+        if projection.get("status") == "SHADOW_AVAILABLE":
+            key = f"{projection.get('sport')}:{projection.get('event_id')}"
+            prior = shadow_latest.get(key)
+            if not prior or (parse_time(projection.get("generated_at")) or now) >= (parse_time(prior.get("generated_at")) or now):
+                shadow_latest[key] = projection
     state_path = DATA_ROOT / "resolution_state.json"
     state = _read_json(state_path, {"sports": {}, "resolved": {}})
+    shadow_state_path = DATA_ROOT / "resolution_v2_shadow_state.json"
+    shadow_state = _read_json(shadow_state_path, {"resolved": {}})
     for sport, config in SPORTS.items():
         if not config["enabled"]:
             continue
         candidates = {key: value for key, value in latest.items() if value.get("sport") == sport and (parse_time(value.get("commence_time")) or now) < now and key not in state["resolved"]}
-        if not candidates:
+        shadow_candidates = {
+            key: value for key, value in shadow_latest.items()
+            if value.get("sport") == sport and (parse_time(value.get("commence_time")) or now) < now
+            and key not in shadow_state["resolved"]
+        }
+        if not candidates and not shadow_candidates:
             continue
         last = parse_time(state["sports"].get(sport))
         if not force and last and (now - last).total_seconds() < 6 * 3600:
@@ -419,20 +566,32 @@ def run_resolution(client=None, now=None, force=False):
         state["sports"][sport] = now.isoformat()
         for score in scores:
             key = f"{sport}:{score.get('id') or score.get('event_id')}"
-            if key not in candidates or str(score.get("status") or "").lower() not in {"final", "completed", "complete"}:
+            if key not in candidates and key not in shadow_candidates:
                 continue
-            projection = candidates[key]
+            if str(score.get("status") or "").lower() not in {"final", "completed", "complete"}:
+                continue
             try:
                 actual_away, actual_home = int(score["away_score"]), int(score["home_score"])
             except (KeyError, TypeError, ValueError):
                 continue
-            state["resolved"][key] = {
-                "sport": sport, "event_id": projection["event_id"], "model_version": projection["model_version"],
-                "confidence": projection["confidence"], "projected_away": projection["away_score"],
-                "projected_home": projection["home_score"], "actual_away": actual_away, "actual_home": actual_home,
-                "away_error": projection["away_score"] - actual_away, "home_error": projection["home_score"] - actual_home,
-                "resolved_at": now.isoformat(),
-            }
+            if key in candidates:
+                projection = candidates[key]
+                state["resolved"][key] = {
+                    "sport": sport, "event_id": projection["event_id"], "model_version": projection["model_version"],
+                    "confidence": projection["confidence"], "projected_away": projection["away_score"],
+                    "projected_home": projection["home_score"], "actual_away": actual_away, "actual_home": actual_home,
+                    "away_error": projection["away_score"] - actual_away, "home_error": projection["home_score"] - actual_home,
+                    "resolved_at": now.isoformat(),
+                }
+            if key in shadow_candidates:
+                projection = shadow_candidates[key]
+                shadow_state["resolved"][key] = {
+                    "sport": sport, "event_id": projection["event_id"], "model_version": projection["model_version"],
+                    "confidence": projection["confidence"], "baseline_variant": projection["baseline_variant"],
+                    "projection_generated_at": projection.get("generated_at"),
+                    "variants": projection["variants"], "v1_benchmark": projection.get("v1_benchmark", {}),
+                    "actual_away": actual_away, "actual_home": actual_home, "resolved_at": now.isoformat(),
+                }
     rows = list(state["resolved"].values())
     metrics = {}
     for sport in SPORTS:
@@ -441,12 +600,18 @@ def run_resolution(client=None, now=None, force=False):
             metrics[sport] = {"team_scores": len(errors), "mae": round(sum(abs(x) for x in errors) / len(errors), 3), "bias": round(sum(errors) / len(errors), 3)}
     _atomic_json(state_path, state)
     _atomic_json(DATA_ROOT / "performance.json", {"generated_at": now.isoformat(), "metrics": metrics, "games": rows})
+    shadow_rows = list(shadow_state["resolved"].values())
+    _atomic_json(shadow_state_path, shadow_state)
+    _atomic_json(
+        DATA_ROOT / "performance_v2_shadow.json",
+        {"generated_at": now.isoformat(), "metrics": _shadow_performance(shadow_rows), "games": shadow_rows},
+    )
     return metrics
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Red Fox isolated PropLine projection collector")
-    parser.add_argument("command", choices=("collect", "resolve", "status"), nargs="?", default="collect")
+    parser.add_argument("command", choices=("collect", "resolve", "status", "shadow-backfill"), nargs="?", default="collect")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
     if args.command == "status":
@@ -462,6 +627,12 @@ def main(argv=None):
                 print(json.dumps(run_resolution(force=args.force), indent=2))
             except Exception as error:
                 print(f"[props] resolution unavailable: {type(error).__name__}", file=sys.stderr)
+        return 0
+    if args.command == "shadow-backfill":
+        with process_lock() as acquired:
+            if not acquired:
+                return 0
+            print(json.dumps(run_shadow_backfill(), indent=2))
         return 0
     with process_lock() as acquired:
         if not acquired:
