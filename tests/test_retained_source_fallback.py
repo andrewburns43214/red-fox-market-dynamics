@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 from publication_coverage import PublicationCoverage
-from refresh_anomaly_board import write_board_freshness
+from refresh_anomaly_board import restore_retained_favorites, write_board_freshness
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -86,3 +86,32 @@ def test_parse_failed_rows_stay_blocked_without_a_recent_empty_scrape(tmp_path):
     rows = pd.DataFrame([{"sport": "nfl", "game_id": "g", "market_display": "SPREAD"}])
 
     assert coverage.validated(rows).empty
+
+
+def test_retained_mode_restores_only_matching_pre_outage_favorite(tmp_path):
+    archive = pd.DataFrame([
+        {"sport": "nfl", "game_id": "keep", "market_display": "SPREAD",
+         "red_fox_favorite": "true", "favorite_state": "qualified",
+         "favorite_side": "NY Jets +3.5", "favorite_pathway": "low_support_contrarian",
+         "favorite_late_invalidated": "true",
+         "favorite_late_invalidated_reason": "Favorite unavailable: latest verified market state is 49.6 minutes old (maximum 30).",
+         "candidate_recorded_at_utc": "2026-09-20T07:05:00Z"},
+        {"sport": "nfl", "game_id": "mismatch", "market_display": "SPREAD",
+         "red_fox_favorite": "true", "favorite_state": "qualified",
+         "favorite_side": "Away +3", "candidate_recorded_at_utc": "2026-09-20T07:05:00Z"},
+    ])
+    archive.to_csv(tmp_path / "red_fox_favorite_freeze_candidates.csv", index=False)
+    board = pd.DataFrame([
+        {"sport": "nfl", "game_id": "keep", "market_display": "SPREAD",
+         "kickoff_iso": "2026-09-20T17:00:00Z", "supported_side": "NY Jets +3.5",
+         "red_fox_favorite": "false", "favorite_state": "not_qualified"},
+        {"sport": "nfl", "game_id": "mismatch", "market_display": "SPREAD",
+         "kickoff_iso": "2026-09-20T20:00:00Z", "supported_side": "Home -3",
+         "red_fox_favorite": "false", "favorite_state": "not_qualified"},
+    ])
+
+    result = restore_retained_favorites(board, tmp_path, now="2026-09-20T16:30:00Z")
+
+    assert result.loc[result.game_id.eq("keep"), "red_fox_favorite"].iloc[0] == "true"
+    assert "pre-outage" in result.loc[result.game_id.eq("keep"), "favorite_reason"].iloc[0]
+    assert result.loc[result.game_id.eq("mismatch"), "red_fox_favorite"].iloc[0] == "false"

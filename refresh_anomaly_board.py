@@ -129,6 +129,63 @@ def write_board_freshness(dashboard, data_dir=DATA, now=None, source_state="LIVE
     return oldest, newest, market_count
 
 
+def restore_retained_favorites(board, data_dir=DATA, now=None):
+    """Carry the last confirmed Favorite through a confirmed provider outage.
+
+    This never creates a Favorite from a retained row. It restores only a
+    previously archived qualification whose side still matches the retained
+    Supported Side, whose game has not started, and whose later invalidation
+    (if any) was caused solely by source freshness.
+    """
+    if board is None or board.empty:
+        return pd.DataFrame() if board is None else board.copy()
+    archive_path = Path(data_dir) / "red_fox_favorite_freeze_candidates.csv"
+    try:
+        archived = pd.read_csv(archive_path, dtype=str, keep_default_na=False)
+    except (OSError, pd.errors.EmptyDataError):
+        return board.copy()
+    keys = ["sport", "game_id", "market_display"]
+    if archived.empty or not all(column in archived for column in keys):
+        return board.copy()
+    result = board.copy()
+    for column in FAVORITE_COLUMNS:
+        if column not in result:
+            result[column] = ""
+    current = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    current = current.tz_localize("UTC") if current.tzinfo is None else current.tz_convert("UTC")
+    archived = archived.sort_values("candidate_recorded_at_utc", kind="mergesort").drop_duplicates(keys, keep="last")
+    lookup = {
+        tuple(str(row.get(column, "")) for column in keys): row
+        for _, row in archived.iterrows()
+    }
+    for index, row in result.iterrows():
+        source = lookup.get(tuple(str(row.get(column, "")) for column in keys))
+        if source is None or str(source.get("red_fox_favorite", "")).lower() != "true":
+            continue
+        invalidated = str(source.get("favorite_late_invalidated", "")).lower() == "true"
+        invalidation_reason = str(source.get("favorite_late_invalidated_reason", ""))
+        if invalidated and not invalidation_reason.startswith("Favorite unavailable: latest verified market state"):
+            continue
+        kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
+        if pd.isna(kickoff) or kickoff <= current:
+            continue
+        supported = str(row.get("supported_side", "")).strip().casefold()
+        favorite = str(source.get("favorite_side", "")).strip().casefold()
+        if not supported or supported != favorite:
+            continue
+        for column in FAVORITE_COLUMNS:
+            result.at[index, column] = source.get(column, "")
+        result.at[index, "red_fox_favorite"] = "true"
+        result.at[index, "favorite_state"] = "qualified"
+        result.at[index, "favorite_late_invalidated"] = "false"
+        result.at[index, "favorite_late_invalidated_at"] = ""
+        result.at[index, "favorite_late_invalidated_reason"] = ""
+        result.at[index, "favorite_reason"] = (
+            "Favorite retained from the last confirmed pre-outage capture; live provider unavailable."
+        )
+    return result
+
+
 def load_current_l2(data_dir, as_of):
     """Load L2 only while its capture can still describe the current board.
 
@@ -514,6 +571,7 @@ def _refresh(coverage):
     board = update_favorite_tracking(board, DATA, as_of=newest_snapshot)
     if retained_source and not board.empty:
         board["data_badge"] = "RETAINED"
+        board = restore_retained_favorites(board, DATA, now=coverage.now)
     detail_count = write_event_detail_files(board, events, details_dir=DATA / "anomaly_event_details")
     # Replace each public file only after its complete export is ready for Nginx.
     for frame, name in ((board, "anomaly_board.csv"), (events, "anomaly_events.csv")):
