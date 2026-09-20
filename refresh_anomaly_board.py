@@ -153,12 +153,13 @@ def load_current_l2(data_dir, as_of):
 
 
 def filter_publication_eligible_markets(dashboard, now=None):
-    """Apply public football windows before board ranking/export.
+    """Apply sport publication windows before board ranking/export.
 
-    Non-football rows retain their existing publication behavior.  CFB keeps
-    its existing rolling eight-calendar-day window.  NFL uses a Tuesday-to-
-    Monday board week so the current week remains visible through Monday Night
-    Football and Week +2 source data is never published early.
+    CFB keeps its existing rolling eight-calendar-day window. NFL uses a
+    Tuesday-to-Monday board week so the current week remains visible through
+    Monday Night Football and Week +2 source data is never published early.
+    NHL is intentionally limited to the next 72 hours so early-release lines
+    cannot become Red Fox Favorites more than three days before puck drop.
     """
     if dashboard is None or dashboard.empty:
         return pd.DataFrame() if dashboard is None else dashboard.copy()
@@ -174,6 +175,7 @@ def filter_publication_eligible_markets(dashboard, now=None):
     sport = work.get("sport", "").fillna("").astype(str).str.strip().str.lower()
     football = sport.isin(FOOTBALL_SPORTS)
     nfl = sport.eq("nfl")
+    nhl = sport.eq("nhl")
 
     # Opening-week exception: publish exactly Sep. 9 through Sep. 14 before
     # the first regular Tuesday rollover, never the following NFL week.
@@ -187,7 +189,14 @@ def filter_publication_eligible_markets(dashboard, now=None):
 
     eligible_other_football = kickoff.notna() & (kickoff >= start) & (kickoff < end_exclusive)
     eligible_nfl = kickoff.notna() & (kickoff >= nfl_start) & (kickoff < nfl_end_exclusive)
-    eligible = ~football | ((~nfl) & eligible_other_football) | (nfl & eligible_nfl)
+    nhl_horizon_hours = int(os.environ.get("REDFOX_NHL_PUBLICATION_HORIZON_HOURS", "72"))
+    eligible_nhl = kickoff.notna() & (kickoff >= now) & (kickoff <= now + pd.Timedelta(hours=nhl_horizon_hours))
+    eligible = (
+        (~football & ~nhl)
+        | ((~nfl) & football & eligible_other_football)
+        | (nfl & eligible_nfl)
+        | (nhl & eligible_nhl)
+    )
     return work.loc[eligible].copy()
 
 

@@ -139,6 +139,21 @@ def test_nfl_publication_window_keeps_monday_current_week_and_rolls_on_tuesday()
     assert set(tuesday.signal) == {"same"}
 
 
+def test_nhl_early_release_games_wait_until_three_days_before_puck_drop():
+    rows = pd.DataFrame([
+        {"sport": "nhl", "game_id": "inside", "market_display": "MONEYLINE",
+         "dk_start_iso": "2026-09-23T15:59:59-04:00"},
+        {"sport": "nhl", "game_id": "outside", "market_display": "MONEYLINE",
+         "dk_start_iso": "2026-09-23T16:00:01-04:00"},
+        {"sport": "mlb", "game_id": "unchanged", "market_display": "MONEYLINE",
+         "dk_start_iso": "2026-10-01T19:00:00-04:00"},
+    ])
+
+    published = filter_publication_eligible_markets(rows, now="2026-09-20T16:00:00-04:00")
+
+    assert set(published.game_id) == {"inside", "unchanged"}
+
+
 def test_board_uses_latest_shared_snapshot_for_both_market_sides():
     active = pd.DataFrame([
         {"sport": "nfl", "game_id": "g1", "market_display": "TOTAL", "side_key": "Over", "timestamp": "2026-09-03T15:00:00Z", "current_line": "Over 56.5"},

@@ -44,9 +44,11 @@ def test_recent_empty_scrape_can_reuse_only_parse_failed_rows(tmp_path):
     coverage.store.update(
         [
             {"sport": "nfl", "game_id": "parse", "market_display": "SPREAD",
-             "capture_exclusion_reason": "RAW_MARKET_PARSE_FAILED"},
+             "capture_exclusion_reason": "RAW_MARKET_PARSE_FAILED",
+             "dk_start_iso": "2026-09-21T20:00:00Z"},
             {"sport": "nfl", "game_id": "identity", "market_display": "TOTAL",
-             "capture_exclusion_reason": "UNRESOLVED_EVENT_IDENTITY"},
+             "capture_exclusion_reason": "UNRESOLVED_EVENT_IDENTITY",
+             "dk_start_iso": "2026-09-21T20:00:00Z"},
         ],
         coverage.run_id,
         "TEST",
@@ -63,7 +65,14 @@ def test_recent_empty_scrape_can_reuse_only_parse_failed_rows(tmp_path):
 
     assert empty_sports == {"nfl"}
     assert accepted.game_id.tolist() == ["parse"]
+    assert coverage.retained_parse_failed_keys == {("nfl", "parse", "SPREAD")}
     assert coverage.reasons[("nfl", "identity", "TOTAL")] == "UNRESOLVED_EVENT_IDENTITY"
+    board_path = tmp_path / "board.csv"
+    accepted.to_csv(board_path, index=False)
+    coverage.gate_ready = {("nfl", "parse", "SPREAD")}
+    summary = coverage.publish(accepted, board_path, lambda probe, now: probe)
+    assert summary["publication_conflicts"] == 0
+    assert summary["sports"]["nfl"]["published"] == 1
 
 
 def test_parse_failed_rows_stay_blocked_without_a_recent_empty_scrape(tmp_path):

@@ -145,6 +145,7 @@ class PublicationCoverage:
         self.last_captures = {}
         self.last_pairs = {}
         self.gate_ready = set()
+        self.retained_parse_failed_keys = set()
 
     def seed(self, snapshots):
         """Bootstrap retained captures without claiming a complete DK census."""
@@ -191,6 +192,7 @@ class PublicationCoverage:
                    for r in self.store.inventory() if r.get("capture_exclusion_reason")}
         for key, reason in blocked.items():
             if reason == "RAW_MARKET_PARSE_FAILED" and key[0] in retained_sports:
+                self.retained_parse_failed_keys.add(key)
                 continue
             self.reasons[key] = reason
         return frame.loc[[
@@ -223,7 +225,7 @@ class PublicationCoverage:
                 state = "STARTED"
             elif not enabled:
                 state = "SPORT_DISABLED_BY_SEASON"
-            elif item.get("capture_exclusion_reason"):
+            elif item.get("capture_exclusion_reason") and key not in self.retained_parse_failed_keys:
                 state = item["capture_exclusion_reason"]
             elif key in published:
                 state = "PUBLISHED"
