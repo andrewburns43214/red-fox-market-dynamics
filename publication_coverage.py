@@ -79,10 +79,10 @@ class CoverageStore:
                 encoded = json.dumps(payload, default=str, sort_keys=True)
                 db.execute("INSERT OR REPLACE INTO markets VALUES (?,?,?,?)", (*key, encoded))
                 # Retain actual state changes, not another full historical slate
-                # solely because the publication clock/run ID advanced.
+                # solely because a scrape/publication clock or run ID advanced.
                 state_fields = ("state", "validation_state", "capture_exclusion_reason", "published", "publication_eligible", "in_window_scope")
                 changed = any(previous.get(field) != payload.get(field) for field in state_fields)
-                if state != "PUBLICATION_ACCOUNTED" or not old or changed:
+                if not old or changed:
                     db.execute("INSERT INTO transitions VALUES (?,?,?,?,?,?,?)", (run_id, *key, now, state, encoded))
 
 

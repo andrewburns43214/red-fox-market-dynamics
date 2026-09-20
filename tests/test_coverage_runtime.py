@@ -296,3 +296,14 @@ def test_unchanged_publication_does_not_duplicate_historical_state_transitions(t
     store.update([{**row, "state": "PUBLISHED", "published": True}], "third", "PUBLICATION_ACCOUNTED")
     with store.connect() as db:
         assert db.execute("SELECT count(*) FROM transitions").fetchone()[0] == 2
+
+
+def test_unchanged_scrape_does_not_duplicate_historical_state_transitions(tmp_path):
+    store = CoverageStore(tmp_path)
+    row = dict(sport="nfl", game_id="123", market_display="SPREAD", state="DISCOVERED",
+               validation_state="NOT_VALIDATED", capture_exclusion_reason="RAW_MARKET_PARSE_FAILED")
+    store.update([row], "first", "DISCOVERED")
+    store.update([{**row, "last_discovered_at": "later", "discovery_run_id": "second"}], "second", "DISCOVERED")
+    store.update([{**row, "validation_state": "VALIDATED", "capture_exclusion_reason": ""}], "second", "VALIDATED")
+    with store.connect() as db:
+        assert db.execute("SELECT count(*) FROM transitions").fetchone()[0] == 2
