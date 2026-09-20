@@ -239,6 +239,59 @@ def _mlb_score(lines, offense, defense):
     return min(10.0, max(1.0, statistics.median(estimates))), {"estimators": [round(x, 3) for x in estimates]}
 
 
+def _best_anchor(lines, team, markets, used):
+    priorities = {market: index for index, market in enumerate(markets)}
+    candidates = [line for line in lines if line["team"] == team and line["market"] in priorities]
+    candidates.sort(key=lambda line: (priorities[line["market"]], -line["book_count"], line["player_key"]))
+    for line in candidates:
+        key = (line["team"], line["player_key"], line["market"])
+        if key not in used:
+            used.add(key)
+            return {
+                "team": line["team"], "player": line["player"], "market": line["market"],
+                "line": line["line"], "book_count": line["book_count"],
+                "role": "scoring" if line["market"] not in {
+                    "player_pass_yds", "player_reception_yds", "player_receptions",
+                    "batter_hits", "batter_total_bases",
+                } else "validation",
+            }
+    return None
+
+
+def strongest_anchors(sport, lines, away, home, maximum=7):
+    """Return a small, balanced explanation set without changing broad collection."""
+    used, anchors = set(), []
+
+    def add(team, markets):
+        anchor = _best_anchor(lines, team, markets, used)
+        if anchor and len(anchors) < maximum:
+            anchors.append(anchor)
+
+    if sport in {"nfl", "ncaaf"}:
+        for team in (away, home):
+            add(team, ("player_pass_tds", "player_pass_yds"))
+            add(team, ("player_rush_tds", "player_rush_yds"))
+            add(team, ("player_kicking_points", "player_field_goals_made", "player_extra_points_made"))
+    else:
+        # Pitcher ER + outs form one opponent-run estimator. Hitter props form
+        # separate run-creation estimators that are blended, never summed.
+        for team in (away, home):
+            add(team, ("pitcher_earned_runs",))
+            add(team, ("pitcher_outs",))
+        for team in (away, home):
+            add(team, ("batter_runs", "batter_rbis"))
+        # One final representative contact/power line keeps the explanation
+        # concise while the full hitter surface remains in the model.
+        best_team = max((away, home), key=lambda team: max(
+            (line["book_count"] for line in lines if line["team"] == team and line["market"] in {"batter_total_bases", "batter_hits"}),
+            default=-1,
+        ))
+        add(best_team, ("batter_total_bases", "batter_hits"))
+        other_team = home if best_team == away else away
+        add(other_team, ("batter_total_bases", "batter_hits"))
+    return anchors[:maximum]
+
+
 def _coverage(sport, lines, event, context):
     teams = [event["away_team"], event["home_team"]]
     ages = [parse_time(line["observed_at"]) for line in lines]
@@ -260,12 +313,28 @@ def _coverage(sport, lines, event, context):
         lineup_confirmed = bool(context.get("lineup_confirmed"))
         pitchers = {normalized_name(context.get("home_probable_pitcher")), normalized_name(context.get("away_probable_pitcher"))} - {""}
         represented = {line["player_key"] for line in lines}
-        pitchers_ready = len(pitchers) == 2 and pitchers.issubset(represented)
+        represented_pitchers = pitchers & represented
+        pitchers_ready = len(pitchers) == 2 and len(represented_pitchers) == 2
+        # The second probable starter may be named but lack props, or may still
+        # be unannounced in context. Either case is acceptable only when one
+        # identified starter is represented and both nine-hitter surfaces are
+        # otherwise complete.
+        one_pitcher_missing = len(pitchers) in {1, 2} and len(represented_pitchers) == 1
         batter_counts = {team: len({line["player_key"] for line in lines if line["team"] == team and line["market"].startswith("batter_")}) for team in teams}
-        moderate = pitchers_ready and all(batter_counts[team] >= 7 and x["books"] >= 2 and len(x["families"]) >= 3 for team, x in per_team.items())
+        ordinary_ready = pitchers_ready and all(batter_counts[team] >= 7 and x["books"] >= 2 and len(x["families"]) >= 3 for team, x in per_team.items())
+        complete_hitter_ready = one_pitcher_missing and all(
+            batter_counts[team] >= 9 and x["books"] >= 2 and
+            {"hitting", "run_creation"}.issubset(set(x["families"]))
+            for team, x in per_team.items()
+        )
+        moderate = ordinary_ready or complete_hitter_ready
         high = moderate and lineup_confirmed and all(batter_counts[team] >= 8 and x["books"] >= 3 and len(x["families"]) >= 4 for team, x in per_team.items())
+        high = high and pitchers_ready
         for team in teams:
             per_team[team]["batters"] = batter_counts[team]
+            per_team[team]["probable_pitchers_represented"] = len({
+                line["player_key"] for line in lines if line["team"] == team and line["player_key"] in pitchers
+            })
         score_ready = moderate
     confidence = "HIGH" if high else ("MODERATE" if moderate and score_ready else "INSUFFICIENT")
     return confidence, {"teams": per_team, "books": sorted(books), "age_minutes": round(age_minutes, 1)}
@@ -285,12 +354,21 @@ def project_event(sport, event, rosters, context=None, now=None):
     start = parse_time(event.get("commence_time"))
     if start and start <= now:
         return {**base, "status": "UNAVAILABLE", "reason": "game_started", "confidence": "INSUFFICIENT"}
-    rows = attach_teams(flatten_event(event, now=now), event, rosters)
+    raw_rows = flatten_event(event, now=now)
+    if not raw_rows:
+        return {
+            **base, "status": "NOT_OPEN", "display_status": "Props not open yet",
+            "reason": "props_not_open_yet", "confidence": "NOT_OPEN",
+        }
+    rows = attach_teams(raw_rows, event, rosters)
     lines = canonical_player_lines(rows)
     confidence, coverage = _coverage(sport, lines, event, context)
     result = {**base, "confidence": confidence, "coverage": coverage, "line_count": len(lines)}
     if confidence == "INSUFFICIENT":
-        return {**result, "status": "UNAVAILABLE", "reason": "insufficient_verified_prop_coverage"}
+        return {
+            **result, "status": "UNAVAILABLE", "display_status": "Insufficient coverage",
+            "reason": "insufficient_verified_prop_coverage",
+        }
     away, home = event["away_team"], event["home_team"]
     if sport in {"nfl", "ncaaf"}:
         away_mean, away_components = _football_score(lines, away)
@@ -299,9 +377,13 @@ def project_event(sport, event, rosters, context=None, now=None):
         away_mean, away_components = _mlb_score(lines, away, home)
         home_mean, home_components = _mlb_score(lines, home, away)
         if away_mean is None or home_mean is None:
-            return {**result, "status": "UNAVAILABLE", "reason": "missing_scoring_components", "confidence": "INSUFFICIENT"}
+            return {
+                **result, "status": "UNAVAILABLE", "display_status": "Insufficient coverage",
+                "reason": "missing_scoring_components", "confidence": "INSUFFICIENT",
+            }
     result.update({
         "status": "AVAILABLE", "away_score": int(round(away_mean)), "home_score": int(round(home_mean)),
+        "display_status": f"Props-Only · {confidence.title()}",
         "away_mean": round(away_mean, 2), "home_mean": round(home_mean, 2),
         "components": {away: away_components, home: home_components},
         "players": {team: coverage["teams"][team]["players"] for team in (away, home)},
@@ -311,6 +393,7 @@ def project_event(sport, event, rosters, context=None, now=None):
             "away_sd": 6.8 if sport in {"nfl", "ncaaf"} else 2.1,
             "home_sd": 6.8 if sport in {"nfl", "ncaaf"} else 2.1,
         },
+        "anchors": strongest_anchors(sport, lines, away, home),
     })
     # Full line-level audit remains private; public UI receives compact evidence.
     result["audit_hash"] = hashlib.sha256(json.dumps(lines, sort_keys=True, default=str).encode()).hexdigest()

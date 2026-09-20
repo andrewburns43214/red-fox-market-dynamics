@@ -118,6 +118,21 @@ class PropLineClient:
         return self.get(f"/sports/{provider_sport}/scores")
 
 
+def espn_team_matches(provider_name, team):
+    names = [team.get(k) for k in ("displayName", "shortDisplayName", "name", "location", "slug", "abbreviation")]
+    wanted = normalized_name(provider_name)
+    exact_aliases = {normalized_name(x) for x in names if x}
+    provider_tokens = {normalized_name(x) for x in re.findall(r"[A-Za-z0-9]+", str(provider_name)) if x}
+    abbreviation = normalized_name(team.get("abbreviation"))
+    nickname = normalized_name(team.get("name"))
+    provider_nickname = normalized_name(str(provider_name).split()[-1]) if str(provider_name).split() else ""
+    return bool(
+        wanted in exact_aliases or
+        (abbreviation and abbreviation in provider_tokens) or
+        (nickname and provider_nickname == nickname)
+    )
+
+
 class RosterResolver:
     """Official-roster identity barrier. Failure rejects players; it never guesses."""
     def __init__(self, session=None, root=DATA_ROOT / "rosters"):
@@ -142,11 +157,13 @@ class RosterResolver:
 
     def _espn_roster(self, sport, team_name):
         index = self._espn_team_index(sport)
-        wanted = normalized_name(team_name)
         matches = []
         for team_id, team in index.items():
-            names = [team.get(k) for k in ("displayName", "shortDisplayName", "name", "location", "slug", "abbreviation")]
-            if wanted in {normalized_name(x) for x in names if x} or any(normalized_name(x) and normalized_name(x) in wanted for x in names if x):
+            # Team abbreviations and nicknames must match complete tokens. The
+            # former substring check made MIA match PHI (DolPHIns), ARI match
+            # CAR (CARdinals), and KC match CHI (CHIefs), discarding an entire
+            # side as ambiguous even though every sportsbook supplied props.
+            if espn_team_matches(team_name, team):
                 matches.append((team_id, team))
         if len(matches) != 1:
             return [], []
@@ -332,7 +349,8 @@ def run_collection(client=None, resolver=None, force=False, now=None):
                     "sport": sport, "event_id": str(event.get("id") or ""), "away_team": event.get("away_team", ""),
                     "home_team": event.get("home_team", ""), "commence_time": event.get("commence_time"),
                     "model_version": config["model_version"], "provider": "PropLine", "generated_at": now.isoformat(),
-                    "status": "UNAVAILABLE", "confidence": "INSUFFICIENT", "reason": f"validation_error:{type(error).__name__}",
+                    "status": "UNAVAILABLE", "display_status": "Insufficient coverage",
+                    "confidence": "INSUFFICIENT", "reason": f"validation_error:{type(error).__name__}",
                 }
             private_lines = projection.pop("_private_lines", [])
             audit = {"projection": projection, "canonical_lines": private_lines}

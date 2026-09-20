@@ -1269,6 +1269,8 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .prop-score summary { color:var(--accent); font:700 9px/1.2 var(--sans); cursor:pointer; list-style:none; }
 .prop-score summary::-webkit-details-marker { display:none; }
 .prop-score-why { margin-top:6px; color:var(--text2); font:600 9px/1.35 var(--sans); text-align:left; }
+.prop-score-anchors { margin:5px 0 0; padding-left:14px; }
+.prop-score-anchors li { margin:2px 0; }
 .prop-score-unavailable { background:#f5f6f7; border-color:var(--border); }
 .prop-score-unavailable .prop-score-value { color:var(--text2); font:750 11px/1.3 var(--sans); }
 .detail-market-switcher { margin-top:11px; }
@@ -4969,13 +4971,33 @@ function gamePropProjection(row){
   if(Number.isNaN(kickoff.getTime()))return null;
   return matches.sort((a,b)=>Math.abs(new Date(a.commence_time)-kickoff)-Math.abs(new Date(b.commence_time)-kickoff))[0]||null;
 }
+function propOpeningWindowHours(sport){ return ({nfl:48,ncaaf:36,nba:24,ncaab:24,nhl:24,mlb:12})[normSportKey(sport)]||24; }
+function propUnavailableStatus(row,prop){
+  if(prop?.status==='NOT_OPEN'||prop?.reason==='props_not_open_yet') return 'Props not open yet';
+  if(!prop){
+    const kickoff=new Date(row.kickoff_iso||row._game_time||row.kickoff_time||'');
+    const leadHours=(kickoff-Date.now())/3600000;
+    if(Number.isFinite(leadHours)&&leadHours>propOpeningWindowHours(row.sport)) return 'Props not open yet';
+  }
+  return 'Insufficient coverage';
+}
+function propMarketLabel(value){ return String(value||'').replace(/^player_|^batter_|^pitcher_/,'').replace(/_/g,' '); }
+function propAnchorsHtml(anchors){
+  if(!Array.isArray(anchors)||!anchors.length)return '';
+  return '<ul class="prop-score-anchors">'+anchors.slice(0,7).map(anchor=>'<li>'+escHtml(anchor.player||anchor.team||'Anchor')+' · '+escHtml(propMarketLabel(anchor.market))+' '+escHtml(String(anchor.line??'--'))+' · '+escHtml(String(anchor.book_count||0))+' books</li>').join('')+'</ul>';
+}
 function propScoreHtml(row){
   const supported=['nfl','ncaaf','mlb','nba','ncaab','nhl'].includes(normSportKey(row.sport)); if(!supported)return '';
   const prop=gamePropProjection(row);
-  if(!prop||prop.status!=='AVAILABLE') return '<aside class="prop-score prop-score-unavailable" aria-label="Prop projection unavailable"><div class="prop-score-label">Props-only projection</div><div class="prop-score-value">Prop Score unavailable</div><div class="prop-score-meta">Verified coverage gate not met</div></aside>';
+  if(!prop||prop.status!=='AVAILABLE'){
+    const status=propUnavailableStatus(row,prop);
+    const detail=status==='Props not open yet'?'Markets normally populate closer to game time.':'The verified two-team coverage gate was not met.';
+    return '<aside class="prop-score prop-score-unavailable" aria-label="'+escHtml(status)+'"><div class="prop-score-label">Props-only projection</div><div class="prop-score-value">'+escHtml(status)+'</div><div class="prop-score-meta">'+escHtml(detail)+'</div></aside>';
+  }
   const books=(prop.coverage?.books||[]).length, players=Object.values(prop.players||{}).reduce((sum,value)=>sum+Number(value||0),0), families=(prop.families||[]).join(', ')||'--';
   const age=Number(prop.oldest_observation_age_minutes); const ageText=Number.isFinite(age)?Math.round(age)+'m':'--';
-  return '<aside class="prop-score" aria-label="Props-only projected score"><div class="prop-score-label">Props-only projection</div><div class="prop-score-value">'+escHtml(prop.away_team)+' '+escHtml(String(prop.away_score))+' · '+escHtml(prop.home_team)+' '+escHtml(String(prop.home_score))+'</div><div class="prop-score-meta">'+escHtml(prop.confidence)+' confidence · '+escHtml(prop.model_version)+'</div><details><summary>Why?</summary><div class="prop-score-why">'+players+' verified players · '+books+' books · '+escHtml(families)+' · oldest line '+escHtml(ageText)+' old. Independent display-only model; no spread, total, moneyline, Market Read, rank, or Favorite input.</div></details></aside>';
+  const tier=prop.display_status||('Props-Only · '+String(prop.confidence||'').toLowerCase().replace(/^./,value=>value.toUpperCase()));
+  return '<aside class="prop-score" aria-label="Props-only projected score"><div class="prop-score-label">Props-only projection</div><div class="prop-score-value">'+escHtml(prop.away_team)+' '+escHtml(String(prop.away_score))+' · '+escHtml(prop.home_team)+' '+escHtml(String(prop.home_score))+'</div><div class="prop-score-meta">'+escHtml(tier)+'</div><details><summary>5–7 strongest anchors</summary><div class="prop-score-why">'+players+' verified players · '+books+' books · '+escHtml(families)+' · oldest line '+escHtml(ageText)+' old.'+propAnchorsHtml(prop.anchors)+'<div style="margin-top:5px">Broad prop coverage is collected; correlated markets validate or blend and are never independently double-counted. No spread, total, moneyline, Market Read, rank, or Favorite input.</div></div></details></aside>';
 }
 function renderGameDetail(){
   const state=window._gameDetailState; if(!state) return;

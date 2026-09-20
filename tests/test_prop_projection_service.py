@@ -10,6 +10,30 @@ import prop_projection_service as service
 NOW = datetime(2026, 9, 19, 16, 0, tzinfo=timezone.utc)
 
 
+def team(display, abbreviation, name, location):
+    return {
+        "displayName": display, "shortDisplayName": name, "name": name,
+        "location": location, "slug": display.lower().replace(" ", "-"),
+        "abbreviation": abbreviation,
+    }
+
+
+def test_team_aliases_match_complete_tokens_not_embedded_abbreviations():
+    miami = team("Miami Dolphins", "MIA", "Dolphins", "Miami")
+    philadelphia = team("Philadelphia Eagles", "PHI", "Eagles", "Philadelphia")
+    arizona = team("Arizona Cardinals", "ARI", "Cardinals", "Arizona")
+    carolina = team("Carolina Panthers", "CAR", "Panthers", "Carolina")
+    kansas_city = team("Kansas City Chiefs", "KC", "Chiefs", "Kansas City")
+    chicago = team("Chicago Bears", "CHI", "Bears", "Chicago")
+
+    assert service.espn_team_matches("MIA Dolphins", miami)
+    assert not service.espn_team_matches("MIA Dolphins", philadelphia)
+    assert service.espn_team_matches("ARI Cardinals", arizona)
+    assert not service.espn_team_matches("ARI Cardinals", carolina)
+    assert service.espn_team_matches("KC Chiefs", kansas_city)
+    assert not service.espn_team_matches("KC Chiefs", chicago)
+
+
 class Response:
     def __init__(self, payload, headers=None, status=200):
         self.payload, self.headers, self.status_code = payload, headers or {}, status
@@ -95,7 +119,8 @@ def test_provider_outage_uses_cache_and_never_raises(monkeypatch, tmp_path):
     class Resolver:
         def prefetch(self, *_): return {"1": {}}
     payload = service.run_collection(client=Client(), resolver=Resolver(), force=True, now=NOW)
-    assert payload["projections"][0]["status"] == "UNAVAILABLE"
+    assert payload["projections"][0]["status"] == "NOT_OPEN"
+    assert payload["projections"][0]["display_status"] == "Props not open yet"
     assert public.exists()
     state = json.loads((data / "state.json").read_text())
     assert state["sports"]["nfl"]["last_poll"] == NOW.isoformat()

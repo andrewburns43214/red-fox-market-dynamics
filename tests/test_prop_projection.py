@@ -58,7 +58,7 @@ def mlb_fixture():
     rosters, specs = {}, []
     pitcher_names = {}
     for team, token, prefix in ((away, "AA", "Away"), (home, "HH", "Home")):
-        batters = [f"{prefix} Batter{i}" for i in range(1, 9)]
+        batters = [f"{prefix} Batter{i}" for i in range(1, 10)]
         pitcher = f"{prefix} Pitcher"
         pitcher_names[team] = pitcher
         rosters[team], rosters[f"{team}__tokens"] = batters + [pitcher], [token]
@@ -122,6 +122,8 @@ def test_qualifying_football_projection_is_deterministic(sport):
     assert first == second
     assert first["status"] == "AVAILABLE"
     assert first["confidence"] == "HIGH"
+    assert first["display_status"] == "Props-Only · High"
+    assert 5 <= len(first["anchors"]) <= 7
     assert 10 <= first["away_score"] <= 45
     assert first["model_version"] == f"prop_projection_{sport}_v1"
 
@@ -134,20 +136,59 @@ def test_zero_coverage_ncaaf_is_unavailable_not_guessed():
     assert "away_score" not in result
 
 
+def test_future_event_without_open_prop_rows_has_explicit_not_open_status():
+    event, rosters = football_fixture("nfl")
+    event["bookmakers"] = []
+    result = project_event("nfl", event, rosters, now=NOW)
+    assert result["status"] == "NOT_OPEN"
+    assert result["display_status"] == "Props not open yet"
+    assert result["reason"] == "props_not_open_yet"
+
+
 def test_live_high_coverage_nfl_stops_at_start():
     event, rosters = football_fixture("nfl")
     event["commence_time"] = NOW.isoformat()
     assert project_event("nfl", event, rosters, now=NOW)["reason"] == "game_started"
 
 
-def test_mlb_requires_probable_pitchers_and_lineup_coverage():
+def test_mlb_high_requires_probable_pitchers_and_lineup_coverage():
     event, rosters, context = mlb_fixture()
     result = project_event("mlb", event, rosters, context=context, now=NOW)
     assert result["status"] == "AVAILABLE"
     assert result["confidence"] == "HIGH"
+    assert result["display_status"] == "Props-Only · High"
     assert 1 <= result["away_score"] <= 10
     missing = project_event("mlb", event, rosters, context={"lineup_confirmed": True}, now=NOW)
     assert missing["status"] == "UNAVAILABLE"
+
+
+def test_mlb_complete_hitter_surface_with_one_missing_pitcher_is_moderate():
+    event, rosters, context = mlb_fixture()
+    for book in event["bookmakers"]:
+        book["markets"] = [
+            item for item in book["markets"]
+            if "Home Pitcher" not in str(item.get("outcomes", [{}])[0].get("description", ""))
+        ]
+    result = project_event("mlb", event, rosters, context=context, now=NOW)
+    assert result["status"] == "AVAILABLE"
+    assert result["confidence"] == "MODERATE"
+    assert result["display_status"] == "Props-Only · Moderate"
+    assert result["coverage"]["teams"]["Away Aces"]["batters"] == 9
+    assert result["coverage"]["teams"]["Home Hammers"]["batters"] == 9
+    assert 5 <= len(result["anchors"]) <= 7
+
+
+def test_mlb_complete_hitter_surface_allows_unannounced_second_starter_at_moderate():
+    event, rosters, context = mlb_fixture()
+    context["home_probable_pitcher"] = None
+    for book in event["bookmakers"]:
+        book["markets"] = [
+            item for item in book["markets"]
+            if "Home Pitcher" not in str(item.get("outcomes", [{}])[0].get("description", ""))
+        ]
+    result = project_event("mlb", event, rosters, context=context, now=NOW)
+    assert result["status"] == "AVAILABLE"
+    assert result["confidence"] == "MODERATE"
 
 
 def test_no_game_line_or_red_fox_decision_input_exists():

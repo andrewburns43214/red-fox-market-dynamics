@@ -6,8 +6,9 @@ The subsystem reads PropLine player props, official roster sources, MLB game
 context, and final scores. It does not read `snapshots.csv`, spread, moneyline,
 game total, team total, public splits, Market Read, Supported Side, Market Rank,
 or Red Fox Favorite. Its only public artifact is `data/prop_projections.json`.
-Failure, timeout, missing credentials, or inadequate coverage produces an
-unavailable state and cannot block the normal Red Fox refresh.
+Failure, timeout, missing credentials, or inadequate coverage cannot block the
+normal Red Fox refresh. Customer-facing states are `Props-Only · High`,
+`Props-Only · Moderate`, `Props not open yet`, and `Insufficient coverage`.
 
 The API key is read only from `PROPLINE_API_KEY` and is sent only in the
 `X-API-Key` request header. It is never serialized, logged, published, or
@@ -78,10 +79,18 @@ changing scoring coefficients.
   three families, pass-TD coverage, and a kicking component. High additionally
   requires seven players, three books, and four families per team.
 - MLB moderate: both probable pitchers are verified, each team has at least
-  seven represented batters, two books, and three families. High additionally
-  requires a confirmed lineup, eight batters, three books, and four families.
+  seven represented batters, two books, and three families. A game also earns
+  Moderate when one probable pitcher is represented and the other is either
+  unannounced or lacks props, provided both teams have nine represented hitters,
+  two books, and both hitting and run-creation families. High requires both pitchers, a confirmed
+  lineup, eight batters, three books, and four families.
 - Anything below moderate is `INSUFFICIENT`; no projected score is published.
   NCAAF uses the same gate as NFL and never receives a weaker exception.
+
+The broad configured market surface is always collected. Public explanations
+show only five to seven balanced, strongest anchors. Correlated families may
+validate or contribute to a blended estimator, but are never independently
+summed as separate production.
 
 ## Collection and storage
 
