@@ -99,6 +99,9 @@ def test_retained_mode_restores_only_matching_pre_outage_favorite(tmp_path):
         {"sport": "nfl", "game_id": "mismatch", "market_display": "SPREAD",
          "red_fox_favorite": "true", "favorite_state": "qualified",
          "favorite_side": "Away +3", "candidate_recorded_at_utc": "2026-09-20T07:05:00Z"},
+        {"sport": "nfl", "game_id": "historical", "market_display": "SPREAD",
+         "red_fox_favorite": "true", "favorite_state": "qualified",
+         "favorite_side": "Home -2", "candidate_recorded_at_utc": "2026-09-19T07:05:00Z"},
     ])
     archive.to_csv(tmp_path / "red_fox_favorite_freeze_candidates.csv", index=False)
     board = pd.DataFrame([
@@ -108,6 +111,9 @@ def test_retained_mode_restores_only_matching_pre_outage_favorite(tmp_path):
         {"sport": "nfl", "game_id": "mismatch", "market_display": "SPREAD",
          "kickoff_iso": "2026-09-20T20:00:00Z", "supported_side": "Home -3",
          "red_fox_favorite": "false", "favorite_state": "not_qualified"},
+        {"sport": "nfl", "game_id": "historical", "market_display": "SPREAD",
+         "kickoff_iso": "2026-09-20T20:00:00Z", "supported_side": "Home -2",
+         "red_fox_favorite": "false", "favorite_state": "not_qualified"},
     ])
 
     result = restore_retained_favorites(board, tmp_path, now="2026-09-20T16:30:00Z")
@@ -115,3 +121,4 @@ def test_retained_mode_restores_only_matching_pre_outage_favorite(tmp_path):
     assert result.loc[result.game_id.eq("keep"), "red_fox_favorite"].iloc[0] == "true"
     assert "pre-outage" in result.loc[result.game_id.eq("keep"), "favorite_reason"].iloc[0]
     assert result.loc[result.game_id.eq("mismatch"), "red_fox_favorite"].iloc[0] == "false"
+    assert result.loc[result.game_id.eq("historical"), "red_fox_favorite"].iloc[0] == "false"

@@ -158,13 +158,41 @@ def restore_retained_favorites(board, data_dir=DATA, now=None):
         tuple(str(row.get(column, "")) for column in keys): row
         for _, row in archived.iterrows()
     }
+    tracking_path = Path(data_dir) / "red_fox_favorite_tracking.csv"
+    try:
+        tracking = pd.read_csv(tracking_path, dtype=str, keep_default_na=False)
+    except (OSError, pd.errors.EmptyDataError):
+        tracking = pd.DataFrame()
+    latest_tracking = {}
+    if not tracking.empty and all(column in tracking for column in keys):
+        tracking = tracking.sort_values("recorded_at", kind="mergesort").drop_duplicates(keys, keep="last")
+        latest_tracking = {
+            tuple(str(row.get(column, "")) for column in keys): row
+            for _, row in tracking.iterrows()
+        }
     for index, row in result.iterrows():
-        source = lookup.get(tuple(str(row.get(column, "")) for column in keys))
+        key = tuple(str(row.get(column, "")) for column in keys)
+        source = lookup.get(key)
         if source is None or str(source.get("red_fox_favorite", "")).lower() != "true":
             continue
         invalidated = str(source.get("favorite_late_invalidated", "")).lower() == "true"
         invalidation_reason = str(source.get("favorite_late_invalidated_reason", ""))
-        if invalidated and not invalidation_reason.startswith("Favorite unavailable: latest verified market state"):
+        freshness_only = invalidated and invalidation_reason.startswith(
+            "Favorite unavailable: latest verified market state"
+        )
+        prior = latest_tracking.get(key)
+        latest_was_qualified = (
+            prior is not None and str(prior.get("favorite_state", "")).lower() == "qualified"
+        )
+        # An old archive row is not proof that a Favorite was active when the
+        # outage began. Require either an explicit freshness-only invalidation
+        # or a still-qualified latest ledger state.
+        if not freshness_only and not latest_was_qualified:
+            continue
+        if invalidated and not freshness_only:
+            continue
+        current_reason = str(row.get("favorite_reason", "")).casefold()
+        if "withheld" in current_reason or "injury" in current_reason:
             continue
         kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
         if pd.isna(kickoff) or kickoff <= current:
