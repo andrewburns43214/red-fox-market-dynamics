@@ -352,11 +352,14 @@ def test_arizona_system_miss_is_retroactively_classified_with_explicit_provenanc
 def test_one_minute_worker_expires_started_board_only_after_freeze_window(tmp_path, monkeypatch):
     board_path = tmp_path / "anomaly_board.csv"
     monkeypatch.setattr(live, "BOARD", board_path)
+    monkeypatch.setattr(live, "DATA", tmp_path)
     pd.DataFrame([
         {"game_id": "started", "kickoff_iso": "2026-09-12T16:00:00Z", "red_fox_favorite": "true"},
         {"game_id": "grace", "kickoff_iso": "2026-09-12T16:08:00Z", "red_fox_favorite": "false"},
         {"game_id": "future", "kickoff_iso": "2026-09-12T18:00:00Z", "red_fox_favorite": "false"},
     ]).to_csv(board_path, index=False)
+    original_hash = __import__("hashlib").sha256(board_path.read_bytes()).hexdigest()
+    (tmp_path / "publication_coverage.json").write_text(json.dumps({"board_sha256": original_hash}))
 
     removed = live.expire_started_board_rows(datetime(2026, 9, 12, 16, 10, tzinfo=timezone.utc))
 
@@ -364,3 +367,6 @@ def test_one_minute_worker_expires_started_board_only_after_freeze_window(tmp_pa
     remaining = pd.read_csv(board_path, dtype=str, keep_default_na=False)
     assert remaining.game_id.tolist() == ["grace", "future"]
     assert remaining.loc[remaining.game_id.eq("grace"), "red_fox_favorite"].item() == "false"
+    coverage = json.loads((tmp_path / "publication_coverage.json").read_text())
+    assert coverage["board_sha256"] == __import__("hashlib").sha256(board_path.read_bytes()).hexdigest()
+    assert coverage["post_publish_expiry"]["removed_rows"] == 1

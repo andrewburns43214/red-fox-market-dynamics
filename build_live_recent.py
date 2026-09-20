@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import argparse
+import hashlib
+import io
 import json
 import re
 
@@ -564,7 +566,11 @@ def expire_started_board_rows(now: datetime, grace_minutes: int = 5) -> int:
     the final write.  The one-minute Live & Recent worker calls this only after
     it has had an opportunity to freeze the existing board rows.
     """
-    board = read_csv_or_empty(BOARD)
+    try:
+        original = BOARD.read_bytes()
+        board = pd.read_csv(io.BytesIO(original), dtype=str, keep_default_na=False)
+    except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError):
+        return 0
     if board.empty or "kickoff_iso" not in board.columns:
         return 0
     kickoff = utc_series(board["kickoff_iso"], board.index)
@@ -575,7 +581,36 @@ def expire_started_board_rows(now: datetime, grace_minutes: int = 5) -> int:
         return 0
     temporary = BOARD.with_name("." + BOARD.name + ".kickoff.tmp")
     board.loc[keep].to_csv(temporary, index=False)
+    # Do not let the one-minute worker replace a newer full-board publication
+    # that landed after this worker read the file.
+    try:
+        if BOARD.read_bytes() != original:
+            temporary.unlink(missing_ok=True)
+            print("[live-recent] skipped board expiry because a newer publication arrived")
+            return 0
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        return 0
     temporary.replace(BOARD)
+    # Kickoff expiry is an authorized post-publication subset mutation. Keep
+    # the coverage hash synchronized and record exactly what changed so the
+    # health monitor can distinguish it from an unexplained file rewrite.
+    coverage_path = DATA / "publication_coverage.json"
+    try:
+        coverage = json.loads(coverage_path.read_text(encoding="utf-8"))
+        original_hash = hashlib.sha256(original).hexdigest()
+        if coverage.get("board_sha256") == original_hash:
+            coverage["board_sha256"] = hashlib.sha256(BOARD.read_bytes()).hexdigest()
+            coverage["post_publish_expiry"] = {
+                "expired_at": pd.Timestamp(now).isoformat(),
+                "removed_rows": removed,
+                "source_board_sha256": original_hash,
+            }
+            coverage_temp = coverage_path.with_name("." + coverage_path.name + ".expiry.tmp")
+            coverage_temp.write_text(json.dumps(coverage, indent=2), encoding="utf-8")
+            coverage_temp.replace(coverage_path)
+    except (OSError, ValueError, TypeError):
+        pass
     print(f"[live-recent] removed {removed} started rows from the pregame board")
     return removed
 
