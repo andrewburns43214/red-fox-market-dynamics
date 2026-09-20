@@ -31,10 +31,12 @@ def _read_json(path, default):
         return default
 
 
-def _atomic_json(path, payload):
+def _atomic_json(path, payload, mode=None):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    if mode is not None:
+        os.chmod(temporary, mode)
     temporary.replace(path)
 
 
@@ -351,7 +353,10 @@ def run_collection(client=None, resolver=None, force=False, now=None):
             state.get("projection_hashes", {}).pop(event_key, None)
     projections = _retain_final_pregame(state, projections, now)
     payload = {"schema_version": 1, "generated_at": now.isoformat(), "projections": projections}
-    _atomic_json(PUBLIC_PATH, payload)
+    # Nginx serves only this compact projection payload. Keep credentials,
+    # state, observations, and the canonical-line ledger private while making
+    # the atomically replaced public file readable by the web worker.
+    _atomic_json(PUBLIC_PATH, payload, mode=0o644)
     _atomic_json(state_path, state)
     return payload
 

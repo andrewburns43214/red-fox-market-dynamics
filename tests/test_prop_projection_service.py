@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -99,6 +100,23 @@ def test_provider_outage_uses_cache_and_never_raises(monkeypatch, tmp_path):
     state = json.loads((data / "state.json").read_text())
     assert state["sports"]["nfl"]["last_poll"] == NOW.isoformat()
     assert state["sports"]["nfl"]["last_error"] == "RuntimeError"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows does not expose POSIX file modes")
+def test_public_projection_is_world_readable_but_private_state_is_not_forced_public(monkeypatch, tmp_path):
+    data = tmp_path / "private"
+    public = tmp_path / "public.json"
+    monkeypatch.setattr(service, "DATA_ROOT", data)
+    monkeypatch.setattr(service, "PUBLIC_PATH", public)
+
+    class Client:
+        def bulk_odds(self, *_): return []
+    class Resolver:
+        def prefetch(self, *_): return {}
+
+    service.run_collection(client=Client(), resolver=Resolver(), force=True, now=NOW)
+
+    assert public.stat().st_mode & 0o777 == 0o644
 
 
 def test_process_lock_prevents_overlap(tmp_path):
