@@ -4589,6 +4589,7 @@ function updateFreshness(f){
   function fmtAge(m){ if(m===Infinity) return 'N/A'; if(m<1) return '<1m'; if(m<60) return m+'m'; return Math.floor(m/60)+'h '+m%60+'m'; }
   function fmtTime(ts){ if(!ts) return '--'; const d=new Date(ts); if(isNaN(d)) return '--'; return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
   // Per-source: {name, ts, freshThresh, warnThresh}
+  const retainedSource=String(f.board_source_state||'').toUpperCase()==='RETAINED';
   const sources=[
     // The board source is deliberately the oldest visible paired capture,
     // not the time the runner happened to finish. This keeps a green status
@@ -4599,11 +4600,13 @@ function updateFreshness(f){
     {name:'DK', label:'Board source', ts:f.board_oldest_ts||f.dk_ts, fresh:15, warn:20},
     {name:'Engine', label:'Board publish', ts:f.board_published_at||f.engine_ts, fresh:15, warn:20}
   ];
+  if(retainedSource){ sources[0].label='Retained source'; sources[0].forced='warn'; }
   if(boardFresh){
     boardFresh.innerHTML=sources.map(s=>{
       const age=ageMin(s.ts);
-      const state=age>s.warn?'bad':age>s.fresh?'warn':'ok';
-      return `<span class="fresh-src" title="${s.label}: ${s.ts||'unavailable'}"><span class="fs-dot ${state}"></span><span>${s.label} ${fmtTime(s.ts)} (${fmtAge(age)})</span></span>`;
+      const state=s.forced||(age>s.warn?'bad':age>s.fresh?'warn':'ok');
+      const note=s.name==='DK'&&f.board_source_note?' · '+f.board_source_note:'';
+      return `<span class="fresh-src" title="${s.label}: ${s.ts||'unavailable'}${escHtml(note)}"><span class="fs-dot ${state}"></span><span>${s.label} ${fmtTime(s.ts)} (${fmtAge(age)})</span></span>`;
     }).join('');
   }
   let worst=0; // 0=live, 1=degraded, 2=stale
@@ -4611,7 +4614,8 @@ function updateFreshness(f){
   sources.forEach(s=>{
     const age=ageMin(s.ts);
     let st='ok', lvl=0;
-    if(age>s.warn){ st='bad'; lvl=2; }
+    if(s.forced==='warn'){ st='warn'; lvl=1; }
+    else if(age>s.warn){ st='bad'; lvl=2; }
     else if(age>s.fresh){ st='warn'; lvl=1; }
     worst=Math.max(worst,lvl);
     srcHtml+=`<span class="fresh-src"><span class="fs-dot ${st}"></span><span class="fs-name">${s.label||s.name}</span><span class="fs-age">${fmtTime(s.ts)} (${fmtAge(age)})</span></span>`;
@@ -4631,7 +4635,7 @@ function updateFreshness(f){
     sources.forEach(s=>{
       const age=ageMin(s.ts);
       let st='ok';
-      if(age>s.warn) st='bad'; else if(age>s.fresh) st='warn';
+      if(s.forced==='warn') st='warn'; else if(age>s.warn) st='bad'; else if(age>s.fresh) st='warn';
       sh+=`<div class="si"><span class="fs-dot ${st}" style="width:6px;height:6px;display:inline-block;border-radius:50%;margin-right:4px"></span><span>${s.label||s.name}</span><span class="v">${fmtTime(s.ts)} (${fmtAge(age)})</span></div>`;
     });
     sbf.innerHTML=sh;
