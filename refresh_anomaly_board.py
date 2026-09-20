@@ -77,7 +77,7 @@ def filter_fresh_market_rows(dashboard, now=None, max_age_minutes=None):
     return dashboard.loc[captured >= current - pd.Timedelta(minutes=max_age_minutes)].copy()
 
 
-def write_board_freshness(dashboard, data_dir=DATA, now=None):
+def write_board_freshness(dashboard, data_dir=DATA, now=None, source_state="LIVE", source_note=""):
     """Atomically record the real source age of the just-published board."""
     if dashboard is None or dashboard.empty or "timestamp" not in dashboard.columns:
         path = data_dir / "freshness.json"
@@ -87,6 +87,8 @@ def write_board_freshness(dashboard, data_dir=DATA, now=None):
             payload = {}
         payload.update(dk_ts=None, board_oldest_ts=None, board_newest_ts=None,
                        board_market_count=0, board_published_at=str(now or pd.Timestamp.now(tz="UTC")))
+        payload["board_source_state"] = "UNAVAILABLE"
+        payload["board_source_note"] = source_note
         data_dir.mkdir(parents=True, exist_ok=True)
         temporary = data_dir / ".freshness.json.tmp"
         temporary.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
@@ -118,6 +120,8 @@ def write_board_freshness(dashboard, data_dir=DATA, now=None):
         "board_newest_ts": newest.isoformat(),
         "board_market_count": market_count,
         "board_published_at": current.isoformat(),
+        "board_source_state": str(source_state or "LIVE").upper(),
+        "board_source_note": str(source_note or ""),
     })
     temporary = data_dir / ".freshness.json.tmp"
     temporary.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
@@ -383,7 +387,15 @@ def _refresh(coverage):
     coverage.seed(snapshots)
     supported = snapshots[snapshots["market_display"].isin(["MONEYLINE", "SPREAD", "TOTAL"])].copy()
     coverage.stage(snapshots, supported, "NORMALIZATION_FAILED")
-    snapshots = coverage.validated(supported)
+    # A fresh EMPTY_COMPLETE scrape is positive evidence that the upstream
+    # inventory is unavailable. In that state only, allow older rows carrying
+    # RAW_MARKET_PARSE_FAILED inventory metadata to proceed to the unchanged
+    # synchronized-pair, completeness, age, kickoff, and publication gates.
+    # Unresolved identities remain blocked.
+    empty_source_sports = coverage.recent_empty_sports()
+    snapshots = coverage.validated(
+        supported, allow_retained_parse_failed_sports=empty_source_sports
+    )
     snapshots["timestamp"] = pd.to_datetime(snapshots["timestamp"], utc=True, errors="coerce")
     coverage.stage(snapshots, snapshots[snapshots["timestamp"].notna()], "CAPTURE_TIMESTAMP_INVALID")
     newest_snapshot = snapshots["timestamp"].max()
@@ -406,7 +418,22 @@ def _refresh(coverage):
     before_freshness = len(dashboard)
     fresh = filter_fresh_market_rows(dashboard, now=coverage.now)
     coverage.stage(dashboard, fresh, "STALE_CAPTURE")
+    retained_source = False
     dashboard = fresh
+    if not dashboard.empty and set(dashboard["sport"].astype(str)) & empty_source_sports:
+        retained_source = True
+    if dashboard.empty and before_freshness:
+        # A provider-wide empty response must not erase the last useful board.
+        # Retain only bounded, pregame source rows and label them explicitly;
+        # never advance their observation timestamp or present them as live.
+        retained_minutes = int(os.environ.get("REDFOX_RETAINED_SOURCE_MAX_AGE_MINUTES", "720"))
+        retained = filter_fresh_market_rows(
+            complete, now=coverage.now, max_age_minutes=retained_minutes
+        )
+        if not retained.empty:
+            dashboard = retained
+            retained_source = True
+            print(f"[degraded] live source empty; retained {len(dashboard)}/{before_freshness} rows within {retained_minutes} minutes")
     print(f"[ok] kept {len(dashboard)}/{before_freshness} rows within the public source-freshness window")
     update_market_candidates(dashboard, DATA / MARKET_CANDIDATES.name, as_of=newest_snapshot)
     dashboard["canonical_key"] = dashboard["sport"] + "|" + dashboard["game_id"]
@@ -476,6 +503,8 @@ def _refresh(coverage):
     # Tracking and the immutable kickoff handoff archive must receive the
     # precise source timestamp attached above, not just publication wall time.
     board = update_favorite_tracking(board, DATA, as_of=newest_snapshot)
+    if retained_source and not board.empty:
+        board["data_badge"] = "RETAINED"
     detail_count = write_event_detail_files(board, events, details_dir=DATA / "anomaly_event_details")
     # Replace each public file only after its complete export is ready for Nginx.
     for frame, name in ((board, "anomaly_board.csv"), (events, "anomaly_events.csv")):
@@ -491,7 +520,15 @@ def _refresh(coverage):
     # ``coverage.now`` is the deterministic evaluation clock captured at run
     # start.  Customer-facing publish age must record when the completed files
     # actually became available, especially when a large board takes minutes.
-    freshness = write_board_freshness(dashboard, data_dir=DATA)
+    freshness = write_board_freshness(
+        dashboard,
+        data_dir=DATA,
+        source_state="RETAINED" if retained_source else "LIVE",
+        source_note=(
+            "Live provider response was empty; displaying the last verified pregame capture without changing its timestamp."
+            if retained_source else ""
+        ),
+    )
     resolved_count = rebuild_action_results(DATA)
     freshness_summary = "no current source rows" if freshness is None else (
         f"source range {freshness[0].isoformat()} to {freshness[1].isoformat()} across {freshness[2]} markets"

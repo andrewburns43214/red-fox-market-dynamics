@@ -170,12 +170,33 @@ class PublicationCoverage:
         for key, group in paired.groupby(KEYS, dropna=False):
             self.last_pairs[key] = str(group.timestamp.max())
 
-    def validated(self, frame):
+    def recent_empty_sports(self, max_age_minutes=25):
+        """Return sports whose latest scrape completed with an empty inventory."""
+        with self.store.connect() as db:
+            rows = db.execute(
+                "SELECT sport,state,started_at FROM runs WHERE kind='SCRAPE' ORDER BY started_at"
+            ).fetchall()
+        latest = {sport: (state, started_at) for sport, state, started_at in rows}
+        empty = set()
+        for sport, (state, started_at) in latest.items():
+            captured = pd.to_datetime(started_at, utc=True, errors="coerce")
+            age = (self.now - captured).total_seconds() / 60 if pd.notna(captured) else None
+            if state == "EMPTY_COMPLETE" and age is not None and -1 <= age <= max_age_minutes:
+                empty.add(sport)
+        return empty
+
+    def validated(self, frame, allow_retained_parse_failed_sports=None):
+        retained_sports = set(allow_retained_parse_failed_sports or ())
         blocked = {tuple(str(r.get(k, "")) for k in KEYS): r["capture_exclusion_reason"]
                    for r in self.store.inventory() if r.get("capture_exclusion_reason")}
         for key, reason in blocked.items():
+            if reason == "RAW_MARKET_PARSE_FAILED" and key[0] in retained_sports:
+                continue
             self.reasons[key] = reason
-        return frame.loc[[tuple(str(row[k]) for k in KEYS) not in blocked for row in frame.to_dict("records")]].copy()
+        return frame.loc[[
+            tuple(str(row[k]) for k in KEYS) not in self.reasons
+            for row in frame.to_dict("records")
+        ]].copy()
 
     def publish(self, board, board_path, window_filter):
         published = keys(board)

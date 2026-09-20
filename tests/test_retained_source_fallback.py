@@ -1,0 +1,79 @@
+import json
+from pathlib import Path
+
+import pandas as pd
+
+from publication_coverage import PublicationCoverage
+from refresh_anomaly_board import write_board_freshness
+
+
+ROOT = Path(__file__).resolve().parents[1]
+BOARD = (ROOT / "site" / "board.html").read_text(encoding="utf-8")
+REFRESH = (ROOT / "refresh_anomaly_board.py").read_text(encoding="utf-8")
+
+
+def test_retained_source_keeps_true_capture_age_and_explicit_state(tmp_path):
+    dashboard = pd.DataFrame(
+        [{"sport": "nfl", "game_id": "1", "market_display": "SPREAD", "timestamp": "2026-09-20T08:30:00Z"}]
+    )
+    oldest, newest, count = write_board_freshness(
+        dashboard,
+        data_dir=tmp_path,
+        now="2026-09-20T16:00:00Z",
+        source_state="RETAINED",
+        source_note="provider empty",
+    )
+    payload = json.loads((tmp_path / "freshness.json").read_text())
+    assert oldest.isoformat() == "2026-09-20T08:30:00+00:00"
+    assert newest == oldest
+    assert count == 1
+    assert payload["board_source_state"] == "RETAINED"
+    assert payload["board_source_note"] == "provider empty"
+    assert payload["board_published_at"] == "2026-09-20T16:00:00+00:00"
+
+
+def test_retained_mode_is_bounded_and_never_fakes_live_timestamp():
+    assert 'REDFOX_RETAINED_SOURCE_MAX_AGE_MINUTES", "720"' in REFRESH
+    assert 'board["data_badge"] = "RETAINED"' in REFRESH
+    assert "Retained source" in BOARD
+    assert "sources[0].label='Retained source'; sources[0].forced='warn'" in BOARD
+
+
+def test_recent_empty_scrape_can_reuse_only_parse_failed_rows(tmp_path):
+    coverage = PublicationCoverage(tmp_path, pd.Timestamp("2026-09-20T16:00:00Z"))
+    coverage.store.update(
+        [
+            {"sport": "nfl", "game_id": "parse", "market_display": "SPREAD",
+             "capture_exclusion_reason": "RAW_MARKET_PARSE_FAILED"},
+            {"sport": "nfl", "game_id": "identity", "market_display": "TOTAL",
+             "capture_exclusion_reason": "UNRESOLVED_EVENT_IDENTITY"},
+        ],
+        coverage.run_id,
+        "TEST",
+    )
+    scrape = coverage.store.begin("SCRAPE", "nfl", now="2026-09-20T15:55:00Z")
+    coverage.store.finish(scrape, "EMPTY_COMPLETE")
+    rows = pd.DataFrame([
+        {"sport": "nfl", "game_id": "parse", "market_display": "SPREAD"},
+        {"sport": "nfl", "game_id": "identity", "market_display": "TOTAL"},
+    ])
+
+    empty_sports = coverage.recent_empty_sports()
+    accepted = coverage.validated(rows, allow_retained_parse_failed_sports=empty_sports)
+
+    assert empty_sports == {"nfl"}
+    assert accepted.game_id.tolist() == ["parse"]
+    assert coverage.reasons[("nfl", "identity", "TOTAL")] == "UNRESOLVED_EVENT_IDENTITY"
+
+
+def test_parse_failed_rows_stay_blocked_without_a_recent_empty_scrape(tmp_path):
+    coverage = PublicationCoverage(tmp_path, pd.Timestamp("2026-09-20T16:00:00Z"))
+    coverage.store.update(
+        [{"sport": "nfl", "game_id": "g", "market_display": "SPREAD",
+          "capture_exclusion_reason": "RAW_MARKET_PARSE_FAILED"}],
+        coverage.run_id,
+        "TEST",
+    )
+    rows = pd.DataFrame([{"sport": "nfl", "game_id": "g", "market_display": "SPREAD"}])
+
+    assert coverage.validated(rows).empty
