@@ -1,9 +1,11 @@
+import json
 from pathlib import Path
 
 import pandas as pd
 
 from anomaly_board import build_anomaly_outputs
 from refresh_anomaly_board import (
+    compact_public_board_payload,
     complete_public_market_rows,
     filter_fresh_market_rows,
     filter_publication_eligible_markets,
@@ -218,3 +220,29 @@ def test_two_sided_market_uses_its_first_shared_history_capture_for_both_open_pr
 
     assert sides.loc["Over 56.5", "open_line"] == "56.5"
     assert sides.loc["Under 56.5", "open_line"] == "56.5"
+
+
+def test_public_payload_compaction_keeps_side_evidence_without_duplicate_paths():
+    sides = [
+        {"flagged_side": "Away +3", "bets_pct": 40, "money_pct": 35,
+         "current_line": "+3 (-110)", "reaction": "Contrarian",
+         "observed_path": ["+4", "+3.5", "+3"]},
+        {"flagged_side": "Home -3", "bets_pct": 60, "money_pct": 65,
+         "current_line": "-3 (-110)", "reaction": "Watch",
+         "observed_path": ["-4", "-3.5", "-3"]},
+    ]
+    board = pd.DataFrame([{
+        "sport": "nfl", "game_id": "g", "market_display": "SPREAD",
+        "observed_path": json.dumps(["+4", "+3.5", "+3"]),
+        "market_sides": json.dumps(sides), "supported_side": "Away +3",
+    }])
+
+    compact = compact_public_board_payload(board)
+    compact_sides = json.loads(compact.iloc[0].market_sides)
+
+    assert compact.iloc[0].observed_path == ""
+    assert len(compact_sides) == 2
+    assert all("observed_path" not in side for side in compact_sides)
+    assert compact_sides[0]["flagged_side"] == "Away +3"
+    assert compact_sides[0]["current_line"] == "+3 (-110)"
+    assert compact.iloc[0].supported_side == "Away +3"

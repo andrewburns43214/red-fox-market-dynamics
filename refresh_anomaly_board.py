@@ -214,6 +214,35 @@ def restore_retained_favorites(board, data_dir=DATA, now=None):
     return result
 
 
+def compact_public_board_payload(board):
+    """Remove duplicated path arrays after every scoring consumer has run.
+
+    The authoritative timeline remains in ``anomaly_events.csv`` and the
+    game-scoped detail JSON files. The board needs only the current two-side
+    summaries, so carrying each lifetime display path again substantially
+    increases every board download without adding customer-visible evidence.
+    """
+    if board is None or board.empty:
+        return pd.DataFrame() if board is None else board.copy()
+    result = board.copy()
+    if "observed_path" in result:
+        result["observed_path"] = ""
+    if "market_sides" in result:
+        def compact_sides(value):
+            try:
+                sides = json.loads(str(value or "[]"))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return value
+            if not isinstance(sides, list):
+                return value
+            for side in sides:
+                if isinstance(side, dict):
+                    side.pop("observed_path", None)
+            return json.dumps(sides, separators=(",", ":"))
+        result["market_sides"] = result["market_sides"].map(compact_sides)
+    return result
+
+
 def load_current_l2(data_dir, as_of):
     """Load L2 only while its capture can still describe the current board.
 
@@ -600,6 +629,7 @@ def _refresh(coverage):
     if retained_source and not board.empty:
         board["data_badge"] = "RETAINED"
         board = restore_retained_favorites(board, DATA, now=coverage.now)
+    board = compact_public_board_payload(board)
     detail_count = write_event_detail_files(board, events, details_dir=DATA / "anomaly_event_details")
     # Replace each public file only after its complete export is ready for Nginx.
     for frame, name in ((board, "anomaly_board.csv"), (events, "anomaly_events.csv")):
