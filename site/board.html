@@ -24,6 +24,7 @@
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   window.redfoxSupabase = client;
   const cookieName = 'redfox_access_token';
+  let accessRefreshPromise = null;
   function syncAccessCookie(session) {
     if (session && session.access_token) {
       document.cookie = cookieName + '=' + encodeURIComponent(session.access_token) +
@@ -34,6 +35,26 @@
   }
   client.auth.getSession().then(function (result) { syncAccessCookie(result.data.session); });
   client.auth.onAuthStateChange(function (_event, session) { syncAccessCookie(session); });
+  window.redfoxAuthorizedFetch = async function (input, init) {
+    const response = await fetch(input, init);
+    if (response.status !== 401) return response;
+
+    if (!accessRefreshPromise) {
+      accessRefreshPromise = client.auth.refreshSession()
+        .then(function (result) {
+          const session = result && result.data ? result.data.session : null;
+          syncAccessCookie(session);
+          return session;
+        })
+        .catch(function () { return null; })
+        .finally(function () { accessRefreshPromise = null; });
+    }
+
+    const session = await accessRefreshPromise;
+    if (session) return fetch(input, init);
+    window.location.replace('/?auth=required');
+    return response;
+  };
 })();
 </script>
 <style>
@@ -4573,7 +4594,7 @@ function buildKPIs(){
 }
 
 
-async function loadCSV(url){ try{ const r=await fetch(url+'?t='+Date.now()); if(!r.ok) return null; const txt=await r.text(); return Papa.parse(txt,{header:true,skipEmptyLines:true}).data.map(row=>{ const o={}; Object.keys(row).forEach(k=>{o[k.replace(/\ufeff|\r|\n/g,'').trim()]=row[k];}); return o; }); }catch(e){ return null; } }
+async function loadCSV(url){ try{ const r=await window.redfoxAuthorizedFetch(url+'?t='+Date.now()); if(!r.ok) return null; const txt=await r.text(); return Papa.parse(txt,{header:true,skipEmptyLines:true}).data.map(row=>{ const o={}; Object.keys(row).forEach(k=>{o[k.replace(/\ufeff|\r|\n/g,'').trim()]=row[k];}); return o; }); }catch(e){ return null; } }
 
 function updateFreshness(f){
   const bar=document.getElementById('fresh-bar');
@@ -5037,7 +5058,7 @@ async function ensureGameEvents(row){
   if(_gameEventRequests.has(url)) return _gameEventRequests.get(url);
   const request=(async()=>{
     try{
-      const response=await fetch(url+'?_='+Date.now());
+      const response=await window.redfoxAuthorizedFetch(url+'?_='+Date.now());
       if(response.ok){
         const events=await response.json();
         if(Array.isArray(events)) return events;
@@ -5070,13 +5091,13 @@ async function ensureEvents(){
 }
 async function loadAll({forceRender=false}={}){
   let freshJson=null;
-  try{ const r=await fetch('/data/freshness.json?_='+Date.now()); if(r.ok) freshJson=await r.json(); } catch(e){}
+  try{ const r=await window.redfoxAuthorizedFetch('/data/freshness.json?_='+Date.now()); if(r.ok) freshJson=await r.json(); } catch(e){}
   _boardFreshness=freshJson;
   const[dash,results,kpi,props]=await Promise.all([
     loadCSV(DASH_URL),
     loadCSV(RESULTS_URL),
     loadCSV('/data/kpi_master_dataset.csv'),
-    fetch(PROP_PROJECTION_URL+'?_='+Date.now(),{cache:'no-store'}).then(response=>response.ok?response.json():null).catch(()=>null),
+    window.redfoxAuthorizedFetch(PROP_PROJECTION_URL+'?_='+Date.now(),{cache:'no-store'}).then(response=>response.ok?response.json():null).catch(()=>null),
   ]);
   propProjections=Array.isArray(props?.projections)?props.projections:[];
   updateFreshness(freshJson);
@@ -5299,7 +5320,7 @@ async function loadCSV(url){
   if(_csvRequests.has(url)) return _csvRequests.get(url);
   const request=(async()=>{
     try{
-      const r=await fetch(url,{cache:'no-store'});
+      const r=await window.redfoxAuthorizedFetch(url,{cache:'no-store'});
       if(!r.ok) return null;
       const text=await r.text();
       return new Promise(resolve=>{
@@ -5356,7 +5377,7 @@ function renderFavoritePerformance(){
 }
 async function loadFavoritePerformance(){
   try{
-    const response=await fetch(FAVORITE_PERFORMANCE_URL+'?_='+Date.now(),{cache:'no-store'});
+    const response=await window.redfoxAuthorizedFetch(FAVORITE_PERFORMANCE_URL+'?_='+Date.now(),{cache:'no-store'});
     if(!response.ok) return;
     const performance=normalizeFavoritePerformance(await response.json());
     if(!performance) return;
