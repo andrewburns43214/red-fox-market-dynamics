@@ -96,6 +96,9 @@ def test_provider_outage_uses_cache_and_never_raises(monkeypatch, tmp_path):
     payload = service.run_collection(client=Client(), resolver=Resolver(), force=True, now=NOW)
     assert payload["projections"][0]["status"] == "UNAVAILABLE"
     assert public.exists()
+    state = json.loads((data / "state.json").read_text())
+    assert state["sports"]["nfl"]["last_poll"] == NOW.isoformat()
+    assert state["sports"]["nfl"]["last_error"] == "RuntimeError"
 
 
 def test_process_lock_prevents_overlap(tmp_path):

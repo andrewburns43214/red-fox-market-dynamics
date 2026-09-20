@@ -287,7 +287,16 @@ def run_collection(client=None, resolver=None, force=False, now=None):
                 _atomic_json(cached_path, payload)
                 state["sports"][sport] = {"last_poll": now.isoformat(), "last_success": now.isoformat()}
             except Exception as error:
-                state["sports"][sport] = {**sport_state, "last_error": type(error).__name__, "last_error_at": now.isoformat()}
+                # A bad credential or provider outage must not be retried by
+                # every five-minute RF runner. Record the attempt as a poll so
+                # the normal event-aware interval backs errors off to hourly
+                # when there is no usable cache.
+                state["sports"][sport] = {
+                    **sport_state,
+                    "last_poll": now.isoformat(),
+                    "last_error": type(error).__name__,
+                    "last_error_at": now.isoformat(),
+                }
         upcoming_events = [event for event in _events(payload) if (parse_time(event.get("commence_time")) or now) > now]
         rosters_by_event = resolver.prefetch(sport, upcoming_events)
         for event in upcoming_events:
