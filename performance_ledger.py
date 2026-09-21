@@ -39,6 +39,8 @@ LEDGER_COLUMNS = [
     "open_line", "open_price", "decision_line", "decision_price", "decision_line_source",
     "final_pregame_line", "final_pregame_price",
     "line_move_from_open", "market_read", "market_read_detail", "market_path",
+    "bets_pct", "money_pct", "bets_pct_band", "money_pct_band",
+    "movement_magnitude", "movement_magnitude_band", "favorite_cross_market_state",
     "observation_count", "line_direction_changes", "return_toward_open",
     "active_worsening_reversal", "whipsaw_state", "whipsaw_ever",
     "supported_side", "favorite_qualified", "favorite_rule_version",
@@ -48,7 +50,8 @@ LEDGER_COLUMNS = [
     "price_band", "spread_band",
     "favorite_first_qualified_at", "favorite_final_qualified_at",
     "favorite_first_fell_off_at", "favorite_last_fell_off_at",
-    "favorite_fell_off_before_kickoff", "qualification_episode_count",
+    "favorite_fell_off_before_kickoff", "favorite_ever_fell_off", "favorite_final_state",
+    "favorite_t20_state", "favorite_locked_decision", "qualification_episode_count",
     "requalification_count", "falloff_count", "qualifying_capture_count",
     "minutes_first_qualified_before_start", "minutes_final_state_before_start",
     "first_qualified_timing_band", "final_state_timing_band",
@@ -57,7 +60,8 @@ LEDGER_COLUMNS = [
     "classification_correction_reason", "classification_original_publication",
     "final_score", "market_result", "grade", "stake_units", "net_profit_units", "roi",
     "closing_line", "closing_price", "clv", "clv_method", "clv_available",
-    "score_provider", "score_provider_event_id", "score_resolved_at",
+    "score_provider", "score_source", "score_provider_event_id", "score_resolved_at",
+    "graded_at_utc", "grade_evidence_hash",
     "freeze_source", "freeze_method", "source_snapshot_id", "source_hash", "audit_status",
 ]
 CLASSIFICATION_COLUMNS = LEDGER_COLUMNS[:LEDGER_COLUMNS.index("final_score")] + [
@@ -66,7 +70,8 @@ CLASSIFICATION_COLUMNS = LEDGER_COLUMNS[:LEDGER_COLUMNS.index("final_score")] + 
 RESULT_COLUMNS = [
     "final_score", "market_result", "grade", "stake_units", "net_profit_units", "roi",
     "closing_line", "closing_price", "clv", "clv_method", "clv_available",
-    "score_provider", "score_provider_event_id", "score_resolved_at", "audit_status",
+    "score_provider", "score_source", "score_provider_event_id", "score_resolved_at",
+    "graded_at_utc", "grade_evidence_hash", "audit_status",
 ]
 EXPORT_FILES = {
     "combined": "performance_combined.csv",
@@ -77,15 +82,18 @@ EXPORT_FILES = {
 }
 
 COHORT_DIMENSIONS = [
-    "sport", "market", "favorite_pathway", "price_band", "spread_band",
+    "sport", "market", "favorite_pathway", "market_read", "bets_pct_band", "money_pct_band",
+    "price_band", "spread_band", "movement_magnitude_band", "favorite_cross_market_state",
     "first_qualified_timing_band", "final_state_timing_band", "whipsaw_ever",
-    "favorite_fell_off_before_kickoff",
+    "favorite_ever_fell_off", "favorite_t20_state", "favorite_locked_decision",
+    "favorite_rule_version",
 ]
 COHORT_KPI_COLUMNS = [
     "dimension", "segment", "candidate_decision", "candidates", "graded",
     "wins", "losses", "pushes", "win_rate_excluding_pushes", "stake_units",
     "net_profit_units", "roi", "clv_available", "clv_coverage", "average_clv",
     "whipsaw_candidates", "whipsaw_rate", "fell_off_candidates", "falloff_rate",
+    "sample_status",
 ]
 
 
@@ -246,6 +254,43 @@ def _spread_band(line: object, market: str) -> str:
     return "above_8"
 
 
+def _percent_band(value: object) -> str:
+    number = _number(value)
+    if number is None:
+        return "unavailable"
+    if number <= 20:
+        return "0_to_20"
+    if number <= 35:
+        return "21_to_35"
+    if number <= 45:
+        return "36_to_45"
+    if number <= 55:
+        return "46_to_55"
+    if number <= 70:
+        return "56_to_70"
+    if number <= 85:
+        return "71_to_85"
+    return "86_to_100"
+
+
+def _movement_band(value: object) -> str:
+    number = _number(value)
+    if number is None:
+        return "unavailable"
+    magnitude = abs(number)
+    if magnitude == 0:
+        return "held"
+    if magnitude < 0.5:
+        return "under_0.5"
+    if magnitude < 1:
+        return "0.5_to_under_1"
+    if magnitude < 2:
+        return "1_to_under_2"
+    if magnitude < 5:
+        return "2_to_under_5"
+    return "5_plus"
+
+
 def _candidate_pathway(side: dict, market_sides: list[dict]) -> str:
     bets, money = _number(side.get("bets_pct")), _number(side.get("money_pct"))
     reaction = _text(side.get("reaction"))
@@ -306,6 +351,7 @@ def _tracking_lifecycle(history: pd.DataFrame, row: pd.Series, kickoff: pd.Times
         "last_fell_off": "", "episodes": "0", "requalifications": "0",
         "falloffs": "0", "qualifying_captures": "0", "whipsaw_ever": "no",
         "pathway": "", "first_qualified_line": "",
+        "history_available": "no", "final_state": "unknown", "t20_state": "unknown",
     }
     if history.empty:
         return empty
@@ -335,6 +381,7 @@ def _tracking_lifecycle(history: pd.DataFrame, row: pd.Series, kickoff: pd.Times
     ) | scoped.get("path", pd.Series("", index=scoped.index)).astype(str).str.contains("whipsaw", case=False, na=False)
     pathways = scoped.loc[qualified, "favorite_pathway"] if "favorite_pathway" in scoped else pd.Series(dtype=str)
     first_lines = scoped.loc[qualified, "first_qualified_line"] if "first_qualified_line" in scoped else pd.Series(dtype=str)
+    t20 = scoped[scoped["_at"] <= kickoff - pd.Timedelta(minutes=20)] if pd.notna(kickoff) else pd.DataFrame()
     return {
         "first_qualified": _text(scoped.loc[qualified, "recorded_at"].iloc[0]) if qualified.any() else "",
         "last_qualified": _text(scoped.loc[qualified, "recorded_at"].iloc[-1]) if qualified.any() else "",
@@ -347,6 +394,9 @@ def _tracking_lifecycle(history: pd.DataFrame, row: pd.Series, kickoff: pd.Times
         "whipsaw_ever": "yes" if whipsaw.any() else "no",
         "pathway": _text(pathways.iloc[-1]) if not pathways.empty else "",
         "first_qualified_line": _text(first_lines.iloc[0]) if not first_lines.empty else "",
+        "history_available": "yes",
+        "final_state": _text(states.iloc[-1]) or "unknown",
+        "t20_state": _text(t20.iloc[-1].get("favorite_state")) if not t20.empty else "not_observed",
     }
 
 
@@ -409,7 +459,10 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         line, price = _line_and_price(market, supported, side_record.get("current_line"))
         open_line, open_price = _line_and_price(market, supported, side_record.get("open_line"))
         lifecycle = _tracking_lifecycle(history, row, kickoff)
-        first_qualified, fell_off = _lifecycle(history, row, kickoff)
+        first_qualified = lifecycle["first_qualified"] or _text(row.get("favorite_first_qualified_at"))
+        fell_off = (
+            "yes" if int(_number(lifecycle["falloffs"]) or 0) > 0 else "no"
+        ) if lifecycle["history_available"] == "yes" else "unknown"
         late_invalidated = _truthy(row.get("favorite_late_invalidated"))
         originally_qualified = _truthy(row.get("favorite_originally_qualified")) or late_invalidated
         favorite = (
@@ -433,6 +486,17 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         movement_start = _number(open_price if market == "MONEYLINE" else open_line)
         movement_end = _number(price if market == "MONEYLINE" else line)
         line_move = "" if movement_start is None or movement_end is None else str(round(movement_end - movement_start, 4))
+        movement_magnitude = _number(side_record.get("price_move_pct")) if market == "MONEYLINE" else _number(line_move)
+        contradiction_state = _text(row.get("favorite_cross_market_state")) or (
+            "mismatch" if _truthy(row.get("cross_market_mismatch")) or _truthy(row.get("cross_market_opener_mismatch_verified"))
+            else "clear"
+        )
+        favorite_reason = _text(row.get("favorite_reason")).lower()
+        locked_decision = (
+            "favorite" if "official favorite locked at t-20" in favorite_reason
+            else "non_favorite" if "official non-favorite state locked at t-20" in favorite_reason
+            else "not_recorded"
+        )
         whipsaw_state = _text(row.get("favorite_whipsaw_state"))
         if not whipsaw_state:
             whipsaw_state = (
@@ -463,6 +527,13 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
             "market_read": _text(side_record.get("reaction")),
             "market_read_detail": _text(side_record.get("anomaly_chips")) or _text(side_record.get("reaction")),
             "market_path": _text(side_record.get("path")),
+            "bets_pct": _text(side_record.get("bets_pct")),
+            "money_pct": _text(side_record.get("money_pct")),
+            "bets_pct_band": _percent_band(side_record.get("bets_pct")),
+            "money_pct_band": _percent_band(side_record.get("money_pct")),
+            "movement_magnitude": "" if movement_magnitude is None else str(round(abs(movement_magnitude), 4)),
+            "movement_magnitude_band": _movement_band(movement_magnitude),
+            "favorite_cross_market_state": contradiction_state,
             "observation_count": _text(side_record.get("observation_count")),
             "line_direction_changes": _text(side_record.get("line_dir_changes")),
             "return_toward_open": "yes" if _truthy(side_record.get("return_toward_open")) else "no",
@@ -487,6 +558,10 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
             "favorite_first_fell_off_at": lifecycle["first_fell_off"],
             "favorite_last_fell_off_at": lifecycle["last_fell_off"],
             "favorite_fell_off_before_kickoff": fell_off,
+            "favorite_ever_fell_off": fell_off,
+            "favorite_final_state": "late_invalidated" if late_invalidated else ("qualified" if favorite else "not_qualified"),
+            "favorite_t20_state": lifecycle["t20_state"],
+            "favorite_locked_decision": locked_decision,
             "qualification_episode_count": lifecycle["episodes"],
             "requalification_count": lifecycle["requalifications"],
             "falloff_count": lifecycle["falloffs"],
@@ -507,8 +582,9 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
             "closing_price": _text(row.get("closing_price")) or price,
             "clv": _text(row.get("clv")), "clv_method": "retained_source" if _text(row.get("clv")) else "",
             "clv_available": "yes" if _text(row.get("clv")) else "no",
-            "score_provider": "", "score_provider_event_id": "",
-            "score_resolved_at": "", "freeze_source": source_name,
+            "score_provider": "", "score_source": "", "score_provider_event_id": "",
+            "score_resolved_at": "", "graded_at_utc": "", "grade_evidence_hash": "",
+            "freeze_source": source_name,
             "freeze_method": _text(row.get("freeze_method")) or "audited_latest_state_at_or_before_start",
             "source_snapshot_id": _text(row.get("favorite_snapshot_id")),
             "source_hash": hashlib.sha256(source_payload.encode("utf-8")).hexdigest(),
@@ -520,7 +596,9 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
 def _score_map(scores: pd.DataFrame) -> dict[str, pd.Series]:
     if scores.empty or "game_id" not in scores:
         return {}
-    return {str(row.get("game_id", "")): row for _, row in scores.drop_duplicates("game_id", keep="last").iterrows()}
+    # The immutable final-score history is concatenated first; frozen live rows
+    # are fallback evidence and may not overwrite it during routine rebuilds.
+    return {str(row.get("game_id", "")): row for _, row in scores.drop_duplicates("game_id", keep="first").iterrows()}
 
 
 def _scores_from_frozen(frozen: pd.DataFrame) -> pd.DataFrame:
@@ -539,6 +617,7 @@ def _scores_from_frozen(frozen: pd.DataFrame) -> pd.DataFrame:
             "team1_score": _text(row.get("score_away")), "team2": home,
             "team2_score": _text(row.get("score_home")),
             "score_provider": _text(row.get("score_provider")) or "retained_live_recent",
+            "score_source": "live_recent.csv",
             "score_provider_event_id": _text(row.get("score_provider_event_id")),
             "resolved_at_utc": _text(row.get("score_completed_at_utc")) or _text(row.get("score_updated_at_utc")),
         })
@@ -586,21 +665,22 @@ def _attach_clv(result: pd.DataFrame, index: object, row: pd.Series) -> None:
 
 def _attach_results(ledger: pd.DataFrame, scores: pd.DataFrame) -> pd.DataFrame:
     result = ledger.copy()
+    by_event = _score_map(scores)
+    graded_at = datetime.now(timezone.utc).isoformat()
     for index, row in result.iterrows():
         _attach_clv(result, index, row)
-        grade = _text(row.get("grade"))
-        win_profit = _american_profit(row.get("decision_price"))
-        if grade in {"W", "L", "Push"} and win_profit is not None and not _text(row.get("stake_units")):
-            net = win_profit if grade == "W" else (-1.0 if grade == "L" else 0.0)
-            result.at[index, "stake_units"] = "1"
-            result.at[index, "net_profit_units"] = f"{round(net, 6):g}"
-            result.at[index, "roi"] = f"{round(net, 6):g}"
-    by_event = _score_map(scores)
-    unresolved = ~result.get("grade", pd.Series("", index=result.index)).isin(["W", "L", "Push"])
-    for index, row in result[unresolved].iterrows():
         score = by_event.get(_text(row.get("event_id")))
         if score is None:
-            if not _text(row.get("grade")):
+            if _text(row.get("grade")) in {"W", "L", "Push"} and _text(row.get("final_score")):
+                result.at[index, "score_source"] = _text(row.get("score_source")) or "retained_performance_ledger"
+                result.at[index, "graded_at_utc"] = _text(row.get("graded_at_utc")) or _text(row.get("score_resolved_at")) or graded_at
+                if not _text(row.get("grade_evidence_hash")):
+                    result.at[index, "grade_evidence_hash"] = _result_evidence_hash(result.loc[index])
+            elif _text(row.get("grade")) in {"W", "L", "Push"}:
+                for column in ("grade", "market_result", "stake_units", "net_profit_units", "roi"):
+                    result.at[index, column] = ""
+                result.at[index, "audit_status"] = "unresolved_missing_score_evidence"
+            else:
                 result.at[index, "audit_status"] = "awaiting_final_score"
             continue
         grade_row = {
@@ -624,10 +704,32 @@ def _attach_results(ledger: pd.DataFrame, scores: pd.DataFrame) -> pd.DataFrame:
             result.at[index, "net_profit_units"] = f"{round(net, 6):g}"
             result.at[index, "roi"] = f"{round(net, 6):g}"
         result.at[index, "score_provider"] = _text(score.get("score_provider")) or "espn_final_scores_history"
+        result.at[index, "score_source"] = _text(score.get("score_source")) or "final_scores_history.csv"
         result.at[index, "score_provider_event_id"] = _text(score.get("score_provider_event_id"))
         result.at[index, "score_resolved_at"] = _text(score.get("resolved_at_utc"))
+        result.at[index, "graded_at_utc"] = _text(row.get("graded_at_utc")) or graded_at
+        result.at[index, "grade_evidence_hash"] = _result_evidence_hash(result.loc[index])
         result.at[index, "audit_status"] = "graded"
+    for index, row in result.iterrows():
+        grade = _text(row.get("grade"))
+        win_profit = _american_profit(row.get("decision_price"))
+        if grade in {"W", "L", "Push"} and win_profit is not None:
+            net = win_profit if grade == "W" else (-1.0 if grade == "L" else 0.0)
+            result.at[index, "stake_units"] = "1"
+            result.at[index, "net_profit_units"] = f"{round(net, 6):g}"
+            result.at[index, "roi"] = f"{round(net, 6):g}"
     return result
+
+
+def _result_evidence_hash(row: pd.Series) -> str:
+    if _text(row.get("grade")) not in {"W", "L", "Push"} or not _text(row.get("final_score")):
+        return ""
+    payload = "|".join(_text(row.get(column)) for column in (
+        "ledger_id", "event_id", "market", "side", "decision_line", "decision_price",
+        "final_score", "grade", "score_provider", "score_source",
+        "score_provider_event_id", "score_resolved_at",
+    ))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _cohort_row(rows: pd.DataFrame, dimension: str, segment: str, decision: str) -> dict:
@@ -643,7 +745,7 @@ def _cohort_row(rows: pd.DataFrame, dimension: str, segment: str, decision: str)
     clv = pd.to_numeric(rows.get("clv", pd.Series(dtype=str)), errors="coerce")
     clv_count = int(clv.notna().sum())
     whipsaw = rows.get("whipsaw_ever", pd.Series("no", index=rows.index)).astype(str).eq("yes")
-    fell_off = rows.get("favorite_fell_off_before_kickoff", pd.Series("no", index=rows.index)).astype(str).eq("yes")
+    fell_off = rows.get("favorite_ever_fell_off", pd.Series("unknown", index=rows.index)).astype(str).eq("yes")
     count = len(rows)
     return {
         "dimension": dimension, "segment": segment, "candidate_decision": decision,
@@ -660,6 +762,12 @@ def _cohort_row(rows: pd.DataFrame, dimension: str, segment: str, decision: str)
         "whipsaw_rate": round(float(whipsaw.mean()), 6) if count else "",
         "fell_off_candidates": int(fell_off.sum()),
         "falloff_rate": round(float(fell_off.mean()), 6) if count else "",
+        "sample_status": (
+            "TOO_SMALL" if len(graded) < 10 else
+            "EARLY" if len(graded) < 25 else
+            "DEVELOPING" if len(graded) < 50 else
+            "MATURE"
+        ),
     }
 
 
@@ -789,15 +897,40 @@ def update_performance_ledger(
             "a last-qualified handoff archive must not restore it."
         )
         for index, row in ledger.iterrows():
-            if not _text(row.get("decision_line")) and not _text(row.get("decision_price")):
-                lifecycle_row = pd.Series({
-                    "sport": row.get("sport", ""), "game_id": row.get("event_id", ""),
-                    "market_display": row.get("market", ""),
-                })
-                lifecycle = _tracking_lifecycle(
-                    history, lifecycle_row,
-                    pd.to_datetime(row.get("scheduled_start", ""), errors="coerce", utc=True),
+            lifecycle_row = pd.Series({
+                "sport": row.get("sport", ""), "game_id": row.get("event_id", ""),
+                "market_display": row.get("market", ""),
+            })
+            lifecycle = _tracking_lifecycle(
+                history, lifecycle_row,
+                pd.to_datetime(row.get("scheduled_start", ""), errors="coerce", utc=True),
+            )
+            if lifecycle["history_available"] == "yes":
+                ever_fell_off = "yes" if int(_number(lifecycle["falloffs"]) or 0) > 0 else "no"
+                ledger.at[index, "favorite_first_qualified_at"] = lifecycle["first_qualified"] or row.get("favorite_first_qualified_at", "")
+                ledger.at[index, "favorite_first_fell_off_at"] = lifecycle["first_fell_off"]
+                ledger.at[index, "favorite_last_fell_off_at"] = lifecycle["last_fell_off"]
+                ledger.at[index, "favorite_fell_off_before_kickoff"] = ever_fell_off
+                ledger.at[index, "favorite_ever_fell_off"] = ever_fell_off
+                ledger.at[index, "favorite_t20_state"] = lifecycle["t20_state"]
+                ledger.at[index, "qualification_episode_count"] = lifecycle["episodes"]
+                ledger.at[index, "requalification_count"] = lifecycle["requalifications"]
+                ledger.at[index, "falloff_count"] = lifecycle["falloffs"]
+                ledger.at[index, "qualifying_capture_count"] = lifecycle["qualifying_captures"]
+            else:
+                ledger.at[index, "favorite_fell_off_before_kickoff"] = "unknown"
+                ledger.at[index, "favorite_ever_fell_off"] = "unknown"
+                if not _text(row.get("favorite_t20_state")):
+                    ledger.at[index, "favorite_t20_state"] = "unknown"
+            if not _text(row.get("favorite_final_state")):
+                ledger.at[index, "favorite_final_state"] = (
+                    "late_invalidated" if _truthy(row.get("favorite_late_invalidated"))
+                    else "qualified" if _truthy(row.get("favorite_qualified"))
+                    else "not_qualified"
                 )
+            if not _text(row.get("favorite_locked_decision")):
+                ledger.at[index, "favorite_locked_decision"] = "not_recorded"
+            if not _text(row.get("decision_line")) and not _text(row.get("decision_price")):
                 tracked = lifecycle["first_qualified_line"]
                 if tracked:
                     decision_line, decision_price = _line_and_price(_text(row.get("market")).upper(), _text(row.get("side")), tracked)
@@ -816,6 +949,14 @@ def update_performance_ledger(
                 ledger.at[index, "price_band"] = _price_band(row.get("final_pregame_price")) if _text(row.get("market")).upper() == "MONEYLINE" else "not_applicable"
             if not _text(row.get("spread_band")):
                 ledger.at[index, "spread_band"] = _spread_band(row.get("final_pregame_line"), _text(row.get("market")).upper())
+            if not _text(row.get("bets_pct_band")):
+                ledger.at[index, "bets_pct_band"] = _percent_band(row.get("bets_pct"))
+            if not _text(row.get("money_pct_band")):
+                ledger.at[index, "money_pct_band"] = _percent_band(row.get("money_pct"))
+            if not _text(row.get("movement_magnitude_band")):
+                ledger.at[index, "movement_magnitude_band"] = _movement_band(row.get("movement_magnitude"))
+            if not _text(row.get("favorite_cross_market_state")):
+                ledger.at[index, "favorite_cross_market_state"] = "unavailable"
             if not _text(row.get("first_qualified_timing_band")):
                 ledger.at[index, "first_qualified_timing_band"] = _timing_band(row.get("minutes_first_qualified_before_start"))
             if not _text(row.get("final_state_timing_band")):

@@ -13,6 +13,9 @@ def frozen_row(**updates):
         "current_line": "-105",
         "reaction": "Contrarian",
         "anomaly_chips": "Contrarian | One-Way",
+        "bets_pct": "24",
+        "money_pct": "43",
+        "price_move_pct": "5.2",
     }
     row = {
         "sport": "mlb", "game_id": "101", "game": "NY Mets @ MIA Marlins",
@@ -73,10 +76,17 @@ def test_ingests_directional_final_state_and_grades_without_reclassification(tmp
     assert mets["market_read"] == "Contrarian"
     assert mets["favorite_qualified"] == "yes"
     assert mets["grade"] == "W"
+    assert mets["grade_evidence_hash"] and len(mets["grade_evidence_hash"]) == 64
+    assert mets["score_source"] == "final_scores_history.csv"
+    assert mets["bets_pct_band"] == "21_to_35"
+    assert mets["money_pct_band"] == "36_to_45"
+    assert mets["movement_magnitude_band"] == "5_plus"
     spread = ledger[ledger.event_id.eq("103")].iloc[0]
     assert spread["final_pregame_line"] == "+3.5"
     assert spread["favorite_qualified"] == "no"
     assert spread["favorite_fell_off_before_kickoff"] == "yes"
+    assert spread["favorite_ever_fell_off"] == "yes"
+    assert spread["favorite_t20_state"] == "not_qualified"
     assert spread["grade"] == "L"
     assert spread["candidate_decision"] == "rejected"
     assert spread["falloff_count"] == "1"
@@ -85,10 +95,16 @@ def test_ingests_directional_final_state_and_grades_without_reclassification(tmp
     audit = pd.read_csv(tmp_path / "favorite_candidate_audit.csv", dtype=str, keep_default_na=False)
     assert set(audit["candidate_decision"]) == {"accepted", "rejected"}
     kpis = pd.read_csv(tmp_path / "favorite_cohort_kpis.csv", dtype=str, keep_default_na=False)
-    assert {"sport", "market", "favorite_pathway", "price_band", "spread_band", "full_cohort"}.issubset(set(kpis["dimension"]))
+    assert {
+        "sport", "market", "favorite_pathway", "market_read", "bets_pct_band",
+        "money_pct_band", "price_band", "spread_band", "movement_magnitude_band",
+        "favorite_cross_market_state", "favorite_t20_state", "favorite_rule_version",
+        "full_cohort",
+    }.issubset(set(kpis["dimension"]))
     accepted_all = kpis[(kpis.dimension == "all") & (kpis.candidate_decision == "accepted")].iloc[0]
     assert accepted_all["candidates"] == "1"
     assert accepted_all["net_profit_units"] != ""
+    assert accepted_all["sample_status"] == "TOO_SMALL"
 
     frozen = pd.read_csv(tmp_path / "live_recent.csv", dtype=str, keep_default_na=False)
     frozen.loc[frozen.game_id.eq("101"), "supported_side"] = "MIA Marlins"
@@ -109,6 +125,28 @@ def test_v1_favorite_is_supported_side_only_and_unresolved_rows_remain_ungraded(
     assert ledger.iloc[0]["audit_status"] == "awaiting_final_score"
     favorites = pd.read_csv(tmp_path / "performance_favorites.csv", dtype=str, keep_default_na=False)
     assert favorites.empty
+
+
+def test_v2_and_v3_share_one_official_record_while_rule_version_remains_metadata(tmp_path):
+    write(pd.DataFrame([
+        frozen_row(game_id="v2-game", favorite_rule_version="red_fox_favorite_v2"),
+        frozen_row(game_id="v3-game", favorite_rule_version="red_fox_favorite_v3"),
+    ]), tmp_path / "live_recent.csv")
+    write(pd.DataFrame([
+        {"game_id": game_id, "team1": "NY Mets", "team1_score": "7", "team2": "MIA Marlins", "team2_score": "5"}
+        for game_id in ("v2-game", "v3-game")
+    ]), tmp_path / "final_scores_history.csv")
+
+    result = update_performance_ledger(tmp_path)
+    favorites = pd.read_csv(tmp_path / "performance_favorites.csv", dtype=str, keep_default_na=False)
+    performance = json.loads((tmp_path / "favorite_performance.json").read_text(encoding="utf-8"))
+
+    assert result["favorites"]["wins"] == 2
+    assert performance["wins"] == 2
+    assert set(favorites["favorite_rule_version"]) == {"red_fox_favorite_v2", "red_fox_favorite_v3"}
+    cohorts = pd.read_csv(tmp_path / "favorite_cohort_kpis.csv", dtype=str, keep_default_na=False)
+    version_rows = cohorts[(cohorts["dimension"] == "favorite_rule_version") & (cohorts["candidate_decision"] == "accepted")]
+    assert set(version_rows["segment"]) == {"red_fox_favorite_v2", "red_fox_favorite_v3"}
 
 
 def test_retroactive_system_correction_is_included_and_disclosed_in_favorite_ledger(tmp_path):
