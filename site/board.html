@@ -5042,10 +5042,15 @@ function propTeamMatches(boardTeam,providerTeam){
 function gamePropProjection(row){
   const sport=normSportKey(row.sport); const parts=String(row.game||'').split(/\s+@\s+/); if(parts.length!==2)return null;
   const kickoff=new Date(row.kickoff_iso||row._game_time||row.kickoff_time||'');
-  const matches=propProjections.filter(item=>normSportKey(item.sport)===sport&&propTeamMatches(parts[0],item.away_team)&&propTeamMatches(parts[1],item.home_team));
-  if(matches.length<=1)return matches[0]||null;
   if(Number.isNaN(kickoff.getTime()))return null;
-  return matches.sort((a,b)=>Math.abs(new Date(a.commence_time)-kickoff)-Math.abs(new Date(b.commence_time)-kickoff))[0]||null;
+  const matches=propProjections.filter(item=>normSportKey(item.sport)===sport&&propTeamMatches(parts[0],item.away_team)&&propTeamMatches(parts[1],item.home_team));
+  // Consecutive games in a series have the same teams. Never attach a prior
+  // or next day's prop score merely because it is the only matching payload.
+  const nearby=matches.filter(item=>{
+    const start=new Date(item.commence_time);
+    return !Number.isNaN(start.getTime())&&Math.abs(start-kickoff)<=3*3600000;
+  });
+  return nearby.sort((a,b)=>Math.abs(new Date(a.commence_time)-kickoff)-Math.abs(new Date(b.commence_time)-kickoff))[0]||null;
 }
 function propOpeningWindowHours(sport){ return ({nfl:48,ncaaf:36,nba:24,ncaab:24,nhl:24,mlb:12})[normSportKey(sport)]||24; }
 function propUnavailableStatus(row,prop){
