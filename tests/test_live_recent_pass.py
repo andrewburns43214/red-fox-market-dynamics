@@ -325,6 +325,18 @@ def test_visibility_invalidated_favorite_cannot_reenter_from_handoff_archive():
     assert frozen.empty
 
 
+def test_rule_invalidated_mlb_favorite_is_removed_from_retained_display():
+    candidate = pd.DataFrame([{
+        "sport": "mlb", "game_id": "34694536", "market_display": "MONEYLINE",
+        "red_fox_favorite": "true", "favorite_side": "WAS Nationals",
+        "favorite_state": "qualified", "favorite_reason": "legacy qualification",
+    }])
+    corrected = live.apply_favorite_exclusions(candidate).iloc[0]
+    assert corrected.red_fox_favorite == "false"
+    assert corrected.favorite_state == "not_qualified"
+    assert "five-point" in corrected.favorite_reason
+
+
 def test_arizona_system_miss_is_retroactively_classified_with_explicit_provenance():
     sides = [
         {"flagged_side": "ARI Cardinals +8.5", "bets_pct": 37, "money_pct": 46, "open_line": "+10.5 (-110)", "current_line": "+8.5 (-110)", "path": "One-Way"},

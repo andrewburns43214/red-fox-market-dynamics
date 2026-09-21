@@ -18,7 +18,7 @@ import pandas as pd
 
 @dataclass(frozen=True)
 class FavoriteConfig:
-    version: str = "red_fox_favorite_v2"
+    version: str = "red_fox_favorite_v3"
     spread_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
     primary_moneyline_sports: frozenset[str] = frozenset({"mlb", "nhl", "ufc"})
     secondary_moneyline_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
@@ -38,6 +38,11 @@ class FavoriteConfig:
     minimum_observations: int = 3
     meaningful_spread_move: float = 0.5
     meaningful_moneyline_price_move: float = 2.5
+    # An MLB side that opened and remains plus money has not demonstrated the
+    # same market conviction as an underdog that was bet through pick'em.  It
+    # therefore needs a stronger probability move than the generic market-read
+    # threshold before it can become a Red Fox Favorite.
+    mlb_still_plus_min_probability_move: float = 5.0
     resistance_min_bets: float = 80.0
     resistance_min_money: float = 60.0
     resistance_max_direction_changes: int = 4
@@ -63,6 +68,9 @@ class FavoriteConfig:
 CONFIG = FavoriteConfig()
 VISIBILITY_INVALIDATED_FAVORITES = frozenset({
     ("ncaaf", "34603681", "SPREAD"),  # Jacksonville State @ Ohio, 2026-09-12
+})
+RULE_INVALIDATED_FAVORITES = frozenset({
+    ("mlb", "34694536", "MONEYLINE"),  # WAS Nationals @ STL Cardinals, 2026-09-20
 })
 
 
@@ -1004,6 +1012,8 @@ def _number_is_eligible(sport: str, market: str, value: float, side: dict, game_
     maximum = CONFIG.primary_moneyline_max if sport in CONFIG.primary_moneyline_sports else CONFIG.moneyline_max
     if not CONFIG.moneyline_min <= value <= maximum:
         return False
+    if sport == "mlb" and not _mlb_plus_money_conviction_gate(side, value):
+        return False
     if sport in CONFIG.primary_moneyline_sports:
         return True
     spread = _matching_market_side(game_rows, "SPREAD", side.get("flagged_side"))
@@ -1022,6 +1032,20 @@ def _number_is_eligible(sport: str, market: str, value: float, side: dict, game_
     ):
         return False
     return True
+
+
+def _mlb_plus_money_conviction_gate(side: dict, current_value: float) -> bool:
+    """Require real conviction when an MLB underdog remains plus money.
+
+    Crossing from plus to minus money is sufficient evidence and continues to
+    use the ordinary Favorite gates. If both the opener and current price are
+    positive, require at least five implied-probability points of improvement.
+    Negative openers and non-positive current prices are unaffected.
+    """
+    open_value = _line_value(side.get("open_line"), "MONEYLINE")
+    if open_value is None or open_value <= 0 or current_value <= 0:
+        return True
+    return (_number(side.get("price_move_pct")) or 0) >= CONFIG.mlb_still_plus_min_probability_move
 
 
 def _football_favorite_moneyline_gate(side: dict, spread: dict, spread_value: float) -> bool:

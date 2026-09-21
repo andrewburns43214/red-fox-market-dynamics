@@ -12,7 +12,11 @@ import re
 
 import pandas as pd
 import requests
-from red_fox_favorite import FAVORITE_COLUMNS, VISIBILITY_INVALIDATED_FAVORITES
+from red_fox_favorite import (
+    FAVORITE_COLUMNS,
+    RULE_INVALIDATED_FAVORITES,
+    VISIBILITY_INVALIDATED_FAVORITES,
+)
 from team_aliases import normalize_team_name
 
 
@@ -461,11 +465,11 @@ def suppress_stale_retained_favorites(
 
 
 def apply_favorite_exclusions(frame: pd.DataFrame) -> pd.DataFrame:
-    """Prevent audited visibility failures from re-entering frozen displays."""
+    """Prevent audited invalid Favorites from re-entering frozen displays."""
     if frame.empty or not all(column in frame for column in ("sport", "game_id", "market_display")):
         return frame
     result = frame.copy()
-    invalid = pd.Series(
+    visibility_invalid = pd.Series(
         [
             (str(row.get("sport", "")).lower(), str(row.get("game_id", "")), str(row.get("market_display", "")).upper())
             in VISIBILITY_INVALIDATED_FAVORITES
@@ -473,6 +477,15 @@ def apply_favorite_exclusions(frame: pd.DataFrame) -> pd.DataFrame:
         ],
         index=result.index,
     )
+    rule_invalid = pd.Series(
+        [
+            (str(row.get("sport", "")).lower(), str(row.get("game_id", "")), str(row.get("market_display", "")).upper())
+            in RULE_INVALIDATED_FAVORITES
+            for _, row in result.iterrows()
+        ],
+        index=result.index,
+    )
+    invalid = visibility_invalid | rule_invalid
     for column in FAVORITE_COLUMNS:
         if column in result:
             result.loc[invalid, column] = ""
@@ -481,7 +494,11 @@ def apply_favorite_exclusions(frame: pd.DataFrame) -> pd.DataFrame:
     if "favorite_state" in result:
         result.loc[invalid, "favorite_state"] = "not_qualified"
     if "favorite_reason" in result:
-        result.loc[invalid, "favorite_reason"] = "Favorite removed: audited final-hour visibility failure."
+        result.loc[visibility_invalid, "favorite_reason"] = "Favorite removed: audited final-hour visibility failure."
+        result.loc[rule_invalid, "favorite_reason"] = (
+            "Favorite removed: MLB side opened and remained plus money without the required "
+            "five-point implied-probability move."
+        )
     return result
 
 

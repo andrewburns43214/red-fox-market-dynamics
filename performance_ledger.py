@@ -24,9 +24,16 @@ from anomaly_action_results import _grade_action
 SUPPORTED_SIDE_VALID_FROM = pd.Timestamp("2026-09-07T17:57:58Z")
 FAVORITE_VALID_FROM = pd.Timestamp("2026-09-07T22:11:12Z")
 FAVORITE_TRACKING_START_DATE = "2026-09-07"
-FAVORITE_KPI_EXCLUSIONS = frozenset({
-    ("34603681", "SPREAD"),  # Jacksonville State @ Ohio, visibility invalidated
-})
+FAVORITE_RULE_VERSIONS = frozenset({"red_fox_favorite_v2", "red_fox_favorite_v3"})
+FAVORITE_KPI_EXCLUSIONS = {
+    ("34603681", "SPREAD"): (
+        "Excluded: audited final-hour visibility failure invalidated the Favorite."
+    ),
+    ("34694536", "MONEYLINE"): (
+        "Rule invalidated: Washington opened +123 and remained plus money at +108; "
+        "the 3.2-point implied-probability move did not meet the MLB five-point standard."
+    ),
+}
 LEDGER_COLUMNS = [
     "ledger_id", "event_id", "game", "sport", "scheduled_start", "market", "side",
     "open_line", "open_price", "decision_line", "decision_price", "decision_line_source",
@@ -407,7 +414,7 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         originally_qualified = _truthy(row.get("favorite_originally_qualified")) or late_invalidated
         favorite = (
             kickoff >= FAVORITE_VALID_FROM
-            and _text(row.get("favorite_rule_version")) == "red_fox_favorite_v2"
+            and _text(row.get("favorite_rule_version")) in FAVORITE_RULE_VERSIONS
             and _truthy(row.get("red_fox_favorite"))
             and _identity(row.get("favorite_side")) == _identity(supported)
             and (_text(row.get("game_id")), market) not in FAVORITE_KPI_EXCLUSIONS
@@ -734,6 +741,13 @@ def update_performance_ledger(
         )
         ledger.loc[excluded, "favorite_qualified"] = "no"
         ledger.loc[excluded, "favorite_final_qualified_at"] = ""
+        for index in ledger.index[excluded]:
+            exclusion_key = (_text(ledger.at[index, "event_id"]), _text(ledger.at[index, "market"]).upper())
+            ledger.at[index, "candidate_decision"] = "rule_invalidated"
+            ledger.at[index, "candidate_decision_reason"] = FAVORITE_KPI_EXCLUSIONS[exclusion_key]
+            ledger.at[index, "classification_correction"] = "yes"
+            ledger.at[index, "classification_correction_reason"] = FAVORITE_KPI_EXCLUSIONS[exclusion_key]
+            ledger.at[index, "classification_original_publication"] = "published"
         blank_late = ledger["favorite_late_invalidated"].astype(str).str.strip().eq("")
         ledger.loc[blank_late, "favorite_late_invalidated"] = "no"
         blank_original = ledger["favorite_originally_qualified"].astype(str).str.strip().eq("")

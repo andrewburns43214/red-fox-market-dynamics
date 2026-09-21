@@ -164,6 +164,26 @@ def test_visibility_invalidated_game_is_removed_from_favorite_kpi(tmp_path):
     assert favorites.empty
 
 
+def test_weak_mlb_plus_money_favorite_is_rule_invalidated_and_removed_from_kpi(tmp_path):
+    row = frozen_row(
+        sport="mlb", game_id="34694536", game="WAS Nationals @ STL Cardinals",
+        market_display="MONEYLINE", supported_side="WAS Nationals",
+        favorite_side="WAS Nationals", favorite_rule_version="red_fox_favorite_v2",
+        market_sides=json.dumps([
+            {"flagged_side": "WAS Nationals", "open_line": "+123", "current_line": "+108", "reaction": "Contrarian"},
+            {"flagged_side": "STL Cardinals", "open_line": "-145", "current_line": "-126"},
+        ]),
+    )
+    write(pd.DataFrame([row]), tmp_path / "live_recent.csv")
+    update_performance_ledger(tmp_path, attach_results=False)
+    ledger = pd.read_csv(tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False)
+    assert ledger.iloc[0].favorite_qualified == "no"
+    assert ledger.iloc[0].candidate_decision == "rule_invalidated"
+    assert ledger.iloc[0].classification_correction == "yes"
+    assert "five-point" in ledger.iloc[0].candidate_decision_reason
+    assert pd.read_csv(tmp_path / "performance_favorites.csv").empty
+
+
 def test_late_invalidated_favorite_is_audited_but_excluded_from_official_kpis(tmp_path):
     row = frozen_row(
         red_fox_favorite="false", favorite_state="late_invalidated",

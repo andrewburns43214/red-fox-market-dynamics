@@ -155,7 +155,11 @@ def test_nfl_positive_spread_exception_is_blocked_by_moneyline_contradiction():
 @pytest.mark.parametrize("sport", ["mlb", "nhl", "ufc"])
 @pytest.mark.parametrize("price", [-165, 120])
 def test_primary_moneyline_sports_and_boundaries_qualify(sport, price):
-    candidate = side("Candidate", f"{price:+d}", price_move=3.1)
+    candidate = side(
+        "Candidate", f"{price:+d}",
+        price_move=5.1 if sport == "mlb" and price > 0 else 3.1,
+        open_line="+150" if sport == "mlb" and price > 0 else None,
+    )
     opponent = side("Opponent", f"{-price:+d}", bets=65, money=70, reaction="Watch",
                     direction="AGAINST", kpi=False, action_type="OBSERVE ONLY")
     assert is_favorite(result([market(sport, "MONEYLINE", [candidate, opponent])]))
@@ -245,9 +249,9 @@ def test_freeze_favorite_rejects_retracement_and_excessive_price_churn(candidate
 
 
 def test_freeze_favorite_requires_strong_pressure_and_persistent_resistance():
-    candidate = side("Underdog", "+110", bets=19, money=10, reaction="Watch", direction="LIMITED",
+    candidate = side("Underdog", "-105", bets=19, money=10, reaction="Watch", direction="LIMITED",
                      kpi=False, action_type="OBSERVE ONLY", path="", line_move=0, price_move=2.6,
-                     evidence_role="Resistance Side")
+                     evidence_role="Resistance Side", open_line="+110")
     pressure = side("Favorite", "-130", bets=81, money=90, reaction="Freeze", direction="AGAINST",
                     action_type="FADE CANDIDATE", action_side="Underdog", path="",
                     line_move=0, price_move=2.6, evidence_role="Pressure Side")
@@ -258,9 +262,9 @@ def test_freeze_favorite_requires_strong_pressure_and_persistent_resistance():
     assert not is_favorite(result([market("mlb", "MONEYLINE", [candidate, small_move], supported_side="Underdog")]))
 
 
-def test_rule_tightening_keeps_v2_version_and_tracking_history_append_only(tmp_path):
-    assert CONFIG.version == "red_fox_favorite_v2"
-    legacy = result([market("mlb", "MONEYLINE", pair_for(side("Away", "+120")))])
+def test_rule_tightening_uses_v3_version_and_tracking_history_append_only(tmp_path):
+    assert CONFIG.version == "red_fox_favorite_v3"
+    legacy = result([market("mlb", "MONEYLINE", pair_for(side("Away", "+115", open_line="+150", price_move=6.0)))])
     update_favorite_tracking(legacy, tmp_path, as_of="2026-09-06T20:00:00Z")
     newly_ineligible = legacy.copy()
     newly_ineligible["red_fox_favorite"] = "false"
@@ -268,11 +272,25 @@ def test_rule_tightening_keeps_v2_version_and_tracking_history_append_only(tmp_p
     update_favorite_tracking(newly_ineligible, tmp_path, as_of="2026-09-06T20:01:00Z")
     ledger = pd.read_csv(tmp_path / "red_fox_favorite_tracking.csv", dtype=str, keep_default_na=False)
     assert ledger.favorite_state.tolist() == ["qualified", "not_qualified"]
-    assert ledger.favorite_rule_version.tolist() == ["red_fox_favorite_v2", "red_fox_favorite_v2"]
+    assert ledger.favorite_rule_version.tolist() == ["red_fox_favorite_v3", "red_fox_favorite_v3"]
     shadow = pd.read_csv(tmp_path / "red_fox_favorite_shadow.csv", dtype=str, keep_default_na=False)
     assert shadow.candidate_decision.tolist() == ["accepted", "rejected"]
     assert shadow.candidate_side.tolist() == ["Away", "Away"]
     assert shadow.minutes_before_start.tolist() == ["", ""]
+
+
+def test_mlb_plus_money_requires_crossing_minus_or_five_probability_points():
+    weak = side("WAS Nationals", "+108", open_line="+123", price_move=3.24)
+    assert not is_favorite(result([market("mlb", "MONEYLINE", pair_for(weak), supported_side="WAS Nationals")]))
+
+    strong = side("Large move dog", "+115", open_line="+150", price_move=6.09)
+    assert is_favorite(result([market("mlb", "MONEYLINE", pair_for(strong), supported_side="Large move dog")]))
+
+    crossed = side("Crossed favorite", "-101", open_line="+123", price_move=5.41)
+    assert is_favorite(result([market("mlb", "MONEYLINE", pair_for(crossed), supported_side="Crossed favorite")]))
+
+    same_shape_nhl = side("NHL underdog", "+108", open_line="+123", price_move=3.24)
+    assert is_favorite(result([market("nhl", "MONEYLINE", pair_for(same_shape_nhl), supported_side="NHL underdog")]))
 
 
 def test_similar_splits_without_resistance_or_protection_do_not_qualify():
@@ -516,7 +534,7 @@ def test_rank_and_row_order_are_unchanged():
 
 
 def test_tracking_persists_first_qualification_and_records_subsequent_snapshots(tmp_path: Path):
-    frame = result([market("mlb", "MONEYLINE", pair_for(side("Away", "+120")))])
+    frame = result([market("mlb", "MONEYLINE", pair_for(side("Away", "-105", open_line="+120", price_move=5.0)))])
     first = update_favorite_tracking(frame, tmp_path, as_of="2026-09-06T20:00:00Z")
     later = apply_red_fox_favorites(frame.drop(columns=[column for column in frame if column.startswith("favorite_") or column == "red_fox_favorite"]), as_of="2026-09-06T20:01:00Z")
     second = update_favorite_tracking(later, tmp_path, as_of="2026-09-06T20:01:00Z")
@@ -545,7 +563,7 @@ def test_tracking_retains_full_favorite_handoff_candidate_after_board_disappeara
 
 
 def test_tracking_records_when_a_current_market_loses_favorite_status(tmp_path: Path):
-    qualified = result([market("mlb", "MONEYLINE", pair_for(side("Away", "+120")))])
+    qualified = result([market("mlb", "MONEYLINE", pair_for(side("Away", "-105", open_line="+120", price_move=5.0)))])
     update_favorite_tracking(qualified, tmp_path, as_of="2026-09-06T20:00:00Z")
     lost = qualified.copy()
     lost["red_fox_favorite"] = "false"
