@@ -20,6 +20,7 @@ import requests
 from prop_projection import normalized_name, observation_hash, parse_time, project_event, public_projection, utc_now
 from prop_projection_config import API_BASE, LOCAL_DAILY_REQUEST_CAP, REQUEST_TIMEOUT_SECONDS, SPORTS
 from prop_projection_v2 import project_event_v2
+from prop_projection_prospective import freeze_candidate, frozen_candidates, grade_candidate, performance_summary
 
 
 DATA_ROOT = Path(os.environ.get("REDFOX_PROP_DATA_DIR", "data/prop_projection"))
@@ -175,12 +176,18 @@ class RosterResolver:
             url = f"https://site.api.espn.com/apis/site/v2/sports/football/{league}/teams/{team_id}/roster"
             return self.session.get(url, timeout=12).json()
         payload = self._cache(f"{sport}_{team_id}_roster", load, max_age=21600)
-        athletes = []
+        athletes, positions = [], {}
         for group in payload.get("athletes", []):
             for athlete in group.get("items", []) if isinstance(group, dict) else []:
-                athletes.append(athlete.get("fullName") or athlete.get("displayName"))
+                name = athlete.get("fullName") or athlete.get("displayName")
+                if name:
+                    athletes.append(name)
+                    positions[normalized_name(name)] = str(athlete.get("position", {}).get("abbreviation") or "").upper()
+                    if athlete.get("id"):
+                        positions[f"espn:{athlete['id']}"] = positions[normalized_name(name)]
+                        positions[f"espn:{athlete['id']}__name"] = normalized_name(name)
         tokens = [team.get("abbreviation"), team.get("shortDisplayName")]
-        return [x for x in athletes if x], [x for x in tokens if x]
+        return athletes, [x for x in tokens if x], positions
 
     def _mlb_roster(self, team_id):
         numeric = str(team_id or "").split(":")[-1]
@@ -241,8 +248,10 @@ class RosterResolver:
                 if probable and normalized_name(probable) not in {normalized_name(name) for name in names}:
                     names.append(probable)
             else:
-                names, tokens = self._espn_roster(sport, team)
+                names, tokens, positions = self._espn_roster(sport, team)
             output[team], output[f"{team}__tokens"] = names, tokens
+            if sport == "nfl":
+                output[f"{team}__positions"] = positions
         return output
 
     def prefetch(self, sport, events, workers=8):
@@ -421,6 +430,7 @@ def run_collection(client=None, resolver=None, force=False, now=None):
             state.setdefault("projection_hashes", {})[event_key] = projection_digest
             # v2 is private shadow research. It reuses the exact v1 canonical
             # lines, makes no provider request, and never enters PUBLIC_PATH.
+            shadow = {}
             try:
                 shadow = project_event_v2(sport, projection, private_lines, context=context, now=now)
                 hashable_shadow = {key: value for key, value in shadow.items() if key != "generated_at"}
@@ -447,6 +457,15 @@ def run_collection(client=None, resolver=None, force=False, now=None):
                     state.get("v2_error_hashes", {}).get(event_key),
                 )
                 state.setdefault("v2_error_hashes", {})[event_key] = failure_digest
+            if sport == "nfl":
+                try:
+                    freeze_candidate(DATA_ROOT, event, projection, private_lines, shadow, rosters, now)
+                except Exception as error:
+                    _append_changed(
+                        DATA_ROOT / "prospective_errors.jsonl",
+                        {"event_id": projection.get("event_id"), "at": now.isoformat(), "error": type(error).__name__},
+                        f"{event_key}:{type(error).__name__}:{now.isoformat()}", None,
+                    )
             projections.append(public_projection(projection))
     # Keep hash/context state bounded; long-run model evaluation lives in the
     # compact projection/resolution ledgers, not in an ever-growing raw cache.
@@ -605,6 +624,9 @@ def run_resolution(client=None, now=None, force=False):
     state = _read_json(state_path, {"sports": {}, "resolved": {}})
     shadow_state_path = DATA_ROOT / "resolution_v2_shadow_state.json"
     shadow_state = _read_json(shadow_state_path, {"resolved": {}})
+    prospective_path = DATA_ROOT / "prospective_grades.json"
+    prospective = _read_json(prospective_path, {"games": {}})
+    prospective_pending = frozen_candidates(DATA_ROOT, now, prospective.get("games", {}))
     for sport, config in SPORTS.items():
         if not config["enabled"]:
             continue
@@ -614,7 +636,8 @@ def run_resolution(client=None, now=None, force=False):
             if value.get("sport") == sport and (parse_time(value.get("commence_time")) or now) < now
             and key not in shadow_state["resolved"]
         }
-        if not candidates and not shadow_candidates:
+        sport_prospective = {key: value for key, value in prospective_pending.items() if value.get("sport") == sport}
+        if not candidates and not shadow_candidates and not sport_prospective:
             continue
         last = parse_time(state["sports"].get(sport))
         if not force and last and (now - last).total_seconds() < 6 * 3600:
@@ -626,7 +649,7 @@ def run_resolution(client=None, now=None, force=False):
         state["sports"][sport] = now.isoformat()
         for score in scores:
             key = f"{sport}:{score.get('id') or score.get('event_id')}"
-            if key not in candidates and key not in shadow_candidates:
+            if key not in candidates and key not in shadow_candidates and key not in sport_prospective:
                 continue
             if str(score.get("status") or "").lower() not in {"final", "completed", "complete"}:
                 continue
@@ -652,6 +675,10 @@ def run_resolution(client=None, now=None, force=False):
                     "variants": projection["variants"], "v1_benchmark": projection.get("v1_benchmark", {}),
                     "actual_away": actual_away, "actual_home": actual_home, "resolved_at": now.isoformat(),
                 }
+            if key in sport_prospective:
+                prospective.setdefault("games", {})[key] = grade_candidate(
+                    sport_prospective[key], actual_away, actual_home, now,
+                )
     rows = list(state["resolved"].values())
     metrics = {}
     for sport in SPORTS:
@@ -666,6 +693,8 @@ def run_resolution(client=None, now=None, force=False):
         DATA_ROOT / "performance_v2_shadow.json",
         {"generated_at": now.isoformat(), "metrics": _shadow_performance(shadow_rows), "games": shadow_rows},
     )
+    _atomic_json(prospective_path, prospective)
+    _atomic_json(DATA_ROOT / "prospective_performance.json", performance_summary(prospective, now))
     return metrics
 
 
