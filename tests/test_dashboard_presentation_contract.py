@@ -166,6 +166,15 @@ def test_mobile_market_read_chips_are_compact_without_changing_global_or_desktop
     assert ".signal-chip { cursor:pointer; border:1px solid transparent; font-family:var(--sans); }" in BOARD
 
 
+def test_mobile_saved_games_can_be_removed_even_when_the_market_is_no_longer_available():
+    assert 'class="mobile-saved-row"' in BOARD
+    assert 'class="mobile-saved-remove"' in BOARD
+    assert 'title="Remove from Saved Games"' in BOARD
+    assert "items[Number(node.dataset.savedRemove)]?.querySelector('.saved-remove')" in BOARD
+    assert "if(source)source.click(); openMobileDestination('saved',button);" in BOARD
+    assert ".mobile-sheet-list .mobile-saved-remove{width:48px" in BOARD
+
+
 def test_market_guide_matches_role_and_display_semantics():
     assert "Contrarian and Follow are directional." in BOARD
     assert "Otherwise, Freeze is neutral. Watch is also neutral." in BOARD
