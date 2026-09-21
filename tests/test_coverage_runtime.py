@@ -191,6 +191,17 @@ def test_monitor_missing_evidence_is_not_success(tmp_path):
     assert result["issues"] == ["COVERAGE_EVIDENCE_UNAVAILABLE"]
 
 
+def test_monitor_flags_empty_regular_season_football_source(tmp_path):
+    scrape = ScrapeCoverage(tmp_path, "ncaaf")
+    scrape.finish("EMPTY_COMPLETE")
+    board_path = tmp_path / "anomaly_board.csv"
+    board_path.write_text("sport,game_id,market_display\n")
+    PublicationCoverage(tmp_path, NOW).publish(pd.DataFrame(), board_path, filter_publication_eligible_markets)
+    result, healthy = check(tmp_path, now=NOW.to_pydatetime())
+    assert not healthy
+    assert "ncaaf:SOURCE_EMPTY" in result["issues"]
+
+
 def test_actual_publication_pipeline_accounts_for_all_in_window_markets(tmp_path, monkeypatch):
     import refresh_anomaly_board as refresh
     monkeypatch.setattr(refresh, "DATA", tmp_path)

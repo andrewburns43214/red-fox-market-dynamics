@@ -28,6 +28,10 @@ def check(data_dir, now=None, max_age_minutes=25):
             scrape_age = (now - datetime.fromisoformat(scrape["started_at"])).total_seconds() / 60
             if scrape_age > max_age_minutes:
                 issues.append(f"{sport}:SOURCE_CAPTURE_STALE")
+            # An empty football feed during the regular season can leave a
+            # healthy-looking, freshly published board with no football at all.
+            if sport in {"nfl", "ncaaf"} and now.month in {9, 10, 11} and scrape["state"] == "EMPTY_COMPLETE":
+                issues.append(f"{sport}:SOURCE_EMPTY")
         for sport, stats in summary["sports"].items():
             if sport == "ALL":
                 continue
