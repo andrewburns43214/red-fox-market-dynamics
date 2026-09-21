@@ -44,6 +44,18 @@ def test_tracker_uses_one_shared_payload_for_desktop_mobile_and_guide():
     assert "10 Graded" not in BOARD
 
 
+def test_performance_widget_uses_larger_brand_gold_frame_and_sans_record_numbers():
+    assert ".favorite-performance-record,\n.favorite-performance-rate { font-family:var(--sans)!important; }" in BOARD
+    assert ".favorite-performance-desktop .favorite-performance-brand{width:148px;height:34px;object-fit:cover;object-position:center;}" in BOARD
+    assert "border:1px solid #c79532;" in BOARD
+
+
+def test_drill_in_uses_reference_sans_face_for_all_numeric_surfaces():
+    assert "#drill-overlay .game-detail-modal { --mono:var(--sans); }" in BOARD
+    assert "#drill-overlay .game-detail-modal *," in BOARD
+    assert "#drill-overlay .game-detail-modal .movement-svg text { font-family:var(--sans)!important; }" in BOARD
+
+
 def test_aggregate_endpoint_is_board_protected_without_exposing_admin_rows():
     production = (ROOT / "deploy" / "nginx-redfox.production.conf").read_text(encoding="utf-8")
     site = (ROOT / "redfox-nginx-site.conf").read_text(encoding="utf-8")
