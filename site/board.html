@@ -3359,7 +3359,7 @@ function renderScheduleCoverage(rows){
   const target=document.getElementById('schedule-coverage'); if(!target)return;
   target.hidden=!rows.length;
   if(!rows.length){target.innerHTML='';return;}
-  target.innerHTML='<h3>Scheduled games awaiting verified markets</h3><p>These games are on the schedule. Market reads and scores appear only after complete, verified betting observations arrive.</p><div class="schedule-coverage-grid">'+rows.map(row=>'<div class="schedule-coverage-game"><strong>'+escHtml(row.game)+'</strong><span>'+escHtml(sportLabel(row.sport))+' · '+escHtml(etT(row.kickoff_iso))+'</span></div>').join('')+'</div>';
+  target.innerHTML='<h3>Scheduled games awaiting verified markets</h3><p>These games are on the schedule. Market reads appear when complete, verified betting observations arrive.</p><div class="schedule-coverage-grid">'+rows.map(row=>'<div class="schedule-coverage-game"><strong>'+escHtml(row.game)+'</strong><span>'+escHtml(sportLabel(row.sport))+' · '+escHtml(etT(row.kickoff_iso))+'</span></div>').join('')+'</div>';
 }
 function renderBoard(resetPage=true){
   const marketRows=filtered();
