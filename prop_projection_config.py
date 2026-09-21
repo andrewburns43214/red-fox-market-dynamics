@@ -28,6 +28,9 @@ SPORTS = {
             "player_pass_attempts", "player_pass_completions", "player_rush_attempts",
             "player_reception_targets", "player_field_goals_made", "player_extra_points_made",
         ),
+        # In the same bulk request, but outside the paired-line score model.
+        # One-sided scorer prices need separate margin and allocation research.
+        "scorer_research_markets": ("player_anytime_td", "player_2plus_td", "player_1st_td"),
     },
     "ncaaf": {
         "provider_key": "football_ncaaf",

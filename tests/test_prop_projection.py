@@ -121,8 +121,13 @@ def test_qualifying_football_projection_is_deterministic(sport):
     second = project_event(sport, event, rosters, now=NOW)
     assert first == second
     assert first["status"] == "AVAILABLE"
-    assert first["confidence"] == "HIGH"
-    assert first["display_status"] == "Props-Only · High"
+    assert first["confidence"] == "MODERATE"
+    assert first["display_status"] == "Props-Only · Moderate"
+    assert all(
+        side["scoring"]["rushing_td_source"] == "DIRECT_RUSH_TD"
+        and side["scoring"]["rushing_td_players"] == 1
+        for side in first["coverage"]["teams"].values()
+    )
     assert 5 <= len(first["anchors"]) <= 7
     assert 10 <= first["away_score"] <= 45
     assert first["model_version"] == f"prop_projection_{sport}_v1"
@@ -149,6 +154,87 @@ def test_live_high_coverage_nfl_stops_at_start():
     event, rosters = football_fixture("nfl")
     event["commence_time"] = NOW.isoformat()
     assert project_event("nfl", event, rosters, now=NOW)["reason"] == "game_started"
+
+
+def test_nfl_proxy_rushing_tds_lower_confidence_and_stale_source_is_unavailable():
+    event, rosters = football_fixture()
+    for book in event["bookmakers"]:
+        book["markets"] = [item for item in book["markets"] if item["key"] != "player_rush_tds"]
+    result = project_event("nfl", event, rosters, now=NOW)
+    assert result["status"] == "AVAILABLE"
+    assert result["confidence"] == "MODERATE"
+    assert all(
+        side["scoring"]["rushing_td_source"] == "RUSH_YARDS_PROXY"
+        for side in result["coverage"]["teams"].values()
+    )
+    event["commence_time"] = (NOW + timedelta(hours=8)).isoformat()
+    later = project_event("nfl", event, rosters, now=NOW + timedelta(minutes=26))
+    assert later["status"] == "UNAVAILABLE"
+    assert later["reason"] == "no_fresh_qualified_props"
+
+
+def test_nfl_scorer_ladders_do_not_enter_v1_score():
+    event, rosters = football_fixture()
+    first = project_event("nfl", event, rosters, now=NOW)
+    for book in event["bookmakers"]:
+        book["markets"].extend([
+            {"key": "player_anytime_td", "outcomes": [
+                {"name": "Away RB", "description": "Away RB (AW)", "price": -200, "point": None,
+                 "last_seen_at": NOW.isoformat()},
+            ]},
+            {"key": "player_2plus_td", "outcomes": [
+                {"name": "Away RB", "description": "Away RB (AW)", "price": 300, "point": None,
+                 "last_seen_at": NOW.isoformat()},
+            ]},
+        ])
+    second = project_event("nfl", event, rosters, now=NOW)
+    assert (first["away_mean"], first["home_mean"]) == (second["away_mean"], second["home_mean"])
+    assert second["line_count"] == first["line_count"]
+
+
+def test_nfl_high_requires_direct_rushing_depth_and_fresh_prices():
+    event, rosters = football_fixture()
+    for prefix, team, token in (("Away", "Away Wolves", "AW"), ("Home", "Home Bears", "HB")):
+        rosters[team].append(f"{prefix} RB2")
+        event["bookmakers"][0]["markets"].append(
+            market("player_rush_tds", f"{prefix} RB2", 0.5, token)
+        )
+    fresh = project_event("nfl", event, rosters, now=NOW)
+    assert fresh["status"] == "AVAILABLE"
+    assert fresh["confidence"] == "HIGH"
+    older = project_event("nfl", event, rosters, now=NOW + timedelta(minutes=16))
+    assert older["status"] == "AVAILABLE"
+    assert older["confidence"] == "MODERATE"
+
+
+def test_football_score_requires_rushing_and_complete_kicking_component():
+    event, rosters = football_fixture()
+    for book in event["bookmakers"]:
+        book["markets"] = [
+            item for item in book["markets"]
+            if item["key"] not in {"player_rush_yds", "player_rush_tds"}
+        ]
+    missing_rush = project_event("nfl", event, rosters, now=NOW)
+    assert missing_rush["status"] == "UNAVAILABLE"
+    assert missing_rush["confidence"] == "INSUFFICIENT"
+
+
+def test_receiving_tds_and_fg_pat_do_not_double_count_passing_or_kicker_points():
+    event, rosters = football_fixture()
+    baseline = project_event("nfl", event, rosters, now=NOW)
+    for book in event["bookmakers"]:
+        book["markets"].extend([
+            market("player_reception_tds", "Away WR1", 0.5, "AW"),
+            market("player_reception_tds", "Home WR1", 0.5, "HB"),
+            market("player_field_goals_made", "Away K", 1.5, "AW"),
+            market("player_extra_points_made", "Away K", 2.5, "AW"),
+            market("player_field_goals_made", "Home K", 1.5, "HB"),
+            market("player_extra_points_made", "Home K", 2.5, "HB"),
+        ])
+    enriched = project_event("nfl", event, rosters, now=NOW)
+    assert (enriched["away_mean"], enriched["home_mean"]) == (
+        baseline["away_mean"], baseline["home_mean"]
+    )
 
 
 def test_mlb_high_requires_probable_pitchers_and_lineup_coverage():

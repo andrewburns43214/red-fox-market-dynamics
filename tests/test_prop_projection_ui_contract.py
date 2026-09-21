@@ -28,9 +28,11 @@ def test_public_cache_is_explicitly_allowlisted():
     assert "no-cache, no-store, must-revalidate" in NGINX
 
 
-def test_mlb_expected_runs_keep_a_decimal_and_unavailable_reason_is_specific():
-    assert "Number(prop.away_mean).toFixed(1)" in BOARD
-    assert "Number(prop.home_mean).toFixed(1)" in BOARD
+def test_all_expected_scores_show_two_decimals_and_source_age():
+    assert "Number(prop.away_mean).toFixed(2)" in BOARD
+    assert "Number(prop.home_mean).toFixed(2)" in BOARD
+    assert "source line up to " in BOARD
+    assert "rushing TDs estimated from yards" in BOARD
     assert "Waiting for verified props for " in BOARD
 
 

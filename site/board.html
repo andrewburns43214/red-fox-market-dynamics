@@ -5111,15 +5111,18 @@ function propScoreHtml(row){
       else if(teams.some(team=>Number(team.batters||0)<7)) detail='Waiting for at least 7 verified batters on each team.';
       else if(teams.some(team=>Number(team.books||0)<2)) detail='Waiting for at least 2 books per team.';
     }
+    if(prop?.reason==='no_fresh_qualified_props') detail='Waiting for fresh, qualified prop prices for this game.';
     return '<aside class="prop-score prop-score-unavailable" aria-label="'+escHtml(status)+'"><div class="prop-score-label">Props-only projection</div><div class="prop-score-value">'+escHtml(status)+'</div><div class="prop-score-meta">'+escHtml(detail)+'</div></aside>';
   }
   const books=(prop.coverage?.books||[]).length, players=Object.values(prop.players||{}).reduce((sum,value)=>sum+Number(value||0),0), families=(prop.families||[]).join(', ')||'--';
   const age=Number(prop.oldest_observation_age_minutes); const ageText=Number.isFinite(age)?Math.round(age)+'m':'--';
   const tier=prop.display_status||('Props-Only · '+String(prop.confidence||'').toLowerCase().replace(/^./,value=>value.toUpperCase()));
   const mlb=normSportKey(row.sport)==='mlb';
-  const awayValue=mlb&&Number.isFinite(Number(prop.away_mean))?Number(prop.away_mean).toFixed(1):String(prop.away_score);
-  const homeValue=mlb&&Number.isFinite(Number(prop.home_mean))?Number(prop.home_mean).toFixed(1):String(prop.home_score);
-  return '<aside class="prop-score" aria-label="Props-only projected score"><div class="prop-score-label">'+(mlb?'Props-only expected runs':'Props-only projection')+'</div><div class="prop-score-value">'+escHtml(prop.away_team)+' '+escHtml(awayValue)+' · '+escHtml(prop.home_team)+' '+escHtml(homeValue)+'</div><div class="prop-score-meta">'+escHtml(tier)+'</div><details><summary>5–7 strongest anchors</summary><div class="prop-score-why">'+players+' verified players · '+books+' books · '+escHtml(families)+' · oldest line '+escHtml(ageText)+' old.'+propAnchorsHtml(prop.anchors)+'<div style="margin-top:5px">Broad prop coverage is collected; correlated markets validate or blend and are never independently double-counted. No spread, total, moneyline, Market Read, rank, or Favorite input.</div></div></details></aside>';
+  const awayValue=Number.isFinite(Number(prop.away_mean))?Number(prop.away_mean).toFixed(2):String(prop.away_score);
+  const homeValue=Number.isFinite(Number(prop.home_mean))?Number(prop.home_mean).toFixed(2):String(prop.home_score);
+  const rushingProxy=Object.values(prop.coverage?.teams||{}).some(team=>team.scoring?.rushing_td_source==='RUSH_YARDS_PROXY');
+  const proxyText=rushingProxy?' · rushing TDs estimated from yards':'';
+  return '<aside class="prop-score" aria-label="Props-only projected score"><div class="prop-score-label">'+(mlb?'Props-only expected runs':'Props-only expected points')+'</div><div class="prop-score-value">'+escHtml(prop.away_team)+' '+escHtml(awayValue)+' · '+escHtml(prop.home_team)+' '+escHtml(homeValue)+'</div><div class="prop-score-meta">'+escHtml(tier)+' · source line up to '+escHtml(ageText)+' old'+escHtml(proxyText)+'</div><details><summary>5–7 strongest anchors</summary><div class="prop-score-why">'+players+' verified players · '+books+' books · '+escHtml(families)+' · oldest line '+escHtml(ageText)+' old.'+propAnchorsHtml(prop.anchors)+'<div style="margin-top:5px">Broad prop coverage is collected; correlated markets validate or blend and are never independently double-counted. No spread, total, moneyline, Market Read, rank, or Favorite input.</div></div></details></aside>';
 }
 function renderGameDetail(){
   const state=window._gameDetailState; if(!state) return;

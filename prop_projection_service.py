@@ -280,7 +280,7 @@ def _events(payload):
     return []
 
 
-def _poll_interval_seconds(events, now):
+def _poll_interval_seconds(events, now, sport=None):
     leads = []
     for event in events:
         start = parse_time(event.get("commence_time"))
@@ -289,6 +289,12 @@ def _poll_interval_seconds(events, now):
     if not leads:
         return 3600
     lead = min(leads)
+    if sport == "nfl":
+        if lead <= 3600:
+            return 10 * 60
+        if lead <= 24 * 3600:
+            return 15 * 60
+        return 60 * 60
     if lead <= 3600:
         return 12 * 60
     if lead <= 6 * 3600:
@@ -348,13 +354,16 @@ def run_collection(client=None, resolver=None, force=False, now=None):
         sport_state = state["sports"].get(sport, {})
         cached_path = DATA_ROOT / "cache" / f"{sport}.json"
         cached = _read_json(cached_path, [])
-        interval = _poll_interval_seconds(_events(cached), now)
+        interval = _poll_interval_seconds(_events(cached), now, sport)
         last_poll = parse_time(sport_state.get("last_poll"))
         due = force or not last_poll or (now - last_poll).total_seconds() >= interval
         payload = cached
         if due:
             try:
-                payload = client.bulk_odds(config["provider_key"], config["markets"])
+                payload = client.bulk_odds(
+                    config["provider_key"],
+                    config["markets"] + config.get("scorer_research_markets", ()),
+                )
                 _atomic_json(cached_path, payload)
                 state["sports"][sport] = {"last_poll": now.isoformat(), "last_success": now.isoformat()}
             except Exception as error:

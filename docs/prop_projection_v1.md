@@ -38,7 +38,11 @@ included in a URL.
 - Passing TD expectation is the primary passing scoring component.
 - Rushing TD props are summed once. If absent, verified rushing-yard means use
   the explicit fallback `rush_yards / 92`.
-- Receiving TDs validate passing TDs and are not added again.
+- Receiving TDs validate passing TDs and are not added again. NFL anytime,
+  first, and 2+ scorer markets are collected in the private event cache for
+  research but do not change v1 scores: most are one-sided and cannot use the
+  paired Over/Under de-vig formula. The rushing-yards / 92 component is
+  disclosed as a proxy in public scoring coverage.
 - Kicking points are used directly. If absent, `3 * field_goals + PATs` is the
   non-overlapping fallback.
 - Team mean: `6 * (passing_TD + rushing_TD) + kicking_points`, bounded to
@@ -76,8 +80,13 @@ Thresholds are intentionally conservative and may be tightened without
 changing scoring coefficients.
 
 - Football moderate: each team has at least four verified players, two books,
-  three families, pass-TD coverage, and a kicking component. High additionally
-  requires seven players, three books, and four families per team.
+  three families, passing-TD coverage, rushing TD or yardage coverage, and
+  direct kicker points or both field-goal and extra-point coverage. High additionally
+  requires seven players, three books, four families, a passing-TD line from
+  at least three books, kicking from at least two books, and two directly
+  priced rushing-TD players with at least two books each per team. The oldest
+  qualifying line must be no more than 15 minutes old for NFL or 30 minutes
+  for NCAAF.
 - MLB moderate: both probable pitchers are verified, each team has at least
   seven represented batters, two books, and three families. A game also earns
   Moderate when one probable pitcher is represented and the other is either
@@ -95,8 +104,11 @@ summed as separate production.
 ## Collection and storage
 
 - One bulk sport request is used when a sport is due.
-- More than 6 hours out: hourly. Six to one hours: every 30 minutes. Final
-  hour: every 12 minutes. Collection stops at start.
+- NFL more than 24 hours out: hourly. Within 24 hours: every 15 minutes.
+  Final hour: every 10 minutes. Other enabled sports keep the prior schedule:
+  more than 6 hours out hourly, six to one hours every 30 minutes, and final
+  hour every 12 minutes. Collection stops at start. NFL line validity is
+  capped at 25 minutes inside 24 hours and 15 minutes in the final hour.
 - The local hard cap is 190 PropLine requests per UTC day. Provider quota
   headers are persisted after every request. During dense overlapping months,
   the expected event-aware range is about 80–150 requests/day, with the hard
@@ -108,5 +120,10 @@ summed as separate production.
   days, avoiding a duplicate raw-payload archive.
 - Public projections are atomic JSON. Raw/canonical lines, projection ledger,
   quota state, and resolution performance remain under the private data tree.
+- Football HIGH confidence requires fresh, well-sourced passing and kicking
+  lines plus at least two directly priced rushing-TD players per team. A score
+  using the rushing-yard proxy remains MODERATE even with broad player
+  coverage. The public card shows expected scores to two decimals, source
+  age, and the rushing proxy when used.
 - Final scores resolve projected home/away error, MAE, and bias privately every
   six hours when unresolved games exist.

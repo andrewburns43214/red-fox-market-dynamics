@@ -88,6 +88,13 @@ def test_poll_cadence_changes_by_lead_time():
     assert service._poll_interval_seconds(events(12), NOW) == 3600
     assert service._poll_interval_seconds(events(3), NOW) == 1800
     assert service._poll_interval_seconds(events(0.5), NOW) == 720
+    assert service._poll_interval_seconds(events(36), NOW, "nfl") == 3600
+    assert service._poll_interval_seconds(events(12), NOW, "nfl") == 900
+    assert service._poll_interval_seconds(events(3), NOW, "nfl") == 900
+    assert service._poll_interval_seconds(events(0.5), NOW, "nfl") == 600
+    assert {"player_anytime_td", "player_2plus_td", "player_1st_td"} == set(
+        service.SPORTS["nfl"]["scorer_research_markets"]
+    )
 
 
 def test_change_hash_avoids_duplicate_observation(tmp_path):

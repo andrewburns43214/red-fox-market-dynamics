@@ -131,6 +131,16 @@ def flatten_event(event, now=None, max_age_minutes=None):
     return rows
 
 
+def _nfl_max_age_minutes(event, now):
+    start = parse_time(event.get("commence_time"))
+    lead = (start - now).total_seconds() if start else 0
+    if lead <= 3600:
+        return 15
+    if lead <= 24 * 3600:
+        return 25
+    return 75
+
+
 def attach_teams(rows, event, rosters):
     """Attach a team only after exact roster validation; ambiguity is rejected."""
     teams = [str(event.get("away_team") or ""), str(event.get("home_team") or "")]
@@ -211,6 +221,8 @@ def _football_score(lines, team):
     field_goals = _values(lines, team, "player_field_goals_made")
     extra_points = _values(lines, team, "player_extra_points_made")
     # Receiving TDs validate passing TD production and are not added again.
+    # One-sided anytime/2+ scorer quotes are collected separately for research;
+    # they cannot be de-vigged as paired lines and do not enter this v1 score.
     passing_td = max(pass_tds) if pass_tds else 0.0
     rushing_td = sum(rush_tds) if rush_tds else (sum(rush_yards) / 92.0 if rush_yards else 0.0)
     kick_points = max(kicking) if kicking else ((3.0 * max(field_goals) if field_goals else 0.0) + (max(extra_points) if extra_points else 0.0))
@@ -307,8 +319,45 @@ def _coverage(sport, lines, event, context, now):
         }
     if sport in {"nfl", "ncaaf"}:
         moderate = all(x["players"] >= 4 and x["books"] >= 2 and len(x["families"]) >= 3 for x in per_team.values())
-        score_ready = all("player_pass_tds" in x["markets"] and ("player_kicking_points" in x["markets"] or "player_field_goals_made" in x["markets"]) for x in per_team.values())
+        score_ready = all(
+            "player_pass_tds" in x["markets"]
+            and ("player_rush_tds" in x["markets"] or "player_rush_yds" in x["markets"])
+            and (
+                "player_kicking_points" in x["markets"]
+                or {"player_field_goals_made", "player_extra_points_made"}.issubset(x["markets"])
+            )
+            for x in per_team.values()
+        )
         high = moderate and score_ready and all(x["players"] >= 7 and x["books"] >= 3 and len(x["families"]) >= 4 for x in per_team.values())
+        for team in teams:
+            team_lines = [line for line in lines if line["team"] == team]
+            passing = [line for line in team_lines if line["market"] == "player_pass_tds"]
+            direct_rushing = [line for line in team_lines if line["market"] == "player_rush_tds"]
+            rushing_yards = [line for line in team_lines if line["market"] == "player_rush_yds"]
+            kicker = [line for line in team_lines if line["market"] == "player_kicking_points"]
+            field_goals = [line for line in team_lines if line["market"] == "player_field_goals_made"]
+            extra_points = [line for line in team_lines if line["market"] == "player_extra_points_made"]
+            pass_books = max((line["book_count"] for line in passing), default=0)
+            kicker_books = max((line["book_count"] for line in kicker), default=0)
+            if not kicker_books and field_goals and extra_points:
+                kicker_books = min(
+                    max(line["book_count"] for line in field_goals),
+                    max(line["book_count"] for line in extra_points),
+                )
+            rush_source = "DIRECT_RUSH_TD" if direct_rushing else ("RUSH_YARDS_PROXY" if rushing_yards else "MISSING")
+            per_team[team]["scoring"] = {
+                "passing_td_books": pass_books,
+                "rushing_td_source": rush_source,
+                "rushing_td_players": len(direct_rushing),
+                "rushing_td_min_books": min((line["book_count"] for line in direct_rushing), default=0),
+                "kicking_books": kicker_books,
+            }
+            high = high and pass_books >= 3 and kicker_books >= 2 and len(direct_rushing) >= 2 and all(
+                line["book_count"] >= 2 for line in direct_rushing
+            )
+        # A broad receiving/yardage surface cannot compensate for old scoring
+        # prices. NFL collection aims for 10-15 minute source age pregame.
+        high = high and age_minutes <= (15 if sport == "nfl" else 30)
     else:
         lineup_confirmed = bool(context.get("lineup_confirmed"))
         pitchers_by_team = {team: str(context.get(f"{side}_probable_pitcher") or "")
@@ -361,11 +410,23 @@ def project_event(sport, event, rosters, context=None, now=None):
     start = parse_time(event.get("commence_time"))
     if start and start <= now:
         return {**base, "status": "UNAVAILABLE", "reason": "game_started", "confidence": "INSUFFICIENT"}
-    raw_rows = flatten_event(event, now=now)
+    raw_rows = flatten_event(
+        event, now=now,
+        max_age_minutes=_nfl_max_age_minutes(event, now) if sport == "nfl" else None,
+    )
     if not raw_rows:
+        had_main_props = any(
+            market.get("key") in STAT_SIGMA
+            for book in event.get("bookmakers") or []
+            if str(book.get("key") or "").lower() in TRADITIONAL_BOOKS
+            for market in book.get("markets") or []
+        )
         return {
-            **base, "status": "NOT_OPEN", "display_status": "Props not open yet",
-            "reason": "props_not_open_yet", "confidence": "NOT_OPEN",
+            **base,
+            "status": "UNAVAILABLE" if had_main_props else "NOT_OPEN",
+            "display_status": "Insufficient coverage" if had_main_props else "Props not open yet",
+            "reason": "no_fresh_qualified_props" if had_main_props else "props_not_open_yet",
+            "confidence": "INSUFFICIENT" if had_main_props else "NOT_OPEN",
         }
     rows = attach_teams(raw_rows, event, rosters)
     lines = canonical_player_lines(rows)
