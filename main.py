@@ -1977,7 +1977,7 @@ def purge_sport_from_live_files(sport: str) -> list[str]:
 SPORT_CONFIG = {
     "nfl": {
         "label": "NFL",
-        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=NFL&tb_edate=n30days&tb_emt=0&itm_content=NFL",
+        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=NFL&tb_edate=n7days&tb_emt=0&itm_content=NFL",
         "dashboard_horizon_days": 21,
     },
     "nba": {

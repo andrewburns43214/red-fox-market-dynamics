@@ -80,6 +80,19 @@ def _set_tb_page(url: str, page: int) -> str:
     return urlunparse((p.scheme, p.netloc, p.path, p.params, new_query, p.fragment))
 
 
+def _alternate_football_date_url(url: str, sport: str) -> str:
+    """Try DK's other upcoming date selector when its chosen one is empty."""
+    if sport not in {"nfl", "ncaaf"}:
+        return ""
+    p = urlparse(url)
+    query = dict(parse_qsl(p.query, keep_blank_values=True))
+    current = query.get("tb_edate")
+    if current not in {"n7days", "n30days"}:
+        return ""
+    query["tb_edate"] = "n30days" if current == "n7days" else "n7days"
+    return urlunparse((p.scheme, p.netloc, p.path, p.params, urlencode(query), p.fragment))
+
+
 def _load_filtered_splits_page(driver, url: str, sport_filter_labels: list[str]) -> None:
     """
     Drive the live DK form instead of trusting raw query params.
@@ -510,6 +523,18 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None, cove
         if coverage is not None and html:
             coverage.page(page, page_url, html)
         page_records = dom_scrape_splits(html, sport) if html else []
+        if page == 1 and not page_records and html and "No events match your current selections" in html:
+            alternate_url = _alternate_football_date_url(page_url, sport)
+            if alternate_url:
+                alternate_html = fetch_server_rendered_html(alternate_url)
+                alternate_records = dom_scrape_splits(alternate_html, sport) if alternate_html else []
+                if alternate_records:
+                    logger.info("[dk] %s date selector empty; using %s", sport, alternate_url)
+                    url = page_url = alternate_url
+                    html = observed_html = alternate_html
+                    page_records = alternate_records
+                    if coverage is not None:
+                        coverage.page(page, page_url, html)
         last_err = None
         # The direct response is normally complete.  If DK changes to a
         # client-rendered response or returns an incomplete page, retain the

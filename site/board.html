@@ -2224,6 +2224,7 @@ const MOCK_RESULTS = [
 ];
 
 let allDash=[], allLedger=[], allEvents=[], allResults=[], allKPI=[], allLiveRecent=[];
+let publicationCoverage=null;
 let favoritePerformance=null;
 let liveRecentSport='ALL', liveRecentStatus='ALL', liveRecentSort='STATUS_TIME', liveRecentVisible=18;
 let _liveRecentLoaded=false, _liveRecentLoading=null, _liveRecentObserver=null;
@@ -3358,7 +3359,15 @@ function renderBoard(resetPage=true){
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
   if(!games.length){
     const tr=document.createElement('tr'); tr.className='board-empty';
-    tr.innerHTML='<td colspan="8"><strong>No markets are currently available for this view.</strong><span>Try another sport, view all markets, or review Live &amp; Recent.</span><button type="button" onclick="resetMobileBoardView()">View all markets</button></td>';
+    const sportKey=sport==='NFL'?'nfl':sport==='CFB'?'ncaaf':'';
+    const coverageTime=new Date(publicationCoverage?.as_of||'').getTime();
+    const coverageCurrent=Number.isFinite(coverageTime)&&Date.now()-coverageTime<25*60000;
+    const scrape=coverageCurrent&&sportKey?publicationCoverage?.latest_scrapes?.[sportKey]:null;
+    const sourceEmpty=scrape?.state==='EMPTY_COMPLETE';
+    const detail=sourceEmpty&&filter==='all'&&market==='ALL'&&boardDateFilter==='ALL'&&boardSignalFilter==='ALL'
+      ?'DraftKings currently reports no upcoming '+(sport==='NFL'?'NFL':'CFB')+' betting splits. Market reads will return when complete source observations arrive.'
+      :'Try another sport, view all markets, or review Live &amp; Recent.';
+    tr.innerHTML='<td colspan="8"><strong>No markets are currently available for this view.</strong><span>'+detail+'</span><button type="button" onclick="resetMobileBoardView()">View all markets</button></td>';
     tbody.appendChild(tr);
   }
   visibleGames.forEach((game,i)=>{
@@ -5196,12 +5205,14 @@ async function loadAll({forceRender=false}={}){
   let freshJson=null;
   try{ const r=await window.redfoxAuthorizedFetch('/data/freshness.json?_='+Date.now()); if(r.ok) freshJson=await r.json(); } catch(e){}
   _boardFreshness=freshJson;
-  const[dash,results,kpi,props]=await Promise.all([
+  const[dash,results,kpi,props,coverage]=await Promise.all([
     loadCSV(DASH_URL),
     loadCSV(RESULTS_URL),
     loadCSV('/data/kpi_master_dataset.csv'),
     window.redfoxAuthorizedFetch(PROP_PROJECTION_URL+'?_='+Date.now(),{cache:'no-store'}).then(response=>response.ok?response.json():null).catch(()=>null),
+    window.redfoxAuthorizedFetch('/data/publication_coverage.json?_='+Date.now(),{cache:'no-store'}).then(response=>response.ok?response.json():null).catch(()=>null),
   ]);
+  publicationCoverage=coverage;
   propProjections=Array.isArray(props?.projections)?props.projections:[];
   updateFreshness(freshJson);
   const dashRaw=(dash&&dash.length)?dash:[];
@@ -5230,7 +5241,7 @@ async function loadAll({forceRender=false}={}){
     return String(a.game||'').localeCompare(String(b.game||''));
   });
 
-  const _hash=dashRaw.map(r=>(r.game_id||'')+(r.market_display||'')+(r.flagged_side||'')+(r.reaction||'')+(r.recorded_reaction||'')+(r.recorded_note||'')+(r.path||'')+(r.context_chips||'')+(r.data_badge||'')+(r.rank_reason||'')+(r.current_line||'')).join('|');
+  const _hash=dashRaw.map(r=>(r.game_id||'')+(r.market_display||'')+(r.flagged_side||'')+(r.reaction||'')+(r.recorded_reaction||'')+(r.recorded_note||'')+(r.path||'')+(r.context_chips||'')+(r.data_badge||'')+(r.rank_reason||'')+(r.current_line||'')).join('|')+'|'+(coverage?.as_of||'')+'|'+(coverage?.latest_scrapes?.nfl?.state||'')+'|'+(coverage?.latest_scrapes?.ncaaf?.state||'');
   const _changed=_hash!==_lastDashHash;
   _lastDashHash=_hash;
   updateStats();
