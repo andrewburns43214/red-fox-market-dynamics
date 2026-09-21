@@ -492,6 +492,7 @@ td { padding: 6px 10px; font-size: 13px; white-space: nowrap; vertical-align: mi
 .td-rank { font-family: var(--mono); font-size: 10px; color: var(--text3); text-align: center; width: 36px; padding: 6px 4px; vertical-align: top; padding-top: 10px; }
 
 .td-game { width: 290px; max-width: 290px; overflow: hidden; padding: 8px 10px 6px; vertical-align: middle; white-space: normal; }
+.retained-market-note { display:block; margin:4px 0 1px; color:#9a5a18; font:700 10px/1.35 var(--sans); letter-spacing:.02em; }
 .game-row1 { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .game-name {
   font-family: var(--sans);
@@ -2563,6 +2564,7 @@ function anomalyBadge(text){
 }
 function dataBadge(v){
   const t=String(v||'').trim().toUpperCase();
+  if(t==='RETAINED') return '<span class="tim tLATE retained-data-badge" title="Last verified source capture; live DraftKings splits unavailable">RETAINED</span>';
   const label=t==='CLEAN'?'CLEAN':t==='THIN'?'THIN':t==='SPLIT RISK'?'SPLIT RISK':'FEED RISK';
   const cls=t==='CLEAN'?'tMID':t==='THIN'?'tLATE':'tLIVE';
   const meta=signalMetaFor(label);
@@ -2570,6 +2572,7 @@ function dataBadge(v){
 }
 function resolvedDetailDataBadge(row,detailRows,historyLoading=false){
   const explicit=String(row?.data_badge||'').trim().toUpperCase();
+  if(explicit==='RETAINED') return 'RETAINED';
   if(['CLEAN','THIN','SPLIT RISK','FEED RISK'].includes(explicit)) return explicit;
   if(historyLoading) return '';
   const usable=(detailRows||[]).filter(item=>String(item?.line_display||'').trim()&&!['--','-'].includes(String(item.line_display).trim()));
@@ -2646,11 +2649,14 @@ function gameLanes(r){
   const mismatch=hasCrossMarketMismatch(r), split=hasCrossMarketSplit(r), crossMarket=mismatch||split, hasHeader=favorite||crossMarket;
   const header=hasHeader?'<div class="game-favorite-header'+(crossMarket?' has-cross-market':'')+'"><span class="game-sport">'+spChip(r.sport)+'</span>'+(favorite?favoriteBadge():'')+(mismatch?crossMarketMismatchBadge():split?crossMarketSplitBadge():'')+'</div>':'';
   const sport=hasHeader?'':'<span class="game-sport">'+spChip(r.sport)+'</span>';
+  const retained=String(r.data_badge||'').trim().toUpperCase()==='RETAINED';
+  const retainedNote=retained?'<span class="retained-market-note">RETAINED · Last verified '+escHtml(et(r.state_as_of_utc||r.source_latest_at))+' ET</span>':'';
   return '<div class="two-side-cell two-side-game'+(favorite?' is-favorite':'')+'">'
     +'<span class="game-name" style="display:none">'+escHtml(game)+'</span>'
     +header
     +'<div class="two-side-row"><div class="game-lane game-away">'+sport+'<span class="game-lane-mark away">A</span><span class="game-lane-name">'+escHtml(away)+'</span></div></div>'
     +'<div class="two-side-row"><div class="game-lane"><span class="game-lane-mark home">H</span><span class="game-lane-stack"><span class="game-lane-name">'+escHtml(home||'—')+'</span><span class="game-lane-time">'+escHtml(r.kickoff_time||'')+'</span></span></div></div>'
+    +retainedNote
     +'</div>';
 }
 function twoSideSplitCell(r){

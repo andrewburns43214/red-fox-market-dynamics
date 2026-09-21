@@ -39,6 +39,13 @@ def test_retained_mode_is_bounded_and_never_fakes_live_timestamp():
     assert "sources[0].label='Retained source'; sources[0].forced='warn'" in BOARD
 
 
+def test_retained_market_stays_explicit_in_board_and_detail():
+    assert "if(t==='RETAINED') return '<span class=\"tim tLATE retained-data-badge\"" in BOARD
+    assert "if(explicit==='RETAINED') return 'RETAINED';" in BOARD
+    assert "const retainedNote=retained?'<span class=\"retained-market-note\">RETAINED · Last verified '" in BOARD
+    assert "et(r.state_as_of_utc||r.source_latest_at)" in BOARD
+
+
 def test_one_sport_can_be_retained_while_another_is_fresh():
     now = "2026-09-21T16:00:00Z"
     complete = pd.DataFrame([
