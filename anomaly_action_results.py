@@ -1,6 +1,7 @@
 import hashlib
 import math
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -212,3 +213,8 @@ def _atomic_csv(frame, path):
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+if __name__ == "__main__":
+    target = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("data")
+    print(rebuild_action_results(target))
