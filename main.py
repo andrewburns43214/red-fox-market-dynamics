@@ -6490,10 +6490,12 @@ def update_final_scores_history():
     import pandas as pd
     from pathlib import Path
     import datetime
+    import hashlib
+    import os
+    from uuid import uuid4
 
     data_dir = Path("data")
     snap_path = data_dir / "snapshots.csv"
-    hist_path = data_dir / "final_scores_history.csv"
     hist_path = data_dir / "final_scores_history.csv"
 
     if not snap_path.exists():
@@ -6548,6 +6550,7 @@ def update_final_scores_history():
                 )
 
     rows = []
+    recorded_at = datetime.datetime.now(__import__('datetime').timezone.utc).isoformat()
     for game_id, g in games.groupby("game_id"):
         if len(g) < 2:
             continue
@@ -6574,7 +6577,9 @@ def update_final_scores_history():
                     "team1_score": t1_score,
                     "team2": home_norm,
                     "team2_score": t2_score,
-                    "resolved_at_utc": datetime.datetime.now(__import__('datetime').timezone.utc).isoformat()
+                    "resolved_at_utc": recorded_at,
+                    "score_source": "snapshots.csv",
+                    "score_provider_event_id": "",
                 })
                 continue
 
@@ -6585,7 +6590,9 @@ def update_final_scores_history():
             "team1_score": g.iloc[0]["final_score_for"],
             "team2": g.iloc[1]["team_norm"],
             "team2_score": g.iloc[1]["final_score_for"],
-            "resolved_at_utc": datetime.datetime.now(__import__('datetime').timezone.utc).isoformat()
+            "resolved_at_utc": recorded_at,
+            "score_source": "snapshots.csv",
+            "score_provider_event_id": "",
         })
 
     if not rows:
@@ -6593,24 +6600,42 @@ def update_final_scores_history():
 
     df_new = pd.DataFrame(rows)
 
+    evidence_columns = [
+        "game_id", "team1", "team1_score", "team2", "team2_score",
+        "resolved_at_utc", "score_source", "score_provider_event_id", "score_evidence_hash",
+    ]
+
+    def evidence_hash(row):
+        payload = "|".join(str(row.get(column, "")) for column in (
+            "game_id", "team1", "team1_score", "team2", "team2_score",
+            "score_source", "score_provider_event_id",
+        ))
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    df_new["score_evidence_hash"] = df_new.apply(evidence_hash, axis=1)
+
     if hist_path.exists():
-        df_old = pd.read_csv(hist_path, dtype=str)
-        df = pd.concat([df_old, df_new])
-        df = df.drop_duplicates(subset=["game_id"], keep="last")
+        df_old = pd.read_csv(hist_path, dtype=str, keep_default_na=False)
+        for column in evidence_columns:
+            if column not in df_old:
+                df_old[column] = ""
+        missing_source = df_old["score_source"].astype(str).str.strip().eq("")
+        df_old.loc[missing_source, "score_source"] = "legacy_final_scores_history"
+        missing_hash = df_old["score_evidence_hash"].astype(str).str.strip().eq("")
+        df_old.loc[missing_hash, "score_evidence_hash"] = df_old.loc[missing_hash].apply(evidence_hash, axis=1)
+        # Final-score evidence is first-write-wins. Repeated snapshot runs may
+        # rediscover a final, but cannot silently replace its historical proof.
+        df = pd.concat([df_old[evidence_columns], df_new[evidence_columns]], ignore_index=True)
+        df = df.drop_duplicates(subset=["game_id"], keep="first")
     else:
-        df = df_new
+        df = df_new[evidence_columns]
 
-
-    # ---- Enforce freeze epoch alignment ----
+    temporary = hist_path.with_name(f".{hist_path.name}.{uuid4().hex}.tmp")
     try:
-        freeze = pd.read_csv("data/decision_freeze_ledger.csv", dtype=str)
-        if "game_id" in freeze.columns:
-            df = df[df["game_id"].isin(freeze["game_id"])]
-    except Exception:
-        pass
-
-
-    df.to_csv(hist_path, index=False)
+        df.to_csv(temporary, index=False)
+        os.replace(temporary, hist_path)
+    finally:
+        temporary.unlink(missing_ok=True)
     
     if len(df) > 0:
         print(f"[final_history] upserted {len(df)} freeze-aligned games")

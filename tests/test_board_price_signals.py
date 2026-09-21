@@ -288,7 +288,67 @@ def test_action_results_grade_locked_fade_side_and_daily_kpi(tmp_path):
     results = pd.read_csv(tmp_path / "anomaly_action_results.csv", dtype=str)
 
     assert results["outcome"].tolist() == ["WIN", "WIN"]
+    assert results["official_decision"].tolist() == ["yes", "yes"]
+    assert results["grade_evidence_hash"].str.len().eq(64).all()
+    assert results["final_score"].str.contains("away", case=False).all()
+    official = pd.read_csv(tmp_path / "anomaly_action_official_results.csv", dtype=str)
+    assert len(official) == 2
     assert (tmp_path / "anomaly_action_kpi_daily.csv").exists()
+
+
+def test_action_results_missing_nan_scores_are_unresolved_and_never_enter_kpis(tmp_path):
+    pd.DataFrame([{
+        "action_id": "missing", "captured_at_utc": _timestamp(18),
+        "first_anomaly_seen": _timestamp(18), "sport": "ncaaf", "game_id": "missing-game",
+        "game": "Away @ Home", "market_display": "TOTAL", "reaction": "Freeze",
+        "observed_side": "Over 55.5", "action_side": "Under 55.5",
+        "action_line": "Under 55.5 @ -110", "action_type": "FADE CANDIDATE",
+    }]).to_csv(tmp_path / "anomaly_action_ledger.csv", index=False)
+    pd.DataFrame([{
+        "game_id": "another-game", "team1": "Away", "team1_score": 20,
+        "team2": "Home", "team2_score": 21,
+    }]).to_csv(tmp_path / "final_scores_history.csv", index=False)
+
+    assert rebuild_action_results(tmp_path) == 0
+    result = pd.read_csv(tmp_path / "anomaly_action_results.csv", dtype=str, keep_default_na=False).iloc[0]
+    assert result["outcome"] == "UNRESOLVED"
+    assert result["final_score"] == ""
+    assert result["grade_evidence_hash"] == ""
+    daily = pd.read_csv(tmp_path / "anomaly_action_kpi_daily.csv", dtype=str)
+    assert daily.empty
+
+
+def test_action_kpis_use_one_first_locked_decision_per_event_market(tmp_path):
+    pd.DataFrame([
+        {
+            "action_id": "first", "captured_at_utc": _timestamp(18),
+            "first_anomaly_seen": _timestamp(18), "sport": "ncaab", "game_id": "one-game",
+            "game": "Away @ Home", "market_display": "SPREAD", "reaction": "Contrarian",
+            "observed_side": "Away +3.5", "action_side": "Away +3.5",
+            "action_line": "Away +3.5 @ -110", "action_type": "CONTRARIAN CANDIDATE",
+        },
+        {
+            "action_id": "later-opposite", "captured_at_utc": _timestamp(19),
+            "first_anomaly_seen": _timestamp(19), "sport": "ncaab", "game_id": "one-game",
+            "game": "Away @ Home", "market_display": "SPREAD", "reaction": "Contrarian",
+            "observed_side": "Home -3.5", "action_side": "Home -3.5",
+            "action_line": "Home -3.5 @ -110", "action_type": "CONTRARIAN CANDIDATE",
+        },
+    ]).to_csv(tmp_path / "anomaly_action_ledger.csv", index=False)
+    pd.DataFrame([{
+        "game_id": "one-game", "team1": "Away", "team1_score": 20,
+        "team2": "Home", "team2_score": 21, "score_source": "test-final",
+        "resolved_at_utc": _timestamp(23),
+    }]).to_csv(tmp_path / "final_scores_history.csv", index=False)
+
+    assert rebuild_action_results(tmp_path) == 1
+    all_results = pd.read_csv(tmp_path / "anomaly_action_results.csv", dtype=str)
+    official = pd.read_csv(tmp_path / "anomaly_action_official_results.csv", dtype=str)
+    assert len(all_results) == 2
+    assert len(official) == 1
+    assert official.iloc[0]["action_id"] == "first"
+    assert official.iloc[0]["outcome"] == "WIN"
+    assert all_results["official_decision"].tolist() == ["yes", "no"]
 
 
 def test_recorded_contrarian_survives_a_later_live_watch_state(tmp_path):
