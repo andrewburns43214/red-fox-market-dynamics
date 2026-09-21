@@ -5115,7 +5115,11 @@ function propScoreHtml(row){
     return '<aside class="prop-score prop-score-unavailable" aria-label="'+escHtml(status)+'"><div class="prop-score-label">Props-only projection</div><div class="prop-score-value">'+escHtml(status)+'</div><div class="prop-score-meta">'+escHtml(detail)+'</div></aside>';
   }
   const books=(prop.coverage?.books||[]).length, players=Object.values(prop.players||{}).reduce((sum,value)=>sum+Number(value||0),0), families=(prop.families||[]).join(', ')||'--';
-  const age=Number(prop.oldest_observation_age_minutes); const ageText=Number.isFinite(age)?Math.round(age)+'m':'--';
+  const ageAtPublication=Number(prop.oldest_observation_age_minutes);
+  const publishedAt=Date.parse(prop.generated_at||'');
+  const elapsedMinutes=Number.isFinite(publishedAt)?Math.max(0,(Date.now()-publishedAt)/60000):0;
+  const age=Number.isFinite(ageAtPublication)?ageAtPublication+elapsedMinutes:NaN;
+  const ageText=Number.isFinite(age)?Math.round(age)+'m':'--';
   const tier=prop.display_status||('Props-Only · '+String(prop.confidence||'').toLowerCase().replace(/^./,value=>value.toUpperCase()));
   const mlb=normSportKey(row.sport)==='mlb';
   const awayValue=Number.isFinite(Number(prop.away_mean))?Number(prop.away_mean).toFixed(2):String(prop.away_score);
