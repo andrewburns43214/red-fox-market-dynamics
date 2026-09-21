@@ -14,5 +14,7 @@ LOG=/var/log/redfox_maintenance.log
 PY="/opt/red-fox-market-dynamics/.venv/bin/python"
 
 echo "===== $(date) MAINT START =====" >> "$LOG"
-"$PY" main.py report_maintenance >> "$LOG" 2>&1
+# Historical finals are downstream work. Give live board publication CPU and
+# disk priority whenever the two cron jobs overlap.
+ionice -c3 nice -n 15 "$PY" main.py report_maintenance >> "$LOG" 2>&1
 echo "===== $(date) MAINT END =====" >> "$LOG"

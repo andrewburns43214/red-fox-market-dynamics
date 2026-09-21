@@ -3326,9 +3326,8 @@ function selectBoardGameMarket(gameId,marketName){
   boardGameSelections.set(String(gameId),String(marketName).toUpperCase());
   renderBoard(false);
 }
-// Keep initial board rendering fast and predictable on every viewport. More
-// markets remain available in equal, explicit batches through the footer.
-function boardPageSize(){ return 40; }
+// Every eligible game must be visible in the board's initial result set.
+function boardPageSize(){ return Number.MAX_SAFE_INTEGER; }
 function showMoreBoardRows(){
   _visibleBoardRows=Math.min(window._boardRows.length,_visibleBoardRows+boardPageSize());
   renderBoard(false);

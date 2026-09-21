@@ -649,7 +649,7 @@ def get_espn_finals_map(sport: str, games: list[str], dates: list[str] | None = 
         return {}
 
 
-def update_snapshots_with_espn_finals():
+def update_snapshots_with_espn_finals(lookback_days=None, now=None):
     """
     Updates data/snapshots.csv with final_score_for / final_score_against
     for TEAM rows only (moneyline/spread rows where side looks like a team name).
@@ -685,6 +685,12 @@ def update_snapshots_with_espn_finals():
 
     # only try to fill rows missing finals (blank-safe)
     need = df[(df["final_score_for"] == "") | (df["final_score_against"] == "")]
+    if lookback_days is not None:
+        current = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+        current = current.tz_localize("UTC") if current.tzinfo is None else current.tz_convert("UTC")
+        kickoff = pd.to_datetime(df.get("dk_start_iso", ""), errors="coerce", utc=True)
+        settled = (kickoff >= current - pd.Timedelta(days=lookback_days)) & (kickoff <= current - pd.Timedelta(hours=6))
+        need = need.loc[settled.reindex(need.index, fill_value=False)]
 
     if need.empty:
         return
@@ -745,7 +751,7 @@ def update_snapshots_with_espn_finals():
 
     # fill finals for TEAM rows (side matches away/home team)
     updated = 0
-    for idx, row in df.iterrows():
+    for idx, row in need.iterrows():
         fsf = str(row.get("final_score_for") or "").strip()
         fsa = str(row.get("final_score_against") or "").strip()
         if fsf != "" and fsa != "":
@@ -6028,7 +6034,7 @@ def cmd_report_live(_args):
 def cmd_report_maintenance(_args):
     # ESPN finals (results) update is best-effort; never block maintenance
     try:
-        update_snapshots_with_espn_finals()
+        update_snapshots_with_espn_finals(lookback_days=14)
         update_final_scores_history()
     except KeyboardInterrupt:
         print("[espn finals] skipped (KeyboardInterrupt)")
