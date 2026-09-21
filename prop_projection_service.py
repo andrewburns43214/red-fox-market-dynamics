@@ -311,6 +311,16 @@ def _poll_interval_seconds(events, now, sport=None):
     return 60 * 60
 
 
+def _poll_due(last_poll, interval, now, sport):
+    if not last_poll:
+        return True
+    # The collector runs after several sport snapshots in a five-minute cron.
+    # Allow for that run-time jitter so a 15/10-minute NFL target does not
+    # slip to the following cron tick (20/15 minutes in practice).
+    tolerance = 90 if sport == "nfl" and interval <= 900 else 0
+    return (now - last_poll).total_seconds() >= interval - tolerance
+
+
 def _append_changed(path, payload, digest, prior_digest):
     if digest == prior_digest:
         return False
@@ -365,7 +375,7 @@ def run_collection(client=None, resolver=None, force=False, now=None):
         cached = _read_json(cached_path, [])
         interval = _poll_interval_seconds(_events(cached), now, sport)
         last_poll = parse_time(sport_state.get("last_poll"))
-        due = force or not last_poll or (now - last_poll).total_seconds() >= interval
+        due = force or _poll_due(last_poll, interval, now, sport)
         payload = cached
         if due:
             try:

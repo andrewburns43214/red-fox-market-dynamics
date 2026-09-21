@@ -97,6 +97,14 @@ def test_poll_cadence_changes_by_lead_time():
     )
 
 
+def test_nfl_poll_tolerates_five_minute_runner_jitter():
+    assert not service._poll_due(NOW - timedelta(minutes=13), 900, NOW, "nfl")
+    assert service._poll_due(NOW - timedelta(minutes=14), 900, NOW, "nfl")
+    assert not service._poll_due(NOW - timedelta(minutes=8), 600, NOW, "nfl")
+    assert service._poll_due(NOW - timedelta(minutes=9), 600, NOW, "nfl")
+    assert not service._poll_due(NOW - timedelta(minutes=14), 900, NOW, "mlb")
+
+
 def test_change_hash_avoids_duplicate_observation(tmp_path):
     path = tmp_path / "observations.jsonl"
     assert service._append_changed(path, {"x": 1}, "same", None)
