@@ -524,6 +524,22 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None, cove
             coverage.page(page, page_url, html)
         page_records = dom_scrape_splits(html, sport) if html else []
         if page == 1 and not page_records and html and "No events match your current selections" in html:
+            # DK intermittently returns an empty filtered page for a populated
+            # slate. Recheck the same selection with a fresh URL before an
+            # empty response can remove a sport from the next publication.
+            for _ in range(2):
+                retry_url = _with_cache_buster(page_url)
+                retry_html = fetch_server_rendered_html(retry_url)
+                retry_records = dom_scrape_splits(retry_html, sport) if retry_html else []
+                if retry_records:
+                    logger.info("[dk] %s empty response recovered on fresh request", sport)
+                    url = page_url = retry_url
+                    html = observed_html = retry_html
+                    page_records = retry_records
+                    if coverage is not None:
+                        coverage.page(page, page_url, html)
+                    break
+        if page == 1 and not page_records and html and "No events match your current selections" in html:
             alternate_url = _alternate_football_date_url(page_url, sport)
             if alternate_url:
                 alternate_html = fetch_server_rendered_html(alternate_url)

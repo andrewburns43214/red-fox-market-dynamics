@@ -296,6 +296,10 @@ def test_monitor_can_certify_a_fresh_complete_consistent_run(tmp_path):
     publication.publish(board, path, filter_publication_eligible_markets)
     result, healthy = check(tmp_path, now=NOW.to_pydatetime())
     assert healthy, result["issues"]
+    (tmp_path / "freshness.json").write_text('{"board_source_state":"PARTIAL_RETAINED"}')
+    result, healthy = check(tmp_path, now=NOW.to_pydatetime())
+    assert not healthy
+    assert "RETAINED_SOURCE_MARKETS" in result["issues"]
 
 
 def test_unchanged_publication_does_not_duplicate_historical_state_transitions(tmp_path):

@@ -4688,7 +4688,7 @@ function updateFreshness(f){
   function fmtAge(m){ if(m===Infinity) return 'N/A'; if(m<1) return '<1m'; if(m<60) return m+'m'; return Math.floor(m/60)+'h '+m%60+'m'; }
   function fmtTime(ts){ if(!ts) return '--'; const d=new Date(ts); if(isNaN(d)) return '--'; return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/New_York'}); }
   // Per-source: {name, ts, freshThresh, warnThresh}
-  const retainedSource=String(f.board_source_state||'').toUpperCase()==='RETAINED';
+  const retainedSource=String(f.board_source_state||'').toUpperCase().includes('RETAINED');
   const sources=[
     // The board source is deliberately the oldest visible paired capture,
     // not the time the runner happened to finish. This keeps a green status

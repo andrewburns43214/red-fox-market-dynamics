@@ -22,6 +22,11 @@ def check(data_dir, now=None, max_age_minutes=25):
             issues.append("SOURCE_CENSUS_INCOMPLETE")
         if summary.get("unexplained_gaps") or summary.get("publication_conflicts"):
             issues.append("PUBLICATION_RECONCILIATION_FAILED")
+        freshness_path = root / "freshness.json"
+        if freshness_path.exists():
+            freshness = json.loads(freshness_path.read_text(encoding="utf-8"))
+            if "RETAINED" in str(freshness.get("board_source_state", "")).upper():
+                issues.append("RETAINED_SOURCE_MARKETS")
         for sport, scrape in summary.get("latest_scrapes", {}).items():
             if sport not in summary.get("expected_active_sports", []):
                 continue

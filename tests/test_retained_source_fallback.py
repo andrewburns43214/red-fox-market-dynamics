@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 from publication_coverage import PublicationCoverage
-from refresh_anomaly_board import restore_retained_favorites, write_board_freshness
+from refresh_anomaly_board import restore_retained_favorites, select_current_and_retained_markets, write_board_freshness
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,9 +34,34 @@ def test_retained_source_keeps_true_capture_age_and_explicit_state(tmp_path):
 
 def test_retained_mode_is_bounded_and_never_fakes_live_timestamp():
     assert 'REDFOX_RETAINED_SOURCE_MAX_AGE_MINUTES", "720"' in REFRESH
-    assert 'board["data_badge"] = "RETAINED"' in REFRESH
+    assert 'board.loc[retained_rows, "data_badge"] = "RETAINED"' in REFRESH
     assert "Retained source" in BOARD
     assert "sources[0].label='Retained source'; sources[0].forced='warn'" in BOARD
+
+
+def test_one_sport_can_be_retained_while_another_is_fresh():
+    now = "2026-09-21T16:00:00Z"
+    complete = pd.DataFrame([
+        {"sport": "nfl", "game_id": "n", "market_display": "SPREAD", "timestamp": "2026-09-21T15:58:00Z"},
+        {"sport": "mlb", "game_id": "m", "market_display": "MONEYLINE", "timestamp": "2026-09-21T11:00:00Z"},
+        {"sport": "ncaaf", "game_id": "c", "market_display": "SPREAD", "timestamp": "2026-09-21T03:00:00Z"},
+    ])
+    result, retained = select_current_and_retained_markets(complete, now)
+    assert set(result.game_id) == {"n", "m"}
+    assert retained == {("mlb", "m", "MONEYLINE")}
+    assert result.loc[result.game_id.eq("m"), "timestamp"].iloc[0] == "2026-09-21T11:00:00Z"
+
+
+def test_recent_empty_source_is_labeled_retained_even_if_last_capture_is_recent():
+    complete = pd.DataFrame([
+        {"sport": "mlb", "game_id": "m", "market_display": "MONEYLINE", "timestamp": "2026-09-21T15:58:00Z"},
+        {"sport": "nfl", "game_id": "n", "market_display": "SPREAD", "timestamp": "2026-09-21T15:58:00Z"},
+    ])
+    result, retained = select_current_and_retained_markets(
+        complete, "2026-09-21T16:00:00Z", unavailable_sports={"mlb"}
+    )
+    assert set(result.game_id) == {"m", "n"}
+    assert retained == {("mlb", "m", "MONEYLINE")}
 
 
 def test_recent_empty_scrape_can_reuse_only_parse_failed_rows(tmp_path):
@@ -107,12 +132,15 @@ def test_retained_mode_restores_only_matching_pre_outage_favorite(tmp_path):
     board = pd.DataFrame([
         {"sport": "nfl", "game_id": "keep", "market_display": "SPREAD",
          "kickoff_iso": "2026-09-20T17:00:00Z", "supported_side": "NY Jets +3.5",
+         "data_badge": "RETAINED",
          "red_fox_favorite": "false", "favorite_state": "not_qualified"},
         {"sport": "nfl", "game_id": "mismatch", "market_display": "SPREAD",
          "kickoff_iso": "2026-09-20T20:00:00Z", "supported_side": "Home -3",
+         "data_badge": "RETAINED",
          "red_fox_favorite": "false", "favorite_state": "not_qualified"},
         {"sport": "nfl", "game_id": "historical", "market_display": "SPREAD",
          "kickoff_iso": "2026-09-20T20:00:00Z", "supported_side": "Home -2",
+         "data_badge": "RETAINED",
          "red_fox_favorite": "false", "favorite_state": "not_qualified"},
     ])
 

@@ -77,6 +77,21 @@ def filter_fresh_market_rows(dashboard, now=None, max_age_minutes=None):
     return dashboard.loc[captured >= current - pd.Timedelta(minutes=max_age_minutes)].copy()
 
 
+def select_current_and_retained_markets(complete, now, retained_minutes=720, unavailable_sports=()):
+    """Keep verified pregame markets through a bounded source interruption.
+
+    A fresh capture for one sport must not make another sport disappear. The
+    retained keys are returned separately so every older row can be labeled.
+    """
+    fresh = filter_fresh_market_rows(complete, now=now)
+    fresh = fresh.loc[~fresh["sport"].isin(unavailable_sports)].copy()
+    bounded = filter_fresh_market_rows(complete, now=now, max_age_minutes=retained_minutes)
+    fresh_sports = set(fresh["sport"])
+    older = bounded.loc[~bounded["sport"].isin(fresh_sports)].copy()
+    retained_keys = set(zip(older["sport"], older["game_id"], older["market_display"]))
+    return pd.concat([fresh, older], ignore_index=True), retained_keys
+
+
 def write_board_freshness(dashboard, data_dir=DATA, now=None, source_state="LIVE", source_note=""):
     """Atomically record the real source age of the just-published board."""
     if dashboard is None or dashboard.empty or "timestamp" not in dashboard.columns:
@@ -171,6 +186,8 @@ def restore_retained_favorites(board, data_dir=DATA, now=None):
             for _, row in tracking.iterrows()
         }
     for index, row in result.iterrows():
+        if str(row.get("data_badge", "")).upper() != "RETAINED":
+            continue
         key = tuple(str(row.get(column, "")) for column in keys)
         source = lookup.get(key)
         if source is None or str(source.get("red_fox_favorite", "")).lower() != "true":
@@ -524,7 +541,8 @@ def _refresh(coverage):
     newest_snapshot = snapshots["timestamp"].max()
     if pd.isna(newest_snapshot):
         newest_snapshot = coverage.now
-    active = snapshots[snapshots["timestamp"] >= newest_snapshot - pd.Timedelta(hours=2)].copy()
+    retained_minutes = int(os.environ.get("REDFOX_RETAINED_SOURCE_MAX_AGE_MINUTES", "720"))
+    active = snapshots[snapshots["timestamp"] >= newest_snapshot - pd.Timedelta(minutes=retained_minutes)].copy()
     coverage.stage(snapshots, active, "STALE_CAPTURE")
     active["side_key"] = [
         normalize_side_key(sport, market, side)
@@ -539,24 +557,14 @@ def _refresh(coverage):
     complete_market_count = dashboard[["sport", "game_id", "market_display"]].drop_duplicates().shape[0]
     print(f"[ok] kept {complete_market_count} complete customer-inspectable same-snapshot markets")
     before_freshness = len(dashboard)
-    fresh = filter_fresh_market_rows(dashboard, now=coverage.now)
-    coverage.stage(dashboard, fresh, "STALE_CAPTURE")
-    retained_source = False
-    dashboard = fresh
-    if not dashboard.empty and set(dashboard["sport"].astype(str)) & empty_source_sports:
-        retained_source = True
-    if dashboard.empty and before_freshness:
-        # A provider-wide empty response must not erase the last useful board.
-        # Retain only bounded, pregame source rows and label them explicitly;
-        # never advance their observation timestamp or present them as live.
-        retained_minutes = int(os.environ.get("REDFOX_RETAINED_SOURCE_MAX_AGE_MINUTES", "720"))
-        retained = filter_fresh_market_rows(
-            complete, now=coverage.now, max_age_minutes=retained_minutes
-        )
-        if not retained.empty:
-            dashboard = retained
-            retained_source = True
-            print(f"[degraded] live source empty; retained {len(dashboard)}/{before_freshness} rows within {retained_minutes} minutes")
+    dashboard, retained_keys = select_current_and_retained_markets(
+        complete, now=coverage.now, retained_minutes=retained_minutes,
+        unavailable_sports=empty_source_sports,
+    )
+    coverage.stage(complete, dashboard, "STALE_CAPTURE")
+    retained_source = bool(retained_keys)
+    if retained_source:
+        print(f"[degraded] retained {len(retained_keys)} verified markets within {retained_minutes} minutes of their actual captures")
     print(f"[ok] kept {len(dashboard)}/{before_freshness} rows within the public source-freshness window")
     update_market_candidates(dashboard, DATA / MARKET_CANDIDATES.name, as_of=newest_snapshot)
     dashboard["canonical_key"] = dashboard["sport"] + "|" + dashboard["game_id"]
@@ -627,7 +635,11 @@ def _refresh(coverage):
     # precise source timestamp attached above, not just publication wall time.
     board = update_favorite_tracking(board, DATA, as_of=newest_snapshot)
     if retained_source and not board.empty:
-        board["data_badge"] = "RETAINED"
+        retained_rows = [
+            (row.sport, row.game_id, row.market_display) in retained_keys
+            for row in board.itertuples()
+        ]
+        board.loc[retained_rows, "data_badge"] = "RETAINED"
         board = restore_retained_favorites(board, DATA, now=coverage.now)
     board = compact_public_board_payload(board)
     detail_count = write_event_detail_files(board, events, details_dir=DATA / "anomaly_event_details")
@@ -648,9 +660,9 @@ def _refresh(coverage):
     freshness = write_board_freshness(
         dashboard,
         data_dir=DATA,
-        source_state="RETAINED" if retained_source else "LIVE",
+        source_state=("RETAINED" if board["data_badge"].eq("RETAINED").all() else "PARTIAL_RETAINED") if retained_source and not board.empty else "LIVE",
         source_note=(
-            "Live provider response was empty; displaying the last verified pregame capture without changing its timestamp."
+            "Some markets use their last verified pregame capture; their source timestamps are unchanged."
             if retained_source else ""
         ),
     )
