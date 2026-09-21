@@ -44,9 +44,12 @@ def test_tracker_uses_one_shared_payload_for_desktop_mobile_and_guide():
     assert "10 Graded" not in BOARD
 
 
-def test_performance_widget_uses_larger_brand_gold_frame_and_sans_record_numbers():
+def test_performance_widget_uses_crisp_cropped_brand_gold_frame_and_sans_record_numbers():
     assert ".favorite-performance-record,\n.favorite-performance-rate { font-family:var(--sans)!important; }" in BOARD
-    assert ".favorite-performance-desktop .favorite-performance-brand{width:148px;height:34px;object-fit:cover;object-position:center;}" in BOARD
+    assert 'class="favorite-performance-brand-crop"' in BOARD
+    assert ".favorite-performance-desktop .favorite-performance-brand-crop{width:110px;height:27px;}" in BOARD
+    assert ".favorite-performance-desktop .favorite-performance-brand{width:136px;left:-15px;top:-9px;}" in BOARD
+    assert "object-fit:cover" not in BOARD
     assert "border:1px solid #c79532;" in BOARD
 
 

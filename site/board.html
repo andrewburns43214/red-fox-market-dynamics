@@ -1358,7 +1358,9 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .live-sort-control select:hover { border-color:var(--border3); color:var(--text); }
 .live-sort-control select:focus-visible { outline:2px solid rgba(221,74,64,.22); outline-offset:1px; border-color:var(--red); }
 .live-recent-grid { width:100%; display:grid; grid-template-columns:repeat(auto-fit,minmax(285px,1fr)); gap:10px; align-content:start; }
-.live-game-card { padding:12px; border:1px solid var(--border); border-radius:10px; background:#fff; box-shadow:0 2px 8px rgba(22,53,61,.05); }
+.live-game-card { position:relative; padding:12px; border:1px solid var(--border); border-radius:10px; background:#fff; box-shadow:0 2px 8px rgba(22,53,61,.05); cursor:pointer; transition:border-color .14s ease,box-shadow .14s ease,transform .14s ease; }
+.live-game-card:hover,.live-game-card:focus-visible { border-color:rgba(21,101,99,.46); box-shadow:0 5px 16px rgba(22,53,61,.12); transform:translateY(-1px); }
+.live-game-card:focus-visible { outline:3px solid rgba(21,101,99,.36); outline-offset:2px; }
 .live-game-top { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
 .live-game-heading { min-width:0; }
 .live-game-badges { display:flex; align-items:center; gap:6px; min-height:24px; }
@@ -1386,6 +1388,9 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .live-market-side { min-width:0; font-size:12px; font-weight:700; line-height:1.25; }
 .live-market-meta { min-width:0; color:var(--text3); font:600 9px/1.35 var(--mono); text-align:left; overflow-wrap:anywhere; }
 .detail-frozen-status { margin-top:4px; color:var(--red); font:800 9px var(--mono); text-transform:uppercase; letter-spacing:.06em; }
+.detail-history-loading { display:flex; align-items:center; gap:9px; min-height:58px; margin:10px 0 12px; padding:12px 14px; border:1px solid var(--border); border-radius:8px; background:var(--bg3); color:var(--text3); font:700 11px var(--sans); }
+.detail-history-loading::before { content:""; width:14px; height:14px; flex:0 0 auto; border:2px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:detail-history-spin .7s linear infinite; }
+@keyframes detail-history-spin { to { transform:rotate(360deg); } }
 .live-empty { grid-column:1/-1; width:min(620px,100%); margin:12px 0 0; padding:16px 18px; background:#fff; border:1px solid var(--border); border-radius:9px; text-align:center; color:var(--text3); font-size:12px; }
 .live-more { grid-column:1/-1; min-height:44px; border:1px solid var(--border2); border-radius:8px; background:#fff; color:var(--accent); font:700 11px var(--sans); cursor:pointer; }
 @media (max-width: 900px) {
@@ -1470,7 +1475,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .rail-logo{display:block;color:#ed4c43;text-decoration:none;font:600 18px/1 var(--sans);letter-spacing:-.055em}.rail-logo small{display:block;margin:4px 0 0 2px;color:#fff;font:600 8px var(--sans);letter-spacing:.22em}.rail-live{position:absolute;top:18px;right:13px;display:flex;align-items:center;gap:3px;color:#fff;font:700 10px var(--sans);letter-spacing:.08em}.rail-live:before{content:'•';color:#ed4c43;margin-right:2px;font-size:9px;animation:rail-live-pulse 1.6s ease-in-out infinite}@keyframes rail-live-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.38;transform:scale(1.35)}}@media(prefers-reduced-motion:reduce){.rail-live:before{animation:none}}.rail-section{margin-top:29px;padding:0 10px;color:#f2d9bc;font:700 9px var(--sans);letter-spacing:.08em;text-transform:uppercase}.rail-nav{display:grid;gap:5px;margin-top:9px}.rail-nav button{width:100%;min-height:44px;border:0;border-radius:6px;background:transparent;color:#fff;cursor:pointer;text-align:left;display:grid;grid-template-columns:minmax(0,1fr) 44px 20px;column-gap:8px;align-items:center;padding:0 10px;font:500 14px var(--sans)}.rail-nav button:hover,.rail-nav button.active{background:#20282b;color:#fff}.rail-main{grid-column:1;display:grid;grid-template-columns:18px minmax(0,1fr);column-gap:8px;align-items:center;min-width:0}.rail-icon{width:18px;height:18px;min-width:18px;max-width:18px;stroke-width:1.8}.rail-label{min-width:0}.rail-count{grid-column:2;width:44px;min-width:44px;justify-self:end;margin:0;color:#f2d9bc;text-align:right;white-space:nowrap;font:600 12px var(--mono);font-variant-numeric:tabular-nums}.rail-chevron-placeholder{grid-column:3;width:20px;min-width:20px}.rail-group{margin-top:27px}.rail-section-toggle{width:100%;height:20px;border:0;background:transparent;color:#f2d9bc;cursor:pointer;text-align:left;display:grid;grid-template-columns:minmax(0,1fr) 44px 20px;column-gap:8px;align-items:center;padding:0 10px;font:700 9px var(--sans);letter-spacing:.08em;text-transform:uppercase}.rail-section-toggle:hover{color:#fff}.rail-chevron{grid-column:3;width:20px;height:20px;min-width:20px;justify-self:end;stroke-width:1.8}.rail-chevron path{transform-box:fill-box;transform-origin:center;transition:transform .15s ease}.rail-section-toggle[aria-expanded="true"] .rail-chevron path{transform:rotate(90deg)}.rail-section-panel[hidden]{display:none!important}.rail-section-panel .rail-nav{margin-top:7px}.rail-section-panel .rail-nav button{min-height:38px;font-size:13px}.saved-games{display:grid;gap:2px;margin-top:8px;min-height:0}.saved-empty{padding:8px 10px;color:#fff;font:11px/1.4 var(--sans)}.saved-item{display:grid;grid-template-columns:14px minmax(0,1fr) 18px;column-gap:8px;align-items:start;padding:8px 10px;color:#fff;font:500 12px/1.35 var(--sans)}.saved-item .star{color:#ed4c43}.saved-item .saved-label{min-width:0;border:0;background:transparent;padding:0;color:#fff;overflow-wrap:anywhere;cursor:pointer;text-align:left;font:500 12px/1.35 var(--sans)}.saved-item .saved-label:hover{text-decoration:underline;text-underline-offset:2px}.saved-remove{justify-self:end;align-self:start;border:0;background:transparent;padding:0;color:#fff;cursor:pointer;font:600 16px/1 var(--sans)}.rail-research-note{padding:8px 10px 4px;color:#fff;font:10px/1.35 var(--sans)}.rail-section-panel>a{display:grid;grid-template-columns:minmax(0,1fr) 16px;column-gap:8px;align-items:center;padding:9px 10px;color:#fff;text-decoration:none;font:500 12px var(--sans)}.rail-section-panel>a svg{width:14px;height:14px;stroke-width:1.7;color:#f2d9bc}.rail-foot{margin-top:auto;padding:17px 10px 0;border-top:1px solid #20272a;color:#fff;font:600 13px/1.4 var(--sans)}.rail-foot strong{color:#ed4c43;font-weight:700}
 body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none!important}.content{min-height:100vh;background:#faf9f6}.board{padding:76px 28px 0}.lpane{border:0;box-shadow:none;border-radius:0;background:transparent}.pane-hdr{padding:0 0 13px;background:transparent;border:0}.pane-title,.mfilters{display:none!important}.tscroll{border-top:1px solid var(--border)}.signal-guide-btn{display:inline-flex}.board-tools input{background:#fff}.statusbar{display:none}
 .app-board-controls{position:fixed;top:0;left:280px;right:0;z-index:110;display:flex;align-items:center;gap:8px;min-height:62px;padding:13px 28px;background:#fffdfb;border-bottom:1px solid var(--border);font:700 10px var(--sans);letter-spacing:.06em}.app-board-controls>span{color:#20272a}.app-board-controls button{border:1px solid var(--border);border-radius:999px;background:#fff;color:var(--text2);padding:7px 12px;font:500 12px var(--sans);letter-spacing:0;cursor:pointer}.app-board-controls button.active{background:#ed5149;border-color:#ed5149;color:#fff;font-weight:700}.app-board-controls .app-sport-label{margin-left:10px}.app-board-controls label{display:flex;align-items:center;gap:6px;margin-left:auto;border:1px solid var(--border);border-radius:5px;background:#fff;padding:7px 9px;color:var(--text3);font-size:12px;letter-spacing:0}.app-board-controls input{width:180px;border:0;outline:0;background:transparent;color:var(--text);font:500 12px var(--sans)}
-.favorite-performance{display:none;align-items:center;min-width:0;color:var(--text);font-family:var(--sans);white-space:nowrap}.favorite-performance[hidden]{display:none!important}.favorite-performance-brand{display:block;flex:0 0 auto;width:112px;height:25px;object-fit:contain}.favorite-performance-sep{width:1px;height:13px;margin:0 9px;background:var(--border2)}.favorite-performance-record,.favorite-performance-rate{font:700 11px/1 var(--mono);font-variant-numeric:tabular-nums}.favorite-performance-since{color:var(--text3);font:600 9px/1 var(--sans)}
+.favorite-performance{display:none;align-items:center;min-width:0;color:var(--text);font-family:var(--sans);white-space:nowrap}.favorite-performance[hidden]{display:none!important}.favorite-performance-brand-crop{position:relative;display:block;flex:0 0 auto;overflow:hidden}.favorite-performance-brand{position:absolute;display:block;max-width:none;height:auto;image-rendering:auto}.favorite-performance-sep{width:1px;height:13px;margin:0 9px;background:var(--border2)}.favorite-performance-record,.favorite-performance-rate{font:700 11px/1 var(--mono);font-variant-numeric:tabular-nums}.favorite-performance-since{color:var(--text3);font:600 9px/1 var(--sans)}
 @media(max-width:850px){body{padding-left:0}.sandbox-rail{display:none}.app-board-controls{position:static;left:auto;right:auto;overflow-x:auto;min-height:0;padding:12px 10px;white-space:nowrap}.app-board-controls label{display:none}.board{padding:14px 10px 0}.topbar,.tabs{display:flex!important}.metricbar{display:none!important}}
 
 /* Approved Market Board surface. This used to be supplied by the sandbox
@@ -1541,8 +1546,8 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
 @media (max-width:850px){
   .favorite-performance-desktop{display:none!important}
   .favorite-performance-mobile{display:flex;justify-content:center;width:100%;min-height:34px;padding:3px 6px;overflow:hidden;border-bottom:1px solid var(--border2);background:#fff}
-  .favorite-performance-mobile .favorite-performance-brand{width:82px;height:25px}.favorite-performance-mobile .favorite-performance-sep{height:13px;margin:0 4px}.favorite-performance-mobile .favorite-performance-record,.favorite-performance-mobile .favorite-performance-rate{font-size:10px}.favorite-performance-mobile .favorite-performance-since{font-size:8px}body.live-recent-active .favorite-performance-mobile{display:none!important}
-  @media(max-width:360px){.favorite-performance-mobile .favorite-performance-brand{width:70px}.favorite-performance-mobile .favorite-performance-sep{margin-left:3px;margin-right:3px}.favorite-performance-mobile .favorite-performance-record,.favorite-performance-mobile .favorite-performance-rate{font-size:9px}.favorite-performance-mobile .favorite-performance-since{font-size:7.5px}}
+  .favorite-performance-mobile .favorite-performance-sep{height:13px;margin:0 4px}.favorite-performance-mobile .favorite-performance-record,.favorite-performance-mobile .favorite-performance-rate{font-size:10px}.favorite-performance-mobile .favorite-performance-since{font-size:8px}body.live-recent-active .favorite-performance-mobile{display:none!important}
+  @media(max-width:360px){.favorite-performance-mobile .favorite-performance-brand-crop{width:84px;height:23px}.favorite-performance-mobile .favorite-performance-brand{width:106px;left:-11px;top:-7px}.favorite-performance-mobile .favorite-performance-sep{margin-left:3px;margin-right:3px}.favorite-performance-mobile .favorite-performance-record,.favorite-performance-mobile .favorite-performance-rate{font-size:9px}.favorite-performance-mobile .favorite-performance-since{font-size:7.5px}}
   :root{--mobile-gutter:12px}
   html{background:var(--bg)}
   body{padding-bottom:calc(76px + env(safe-area-inset-bottom));overflow-x:hidden}
@@ -1671,14 +1676,15 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
 
 @media(min-width:851px){
   .favorite-performance-desktop{
-    height:36px;
+    height:34px;
     padding:0 10px 0 6px;
     border:1px solid #c79532;
     border-radius:7px;
     background:linear-gradient(180deg,#fffefb 0%,#fff 100%);
     box-shadow:0 0 0 1px rgba(199,149,50,.13),0 2px 7px rgba(113,78,17,.08);
   }
-  .favorite-performance-desktop .favorite-performance-brand{width:148px;height:34px;object-fit:cover;object-position:center;}
+  .favorite-performance-desktop .favorite-performance-brand-crop{width:110px;height:27px;}
+  .favorite-performance-desktop .favorite-performance-brand{width:136px;left:-15px;top:-9px;}
   .favorite-performance-desktop .favorite-performance-sep{background:#dfc486;}
 }
 @media(max-width:850px){
@@ -1692,7 +1698,8 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
     background:linear-gradient(180deg,#fffefb 0%,#fff 100%);
     box-shadow:0 0 0 1px rgba(199,149,50,.12);
   }
-  .favorite-performance-mobile .favorite-performance-brand{width:104px;height:32px;object-fit:cover;object-position:center;}
+  .favorite-performance-mobile .favorite-performance-brand-crop{width:96px;height:25px;}
+  .favorite-performance-mobile .favorite-performance-brand{width:121px;left:-13px;top:-8px;}
   .favorite-performance-mobile .favorite-performance-sep{background:#dfc486;}
 }
 </style>
@@ -2974,11 +2981,22 @@ function observeLiveRecentMore(){
   _liveRecentObserver=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting))showMoreLiveRecent();},{root:null,rootMargin:'240px'});
   _liveRecentObserver.observe(more);
 }
+function openLiveRecentCard(index,side,event){
+  if(event?.type==='click'&&event.target?.closest('button,a,input,select,textarea,summary')) return;
+  if(event?.type==='keydown'){
+    if(event.target!==event.currentTarget||!['Enter',' '].includes(event.key)) return;
+    event.preventDefault();
+  }
+  openGameDetail(allLiveRecent[index],side);
+}
 function liveGameCard(game){
   const first=game.first, markets=game.rows, key=escHtml(game.key), score=liveScoreText(first), status=liveDisplayStatus(first);
   const favoriteContext=game.favoriteMarkets.join(', '), favorite=game.hasFavorite?`<img class="red-fox-favorite-badge" src="assets/red-fox-favorite.png" alt="Red Fox Favorite — ${escHtml(favoriteContext)}" title="Red Fox Favorite pregame market: ${escHtml(favoriteContext)}">`:'';
   const saveLabel=(game.saved?'Remove saved game ':'Save game ')+String(first.game||'').trim();
-  return `<article class="live-game-card" data-live-game-key="${key}"><div class="live-game-top"><div class="live-game-heading"><div class="live-game-badges">${spChip(first.sport)}${favorite}</div><div class="live-game-name">${escHtml(first.game||'--')}</div><div class="live-status">${escHtml(status)}</div></div><div class="live-game-score-actions"><div class="live-score">${escHtml(score)}</div><button class="live-save" type="button" aria-label="${escHtml(saveLabel)}" title="${escHtml(saveLabel)}" aria-pressed="${game.saved}" onclick="toggleSavedLiveGame(${JSON.stringify(game.key).replace(/"/g,'&quot;')},event)">${game.saved?'★':'☆'}</button></div></div><div class="live-freeze">Frozen pregame record</div>${liveMarketSections(markets).map(function(section){return `<section class="live-market-section"><div class="live-market-type">${escHtml(section.market)}</div>${section.sides.map(function(item){const sideArg=JSON.stringify(item.side.flagged_side||'').replace(/"/g,'&quot;');return `<button class="live-market-side-row${item.supported?' is-supported':''}" type="button" onclick="openGameDetail(allLiveRecent[${item.index}],${sideArg})" aria-label="Open frozen pregame ${escHtml(section.market)} market for ${escHtml(item.side.flagged_side||'side')}"><span class="live-market-side">${escHtml(item.side.flagged_side||'--')}</span><span class="live-market-meta">${escHtml(item.side.open_line||'--')} → ${escHtml(item.side.current_line||'--')} · ${escHtml(detailPercent(item.side.bets_pct))} Bets / ${escHtml(detailPercent(item.side.money_pct))} Money</span></button>`;}).join('')}</section>`;}).join('')}</article>`;
+  const primary=[...markets].sort((a,b)=>Number(isRedFoxFavorite(b))-Number(isRedFoxFavorite(a))||frozenFavoriteRank(a)-frozenFavoriteRank(b)||boardRank(a)-boardRank(b))[0]||first;
+  const primaryIndex=allLiveRecent.indexOf(primary), primarySide=JSON.stringify(primary.flagged_side||'').replace(/"/g,'&quot;');
+  const openLabel='Open '+String(first.game||'game')+' drill-in';
+  return `<article class="live-game-card" tabindex="0" data-live-game-key="${key}" onclick="openLiveRecentCard(${primaryIndex},${primarySide},event)" onkeydown="openLiveRecentCard(${primaryIndex},${primarySide},event)" aria-label="${escHtml(openLabel)}" title="${escHtml(openLabel)}"><div class="live-game-top"><div class="live-game-heading"><div class="live-game-badges">${spChip(first.sport)}${favorite}</div><div class="live-game-name">${escHtml(first.game||'--')}</div><div class="live-status">${escHtml(status)}</div></div><div class="live-game-score-actions"><div class="live-score">${escHtml(score)}</div><button class="live-save" type="button" aria-label="${escHtml(saveLabel)}" title="${escHtml(saveLabel)}" aria-pressed="${game.saved}" onclick="toggleSavedLiveGame(${JSON.stringify(game.key).replace(/"/g,'&quot;')},event)">${game.saved?'★':'☆'}</button></div></div><div class="live-freeze">Frozen pregame record</div>${liveMarketSections(markets).map(function(section){return `<section class="live-market-section"><div class="live-market-type">${escHtml(section.market)}</div>${section.sides.map(function(item){const sideArg=JSON.stringify(item.side.flagged_side||'').replace(/"/g,'&quot;');return `<button class="live-market-side-row${item.supported?' is-supported':''}" type="button" onclick="openGameDetail(allLiveRecent[${item.index}],${sideArg})" aria-label="Open frozen pregame ${escHtml(section.market)} market for ${escHtml(item.side.flagged_side||'side')}"><span class="live-market-side">${escHtml(item.side.flagged_side||'--')}</span><span class="live-market-meta">${escHtml(item.side.open_line||'--')} → ${escHtml(item.side.current_line||'--')} · ${escHtml(detailPercent(item.side.bets_pct))} Bets / ${escHtml(detailPercent(item.side.money_pct))} Money</span></button>`;}).join('')}</section>`;}).join('')}</article>`;
 }
 function renderLiveRecent(){
   const grid=document.getElementById('live-recent-grid'); if(!grid)return;
@@ -5061,6 +5079,7 @@ function renderGameDetail(){
   html+='<div class="detail-game-header">'+spChip(r.sport)+'<div class="detail-game-identity"><div class="detail-game-heading">'+escHtml(r.game||'--')+'</div><div class="detail-game-meta">'+escHtml(r.kickoff_time||'--')+'</div>'+frozenStatus+marketSwitcher+'</div>'+propScoreHtml(r)+'</div>';
   html+='<section style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px">'+sideToggle;
   html+='<div class="detail-current-read"><div><div class="detail-current-line">'+escHtml(selected.current_line||'--')+'</div>'+(currentMovement?'<div class="detail-current-movement">'+currentMovement+'</div>':'')+'<div class="detail-current-splits"><span>'+escHtml(detailPct(selected.bets_pct,'Bets'))+'</span><span>'+escHtml(detailPct(selected.money_pct,'Money'))+'</span></div></div><div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">'+signals.map(anomalyBadge).join('')+'</div></div>';
+  if(state.historyLoading) html+='<div class="detail-history-loading" role="status">Loading market trajectory and observation history…</div>';
   html+=movementChart(detailRows,r.market_display,state.selectedJourneyTimestamp,selected.flagged_side||sideLabel(selected,r));
   html+=detailJourneyHtml(detailRows,selected,state.selectedJourneyTimestamp);
   html+='<section class="market-story"><h3>Market Story</h3><div class="market-story-grid"><div class="market-story-item"><span>Since Open</span><b>'+escHtml((detailRows[0]?.line_display||selected.open_line||'--')+' → '+(detailRows[detailRows.length-1]?.line_display||selected.current_line||'--'))+'</b></div><div class="market-story-item"><span>Positioning</span><b>'+escHtml(detailPct(selected.bets_pct,'Bets')+' / '+detailPct(selected.money_pct,'Money'))+'</b></div><div class="market-story-item"><span>First Signal</span><b>'+escHtml(firstSignal)+'</b></div><div class="market-story-item"><span>Latest Development</span><b>'+escHtml(detailLatestDevelopment(detailRows,selected))+'</b></div></div></section>';
@@ -5075,7 +5094,8 @@ function renderGameDetail(){
   document.getElementById('drill-overlay').classList.add('open');
 }
 async function openGameDetail(r,selectedSideLabel){
-  const events=await ensureGameEvents(r), gid=r.game_id||r.game||'';
+  if(!r) return;
+  const gid=r.game_id||r.game||'';
   const markets=[]; const seen=new Set();
   const frozenPregame=(allLiveRecent||[]).includes(r);
   const relatedRows=frozenPregame?(allLiveRecent||[]):[...(window._boardRows||[]),...(allLiveRecent||[])];
@@ -5085,7 +5105,14 @@ async function openGameDetail(r,selectedSideLabel){
   const sides=marketSides(r);
   const selectedIdentity=marketSideIdentity({flagged_side:selectedSideLabel||r.flagged_side||''},r);
   const selectedIndex=Math.max(0,sides.findIndex(side=>marketSideIdentity(side,r)===selectedIdentity));
-  window._gameDetailState={row:r,events,markets,sideIndex:selectedIndex,selectedJourneyTimestamp:'',frozenPregame,frozenCutoff:r.frozen_at_utc||'',frozenAt:r._frozen_last_snapshot_at||''};
+  const requestId=(window._gameDetailRequestId||0)+1;
+  window._gameDetailRequestId=requestId;
+  window._gameDetailState={row:r,events:[],markets,sideIndex:selectedIndex,selectedJourneyTimestamp:'',frozenPregame,frozenCutoff:r.frozen_at_utc||'',frozenAt:r._frozen_last_snapshot_at||'',historyLoading:true};
+  renderGameDetail();
+  const events=await ensureGameEvents(r);
+  if(window._gameDetailRequestId!==requestId||window._gameDetailState?.row!==r) return;
+  window._gameDetailState.events=events;
+  window._gameDetailState.historyLoading=false;
   renderGameDetail();
 }
 
@@ -5426,7 +5453,7 @@ function renderFavoritePerformance(){
   const text=favoritePerformanceText();
   document.querySelectorAll('[data-favorite-performance]').forEach(host=>{
     host.hidden=!text;
-    host.innerHTML=text?`<img class="favorite-performance-brand" src="assets/red-fox-favorite.png" alt="Red Fox Favorite"><span class="favorite-performance-sep" aria-hidden="true"></span><span class="favorite-performance-record">${escHtml(text.record)}</span><span class="favorite-performance-sep" aria-hidden="true"></span><span class="favorite-performance-rate">${escHtml(text.rate)}</span><span class="favorite-performance-sep" aria-hidden="true"></span><span class="favorite-performance-since">${escHtml(text.since)}</span>`:'';
+    host.innerHTML=text?`<span class="favorite-performance-brand-crop" aria-hidden="true"><img class="favorite-performance-brand" src="assets/red-fox-favorite.png" alt=""></span><span class="favorite-performance-sep" aria-hidden="true"></span><span class="favorite-performance-record">${escHtml(text.record)}</span><span class="favorite-performance-sep" aria-hidden="true"></span><span class="favorite-performance-rate">${escHtml(text.rate)}</span><span class="favorite-performance-sep" aria-hidden="true"></span><span class="favorite-performance-since">${escHtml(text.since)}</span>`:'';
     if(text) host.setAttribute('aria-label',`Red Fox Favorite record ${text.record}, ${text.rate}, ${text.since}`);
   });
   document.querySelectorAll('.favorite-guide-record').forEach(footer=>{

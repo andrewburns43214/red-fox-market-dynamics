@@ -70,6 +70,24 @@ def test_live_cards_group_trusted_frozen_sides_by_market_and_open_the_clicked_si
     assert "async function openGameDetail(r,selectedSideLabel)" in BOARD
 
 
+def test_whole_live_card_opens_the_best_available_market():
+    assert "function openLiveRecentCard(index,side,event)" in BOARD
+    assert "Number(isRedFoxFavorite(b))-Number(isRedFoxFavorite(a))" in BOARD
+    assert 'onclick="openLiveRecentCard(${primaryIndex},${primarySide},event)"' in BOARD
+    assert 'onkeydown="openLiveRecentCard(${primaryIndex},${primarySide},event)"' in BOARD
+    assert "event.target?.closest('button,a,input,select,textarea,summary')" in BOARD
+
+
+def test_drill_in_opens_before_history_request_finishes():
+    function_start = BOARD.rindex("async function openGameDetail(r,selectedSideLabel)")
+    function_end = BOARD.index("\n}\n\nfunction parseLine", function_start)
+    source = BOARD[function_start:function_end]
+    assert source.index("renderGameDetail();") < source.index("await ensureGameEvents(r)")
+    assert "historyLoading:true" in source
+    assert "window._gameDetailState.historyLoading=false;" in source
+    assert 'class="detail-history-loading" role="status"' in BOARD
+
+
 def test_frozen_current_journey_primary_read_matches_the_selected_side_read():
     """The final Journey node cannot fall back to an older event-level Watch."""
     assert "reaction:published.reaction||event.reaction||''" in BOARD
