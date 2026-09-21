@@ -158,6 +158,8 @@ def test_mlb_high_requires_probable_pitchers_and_lineup_coverage():
     assert result["confidence"] == "HIGH"
     assert result["display_status"] == "Props-Only · High"
     assert 1 <= result["away_score"] <= 10
+    assert result["oldest_observation_age_minutes"] == 0
+    assert all(team["probable_pitcher_represented"] for team in result["coverage"]["teams"].values())
     missing = project_event("mlb", event, rosters, context={"lineup_confirmed": True}, now=NOW)
     assert missing["status"] == "UNAVAILABLE"
 

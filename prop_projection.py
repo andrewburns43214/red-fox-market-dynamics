@@ -292,10 +292,10 @@ def strongest_anchors(sport, lines, away, home, maximum=7):
     return anchors[:maximum]
 
 
-def _coverage(sport, lines, event, context):
+def _coverage(sport, lines, event, context, now):
     teams = [event["away_team"], event["home_team"]]
     ages = [parse_time(line["observed_at"]) for line in lines]
-    age_minutes = max(((utc_now() - age).total_seconds() / 60 for age in ages if age), default=9999)
+    age_minutes = max(((now - age).total_seconds() / 60 for age in ages if age), default=9999)
     books = {book for line in lines for book in line["books"]}
     per_team = {}
     for team in teams:
@@ -311,9 +311,13 @@ def _coverage(sport, lines, event, context):
         high = moderate and score_ready and all(x["players"] >= 7 and x["books"] >= 3 and len(x["families"]) >= 4 for x in per_team.values())
     else:
         lineup_confirmed = bool(context.get("lineup_confirmed"))
-        pitchers = {normalized_name(context.get("home_probable_pitcher")), normalized_name(context.get("away_probable_pitcher"))} - {""}
-        represented = {line["player_key"] for line in lines}
-        represented_pitchers = pitchers & represented
+        pitchers_by_team = {team: str(context.get(f"{side}_probable_pitcher") or "")
+                            for side, team in (("away", teams[0]), ("home", teams[1]))}
+        pitchers = {normalized_name(name) for name in pitchers_by_team.values()} - {""}
+        represented_by_team = {team: {line["player_key"] for line in lines if line["team"] == team}
+                               for team in teams}
+        represented_pitchers = {normalized_name(name) for team, name in pitchers_by_team.items()
+                                if normalized_name(name) in represented_by_team[team]}
         pitchers_ready = len(pitchers) == 2 and len(represented_pitchers) == 2
         # The second probable starter may be named but lack props, or may still
         # be unannounced in context. Either case is acceptable only when one
@@ -332,12 +336,15 @@ def _coverage(sport, lines, event, context):
         high = high and pitchers_ready
         for team in teams:
             per_team[team]["batters"] = batter_counts[team]
-            per_team[team]["probable_pitchers_represented"] = len({
-                line["player_key"] for line in lines if line["team"] == team and line["player_key"] in pitchers
-            })
+            per_team[team]["probable_pitcher"] = pitchers_by_team[team]
+            per_team[team]["probable_pitcher_represented"] = normalized_name(pitchers_by_team[team]) in represented_by_team[team]
         score_ready = moderate
     confidence = "HIGH" if high else ("MODERATE" if moderate and score_ready else "INSUFFICIENT")
-    return confidence, {"teams": per_team, "books": sorted(books), "age_minutes": round(age_minutes, 1)}
+    coverage = {"teams": per_team, "books": sorted(books), "age_minutes": round(age_minutes, 1)}
+    if sport == "mlb":
+        coverage["lineup_confirmed"] = lineup_confirmed
+        coverage["one_pitcher_missing_fallback"] = complete_hitter_ready and not pitchers_ready
+    return confidence, coverage
 
 
 def project_event(sport, event, rosters, context=None, now=None):
@@ -362,7 +369,7 @@ def project_event(sport, event, rosters, context=None, now=None):
         }
     rows = attach_teams(raw_rows, event, rosters)
     lines = canonical_player_lines(rows)
-    confidence, coverage = _coverage(sport, lines, event, context)
+    confidence, coverage = _coverage(sport, lines, event, context, now)
     result = {**base, "confidence": confidence, "coverage": coverage, "line_count": len(lines)}
     if confidence == "INSUFFICIENT":
         return {

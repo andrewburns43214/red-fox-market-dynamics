@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -191,12 +192,54 @@ class RosterResolver:
         payload = self._cache(f"mlb_{numeric}_roster", load, max_age=21600)
         return [item.get("person", {}).get("fullName") for item in payload.get("roster", []) if item.get("person", {}).get("fullName")]
 
+    def _mlb_schedule(self, day):
+        def load():
+            payload = self.session.get(
+                "https://statsapi.mlb.com/api/v1/schedule",
+                params={"sportId": 1, "date": day, "hydrate": "probablePitcher"}, timeout=12,
+            ).json()
+            return [game for date in payload.get("dates", []) for game in date.get("games", [])]
+        return self._cache(f"mlb_schedule_{day}", load, max_age=900)
+
+    def _mlb_probable_pitchers(self, event):
+        start = parse_time(event.get("commence_time"))
+        if not start:
+            return {}
+        day = start.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+        away_id = str(event.get("away_team_id") or "").split(":")[-1]
+        home_id = str(event.get("home_team_id") or "").split(":")[-1]
+        if not away_id.isdigit() or not home_id.isdigit():
+            return {}
+        matches = []
+        for game in self._mlb_schedule(day):
+            teams = game.get("teams", {})
+            if (str(teams.get("away", {}).get("team", {}).get("id")) != away_id
+                    or str(teams.get("home", {}).get("team", {}).get("id")) != home_id):
+                continue
+            game_start = parse_time(game.get("gameDate"))
+            if game_start and abs((game_start - start).total_seconds()) <= 3 * 3600:
+                matches.append(game)
+        if len(matches) != 1:
+            return {}
+        return {side: matches[0].get("teams", {}).get(side, {}).get("probablePitcher", {}).get("fullName", "")
+                for side in ("away", "home")}
+
     def for_event(self, sport, event):
         output = {}
+        if sport == "mlb":
+            try:
+                probables = self._mlb_probable_pitchers(event)
+            except Exception:
+                probables = {}
+        else:
+            probables = {}
         for side in ("away", "home"):
             team = str(event.get(f"{side}_team") or "")
             if sport == "mlb":
                 names, tokens = self._mlb_roster(event.get(f"{side}_team_id")), []
+                probable = probables.get(side)
+                if probable and normalized_name(probable) not in {normalized_name(name) for name in names}:
+                    names.append(probable)
             else:
                 names, tokens = self._espn_roster(sport, team)
             output[team], output[f"{team}__tokens"] = names, tokens
@@ -209,6 +252,14 @@ class RosterResolver:
             return {}
         if sport in {"nfl", "ncaaf"}:
             self._espn_team_index(sport)  # one cached league index before threads
+        if sport == "mlb":
+            days = {start.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+                    for event in events if (start := parse_time(event.get("commence_time")))}
+            for day in days:
+                try:
+                    self._mlb_schedule(day)
+                except Exception:
+                    pass
         output = {}
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {pool.submit(self.for_event, sport, event): str(event.get("id") or "") for event in events}

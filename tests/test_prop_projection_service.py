@@ -158,3 +158,33 @@ def test_disabled_sports_are_architected_but_not_enabled():
     assert service.SPORTS["nba"]["enabled"] is False
     assert service.SPORTS["ncaab"]["enabled"] is False
     assert service.SPORTS["nhl"]["enabled"] is False
+
+
+def test_official_game_probables_complete_a_roster_before_team_matching(tmp_path):
+    class OfficialSession:
+        def get(self, url, **kwargs):
+            if url.endswith("/schedule"):
+                return Response({"dates": [{"games": [{
+                    "gameDate": "2026-09-21T22:40:00Z",
+                    "teams": {
+                        "away": {"team": {"id": 120}, "probablePitcher": {"id": 687792, "fullName": "DJ Herz"}},
+                        "home": {"team": {"id": 116}, "probablePitcher": {"id": 689981, "fullName": "River Ryan"}},
+                    },
+                }]}]})
+            if "/teams/120/roster" in url:
+                return Response({"roster": [{"person": {"fullName": "Nationals Batter"}}]})
+            if "/teams/116/roster" in url:
+                return Response({"roster": [{"person": {"fullName": "Tigers Batter"}}]})
+            raise AssertionError(url)
+
+    resolver = service.RosterResolver(session=OfficialSession(), root=tmp_path)
+    event = {
+        "away_team": "Washington Nationals", "home_team": "Detroit Tigers",
+        "away_team_id": "mlb:120", "home_team_id": "mlb:116",
+        "commence_time": "2026-09-21T22:40:00Z",
+    }
+    rosters = resolver.for_event("mlb", event)
+    assert "DJ Herz" in rosters["Washington Nationals"]
+    assert "River Ryan" in rosters["Detroit Tigers"]
+    other = {**event, "commence_time": "2026-09-22T04:00:00Z"}
+    assert "River Ryan" not in resolver.for_event("mlb", other)["Detroit Tigers"]

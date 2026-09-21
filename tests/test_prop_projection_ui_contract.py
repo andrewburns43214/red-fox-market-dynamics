@@ -28,6 +28,12 @@ def test_public_cache_is_explicitly_allowlisted():
     assert "no-cache, no-store, must-revalidate" in NGINX
 
 
+def test_mlb_expected_runs_keep_a_decimal_and_unavailable_reason_is_specific():
+    assert "Number(prop.away_mean).toFixed(1)" in BOARD
+    assert "Number(prop.home_mean).toFixed(1)" in BOARD
+    assert "Waiting for verified props for " in BOARD
+
+
 def test_no_secret_or_raw_prop_dump_is_shipped_to_browser():
     assert "PROPLINE_API_KEY" not in BOARD
     assert "canonical_lines" not in BOARD
