@@ -246,6 +246,22 @@ class PublicationCoverage:
         self.store.update(records, self.run_id, "PUBLICATION_ACCOUNTED")
         frame = pd.DataFrame(records)
         summary = {"run_id": self.run_id, "as_of": self.now.isoformat(), "board_sha256": hashlib.sha256(Path(board_path).read_bytes()).hexdigest(), "sports": {}}
+        # Keep the last verified schedule context visible for the few seconds
+        # between this atomic board publish and the schedule refresh. Remove
+        # placeholders for sports that now have real market rows.
+        prior_path = self.store.root / "publication_coverage.json"
+        try:
+            previous = json.loads(prior_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            previous = {}
+        board_sports = set(board["sport"].astype(str)) if "sport" in board else set()
+        summary["scheduled_without_markets"] = [
+            item for item in previous.get("scheduled_without_markets", [])
+            if isinstance(item, dict) and item.get("sport") not in board_sports
+            and pd.to_datetime(item.get("kickoff_iso"), utc=True, errors="coerce") > self.now
+        ]
+        summary["schedule_checked_at"] = previous.get("schedule_checked_at", "")
+        summary["schedule_fetch_errors"] = previous.get("schedule_fetch_errors", {})
         for sport in ["nfl", "ncaaf", "ALL"]:
             subset = [r for r in records if sport == "ALL" or r["sport"] == sport]
             scoped = [r for r in subset if r["in_window_scope"]]

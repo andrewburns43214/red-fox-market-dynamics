@@ -1,11 +1,14 @@
 """Schedule context is shown only where verified market rows are absent."""
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+import pandas as pd
 
+from publication_coverage import PublicationCoverage
 from schedule_visibility import uncovered_schedule
 
 
@@ -67,3 +70,22 @@ def test_board_shows_schedule_only_game_without_a_market_read():
             assert result["markets"] == 0
         finally:
             browser.close()
+
+
+def test_publication_keeps_schedule_context_until_refresh_and_removes_replaced_sport(tmp_path):
+    path = tmp_path / "anomaly_board.csv"
+    path.write_text("sport,game_id,market_display\n", encoding="utf-8")
+    clock = pd.Timestamp("2026-09-21T16:00:00Z")
+    PublicationCoverage(tmp_path, clock).publish(pd.DataFrame(), path, lambda frame, now: frame)
+    coverage_path = tmp_path / "publication_coverage.json"
+    payload = json.loads(coverage_path.read_text())
+    payload["scheduled_without_markets"] = [{"sport": "nhl", "kickoff_iso": "2026-09-21T23:00:00Z", "game": "Buffalo @ Pittsburgh"}]
+    coverage_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    PublicationCoverage(tmp_path, clock + pd.Timedelta(minutes=1)).publish(pd.DataFrame(), path, lambda frame, now: frame)
+    assert len(json.loads(coverage_path.read_text())["scheduled_without_markets"]) == 1
+
+    board = pd.DataFrame([{"sport": "nhl", "game_id": "game", "market_display": "MONEYLINE"}])
+    board.to_csv(path, index=False)
+    PublicationCoverage(tmp_path, clock + pd.Timedelta(minutes=2)).publish(board, path, lambda frame, now: frame)
+    assert json.loads(coverage_path.read_text())["scheduled_without_markets"] == []
