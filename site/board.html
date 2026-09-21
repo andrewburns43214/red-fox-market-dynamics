@@ -1338,6 +1338,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .detail-quality { margin:14px 0; border:1px solid var(--border); border-radius:10px; background:var(--bg3); }
 .detail-quality-clean { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 12px; }
 .detail-quality-label { color:var(--text3); font:800 9px var(--sans); letter-spacing:.06em; text-transform:uppercase; }
+.detail-quality-pending { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 12px; color:var(--text3); font:700 10px var(--sans); }
 .detail-quality-warning { padding:12px; }
 .detail-quality-warning h3 { margin:0 0 7px; color:var(--text); font:800 11px var(--sans); letter-spacing:.06em; text-transform:uppercase; }
 .live-recent { flex:1; min-width:0; width:100%; padding:20px 24px 28px; overflow:auto; background:var(--bg3); }
@@ -1381,9 +1382,6 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .live-market-side-row:hover { background:#f6fbfa; }
 .live-market-side-row.is-supported { background:linear-gradient(90deg,rgba(21,134,106,.10),rgba(21,134,106,0)); }
 .live-market-side-row.is-supported:hover { background:linear-gradient(90deg,rgba(21,134,106,.13),rgba(21,134,106,.03)); }
-.favorite-review-queue{margin:0 0 10px;padding:10px 12px;border:1px solid rgba(189,123,43,.35);border-radius:8px;background:rgba(189,123,43,.07)}
-.favorite-review-title{margin-bottom:6px;color:var(--gold);font:700 10px var(--mono);letter-spacing:.08em;text-transform:uppercase}
-.favorite-review-item{display:flex;gap:8px;align-items:baseline;padding:4px 0;color:var(--text2);font-size:11px}.favorite-review-item strong{color:var(--text)}
 .live-market-side-row:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .live-market-side { min-width:0; font-size:12px; font-weight:700; line-height:1.25; }
 .live-market-meta { min-width:0; color:var(--text3); font:600 9px/1.35 var(--mono); text-align:left; overflow-wrap:anywhere; }
@@ -1602,6 +1600,8 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .tab.active{color:var(--red)!important;border-bottom-color:var(--red)!important}
   .tab .tbadge{background:transparent!important;border-color:var(--border)!important;color:#050708!important}
   .tab.active .tbadge{background:#fbe4e1!important;border-color:#efb5ae!important;color:var(--red)!important}
+  .tab .tbadge{display:inline-flex!important;align-items:center;justify-content:center;min-width:23px!important;height:23px;padding:0 6px!important;border-radius:999px;font:700 9px/1 var(--sans)!important;font-style:normal!important;font-variant-numeric:tabular-nums}
+  .live-score{font-family:var(--sans)!important;font-style:normal!important;font-variant-numeric:tabular-nums}
   .board{padding-top:10px!important}
 
   /* Mobile card polish: retain the full side names while giving every card
@@ -1917,7 +1917,6 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
           <div class="board-sort-menu" id="desktop-sort-menu" role="menu" hidden></div>
           <div class="favorite-performance favorite-performance-desktop" data-favorite-performance hidden></div>
         </div>
-        <div class="favorite-review-queue" id="favorite-review-queue" hidden aria-live="polite"></div>
         <div class="tscroll">
           <table>
             <thead>
@@ -2558,6 +2557,15 @@ function dataBadge(v){
   const cls=t==='CLEAN'?'tMID':t==='THIN'?'tLATE':'tLIVE';
   const meta=signalMetaFor(label);
   return `<button class="tim ${cls} signal-chip" type="button" data-signal-tooltip="true" data-tooltip-title="${escHtml(label)}" data-tooltip-body="${escHtml(meta.tip)}" onclick="event.stopPropagation();openSignalGuide('${label}')" aria-label="Explain ${escHtml(label)}" title="${escHtml(meta.tip)}">${label}</button>`;
+}
+function resolvedDetailDataBadge(row,detailRows,historyLoading=false){
+  const explicit=String(row?.data_badge||'').trim().toUpperCase();
+  if(['CLEAN','THIN','SPLIT RISK','FEED RISK'].includes(explicit)) return explicit;
+  if(historyLoading) return '';
+  const usable=(detailRows||[]).filter(item=>String(item?.line_display||'').trim()&&!['--','-'].includes(String(item.line_display).trim()));
+  if(usable.length>=3) return 'CLEAN';
+  if(usable.length>=2) return 'THIN';
+  return 'FEED RISK';
 }
 function hasSplitRead(r){ return String(r?.data_badge||'').trim().toUpperCase()!=='SPLIT RISK'; }
 function splitCell(r){
@@ -3312,7 +3320,6 @@ function showMoreBoardRows(){
   renderBoard(false);
 }
 function renderBoard(resetPage=true){
-  renderFavoriteReviewQueue();
   const marketRows=filtered();
   const grouped=new Map();
   marketRows.forEach(row=>{ const id=boardGameKey(row)||'?'; if(!grouped.has(id))grouped.set(id,[]); grouped.get(id).push(row); });
@@ -3376,14 +3383,6 @@ function renderBoard(resetPage=true){
     if(button && !more.hidden) button.textContent=`Load ${Math.min(boardPageSize(),games.length-_visibleBoardRows)} more games`;
   }
   _boardHasRendered=true;
-}
-
-function renderFavoriteReviewQueue(){
-  const host=document.getElementById('favorite-review-queue'); if(!host)return;
-  const active=allDash.filter(row=>['pending_addition','pending_removal','late_warning','applied_addition','applied_removal'].includes(String(row.favorite_review_state||'')));
-  host.hidden=!active.length;
-  if(!active.length){host.innerHTML='';return;}
-  host.innerHTML='<div class="favorite-review-title">Favorite review queue</div>'+active.map(row=>`<div class="favorite-review-item"><strong>${escHtml(row.game||'Game')} · ${escHtml(row.market_display||'Market')}</strong><span>${escHtml(row.favorite_review_reason||'Material closing-window change under review.')}</span></div>`).join('');
 }
 
 function actionLens(r){
@@ -5073,7 +5072,7 @@ function renderGameDetail(){
   const maxExcursion=String(r.market_display||'').toUpperCase()==='MONEYLINE'
     ?detailMaxExcursion(selected,r.market_display)
     :detailPointValue(selected.max_excursion);
-  const isClean=String(r.data_badge||'').trim().toUpperCase()==='CLEAN';
+  const detailQuality=resolvedDetailDataBadge(r,detailRows,state.historyLoading);
   let html='<div class="game-detail-content" style="padding:16px 20px">';
   const frozenStatus=state.frozenPregame?'<div class="detail-frozen-status">Frozen pregame market'+(frozenSnapshotLabel(state.frozenAt)?' · Last snapshot '+escHtml(frozenSnapshotLabel(state.frozenAt)):'')+'</div>':'';
   html+='<div class="detail-game-header">'+spChip(r.sport)+'<div class="detail-game-identity"><div class="detail-game-heading">'+escHtml(r.game||'--')+'</div><div class="detail-game-meta">'+escHtml(r.kickoff_time||'--')+'</div>'+frozenStatus+marketSwitcher+'</div>'+propScoreHtml(r)+'</div>';
@@ -5085,7 +5084,12 @@ function renderGameDetail(){
   html+='<section class="market-story"><h3>Market Story</h3><div class="market-story-grid"><div class="market-story-item"><span>Since Open</span><b>'+escHtml((detailRows[0]?.line_display||selected.open_line||'--')+' → '+(detailRows[detailRows.length-1]?.line_display||selected.current_line||'--'))+'</b></div><div class="market-story-item"><span>Positioning</span><b>'+escHtml(detailPct(selected.bets_pct,'Bets')+' / '+detailPct(selected.money_pct,'Money'))+'</b></div><div class="market-story-item"><span>First Signal</span><b>'+escHtml(firstSignal)+'</b></div><div class="market-story-item"><span>Latest Development</span><b>'+escHtml(detailLatestDevelopment(detailRows,selected))+'</b></div></div></section>';
   html+='<section class="detail-proof"><div class="detail-proof-head"><div><h3>Proof / Observation History</h3><small>'+escHtml(proofSummary)+'</small></div></div><div class="detail-proof-body"><div class="detail-proof-metrics" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px"><div class="movement-fact"><span>'+escHtml(hasClassifiedSignal?'First Signal':'First Observed')+'</span><b>'+escHtml(hasClassifiedSignal?et(frozenSignal):(detailRows.length?et(detailRows[0].timestamp):'--'))+'</b></div><div class="movement-fact"><span>Max Excursion</span><b>'+escHtml(maxExcursion)+'</b></div><div class="movement-fact"><span title="Counts every raw line-direction change across timestamped observations; Market Journey shows only meaningful reversal milestones.">Raw Reversals</span><b>'+escHtml(String(journeyStats.reversals))+'</b></div><div class="movement-fact"><span>Observations</span><b>'+escHtml(String(detailRows.length||selected.observation_count||'--'))+'</b></div></div>';
   if(detailRows.length){ html+='<button type="button" class="detail-observations-toggle" onclick="toggleDetailObservations(this)">View '+escHtml(String(detailRows.length))+' observations</button><div class="detail-observations" style="overflow:auto"><table class="detail-observation-table" style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px"><thead><tr style="background:var(--bg4)"><th style="padding:5px 8px;text-align:left">Time</th><th style="padding:5px 8px;text-align:left">Line</th><th style="padding:5px 8px;text-align:left">Bets</th><th style="padding:5px 8px;text-align:left">Money</th></tr></thead><tbody>'+detailRows.map((row,index)=>'<tr class="detail-observation-row '+(String(row.timestamp||'')===String(state.selectedJourneyTimestamp||'')?'is-selected':'')+'"'+(index>=24?' hidden':'')+' style="border-bottom:1px solid var(--border)"><td data-label="Time" style="padding:4px 8px">'+escHtml(et(row.timestamp))+'</td><td data-label="Line" style="padding:4px 8px">'+escHtml(row.line_display||'--')+'</td><td data-label="Bets" style="padding:4px 8px">'+escHtml(detailPercent(row.bets_pct))+'</td><td data-label="Money" style="padding:4px 8px">'+escHtml(detailPercent(row.money_pct))+'</td></tr>').join('')+'</tbody></table>'+(detailRows.length>24?'<button type="button" class="detail-observations-more" onclick="loadMoreDetailObservations(this)">Show 24 more observations</button>':'')+'</div>'; } else { html+='<div style="color:var(--text3);font-size:12px;padding:10px">No event history yet</div>'; }
-  html+='</div></section>'+(isClean?'<footer class="detail-quality detail-quality-clean"><span class="detail-quality-label">Data Quality</span>'+dataBadge(r.data_badge)+'</footer>':'<section class="detail-quality detail-quality-warning"><h3>Data Quality</h3>'+dataBadge(r.data_badge)+'</section>')+'</div>';
+  const qualityFooter=state.historyLoading
+    ?'<footer class="detail-quality detail-quality-pending"><span class="detail-quality-label">Data Quality</span><span>Checking history…</span></footer>'
+    :detailQuality==='CLEAN'
+      ?'<footer class="detail-quality detail-quality-clean"><span class="detail-quality-label">Data Quality</span>'+dataBadge(detailQuality)+'</footer>'
+      :'<section class="detail-quality detail-quality-warning"><h3>Data Quality</h3>'+dataBadge(detailQuality)+'</section>';
+  html+='</div></section>'+qualityFooter+'</div>';
   document.getElementById('drill-title').textContent=r.game||'Game Detail';
   document.getElementById('drill-tbl').innerHTML='<tr><td style="padding:0">'+html+'</td></tr>';
   document.getElementById('drill-export').style.display='none';

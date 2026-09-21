@@ -434,10 +434,14 @@ def test_live_recent_green_is_reserved_for_the_exact_favorite_market_side():
     assert "supported:Boolean(favoriteIdentity)&&marketSideIdentity(item.side,item.row)===favoriteIdentity" in BOARD
 
 
-def test_material_closing_changes_have_a_visible_review_queue():
-    assert 'id="favorite-review-queue"' in BOARD
-    assert "function renderFavoriteReviewQueue()" in BOARD
-    assert "'pending_addition','pending_removal','late_warning','applied_addition','applied_removal'" in BOARD
-    assert "renderFavoriteReviewQueue();" in BOARD
+def test_internal_favorite_review_state_is_not_customer_visible():
+    assert 'id="favorite-review-queue"' not in BOARD
+    assert "function renderFavoriteReviewQueue()" not in BOARD
     assert "From 40 to 20 minutes before kickoff" in BOARD
     assert "At 20 minutes, the official Favorite and KPI state lock" in BOARD
+
+
+def test_mobile_counts_and_live_scores_use_centered_sans_numerals():
+    assert "display:inline-flex!important;align-items:center;justify-content:center;min-width:23px!important;height:23px" in BOARD
+    assert "font:700 9px/1 var(--sans)!important" in BOARD
+    assert ".live-score{font-family:var(--sans)!important;font-style:normal!important" in BOARD

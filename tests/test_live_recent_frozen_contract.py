@@ -88,6 +88,15 @@ def test_drill_in_opens_before_history_request_finishes():
     assert 'class="detail-history-loading" role="status"' in BOARD
 
 
+def test_unclassified_frozen_rows_derive_quality_from_loaded_history():
+    assert "function resolvedDetailDataBadge(row,detailRows,historyLoading=false)" in BOARD
+    assert "if(usable.length>=3) return 'CLEAN';" in BOARD
+    assert "if(usable.length>=2) return 'THIN';" in BOARD
+    assert "if(historyLoading) return '';" in BOARD
+    assert "Checking history…" in BOARD
+    assert "dataBadge(detailQuality)" in BOARD
+
+
 def test_frozen_current_journey_primary_read_matches_the_selected_side_read():
     """The final Journey node cannot fall back to an older event-level Watch."""
     assert "reaction:published.reaction||event.reaction||''" in BOARD
