@@ -3208,22 +3208,34 @@ async function refreshLiveRecentCount(){
 }
 
 function _decRank(d,r){ const k=(d||'').toUpperCase(); if(k==='BET') return 1; if(k==='LEAN') return (r&&isLocked(r))?3:2; return 4; }
+function nflPublicationDay(value){
+  const date=new Date(value);
+  if(Number.isNaN(date.getTime())) return NaN;
+  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date).map(part=>[part.type,part.value]));
+  return Date.UTC(Number(parts.year),Number(parts.month)-1,Number(parts.day))/86400000;
+}
+function nflCurrentWeekRows(rows,now=Date.now()){
+  const today=nflPublicationDay(now);
+  // The source publisher uses Tuesday through Monday in New York. Keep the
+  // same calendar window even after Sunday's games have kicked off.
+  const weekday=new Date(today*86400000).getUTCDay();
+  let start=today-((weekday-2+7)%7), end=start+7;
+  const openingStart=Date.UTC(2026,8,1)/86400000, openingEnd=Date.UTC(2026,8,15)/86400000;
+  if(today>=openingStart&&today<openingEnd){start=Date.UTC(2026,8,9)/86400000;end=openingEnd;}
+  return rows.filter(row=>{
+    const kickoff=new Date(row.kickoff_iso||row._game_time||'').getTime();
+    const day=nflPublicationDay(kickoff);
+    return Number.isFinite(kickoff)&&kickoff>=now&&day>=start&&day<end;
+  });
+}
 function filtered(){
   const q=(document.getElementById('board-search')||{}).value||'';
   const ql=q.toLowerCase().trim();
   let d=allDash.filter(r=>sport==='ALL'||sportLabel(r.sport)===sport);
-  // NFL is a one-week board: its next upcoming slate is the only NFL week shown.
-  if(sport==='NFL'){
-    const now=Date.now();
-    const upcoming=d.filter(r=>{ const kickoff=new Date(r.kickoff_iso||r._game_time||''); return !Number.isNaN(kickoff.getTime())&&kickoff.getTime()>=now; }).sort((a,b)=>new Date(a.kickoff_iso||a._game_time)-new Date(b.kickoff_iso||b._game_time));
-    if(upcoming.length){
-      // NFL slates run Thursday through the following Wednesday. Anchor the
-      // seven-day window to the first upcoming kickoff so Sunday games stay
-      // with their Thursday opener while later weeks remain out of view.
-      const firstKickoff=new Date(upcoming[0].kickoff_iso||upcoming[0]._game_time).getTime();
-      const weekEnds=firstKickoff+(7*24*60*60*1000);
-      d=upcoming.filter(r=>{ const kickoff=new Date(r.kickoff_iso||r._game_time||'').getTime(); return kickoff>=firstKickoff&&kickoff<weekEnds; });
-    } else d=[];
+  if(sport==='NFL') d=nflCurrentWeekRows(d);
+  if(sport==='ALL'){
+    const nfl=nflCurrentWeekRows(d.filter(r=>sportLabel(r.sport)==='NFL'));
+    d=d.filter(r=>sportLabel(r.sport)!=='NFL').concat(nfl);
   }
   if(filter==='today') d=d.filter(r=>isToday(r.kickoff_iso));
   if(filter==='highconf') d=d.filter(r=>['Contrarian','Freeze'].includes(r.recorded_reaction||r.reaction||''));
