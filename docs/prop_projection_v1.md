@@ -123,7 +123,8 @@ summed as separate production.
 - Football HIGH confidence requires fresh, well-sourced passing and kicking
   lines plus at least two directly priced rushing-TD players per team. A score
   using the rushing-yard proxy remains MODERATE even with broad player
-  coverage. The public card shows expected scores to two decimals, source
-  age, and the rushing proxy when used.
+  coverage. Source age uses the oldest contributing Over/Under leg across the
+  selected book pairs and advances on the public card between refreshes. The
+  card shows expected scores to two decimals and the rushing proxy when used.
 - Final scores resolve projected home/away error, MAE, and bias privately every
   six hours when unresolved games exist.

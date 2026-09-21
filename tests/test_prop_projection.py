@@ -114,6 +114,15 @@ def test_canonical_line_prefers_book_count_then_central_threshold():
     assert line["selection_audit"]["available_thresholds"] == [50.5, 51.5]
 
 
+def test_source_age_uses_oldest_contributing_book_leg():
+    event, rosters = football_fixture()
+    older = NOW - timedelta(minutes=16)
+    event["bookmakers"][0]["markets"][0]["outcomes"][0]["last_seen_at"] = older.isoformat()
+    result = project_event("nfl", event, rosters, now=NOW)
+    assert result["status"] == "AVAILABLE"
+    assert result["oldest_observation_age_minutes"] == 16.0
+
+
 @pytest.mark.parametrize("sport", ["nfl", "ncaaf"])
 def test_qualifying_football_projection_is_deterministic(sport):
     event, rosters = football_fixture(sport)

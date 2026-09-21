@@ -180,6 +180,7 @@ def canonical_player_lines(rows):
         candidates[(team, player_key, market, point)].append({
             "book": book, "over_probability": probability,
             "observed_at": max(sides["over"]["timestamp"], sides["under"]["timestamp"]),
+            "oldest_observed_at": min(sides["over"]["timestamp"], sides["under"]["timestamp"]),
             "player": row["player"], "player_id": row["player_id"],
         })
     by_stat = defaultdict(list)
@@ -200,6 +201,7 @@ def canonical_player_lines(rows):
             "line": point, "mean": round(mean, 4), "fair_over": round(fair_over, 5),
             "books": sorted(b["book"] for b in books), "book_count": len(books),
             "observed_at": max(b["observed_at"] for b in books).isoformat(),
+            "oldest_observed_at": min(b["oldest_observed_at"] for b in books).isoformat(),
             "selection_audit": {"available_thresholds": sorted(all_points), "rule": "book_count_then_central_threshold"},
         })
     return output
@@ -306,7 +308,7 @@ def strongest_anchors(sport, lines, away, home, maximum=7):
 
 def _coverage(sport, lines, event, context, now):
     teams = [event["away_team"], event["home_team"]]
-    ages = [parse_time(line["observed_at"]) for line in lines]
+    ages = [parse_time(line.get("oldest_observed_at") or line["observed_at"]) for line in lines]
     age_minutes = max(((now - age).total_seconds() / 60 for age in ages if age), default=9999)
     books = {book for line in lines for book in line["books"]}
     per_team = {}
