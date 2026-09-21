@@ -1103,6 +1103,14 @@ body { background: radial-gradient(circle at 88% -10%, #dceff0 0, transparent 30
 .board-freshness .fresh-src { display:inline-flex; align-items:center; gap:3px; padding:0; border:0; border-radius:0; background:transparent; color:inherit; font-size:inherit; }
 .board-freshness .fresh-src .fs-dot { width:5px; height:5px; }
 .board-update-note { color:var(--text3); font:700 9px var(--mono); letter-spacing:.03em; }
+.schedule-coverage { margin:12px 16px 18px; padding:14px; border:1px solid var(--border); border-radius:9px; background:var(--surface2); }
+.schedule-coverage[hidden] { display:none; }
+.schedule-coverage h3 { margin:0 0 4px; color:var(--text); font:700 13px var(--sans); }
+.schedule-coverage p { margin:0 0 12px; color:var(--text3); font:500 11px/1.4 var(--sans); }
+.schedule-coverage-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px; }
+.schedule-coverage-game { display:flex; flex-direction:column; gap:4px; padding:10px; border:1px solid var(--border); border-radius:7px; background:#fff; }
+.schedule-coverage-game strong { color:var(--text); font:700 12px var(--sans); }
+.schedule-coverage-game span { color:var(--text3); font:600 10px var(--sans); }
 .detail-observations { max-height:360px; overflow:auto !important; overscroll-behavior:contain; }
 .detail-observation-table thead th { position:sticky; top:0; z-index:2; background:var(--bg4); box-shadow:0 1px 0 var(--border); }
 .tscroll { padding: 0 20px 20px; }
@@ -1933,6 +1941,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
             </thead>
             <tbody id="tbody"></tbody>
           </table>
+          <section class="schedule-coverage" id="schedule-coverage" aria-label="Scheduled games awaiting verified markets" hidden></section>
           <div class="board-footer">
             <div class="board-freshness" id="board-freshness" aria-live="polite"></div>
             <div class="board-more" id="board-more" hidden><button type="button" onclick="showMoreBoardRows()">Show more markets</button></div>
@@ -3332,8 +3341,29 @@ function showMoreBoardRows(){
   _visibleBoardRows=Math.min(window._boardRows.length,_visibleBoardRows+boardPageSize());
   renderBoard(false);
 }
+function scheduledGamesForView(){
+  if(market!=='ALL'||filter==='highconf'||boardSignalFilter!=='ALL') return [];
+  const q=((document.getElementById('board-search')||{}).value||'').toLowerCase().trim();
+  const now=Date.now();
+  return (Array.isArray(publicationCoverage?.scheduled_without_markets)?publicationCoverage.scheduled_without_markets:[]).filter(row=>{
+    if(sport!=='ALL'&&sportLabel(row.sport)!==sport) return false;
+    const start=new Date(row.kickoff_iso).getTime();
+    if(!Number.isFinite(start)||start<now-5*60000) return false;
+    if((filter==='today'||boardDateFilter==='TODAY')&&!isToday(row.kickoff_iso)) return false;
+    if(boardDateFilter==='THIS_WEEK'&&start>=now+7*86400000) return false;
+    if(q&&!String(row.game||'').toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+function renderScheduleCoverage(rows){
+  const target=document.getElementById('schedule-coverage'); if(!target)return;
+  target.hidden=!rows.length;
+  if(!rows.length){target.innerHTML='';return;}
+  target.innerHTML='<h3>Scheduled games awaiting verified markets</h3><p>These games are on the schedule. Market reads and scores appear only after complete, verified betting observations arrive.</p><div class="schedule-coverage-grid">'+rows.map(row=>'<div class="schedule-coverage-game"><strong>'+escHtml(row.game)+'</strong><span>'+escHtml(sportLabel(row.sport))+' · '+escHtml(etT(row.kickoff_iso))+'</span></div>').join('')+'</div>';
+}
 function renderBoard(resetPage=true){
   const marketRows=filtered();
+  const scheduledGames=scheduledGamesForView();
   const grouped=new Map();
   marketRows.forEach(row=>{ const id=boardGameKey(row)||'?'; if(!grouped.has(id))grouped.set(id,[]); grouped.get(id).push(row); });
   const games=[...grouped.values()].map(rows=>{
@@ -3354,7 +3384,7 @@ function renderBoard(resetPage=true){
   document.getElementById('locked-jump').style.display='none';
   const _nGames=games.length;
   const _marketLabel=market==='ALL'?'all markets':market.toLowerCase();
-  document.getElementById('board-meta').textContent=`${_nGames} games | ${marketRows.length} markets | showing ${visibleGames.length} games | ${_marketLabel}`;
+  document.getElementById('board-meta').textContent=`${_nGames} market games | ${marketRows.length} markets | ${scheduledGames.length} awaiting markets | showing ${visibleGames.length} market games | ${_marketLabel}`;
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
   if(!games.length){
     const tr=document.createElement('tr'); tr.className='board-empty';
@@ -3365,7 +3395,7 @@ function renderBoard(resetPage=true){
     const sourceEmpty=scrape?.state==='EMPTY_COMPLETE';
     const detail=sourceEmpty&&filter==='all'&&market==='ALL'&&boardDateFilter==='ALL'&&boardSignalFilter==='ALL'
       ?'DraftKings currently reports no upcoming '+(sport==='NFL'?'NFL':'CFB')+' betting splits. Market reads will return when complete source observations arrive.'
-      :'Try another sport, view all markets, or review Live &amp; Recent.';
+      :scheduledGames.length?'Scheduled games below are awaiting verified market observations.':'Try another sport, view all markets, or review Live &amp; Recent.';
     tr.innerHTML='<td colspan="8"><strong>No markets are currently available for this view.</strong><span>'+detail+'</span><button type="button" onclick="resetMobileBoardView()">View all markets</button></td>';
     tbody.appendChild(tr);
   }
@@ -3403,6 +3433,7 @@ function renderBoard(resetPage=true){
     more.hidden=!games.length || _visibleBoardRows>=games.length;
     if(button && !more.hidden) button.textContent=`Load ${Math.min(boardPageSize(),games.length-_visibleBoardRows)} more games`;
   }
+  renderScheduleCoverage(scheduledGames);
   _boardHasRendered=true;
 }
 
@@ -5256,7 +5287,7 @@ async function loadAll({forceRender=false}={}){
     return String(a.game||'').localeCompare(String(b.game||''));
   });
 
-  const _hash=dashRaw.map(r=>(r.game_id||'')+(r.market_display||'')+(r.flagged_side||'')+(r.reaction||'')+(r.recorded_reaction||'')+(r.recorded_note||'')+(r.path||'')+(r.context_chips||'')+(r.data_badge||'')+(r.rank_reason||'')+(r.current_line||'')).join('|')+'|'+(coverage?.as_of||'')+'|'+(coverage?.latest_scrapes?.nfl?.state||'')+'|'+(coverage?.latest_scrapes?.ncaaf?.state||'');
+  const _hash=dashRaw.map(r=>(r.game_id||'')+(r.market_display||'')+(r.flagged_side||'')+(r.reaction||'')+(r.recorded_reaction||'')+(r.recorded_note||'')+(r.path||'')+(r.context_chips||'')+(r.data_badge||'')+(r.rank_reason||'')+(r.current_line||'')).join('|')+'|'+(coverage?.as_of||'')+'|'+(coverage?.latest_scrapes?.nfl?.state||'')+'|'+(coverage?.latest_scrapes?.ncaaf?.state||'')+'|'+JSON.stringify(coverage?.scheduled_without_markets||[]);
   const _changed=_hash!==_lastDashHash;
   _lastDashHash=_hash;
   updateStats();

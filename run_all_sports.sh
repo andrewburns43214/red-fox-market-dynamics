@@ -114,6 +114,14 @@ fi
 
 # publish (nginx serves directly from project dir)
 
+# Show official schedule context when an active sport has no verified DK
+# markets. Schedule-only games never enter ranking or Favorite calculations.
+if timeout 60 "$PY" schedule_visibility.py >> "$LOG" 2>&1; then
+  echo "--- $(date) schedule visibility DONE ---" >> "$LOG"
+else
+  echo "--- $(date) schedule visibility UNAVAILABLE ---" >> "$LOG"
+fi
+
 # Coverage health is independent of ranking/scoring and never changes the board.
 if ! "$PY" coverage_monitor.py >> "$LOG" 2>&1; then
   echo "--- $(date) COVERAGE ALERT: inspect publication_coverage.json ---" >> "$LOG"
