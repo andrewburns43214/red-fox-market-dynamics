@@ -521,7 +521,8 @@ def _refresh(coverage):
     if DATA == Path("data"):
         build_live_recent()
     snapshot_path = DATA / "snapshots.csv"
-    snapshots = load_current_snapshots(snapshot_path)
+    retained_minutes = int(os.environ.get("REDFOX_RETAINED_SOURCE_MAX_AGE_MINUTES", "720"))
+    snapshots = load_current_snapshots(snapshot_path, window_hours=retained_minutes / 60)
 
     snapshots["market_display"] = markets_for(snapshots)
     coverage.seed(snapshots)
@@ -541,7 +542,6 @@ def _refresh(coverage):
     newest_snapshot = snapshots["timestamp"].max()
     if pd.isna(newest_snapshot):
         newest_snapshot = coverage.now
-    retained_minutes = int(os.environ.get("REDFOX_RETAINED_SOURCE_MAX_AGE_MINUTES", "720"))
     active = snapshots[snapshots["timestamp"] >= newest_snapshot - pd.Timedelta(minutes=retained_minutes)].copy()
     coverage.stage(snapshots, active, "STALE_CAPTURE")
     active["side_key"] = [

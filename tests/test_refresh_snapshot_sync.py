@@ -37,6 +37,18 @@ def test_current_window_is_bounded_while_eligible_market_keeps_lifetime_history(
     assert set(history.timestamp) == {"2026-09-18T12:00:00Z", "2026-09-18T20:00:00Z"}
 
 
+def test_retention_window_loads_an_older_sport_before_publication(tmp_path):
+    path = tmp_path / "snapshots.csv"
+    pd.DataFrame([
+        {"sport": "mlb", "game_id": "mlb", "timestamp": "2026-09-21T11:00:00Z"},
+        {"sport": "nfl", "game_id": "nfl", "timestamp": "2026-09-21T16:00:00Z"},
+    ]).to_csv(path, index=False)
+    assert set(load_current_snapshots(path).sport) == {"nfl"}
+    assert set(load_current_snapshots(path, window_hours=12).sport) == {"mlb", "nfl"}
+    source = (Path(__file__).resolve().parents[1] / "refresh_anomaly_board.py").read_text(encoding="utf-8")
+    assert "load_current_snapshots(snapshot_path, window_hours=retained_minutes / 60)" in source
+
+
 def test_refresh_watchdog_keeps_atomic_failure_protection_with_measured_headroom():
     script = (Path(__file__).resolve().parents[1] / "run_all_sports.sh").read_text(encoding="utf-8")
     assert 'REFRESH_TIMEOUT_SECONDS="${REDFOX_REFRESH_TIMEOUT_SECONDS:-420}"' in script
