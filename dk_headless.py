@@ -551,6 +551,22 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None, cove
                     page_records = alternate_records
                     if coverage is not None:
                         coverage.page(page, page_url, html)
+        if page > 1 and not page_records and advertised_last_page >= page and html and "No events match your current selections" in html:
+            # A page inside DK's advertised pagination can intermittently be
+            # empty even while the same page has valid rows on a fresh request.
+            # Retry the same selected sport/date before launching the browser.
+            for _ in range(2):
+                retry_url = _with_cache_buster(page_url)
+                retry_html = fetch_server_rendered_html(retry_url)
+                retry_records = dom_scrape_splits(retry_html, sport) if retry_html else []
+                if retry_records:
+                    logger.info("[dk] %s page %d empty response recovered on fresh request", sport, page)
+                    page_url = retry_url
+                    html = observed_html = retry_html
+                    page_records = retry_records
+                    if coverage is not None:
+                        coverage.page(page, page_url, html)
+                    break
         last_err = None
         # The direct response is normally complete.  If DK changes to a
         # client-rendered response or returns an incomplete page, retain the

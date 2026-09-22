@@ -8,6 +8,40 @@ def test_nfl_uses_live_seven_day_source_window():
     assert parse_qs(urlparse(SPORT_CONFIG["nfl"]["url"]).query)["tb_edate"] == ["n7days"]
 
 
+def test_cfb_uses_live_seven_day_source_window():
+    assert parse_qs(urlparse(SPORT_CONFIG["ncaaf"]["url"]).query)["tb_edate"] == ["n7days"]
+
+
+def test_advertised_second_page_recovers_on_fresh_request_without_browser(monkeypatch):
+    requested = []
+    form = '<select name="tb_eg"><option value="NCAA Football" selected>NCAA Football</option></select>'
+    first = form + '<a href="?tb_page=2">2</a>PAGE_ONE'
+    second = form + 'PAGE_TWO'
+    empty = form + 'No events match your current selections'
+
+    def fetch(url):
+        requested.append(url)
+        query = parse_qs(urlparse(url).query)
+        if query.get("tb_page") == ["2"]:
+            return second if "_cb" in query else empty
+        if query.get("tb_page") == ["3"]:
+            return second
+        return first
+
+    monkeypatch.setattr(dk_headless, "fetch_server_rendered_html", fetch)
+    monkeypatch.setattr(dk_headless, "fetch_rendered_html", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("browser fallback")))
+    monkeypatch.setattr(dk_headless, "dom_scrape_splits", lambda html, sport: [
+        {"sport": sport, "game_id": marker, "market": "TOTAL", "side": "Over"}
+        for marker in ("PAGE_ONE", "PAGE_TWO") if marker in html
+    ])
+
+    result = dk_headless.get_splits("https://example.test/splits?tb_eg=NCAA+Football&tb_edate=n7days", "ncaaf")
+    assert {row["game_id"] for row in result["records"]} == {"PAGE_ONE", "PAGE_TWO"}
+    assert all(row["_source_league_verified"] for row in result["records"])
+    assert len(requested) == 4
+    assert parse_qs(urlparse(requested[2]).query).get("_cb")
+
+
 def test_empty_football_source_retries_other_date_window(monkeypatch):
     requested = []
     empty = "No events match your current selections"

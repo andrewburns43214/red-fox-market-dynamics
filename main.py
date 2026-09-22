@@ -2003,7 +2003,7 @@ SPORT_CONFIG = {
     },
     "ncaaf": {
         "label": "CFB",
-        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=NCAA+Football&tb_edate=n30days&tb_emt=0&itm_content=NCAA+Football",
+        "url": "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/?tb_eg=NCAA+Football&tb_edate=n7days&tb_emt=0&itm_content=NCAA+Football",
         "dashboard_horizon_days": 21,
     },
     "ncaab": {
