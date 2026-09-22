@@ -76,6 +76,26 @@ def test_quota_guard_stops_before_request(tmp_path):
     assert len(session.calls) == 1
 
 
+def test_default_daily_cap_allows_busy_day_then_resets_next_utc_day(tmp_path, monkeypatch):
+    path = tmp_path / "quota.json"
+    assert service.LOCAL_DAILY_REQUEST_CAP == 400
+    path.write_text(json.dumps({"day": NOW.date().isoformat(), "local_used": 399}))
+    monkeypatch.setattr(service, "utc_now", lambda: NOW)
+    session = Session([])
+    client = service.PropLineClient(api_key="x", session=session, budget=service.RequestBudget(path))
+    client.get("/sports")
+    assert json.loads(path.read_text())["local_used"] == 400
+    with pytest.raises(RuntimeError, match="local_daily_request_cap"):
+        client.get("/sports")
+    assert len(session.calls) == 1
+
+    monkeypatch.setattr(service, "utc_now", lambda: NOW + timedelta(days=1))
+    next_day = service.RequestBudget(path)
+    assert next_day.state["local_used"] == 0
+    service.PropLineClient(api_key="x", session=session, budget=next_day).get("/sports")
+    assert json.loads(path.read_text())["local_used"] == 1
+
+
 def test_missing_key_is_clean_failure(tmp_path):
     client = service.PropLineClient(api_key="", session=Session([]), budget=service.RequestBudget(tmp_path / "quota.json"))
     with pytest.raises(RuntimeError, match="not_configured"):

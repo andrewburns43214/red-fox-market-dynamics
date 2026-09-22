@@ -113,10 +113,12 @@ summed as separate production.
   stops at start. The prop collector runs on its own five-minute cron and
   cannot hold up the splits/Market Board runner. NFL line validity is
   capped at 25 minutes inside 24 hours and 15 minutes in the final hour.
-- The local hard cap is 190 PropLine requests per UTC day. Provider quota
-  headers are persisted after every request. During dense overlapping months,
-  the expected event-aware range is about 80–150 requests/day, with the hard
-  stop preventing a runaway loop.
+- The local hard cap is 400 PropLine requests per UTC day, at most 2,800 per
+  seven UTC days versus the provider's 1,000/day and 7,000/week allowances.
+  Provider quota headers are persisted after every request. A representative
+  five-sport overlap with MLB context calls projected about 255 requests on
+  the busiest day; the cap leaves room for schedule variation while stopping
+  runaway collection.
 - MLB context is cached for six hours, then 30 minutes in the final hour.
 - Raw event observations are SHA-256 hashed. The latest bulk response is
   overwritten per sport; the append-only audit records only compact event

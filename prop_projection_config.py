@@ -8,7 +8,7 @@ from __future__ import annotations
 
 
 API_BASE = "https://api.prop-line.com/v1"
-LOCAL_DAILY_REQUEST_CAP = 190  # leaves headroom under PropLine's 1,000/day free tier
+LOCAL_DAILY_REQUEST_CAP = 400  # 60% below the 1,000/day provider allowance
 REQUEST_TIMEOUT_SECONDS = 18
 TRADITIONAL_BOOKS = {
     "betmgm", "betrivers", "betonlineag", "bovada", "caesars", "circasports",
