@@ -428,6 +428,8 @@ TEAM_ALIASES = {
     "atl braves": "atlanta braves",
     "bal orioles": "baltimore orioles",
     "bos red sox": "boston red sox",
+    "chi cubs": "chicago cubs",
+    "chi white sox": "chicago white sox",
     "chc cubs": "chicago cubs",
     "chw white sox": "chicago white sox",
     "cin reds": "cincinnati reds",

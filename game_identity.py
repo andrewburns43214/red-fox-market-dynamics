@@ -1,6 +1,7 @@
 """Deterministic cross-source identity only; never changes scoring/ledger keys."""
 import re
 import unicodedata
+from datetime import datetime, timezone
 
 
 def clean_name(value):
@@ -97,8 +98,18 @@ class KickoffMatches(dict):
         self.states = {}
 
 
-def match_games(games, events, sport):
-    """Use exact pairs of explicit ESPN name variants, keeping collisions visible."""
+def _as_utc(value):
+    try:
+        parsed = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def match_games(games, events, sport, expected_kickoffs=None):
+    """Use exact team pairs and, when needed, kickoff time to resolve collisions."""
     index = {}
     for event in events:
         comps = event.get("competitions") or []
@@ -119,6 +130,16 @@ def match_games(games, events, sport):
     for game in games:
         key, state = game_identity(game, sport)
         matches = index.get(key, set()) if key else set()
+        if len(matches) > 1 and expected_kickoffs:
+            expected = _as_utc(expected_kickoffs.get(game))
+            if expected is not None:
+                timed = [
+                    match for match in matches
+                    if (actual := _as_utc(match[1])) is not None
+                    and abs((actual - expected).total_seconds()) <= 30 * 60
+                ]
+                if len(timed) == 1:
+                    matches = set(timed)
         result[game] = next(iter(matches))[1] if len(matches) == 1 else ""
         result.states[game] = state if not key else "ESPN_MATCHED" if len(matches) == 1 else "ESPN_AMBIGUOUS" if matches else "ESPN_UNMATCHED"
     return result

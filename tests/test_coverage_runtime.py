@@ -40,8 +40,8 @@ def test_exact_extreme_moneyline_patterns_preserve_both_sides(favorite, price, o
 
 def test_mlb_snapshot_validates_only_the_source_kickoff_dates(monkeypatch):
     captured = {}
-    def kickoff_map(sport, games, dates):
-        captured.update(sport=sport, games=games, dates=dates)
+    def kickoff_map(sport, games, dates, expected_kickoffs=None):
+        captured.update(sport=sport, games=games, dates=dates, expected_kickoffs=expected_kickoffs)
         return {}
     monkeypatch.setattr("main.get_espn_kickoff_map", kickoff_map)
     rows = [dict(game="NY Yankees @ BOS Red Sox", game_id="1", side=side,
@@ -51,6 +51,7 @@ def test_mlb_snapshot_validates_only_the_source_kickoff_dates(monkeypatch):
     validate_snapshot_rows(rows, "mlb")
     assert captured["sport"] == "mlb"
     assert captured["dates"] == ["20260917", "20260918", "20260919"]
+    assert captured["expected_kickoffs"] == {"NY Yankees @ BOS Red Sox": "2026-09-19T00:10:00+00:00"}
 
 
 @pytest.mark.parametrize("odds", ["0", "-99", "+99999999999", "-100000oops", "-100000.1"])
@@ -75,6 +76,8 @@ def test_hawaii_variants_have_one_identity(variant):
     ("KC Chiefs", "Kansas City Chiefs", "nfl"),
     ("LV Raiders", "Las Vegas Raiders", "nfl"),
     ("NY Jets", "New York Jets", "nfl"),
+    ("CHI Cubs", "Chicago Cubs", "mlb"),
+    ("CHI White Sox", "Chicago White Sox", "mlb"),
 ])
 def test_explicit_aliases(left, right, sport):
     assert team_identity(left, sport) == team_identity(right, sport)
@@ -102,6 +105,24 @@ def test_exact_name_matching_and_ambiguity_have_explicit_states():
     collision = match_games(games[:1], [event("1"), event("2")], "ncaaf")
     assert collision.states[games[0]] == "ESPN_AMBIGUOUS"
     assert not collision[games[0]]
+
+
+def test_repeated_mlb_series_is_disambiguated_by_kickoff():
+    game = "NY Yankees @ BOS Red Sox"
+    first = event("one", away="NY Yankees", home="BOS Red Sox")
+    second = event("two", away="NY Yankees", home="BOS Red Sox")
+    first["date"] = "2026-09-18T23:10:00Z"
+    second["date"] = "2026-09-19T23:10:00Z"
+
+    result = match_games(
+        [game],
+        [first, second],
+        "mlb",
+        expected_kickoffs={game: "2026-09-19T23:10:00Z"},
+    )
+
+    assert result[game] == "2026-09-19T23:10:00Z"
+    assert result.states[game] == "ESPN_MATCHED"
 
 
 def test_shared_tokens_cannot_match_the_wrong_directional_school():
