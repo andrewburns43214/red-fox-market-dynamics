@@ -1927,6 +1927,17 @@ def validate_snapshot_rows(rows: list[dict], sport: str) -> tuple[list[dict], st
     return rows, ""
 
 
+def _retain_validated_snapshot_rows(raw_rows: list[dict], accepted_rows: list[dict]) -> list[dict]:
+    """Keep the validator's accepted rows without imposing a second trust policy."""
+    accepted_ids = {id(row) for row in accepted_rows}
+    for row in raw_rows:
+        if id(row) not in accepted_ids:
+            row["_capture_exclusion_reason"] = (
+                row.get("_capture_exclusion_reason") or "SNAPSHOT_VALIDATION_REJECTED"
+            )
+    return [row for row in accepted_rows if not row.get("_capture_exclusion_reason")]
+
+
 def purge_sport_from_live_files(sport: str) -> list[str]:
     sport_key = normalize_sport_key(sport)
     if not sport_key:
@@ -5848,21 +5859,18 @@ def _cmd_snapshot(args, coverage):
 
     raw_rows = rows
     rows, validation_note = validate_snapshot_rows(rows, args.sport)
-    accepted_ids = {id(row) for row in rows}
-    for row in raw_rows:
-        if id(row) not in accepted_ids:
-            row["_capture_exclusion_reason"] = row.get("_capture_exclusion_reason") or "SNAPSHOT_VALIDATION_REJECTED"
-        if row.get("_source_league_verified") is not True:
-            row["_capture_exclusion_reason"] = "SPORT_LEAGUE_NOT_VERIFIED"
-    rows = [r for r in rows if not r.get("_capture_exclusion_reason")]
+    # validate_snapshot_rows already requires either ESPN corroboration or a
+    # verified source-league form. Do not impose a contradictory second gate.
+    rows = _retain_validated_snapshot_rows(raw_rows, rows)
     coverage.validation(raw_rows)
     if validation_note:
         print(f"[snapshot] {validation_note}")
     if not rows:
         # Preserve discovery/history evidence. Rejected markets are quarantined
         # by publication coverage; do not erase an entire sport and its ledgers.
-        print(f"[snapshot] rejected {args.sport} snapshot due to failed sport validation")
-        return
+        # Fail the command so the runner and health monitor cannot report a
+        # fully rejected capture as a successful snapshot.
+        raise RuntimeError(f"rejected {args.sport} snapshot due to failed sport validation")
 
 
 

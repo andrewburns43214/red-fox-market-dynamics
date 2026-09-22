@@ -60,8 +60,15 @@ def test_refresh_watchdog_keeps_atomic_failure_protection_with_measured_headroom
 def test_healthcheck_resets_consecutive_failure_count_after_success():
     script = (Path(__file__).resolve().parents[1] / "ops" / "redfox-healthcheck.sh").read_text(encoding="utf-8")
     assert 'MAX_BOARD_AGE_MINUTES="${REDFOX_MAX_BOARD_AGE_MINUTES:-20}"' in script
-    assert "/refresh anomaly board DONE/ { failures=0; next }" in script
-    assert "/refresh anomaly board ERROR/ { failures++ }" in script
+    assert "/refresh anomaly board DONE/ { publish_failures=0; next }" in script
+    assert "/refresh anomaly board ERROR/ { publish_failures++; next }" in script
+    assert "/snapshot DONE --sport/" in script
+    assert "/snapshot ERROR --sport/" in script
+
+
+def test_fully_rejected_snapshot_fails_the_command_for_runner_visibility():
+    source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
+    assert 'raise RuntimeError(f"rejected {args.sport} snapshot due to failed sport validation")' in source
 
 
 def test_customer_freshness_threshold_includes_the_scheduled_processing_window():

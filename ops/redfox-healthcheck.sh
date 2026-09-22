@@ -43,12 +43,25 @@ recent_log=$(tail -n 2000 /var/log/redfox_update.log 2>/dev/null || true)
 if ! grep -q 'RUN END' <<<"$recent_log"; then
   issues+=("no completed full pipeline marker")
 fi
-# Count consecutive failed publish outcomes, not old failures that preceded a
-# successful recovery.  This keeps the status actionable after the board heals.
+# Count current consecutive failures for publishing and for each sport capture.
+# A validation rejection exits nonzero, so a provider contract change can no
+# longer look healthy while every market is being quarantined.
 upstream_errors=$(awk '
-  /refresh anomaly board DONE/ { failures=0; next }
-  /refresh anomaly board ERROR/ { failures++ }
-  END { print failures+0 }
+  /refresh anomaly board DONE/ { publish_failures=0; next }
+  /refresh anomaly board ERROR/ { publish_failures++; next }
+  /snapshot DONE --sport/ {
+    sport=$0; sub(/^.*--sport /, "", sport); sub(/ .*/, "", sport)
+    snapshot_failures[sport]=0; next
+  }
+  /snapshot ERROR --sport/ {
+    sport=$0; sub(/^.*--sport /, "", sport); sub(/ .*/, "", sport)
+    snapshot_failures[sport]++; next
+  }
+  END {
+    total=publish_failures+0
+    for (sport in snapshot_failures) total += snapshot_failures[sport]
+    print total
+  }
 ' <<<"$recent_log")
 (( upstream_errors < MAX_UPSTREAM_ERRORS )) || issues+=("repeated upstream failures ${upstream_errors}")
 

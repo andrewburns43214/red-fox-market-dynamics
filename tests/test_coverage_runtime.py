@@ -1,12 +1,18 @@
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
 
 from game_identity import clean_name, game_identity, match_games, team_identity
-from main import infer_market_type, normalize_side_key, validate_snapshot_rows
+from main import (
+    _retain_validated_snapshot_rows,
+    infer_market_type,
+    normalize_side_key,
+    validate_snapshot_rows,
+)
 from publication_coverage import CoverageStore, PublicationCoverage, ScrapeCoverage, keys
 from refresh_anomaly_board import filter_publication_eligible_markets, latest_synchronized_market_rows
 from coverage_monitor import check
@@ -123,6 +129,37 @@ def test_espn_outage_retains_valid_dk_but_ambiguous_names_are_quarantined(monkey
     invalid = dk_rows(); invalid[0]["game_id"] = ""
     assert len(validate_snapshot_rows(invalid, "ncaaf")[0]) == 1
     assert invalid[0]["_capture_exclusion_reason"] == "UNRESOLVED_EVENT_IDENTITY"
+
+
+def test_espn_match_accepts_rows_when_provider_league_form_is_missing(monkeypatch):
+    rows = dk_rows()
+    for row in rows:
+        row["_source_league_verified"] = False
+    monkeypatch.setattr(
+        "main.get_espn_kickoff_map",
+        lambda sport, games: {game: KICK for game in games},
+    )
+
+    accepted, note = validate_snapshot_rows(rows, "ncaaf")
+
+    assert _retain_validated_snapshot_rows(rows, accepted) == rows
+    assert "accepted 2" in note
+    assert all(not row["_capture_exclusion_reason"] for row in rows)
+
+
+def test_snapshot_command_fails_when_every_discovered_row_is_rejected(monkeypatch):
+    import main
+
+    rows = dk_rows()
+    monkeypatch.setattr(main, "get_splits", lambda *args, **kwargs: {"records": rows})
+    monkeypatch.setattr(main, "validate_snapshot_rows", lambda raw, sport: ([], "all rejected"))
+
+    class Coverage:
+        def validation(self, raw):
+            assert raw == rows
+
+    with pytest.raises(RuntimeError, match="rejected ncaaf snapshot"):
+        main._cmd_snapshot(SimpleNamespace(sport="ncaaf", debug=False), Coverage())
 
 
 def header(gid="123", when="9/5, 10:00PM"):
