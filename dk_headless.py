@@ -567,6 +567,12 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None, cove
                     if coverage is not None:
                         coverage.page(page, page_url, html)
                     break
+        if page > 1 and all_records and page > advertised_last_page and not page_records and html and "No events match your current selections" in html:
+            # The next page after a populated advertised range is the normal
+            # end of pagination, not an empty sport feed. No browser needed.
+            completion = "COMPLETE"
+            logger.info("[dk] page %d is past the last advertised page; collection complete", page)
+            break
         last_err = None
         # The direct response is normally complete.  If DK changes to a
         # client-rendered response or returns an incomplete page, retain the
@@ -614,7 +620,12 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None, cove
 
         if not page_records:
             logger.info("[dk] page %d empty, stopping paging", page)
-            completion = "EMPTY_COMPLETE" if "No events match your current selections" in html else "RAW_MARKET_PARSE_FAILED"
+            if "No events match your current selections" in html:
+                completion = "EMPTY_COMPLETE" if not all_records else (
+                    "COMPLETE" if page > advertised_last_page else "PAGINATION_INCOMPLETE"
+                )
+            else:
+                completion = "RAW_MARKET_PARSE_FAILED"
             break
 
         new_count = 0

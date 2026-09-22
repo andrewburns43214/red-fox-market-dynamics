@@ -97,3 +97,70 @@ def test_intermittent_empty_mlb_source_recovers_without_changing_sport(monkeypat
     assert len(result["records"]) == 1
     assert result["records"][0]["_source_league_verified"] is True
     assert parse_qs(urlparse(requested[1]).query).get("_cb")
+
+
+def test_mlb_terminal_empty_page_is_complete_not_empty_source(monkeypatch):
+    form = '<select name="tb_eg"><option value="MLB" selected>MLB</option></select>'
+    first = form + '<a href="?tb_page=2">2</a>FIRST'
+    second = form + 'SECOND'
+    empty = form + 'No events match your current selections'
+    requested = []
+
+    def fetch(url):
+        page = parse_qs(urlparse(url).query).get("tb_page", ["1"])[0]
+        requested.append(page)
+        return {"1": first, "2": second}.get(page, empty)
+
+    class Coverage:
+        state = None
+        def page(self, *_): pass
+        def finish(self, state): self.state = state
+
+    monkeypatch.setattr(dk_headless, "fetch_server_rendered_html", fetch)
+    monkeypatch.setattr(dk_headless, "fetch_rendered_html", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("browser fallback")))
+    monkeypatch.setattr(dk_headless, "dom_scrape_splits", lambda html, sport: [
+        {"sport": sport, "game_id": marker, "market": "TOTAL", "side": "Over"}
+        for marker in ("FIRST", "SECOND") if marker in html
+    ])
+    coverage = Coverage()
+    result = dk_headless.get_splits("https://example.test/splits?tb_eg=MLB&tb_edate=n30days", "mlb", coverage=coverage)
+    assert len(result["records"]) == 2
+    assert requested == ["1", "2", "3"]
+    assert coverage.state == "COMPLETE"
+
+
+def test_mlb_empty_page_inside_advertised_range_is_incomplete(monkeypatch):
+    form = '<select name="tb_eg"><option value="MLB" selected>MLB</option></select>'
+    populated = form + '<a href="?tb_page=3">3</a>FIRST'
+    empty = form + 'No events match your current selections'
+
+    class Coverage:
+        state = None
+        def page(self, *_): pass
+        def finish(self, state): self.state = state
+
+    monkeypatch.setattr(dk_headless, "fetch_server_rendered_html", lambda url: populated if "tb_page" not in parse_qs(urlparse(url).query) else empty)
+    monkeypatch.setattr(dk_headless, "fetch_rendered_html", lambda *args, **kwargs: empty)
+    monkeypatch.setattr(dk_headless, "dom_scrape_splits", lambda html, sport: [
+        {"sport": sport, "game_id": "one", "market": "TOTAL", "side": "Over"}
+    ] if "FIRST" in html else [])
+    coverage = Coverage()
+    result = dk_headless.get_splits("https://example.test/splits?tb_eg=MLB&tb_edate=n30days", "mlb", coverage=coverage)
+    assert len(result["records"]) == 1
+    assert coverage.state == "PAGINATION_INCOMPLETE"
+
+
+def test_genuinely_empty_mlb_first_page_remains_empty_source(monkeypatch):
+    empty = '<select name="tb_eg"><option value="MLB" selected>MLB</option></select>No events match your current selections'
+
+    class Coverage:
+        state = None
+        def page(self, *_): pass
+        def finish(self, state): self.state = state
+
+    monkeypatch.setattr(dk_headless, "fetch_server_rendered_html", lambda url: empty)
+    monkeypatch.setattr(dk_headless, "fetch_rendered_html", lambda *args, **kwargs: empty)
+    coverage = Coverage()
+    result = dk_headless.get_splits("https://example.test/splits?tb_eg=MLB&tb_edate=n30days", "mlb", coverage=coverage)
+    assert result["records"] == []
+    assert coverage.state == "EMPTY_COMPLETE"
