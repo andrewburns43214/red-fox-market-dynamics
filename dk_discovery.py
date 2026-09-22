@@ -3,6 +3,31 @@ import re
 import pandas as pd
 from bs4 import BeautifulSoup
 HEADER_MARKETS = {"RUN LINE": "SPREAD", "PUCK LINE": "SPREAD"}
+SPORT_LABELS = {
+    "mlb": "mlb", "nfl": "nfl", "nfl preseason": "nfl",
+    "national football league": "nfl", "nba": "nba", "nhl": "nhl",
+    "ufc": "ufc", "ncaa football": "ncaaf", "college football": "ncaaf",
+    "ncaaf": "ncaaf", "ncaa basketball": "ncaab",
+    "college basketball": "ncaab", "ncaab": "ncaab",
+}
+
+
+def selected_sport_key(soup):
+    """Read the selected league across DK's numeric-value and legacy forms."""
+    selected = soup.select_one('select[name="tb_eg"] option[selected]')
+    hidden = soup.select_one('input[name="itm_content"]')
+    candidates = []
+    if selected:
+        candidates.extend((selected.get_text(" ", strip=True), selected.get("value", "")))
+    if hidden:
+        candidates.append(hidden.get("value", ""))
+    for candidate in candidates:
+        sport = SPORT_LABELS.get(str(candidate or "").strip().casefold())
+        if sport:
+            return sport
+    return ""
+
+
 def utc(value):
     value = pd.Timestamp(value)
     return value.tz_localize("UTC") if value.tzinfo is None else value.tz_convert("UTC")
@@ -16,10 +41,8 @@ def inventory_html(html, sport, observed_at, source=""):
     """
     soup = BeautifulSoup(html, "html.parser")
     selected = soup.select_one('select[name="tb_eg"] option[selected]')
-    label = selected.get("value", "") if selected else ""
-    league = {"NCAA Football": "ncaaf", "College Football": "ncaaf", "NCAAF": "ncaaf",
-              "NCAA Basketball": "ncaab", "College Basketball": "ncaab", "NCAAB": "ncaab",
-              "NFL Preseason": "nfl", "National Football League": "nfl"}.get(label, label.lower())
+    label = selected.get_text(" ", strip=True) if selected else ""
+    league = selected_sport_key(soup)
     identified = league == sport
     now = utc(observed_at).tz_convert("America/New_York")
     out = []

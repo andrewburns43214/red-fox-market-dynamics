@@ -99,6 +99,21 @@ def test_intermittent_empty_mlb_source_recovers_without_changing_sport(monkeypat
     assert parse_qs(urlparse(requested[1]).query).get("_cb")
 
 
+def test_numeric_provider_league_value_is_verified_from_selected_text(monkeypatch):
+    form = '''<select name="tb_eg">
+        <option value="84240" selected="selected">MLB</option>
+    </select><input type="hidden" name="itm_content" value="MLB">'''
+    populated = form + "AVAILABLE"
+    monkeypatch.setattr(dk_headless, "fetch_server_rendered_html", lambda url: populated)
+    monkeypatch.setattr(dk_headless, "dom_scrape_splits", lambda html, sport: [
+        {"sport": sport, "game_id": "numeric-league", "market": "TOTAL", "side": "Over"}
+    ])
+
+    result = dk_headless.get_splits("https://example.test/splits?tb_eg=84240", "mlb")
+
+    assert result["records"][0]["_source_league_verified"] is True
+
+
 def test_mlb_terminal_empty_page_is_complete_not_empty_source(monkeypatch):
     form = '<select name="tb_eg"><option value="MLB" selected>MLB</option></select>'
     first = form + '<a href="?tb_page=2">2</a>FIRST'

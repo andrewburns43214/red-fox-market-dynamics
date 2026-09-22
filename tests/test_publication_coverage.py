@@ -116,6 +116,18 @@ def test_source_sport_is_not_verified_when_form_disagrees():
     assert result.iloc[0].market_display == "UNKNOWN"
 
 
+def test_numeric_source_value_uses_selected_label_for_league_identity():
+    html = '''<select name="tb_eg"><option value="84240" selected>MLB</option></select>
+    <input type="hidden" name="itm_content" value="MLB">
+    <div class="tb-se"><div class="tb-se-title"><a href="/event/1">A @ B</a></div>
+    <div class="tb-se-head"><div>Total</div></div></div>'''
+
+    result = inventory_html(html, "mlb", NOW)
+
+    assert bool(result.iloc[0].league_identified)
+    assert result.iloc[0].source_league == "MLB"
+
+
 def test_espn_90_percent_match_retains_valid_unmatched_dk_game(monkeypatch):
     rows = [dict(game=f"Away{i} @ Home{i}", game_id=str(i), side=f"{side} 50.5",
                  current=f"{side} 50.5 @ -110", dk_start_iso=KICK, _source_league_verified=True)

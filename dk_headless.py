@@ -605,10 +605,9 @@ def get_splits(url: str, sport: str, debug_dump_path: Optional[str] = None, cove
         if coverage is not None and html != observed_html:
             coverage.page(page, page_url, html)
         from bs4 import BeautifulSoup
+        from dk_discovery import selected_sport_key
         page_soup = BeautifulSoup(html, "html.parser")
-        selected = page_soup.select_one('select[name="tb_eg"] option[selected]')
-        selected_label = selected.get("value", "") if selected else ""
-        league_verified = selected_label.casefold() in {label.casefold() for label in (sport_filter_labels or [])}
+        league_verified = selected_sport_key(page_soup) == (sport or "").strip().lower()
         page_numbers = [int(n) for link in page_soup.select('a[href*="tb_page="]') for n in re.findall(r'tb_page=(\d+)', link.get("href", ""))]
         advertised_last_page = max([advertised_last_page, *page_numbers])
         if debug_dump_path and page == 1:
