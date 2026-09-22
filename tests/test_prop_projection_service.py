@@ -88,20 +88,37 @@ def test_poll_cadence_changes_by_lead_time():
     assert service._poll_interval_seconds(events(12), NOW) == 3600
     assert service._poll_interval_seconds(events(3), NOW) == 1800
     assert service._poll_interval_seconds(events(0.5), NOW) == 720
-    assert service._poll_interval_seconds(events(36), NOW, "nfl") == 3600
-    assert service._poll_interval_seconds(events(12), NOW, "nfl") == 900
-    assert service._poll_interval_seconds(events(3), NOW, "nfl") == 900
-    assert service._poll_interval_seconds(events(0.5), NOW, "nfl") == 600
+    for sport in ("nfl", "ncaaf"):
+        for lead, interval in ((72, 10800), (48, 7200), (36, 7200),
+                               (24, 3600), (12, 3600), (6, 1800),
+                               (3, 1800), (1, 600), (0.5, 600)):
+            assert service._poll_interval_seconds(events(lead), NOW, sport) == interval
+        assert service._poll_interval_seconds([], NOW, sport) == 10800
+        assert service._poll_interval_seconds(events(72) + events(0.5), NOW, sport) == 600
     assert {"player_anytime_td", "player_2plus_td", "player_1st_td"} == set(
         service.SPORTS["nfl"]["scorer_research_markets"]
     )
 
 
-def test_nfl_poll_tolerates_five_minute_runner_jitter():
-    assert not service._poll_due(NOW - timedelta(minutes=13), 900, NOW, "nfl")
-    assert service._poll_due(NOW - timedelta(minutes=14), 900, NOW, "nfl")
-    assert not service._poll_due(NOW - timedelta(minutes=8), 600, NOW, "nfl")
-    assert service._poll_due(NOW - timedelta(minutes=9), 600, NOW, "nfl")
+@pytest.mark.parametrize("boundary_hours,at_boundary,just_above", [
+    (48, 7200, 10800), (24, 3600, 7200),
+    (6, 1800, 3600), (1, 600, 1800),
+])
+@pytest.mark.parametrize("sport", ["nfl", "ncaaf"])
+def test_football_cadence_tier_transitions(sport, boundary_hours, at_boundary, just_above):
+    at = [{"commence_time": (NOW + timedelta(hours=boundary_hours)).isoformat()}]
+    above = [{"commence_time": (NOW + timedelta(hours=boundary_hours, seconds=1)).isoformat()}]
+    assert service._poll_interval_seconds(at, NOW, sport) == at_boundary
+    assert service._poll_interval_seconds(above, NOW, sport) == just_above
+
+
+def test_football_poll_tolerates_five_minute_cron_jitter():
+    for sport in ("nfl", "ncaaf"):
+        assert not service._poll_due(NOW - timedelta(minutes=8), 600, NOW, sport)
+        assert service._poll_due(NOW - timedelta(minutes=9), 600, NOW, sport)
+        assert not service._poll_due(NOW - timedelta(minutes=28), 1800, NOW, sport)
+        assert service._poll_due(NOW - timedelta(minutes=29), 1800, NOW, sport)
+        assert service._poll_due(NOW - timedelta(hours=2, minutes=-1), 7200, NOW, sport)
     assert not service._poll_due(NOW - timedelta(minutes=14), 900, NOW, "mlb")
 
 

@@ -104,10 +104,14 @@ summed as separate production.
 ## Collection and storage
 
 - One bulk sport request is used when a sport is due.
-- NFL more than 24 hours out: hourly. Within 24 hours: every 15 minutes.
-  Final hour: every 10 minutes. Other enabled sports keep the prior schedule:
-  more than 6 hours out hourly, six to one hours every 30 minutes, and final
-  hour every 12 minutes. Collection stops at start. NFL line validity is
+- NFL and CFB use the nearest upcoming kickoff in each bulk sport response:
+  more than 48 hours out every 3 hours; 48 to 24 hours every 2 hours; 24 to 6
+  hours every 60 minutes; 6 to 1 hours every 30 minutes; final hour every 10
+  minutes. With no upcoming cached game, they poll every 3 hours. Other
+  enabled sports keep the prior schedule: more than 6 hours out hourly, six
+  to one hours every 30 minutes, and final hour every 12 minutes. Collection
+  stops at start. The prop collector runs on its own five-minute cron and
+  cannot hold up the splits/Market Board runner. NFL line validity is
   capped at 25 minutes inside 24 hours and 15 minutes in the final hour.
 - The local hard cap is 190 PropLine requests per UTC day. Provider quota
   headers are persisted after every request. During dense overlapping months,

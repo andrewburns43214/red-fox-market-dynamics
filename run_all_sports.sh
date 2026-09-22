@@ -82,15 +82,6 @@ for SPORT in $SPORTS; do
   sleep 3
 done
 
-# Player props are a separate, quota-aware display-only subsystem. A timeout,
-# provider outage, missing key, or coverage failure can never block RF refresh.
-echo "--- $(date) prop projection refresh ---" >> "$LOG"
-if timeout "${REDFOX_PROP_TIMEOUT_SECONDS:-120}" "$PY" prop_projection_service.py collect >> "$LOG" 2>&1; then
-  echo "--- $(date) prop projection refresh DONE ---" >> "$LOG"
-else
-  echo "--- $(date) prop projection refresh UNAVAILABLE (continuing) ---" >> "$LOG"
-fi
-
 echo "--- $(date) refresh anomaly board ---" >> "$LOG"
 # Production reached the former 120-second watchdog while publishing a valid
 # high-volume two-sided event set.  Keep the watchdog (and atomic publisher),

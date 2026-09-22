@@ -12,7 +12,10 @@ def test_prop_score_is_cache_only_and_display_only():
     assert "propScoreHtml(r)" in BOARD
     assert "Broad prop coverage is collected" in BOARD
     assert "No spread, total, moneyline, Market Read, rank, or Favorite input" in BOARD
-    assert "prop_projection_service.py collect" in RUNNER
+    assert "prop_projection_service.py collect" not in RUNNER
+    prop_runner = (ROOT / "ops" / "run_prop_collection.sh").read_text(encoding="utf-8")
+    assert "prop_projection_service.py collect" in prop_runner
+    assert "timeout" in prop_runner
 
 
 def test_desktop_and_mobile_header_placement_contract():

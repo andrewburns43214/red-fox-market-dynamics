@@ -296,14 +296,18 @@ def _poll_interval_seconds(events, now, sport=None):
         if start and start > now:
             leads.append((start - now).total_seconds())
     if not leads:
-        return 3600
+        return 3 * 3600 if sport in {"nfl", "ncaaf"} else 3600
     lead = min(leads)
-    if sport == "nfl":
+    if sport in {"nfl", "ncaaf"}:
         if lead <= 3600:
             return 10 * 60
+        if lead <= 6 * 3600:
+            return 30 * 60
         if lead <= 24 * 3600:
-            return 15 * 60
-        return 60 * 60
+            return 60 * 60
+        if lead <= 48 * 3600:
+            return 2 * 3600
+        return 3 * 3600
     if lead <= 3600:
         return 12 * 60
     if lead <= 6 * 3600:
@@ -314,10 +318,9 @@ def _poll_interval_seconds(events, now, sport=None):
 def _poll_due(last_poll, interval, now, sport):
     if not last_poll:
         return True
-    # The collector runs after several sport snapshots in a five-minute cron.
-    # Allow for that run-time jitter so a 15/10-minute NFL target does not
-    # slip to the following cron tick (20/15 minutes in practice).
-    tolerance = 90 if sport == "nfl" and interval <= 900 else 0
+    # The independent collector runs on five-minute cron ticks; tolerate
+    # modest launch jitter without moving a football poll to the next tick.
+    tolerance = 90 if sport in {"nfl", "ncaaf"} else 0
     return (now - last_poll).total_seconds() >= interval - tolerance
 
 
@@ -747,7 +750,7 @@ def main(argv=None):
             print(f"[props] published {available}/{len(payload['projections'])} available projections")
             return 0
         except Exception as error:
-            # The existing RF runner must never fail because props are absent.
+            # The independent prop job must never fail because props are absent.
             print(f"[props] unavailable: {type(error).__name__}", file=sys.stderr)
             return 0
 
