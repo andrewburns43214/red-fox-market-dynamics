@@ -361,6 +361,28 @@ def test_arizona_system_miss_is_retroactively_classified_with_explicit_provenanc
     assert corrected.freeze_method == "retroactive_system_correction_from_retained_pregame_state"
 
 
+def test_falcons_whipsaw_recovery_is_retroactively_classified_with_explicit_provenance():
+    sides = [
+        {"flagged_side": "GB Packers -4.5", "bets_pct": 69, "money_pct": 65, "open_line": "GB Packers -6.5 @ -115", "current_line": "GB Packers -4.5 @ -112", "path": "Pregame snapshot"},
+        {"flagged_side": "ATL Falcons +4.5", "bets_pct": 31, "money_pct": 35, "open_line": "ATL Falcons +6.5 @ -105", "current_line": "ATL Falcons +4.5 @ -108", "path": "Pregame snapshot"},
+    ]
+    frozen = pd.DataFrame([{
+        "sport": "nfl", "game_id": "34118180", "market_display": "SPREAD",
+        "market_sides": json.dumps(sides), "state_as_of_utc": "2026-09-25T00:12:20.118916+00:00",
+        "final_pregame_state_at_utc": "2026-09-25T00:12:20.118916+00:00",
+        "red_fox_favorite": "false", "supported_side": "",
+    }])
+
+    corrected = live.apply_classification_corrections(frozen).iloc[0]
+
+    assert corrected.red_fox_favorite == "true"
+    assert corrected.favorite_side == "ATL Falcons +4.5"
+    assert corrected.favorite_rule_version == "red_fox_favorite_v3"
+    assert corrected.classification_correction == "true"
+    assert corrected.classification_original_publication == "missed"
+    assert "whipsaw counter" in corrected.classification_correction_reason
+
+
 def test_one_minute_worker_expires_started_board_only_after_freeze_window(tmp_path, monkeypatch):
     board_path = tmp_path / "anomaly_board.csv"
     monkeypatch.setattr(live, "BOARD", board_path)

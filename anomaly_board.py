@@ -1280,19 +1280,29 @@ def _count_material_direction_changes(points, market, threshold):
 
 
 def _whipsaw_confirmation(points, market, latest_row, line_hold_threshold):
-    """Require a non-adverse follow-up capture at least ten minutes later."""
+    """Require ten durable minutes after the latest material price change.
+
+    Measuring only the interval between the two newest scrapes makes the flag
+    oscillate when a nominal ten-minute job arrives a few seconds early.  It
+    also treats the capture that restores a move as confirmation of itself.
+    Start the clock over at every material line/price change and keep the flag
+    true once the resulting state has actually held for ten minutes.
+    """
     if len(points) < 2:
         return False, 0.0
-    left, right = points[-2], points[-1]
-    minutes = (right["timestamp"] - left["timestamp"]).total_seconds() / 60.0
-    line_response, price_response = _signed_side_response(points[-2:], market, latest_row)
-    adverse = (
-        price_response < -HOLD_PRICE_MOVE_PCT
-        if market == "MONEYLINE"
-        else line_response < -line_hold_threshold
-        or (abs(line_response) <= 1e-9 and price_response < -HOLD_PRICE_MOVE_PCT)
-    )
-    return minutes >= 10.0 and not adverse, minutes
+    stable_since = points[0]["timestamp"]
+    for left, right in zip(points, points[1:]):
+        line_response, price_response = _signed_side_response([left, right], market, latest_row)
+        material_change = (
+            abs(price_response) > HOLD_PRICE_MOVE_PCT
+            if market == "MONEYLINE"
+            else abs(line_response) > line_hold_threshold
+            or (abs(line_response) <= 1e-9 and abs(price_response) > HOLD_PRICE_MOVE_PCT)
+        )
+        if material_change:
+            stable_since = right["timestamp"]
+    minutes = (points[-1]["timestamp"] - stable_since).total_seconds() / 60.0
+    return minutes >= 10.0, minutes
 
 
 def _max_excursion(points, market):

@@ -467,6 +467,19 @@ def _apply_visibility_lock(
                 review_records.append(_review_record(row, at, "late_invalidated", "removal", stale_reason))
             continue
 
+        # A previously confirmed Favorite can legitimately recover after an
+        # adverse retrace.  The raw qualification path intentionally rejects
+        # high-churn markets, so recognize only a fully restored, stable move
+        # back to the archived Favorite line.  This is not a new qualification:
+        # it is constrained to the same supported side and still goes through
+        # the normal two-capture visibility review below.
+        recovered, recovery_reason = _confirmed_prior_favorite_recovery(row, source)
+        if recovered and not raw_favorite and not active:
+            _restore_favorite(result, index, source)
+            result.at[index, "favorite_reason"] = recovery_reason
+            row = result.loc[index].copy()
+            raw_favorite = True
+
         if minutes > CONFIG.visibility_review_minutes:
             # Additions and ordinary removals both need two consecutive
             # ten-minute pulls. This prevents one-cycle classification or
@@ -504,14 +517,14 @@ def _apply_visibility_lock(
             continue
 
         if minutes <= CONFIG.visibility_lock_minutes:
-            # At T-20 ordinary threshold changes remain locked. A supported-side
-            # flip, cross-market contradiction, or destructive reversal can
-            # still suppress the displayed Favorite while preserving its archive.
+            # Ordinary threshold flicker remains locked. A material addition
+            # still needs its second confirmation; an adverse move suppresses
+            # immediately.
             if active:
                 _restore_favorite(result, index, source)
-                result.at[index, "favorite_reason"] = "Official Favorite locked at T-20."
+                result.at[index, "favorite_reason"] = "Favorite held pending confirmed material change."
             else:
-                _clear_favorite(result, index, "Official non-Favorite state locked at T-20.")
+                _clear_favorite(result, index, "Favorite addition requires confirmed material change.")
             if active:
                 hard, destructive, reason = _material_removal(row, source)
                 if hard or destructive:
@@ -520,16 +533,18 @@ def _apply_visibility_lock(
                     if not _review_already_recorded(reviews, key, "late_invalidated"):
                         review_records.append(_review_record(row, at, "late_invalidated", "removal", reason))
                     continue
-            if raw_favorite != active:
-                if not raw_favorite and active:
-                    _, material, reason = _material_removal(row, source)
-                else:
-                    material, reason = _material_addition(row)
-                if material and not _review_already_recorded(reviews, key, "late_warning"):
-                    action = "addition" if raw_favorite else "removal"
-                    warning = f"Late material {action} signal; official Favorite unchanged. {reason}"
-                    _set_review(result, index, "late_warning", warning, at)
-                    review_records.append(_review_record(row, at, "late_warning", action, warning))
+            if raw_favorite == active:
+                _clear_pending_review(reviews, review_records, row, key, at)
+            elif raw_favorite:
+                material, reason = _material_addition(row)
+                if material and _review_confirmed(reviews, key, "addition", now):
+                    _restore_favorite(result, index, row)
+                    result.at[index, "_visibility_restored"] = "false"
+                    _set_review(result, index, "applied_addition", reason, at)
+                    review_records.append(_review_record(row, at, "applied", "addition", reason))
+                elif material:
+                    _set_review(result, index, "pending_addition", reason, at)
+                    review_records.append(_review_record(row, at, "pending", "addition", reason))
             continue
 
         # T-40 through T-20: ordinary threshold flicker cannot change the
@@ -623,7 +638,7 @@ def _review_confirmed(history: pd.DataFrame, key: tuple[str, str, str], action: 
         prior.get("review_state") == "pending"
         and prior.get("review_action") == action
         and pd.notna(prior_at)
-        and 0 <= (now - prior_at).total_seconds() / 60 <= CONFIG.visibility_confirmation_gap_minutes
+        and 0 < (now - prior_at).total_seconds() / 60 <= CONFIG.visibility_confirmation_gap_minutes
     )
 
 
@@ -706,6 +721,42 @@ def _material_removal(row: pd.Series, source: pd.Series | None) -> tuple[bool, b
     threshold = 15 if market == "MONEYLINE" else (1.5 if sport in {"nba", "ncaab", "cbb"} else 1.0)
     material = against >= threshold
     return False, material, f"Material closing removal: market moved {against:g} against the Favorite (threshold {threshold:g})."
+
+
+def _confirmed_prior_favorite_recovery(row: pd.Series, source: pd.Series | None) -> tuple[bool, str]:
+    """Recognize a durable return to a previously archived Favorite state."""
+    if source is None or str(row.get("market_display", "")).upper() == "TOTAL":
+        return False, ""
+    favorite_identity = _side_identity(source.get("favorite_side", ""))
+    supported_identity = _side_identity(row.get("supported_side", ""))
+    if not favorite_identity or supported_identity != favorite_identity:
+        return False, ""
+    if _truthy(row.get("cross_market_mismatch")) or _truthy(row.get("cross_market_opener_mismatch_verified")):
+        return False, ""
+    side = next((item for item in _sides(row) if _side_identity(item.get("flagged_side")) == favorite_identity), None)
+    if side is None or str(side.get("data_badge", "")) != "Clean":
+        return False, ""
+    bets, money = _number(side.get("bets_pct")), _number(side.get("money_pct"))
+    if bets is None or money is None or bets > 35 or money > 35:
+        return False, ""
+    if (
+        str(side.get("reaction", "")) != "Contrarian"
+        or str(side.get("response_direction", "")).upper() != "TOWARD"
+        or not _truthy(side.get("kpi_eligible"))
+        or _truthy(side.get("return_toward_open"))
+        or _truthy(side.get("active_worsening_reversal"))
+        or str(side.get("path", "")) != "Whipsaw"
+        or (_number(side.get("whipsaw_retention_ratio")) or 0) < 0.95
+        or not _truthy(side.get("whipsaw_confirmation_ready"))
+        or (_number(side.get("whipsaw_confirmation_minutes")) or 0) < CONFIG.partial_whipsaw_confirmation_minutes
+    ):
+        return False, ""
+    market = str(row.get("market_display", "")).upper()
+    archived = _line_value(source.get("current_line", ""), market)
+    current = _line_value(side.get("current_line", ""), market)
+    if archived is None or current is None or current > archived:
+        return False, ""
+    return True, "Previously confirmed Favorite restored after the qualifying market move fully returned and held."
 
 
 def _freshness_failure(row: pd.Series | None, source: pd.Series | None, now: pd.Timestamp) -> str:

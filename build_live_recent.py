@@ -50,10 +50,22 @@ CLASSIFICATION_CORRECTIONS = {
     ("nfl", "34118231", "SPREAD"): {
         "side_prefix": "ari cardinals",
         "recorded_at": "2026-09-13T20:45:00+00:00",
+        "rule_version": "red_fox_favorite_v2",
         "reason": (
             "Retroactive system-miss correction: Arizona satisfied the corrected extended "
             "NFL-underdog Favorite pathway before kickoff, but the former shared 40% "
             "tickets/money ceiling incorrectly demoted the market as splits updated."
+        ),
+    },
+    ("nfl", "34118180", "SPREAD"): {
+        "side_prefix": "atl falcons",
+        "recorded_at": "2026-09-25T02:20:00+00:00",
+        "rule_version": "red_fox_favorite_v3",
+        "reason": (
+            "Retroactive system-miss correction: Atlanta qualified at +4.5, briefly "
+            "retracted, then fully recovered to +4.5 and held through the final pregame "
+            "state. The former whipsaw counter and scrape-gap checks prevented the "
+            "confirmed recovery from restoring the archived Favorite."
         ),
     },
 }
@@ -559,7 +571,7 @@ def apply_classification_corrections(frame: pd.DataFrame) -> pd.DataFrame:
         result.at[index, "red_fox_favorite"] = "true"
         result.at[index, "favorite_side"] = supported
         result.at[index, "favorite_pathway"] = "low_support_contrarian"
-        result.at[index, "favorite_rule_version"] = "red_fox_favorite_v2"
+        result.at[index, "favorite_rule_version"] = correction["rule_version"]
         result.at[index, "favorite_first_qualified_at"] = source_at
         result.at[index, "favorite_final_qualified_at"] = source_at
         result.at[index, "favorite_state"] = "qualified_retroactive_system_correction"

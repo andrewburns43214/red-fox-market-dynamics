@@ -8,6 +8,7 @@ from anomaly_board import (
     _assign_pair_evidence_roles,
     _is_late_move,
     _key_numbers_crossed,
+    _whipsaw_confirmation,
     build_anomaly_outputs,
     select_market_leaders,
 )
@@ -94,6 +95,29 @@ class TestAnomalyBoard(unittest.TestCase):
         self.assertTrue(_is_late_move(points, "TOTAL", 1.0, 4.0, "nfl"))
         self.assertFalse(_is_late_move(points, "TOTAL", 1.0, 7.0, "nfl"))
         self.assertFalse(_is_late_move(points, "TOTAL", 1.0, -0.1, "nfl"))
+
+    def test_whipsaw_confirmation_uses_durable_state_not_latest_scrape_gap(self):
+        latest = {"side": "Away +4.5"}
+        points = [
+            {"value": 5.5, "implied_pct": 51.0, "timestamp": datetime(2026, 9, 24, 23, 0, tzinfo=timezone.utc)},
+            {"value": 4.5, "implied_pct": 51.0, "timestamp": datetime(2026, 9, 24, 23, 10, tzinfo=timezone.utc)},
+            {"value": 4.5, "implied_pct": 51.0, "timestamp": datetime(2026, 9, 24, 23, 19, 54, tzinfo=timezone.utc)},
+        ]
+        ready, minutes = _whipsaw_confirmation(points, "SPREAD", latest, 0.25)
+        self.assertFalse(ready)
+        self.assertAlmostEqual(minutes, 9.9)
+
+        points.append({"value": 4.5, "implied_pct": 51.0, "timestamp": datetime(2026, 9, 24, 23, 30, tzinfo=timezone.utc)})
+        ready, minutes = _whipsaw_confirmation(points, "SPREAD", latest, 0.25)
+        self.assertTrue(ready)
+        self.assertEqual(minutes, 20.0)
+
+        # Once confirmed, a slightly short next cron interval cannot make the
+        # exact same market state unconfirmed again.
+        points.append({"value": 4.5, "implied_pct": 51.0, "timestamp": datetime(2026, 9, 24, 23, 39, 50, tzinfo=timezone.utc)})
+        ready, minutes = _whipsaw_confirmation(points, "SPREAD", latest, 0.25)
+        self.assertTrue(ready)
+        self.assertGreater(minutes, 29.0)
 
     def test_board_publishes_one_evidence_leader_per_market(self):
         board = pd.DataFrame([

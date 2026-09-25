@@ -676,6 +676,66 @@ def test_material_addition_can_confirm_between_t40_and_t20(tmp_path: Path):
     assert applied.iloc[0].favorite_review_state == "applied_addition"
 
 
+def test_prior_favorite_restores_after_full_stable_whipsaw_recovery_inside_t20(tmp_path: Path):
+    original_side = side(
+        "ATL Falcons +4.5", "+4.5 (-105)", bets=30, money=30,
+        open_line="+6.5 (-105)", line_move=2.0,
+    )
+    original = market(
+        "nfl", "SPREAD", pair_for(original_side), game_id="34118180",
+        game="ATL Falcons @ GB Packers",
+    )
+    original["kickoff_iso"] = "2026-09-25T00:15:00Z"
+    for captured in ("2026-09-24T20:22:00Z", "2026-09-24T20:32:00Z"):
+        update_favorite_tracking(
+            apply_red_fox_favorites(pd.DataFrame([original]), as_of=captured),
+            tmp_path, as_of=captured,
+        )
+
+    retraced_side = side(
+        "ATL Falcons +5.5", "+5.5 (-115)", bets=31, money=31,
+        open_line="+6.5 (-105)", path="Whipsaw", direction="TOWARD",
+        line_move=1.0, material_direction_changes=4, whipsaw_retention=0.5,
+        return_toward_open=True,
+    )
+    retraced = market(
+        "nfl", "SPREAD", pair_for(retraced_side), game_id="34118180",
+        game="ATL Falcons @ GB Packers", supported_side="ATL Falcons +5.5",
+    )
+    retraced["kickoff_iso"] = original["kickoff_iso"]
+    for captured in ("2026-09-24T21:52:00Z", "2026-09-24T22:02:00Z"):
+        raw = apply_red_fox_favorites(pd.DataFrame([retraced]), as_of=captured)
+        reviewed = update_favorite_tracking(raw, tmp_path, as_of=captured)
+    assert reviewed.iloc[0].red_fox_favorite == "false"
+
+    restored_side = side(
+        "ATL Falcons +4.5", "+4.5 (-108)", bets=31, money=35,
+        open_line="+6.5 (-105)", path="Whipsaw", direction="TOWARD",
+        line_move=2.0, material_direction_changes=5, whipsaw_retention=1.0,
+        whipsaw_confirmation=True, whipsaw_confirmation_minutes=20,
+    )
+    restored = market(
+        "nfl", "SPREAD", pair_for(restored_side), game_id="34118180",
+        game="ATL Falcons @ GB Packers", supported_side="ATL Falcons +4.5",
+    )
+    restored["kickoff_iso"] = original["kickoff_iso"]
+    assert apply_red_fox_favorites(pd.DataFrame([restored]), as_of="2026-09-24T23:52:00Z").iloc[0].red_fox_favorite == "false"
+
+    first = update_favorite_tracking(
+        apply_red_fox_favorites(pd.DataFrame([restored]), as_of="2026-09-24T23:52:00Z"),
+        tmp_path, as_of="2026-09-24T23:52:00Z",
+    )
+    assert first.iloc[0].red_fox_favorite == "false"
+    assert first.iloc[0].favorite_review_state == "pending_addition"
+    second = update_favorite_tracking(
+        apply_red_fox_favorites(pd.DataFrame([restored]), as_of="2026-09-25T00:02:00Z"),
+        tmp_path, as_of="2026-09-25T00:02:00Z",
+    )
+    assert second.iloc[0].red_fox_favorite == "true"
+    assert second.iloc[0].favorite_review_state == "applied_addition"
+    assert "fully returned and held" in second.iloc[0].favorite_reason
+
+
 def test_material_removal_requires_two_scrapes_between_t40_and_t20(tmp_path: Path):
     original_side = side("Away +3", "+3 (-110)", bets=25, money=20, open_line="+4.5 (-110)")
     original = market("ncaaf", "SPREAD", pair_for(original_side))
@@ -748,7 +808,7 @@ def test_whipsaw_freshness_is_stricter_than_normal_market_freshness(tmp_path: Pa
         apply_red_fox_favorites(pd.DataFrame([normal]), as_of="2026-09-06T20:45:00Z"),
         tmp_path / "normal", as_of="2026-09-06T20:45:00Z",
     )
-    assert normal_result.iloc[0].favorite_review_state == "late_warning"
+    assert normal_result.iloc[0].favorite_review_state == "pending_addition"
     assert normal_result.iloc[0].favorite_late_invalidated != "true"
 
     whipsaw_side = side(
