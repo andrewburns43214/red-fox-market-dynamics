@@ -127,26 +127,31 @@ def test_v1_favorite_is_supported_side_only_and_unresolved_rows_remain_ungraded(
     assert favorites.empty
 
 
-def test_v2_and_v3_share_one_official_record_while_rule_version_remains_metadata(tmp_path):
+def test_rule_versions_share_one_official_record_while_version_remains_metadata(tmp_path):
     write(pd.DataFrame([
         frozen_row(game_id="v2-game", favorite_rule_version="red_fox_favorite_v2"),
         frozen_row(game_id="v3-game", favorite_rule_version="red_fox_favorite_v3"),
+        frozen_row(game_id="v4-game", favorite_rule_version="red_fox_favorite_v4"),
     ]), tmp_path / "live_recent.csv")
     write(pd.DataFrame([
         {"game_id": game_id, "team1": "NY Mets", "team1_score": "7", "team2": "MIA Marlins", "team2_score": "5"}
-        for game_id in ("v2-game", "v3-game")
+        for game_id in ("v2-game", "v3-game", "v4-game")
     ]), tmp_path / "final_scores_history.csv")
 
     result = update_performance_ledger(tmp_path)
     favorites = pd.read_csv(tmp_path / "performance_favorites.csv", dtype=str, keep_default_na=False)
     performance = json.loads((tmp_path / "favorite_performance.json").read_text(encoding="utf-8"))
 
-    assert result["favorites"]["wins"] == 2
-    assert performance["wins"] == 2
-    assert set(favorites["favorite_rule_version"]) == {"red_fox_favorite_v2", "red_fox_favorite_v3"}
+    assert result["favorites"]["wins"] == 3
+    assert performance["wins"] == 3
+    assert set(favorites["favorite_rule_version"]) == {
+        "red_fox_favorite_v2", "red_fox_favorite_v3", "red_fox_favorite_v4",
+    }
     cohorts = pd.read_csv(tmp_path / "favorite_cohort_kpis.csv", dtype=str, keep_default_na=False)
     version_rows = cohorts[(cohorts["dimension"] == "favorite_rule_version") & (cohorts["candidate_decision"] == "accepted")]
-    assert set(version_rows["segment"]) == {"red_fox_favorite_v2", "red_fox_favorite_v3"}
+    assert set(version_rows["segment"]) == {
+        "red_fox_favorite_v2", "red_fox_favorite_v3", "red_fox_favorite_v4",
+    }
 
 
 def test_retroactive_system_correction_is_included_and_disclosed_in_favorite_ledger(tmp_path):

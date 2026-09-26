@@ -18,7 +18,7 @@ import pandas as pd
 
 @dataclass(frozen=True)
 class FavoriteConfig:
-    version: str = "red_fox_favorite_v3"
+    version: str = "red_fox_favorite_v4"
     spread_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
     primary_moneyline_sports: frozenset[str] = frozenset({"mlb", "nhl", "ufc"})
     secondary_moneyline_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
@@ -1097,15 +1097,25 @@ def _number_is_eligible(sport: str, market: str, value: float, side: dict, game_
 
 
 def _mlb_plus_money_conviction_gate(side: dict, current_value: float) -> bool:
-    """Require real conviction when an MLB underdog remains plus money.
+    """Require real conviction from an MLB side that opened plus money.
 
-    Crossing from plus to minus money is sufficient evidence and continues to
-    use the ordinary Favorite gates. If both the opener and current price are
-    positive, require at least five implied-probability points of improvement.
-    Negative openers and non-positive current prices are unaffected.
+    An intact one-way move through pick'em can continue to the ordinary gates,
+    but a partial-retrace whipsaw cannot become a Favorite after crossing from
+    plus to minus money. If both opener and current price remain positive,
+    require at least five implied-probability points of improvement. Negative
+    openers are unaffected.
     """
     open_value = _line_value(side.get("open_line"), "MONEYLINE")
-    if open_value is None or open_value <= 0 or current_value <= 0:
+    if open_value is None or open_value <= 0:
+        return True
+    if current_value < 0:
+        partial_retrace = (
+            str(side.get("path", "")) == "Whipsaw"
+            and not _truthy(side.get("whipsaw_recovered"))
+            and "Whipsaw Recovered" not in _parts(side.get("context_chips"))
+        )
+        return not partial_retrace
+    if current_value == 0:
         return True
     return (_number(side.get("price_move_pct")) or 0) >= CONFIG.mlb_still_plus_min_probability_move
 

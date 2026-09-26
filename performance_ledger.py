@@ -24,7 +24,7 @@ from anomaly_action_results import _grade_action
 SUPPORTED_SIDE_VALID_FROM = pd.Timestamp("2026-09-07T17:57:58Z")
 FAVORITE_VALID_FROM = pd.Timestamp("2026-09-07T22:11:12Z")
 FAVORITE_TRACKING_START_DATE = "2026-09-07"
-FAVORITE_RULE_VERSIONS = frozenset({"red_fox_favorite_v2", "red_fox_favorite_v3"})
+FAVORITE_RULE_VERSIONS = frozenset({"red_fox_favorite_v2", "red_fox_favorite_v3", "red_fox_favorite_v4"})
 FAVORITE_KPI_EXCLUSIONS = {
     ("34603681", "SPREAD"): (
         "Excluded: audited final-hour visibility failure invalidated the Favorite."

@@ -262,8 +262,8 @@ def test_freeze_favorite_requires_strong_pressure_and_persistent_resistance():
     assert not is_favorite(result([market("mlb", "MONEYLINE", [candidate, small_move], supported_side="Underdog")]))
 
 
-def test_rule_tightening_uses_v3_version_and_tracking_history_append_only(tmp_path):
-    assert CONFIG.version == "red_fox_favorite_v3"
+def test_rule_tightening_uses_v4_version_and_tracking_history_append_only(tmp_path):
+    assert CONFIG.version == "red_fox_favorite_v4"
     legacy = result([market("mlb", "MONEYLINE", pair_for(side("Away", "+115", open_line="+150", price_move=6.0)))])
     update_favorite_tracking(legacy, tmp_path, as_of="2026-09-06T20:00:00Z")
     newly_ineligible = legacy.copy()
@@ -272,7 +272,7 @@ def test_rule_tightening_uses_v3_version_and_tracking_history_append_only(tmp_pa
     update_favorite_tracking(newly_ineligible, tmp_path, as_of="2026-09-06T20:01:00Z")
     ledger = pd.read_csv(tmp_path / "red_fox_favorite_tracking.csv", dtype=str, keep_default_na=False)
     assert ledger.favorite_state.tolist() == ["qualified", "not_qualified"]
-    assert ledger.favorite_rule_version.tolist() == ["red_fox_favorite_v3", "red_fox_favorite_v3"]
+    assert ledger.favorite_rule_version.tolist() == ["red_fox_favorite_v4", "red_fox_favorite_v4"]
     shadow = pd.read_csv(tmp_path / "red_fox_favorite_shadow.csv", dtype=str, keep_default_na=False)
     assert shadow.candidate_decision.tolist() == ["accepted", "rejected"]
     assert shadow.candidate_side.tolist() == ["Away", "Away"]
@@ -288,6 +288,22 @@ def test_mlb_plus_money_requires_crossing_minus_or_five_probability_points():
 
     crossed = side("Crossed favorite", "-101", open_line="+123", price_move=5.41)
     assert is_favorite(result([market("mlb", "MONEYLINE", pair_for(crossed), supported_side="Crossed favorite")]))
+
+    partial_retrace = side(
+        "Partial retrace", "-108", open_line="+109", price_move=4.06,
+        path="Whipsaw", whipsaw_retention=0.8,
+    )
+    assert not is_favorite(result([
+        market("mlb", "MONEYLINE", pair_for(partial_retrace), supported_side="Partial retrace")
+    ]))
+
+    recovered = side(
+        "Recovered move", "-104", open_line="+111", price_move=3.59,
+        path="Whipsaw", context="Whipsaw Recovered",
+    )
+    assert is_favorite(result([
+        market("mlb", "MONEYLINE", pair_for(recovered), supported_side="Recovered move")
+    ]))
 
     same_shape_nhl = side("NHL underdog", "+108", open_line="+123", price_move=3.24)
     assert is_favorite(result([market("nhl", "MONEYLINE", pair_for(same_shape_nhl), supported_side="NHL underdog")]))
