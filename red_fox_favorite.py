@@ -71,7 +71,18 @@ VISIBILITY_INVALIDATED_FAVORITES = frozenset({
 })
 RULE_INVALIDATED_FAVORITES = frozenset({
     ("mlb", "34694536", "MONEYLINE"),  # WAS Nationals @ STL Cardinals, 2026-09-20
+    ("mlb", "34726372", "MONEYLINE"),  # ATL Braves @ MIA Marlins, 2026-09-26
 })
+RULE_INVALIDATED_FAVORITE_REASONS = {
+    ("mlb", "34694536", "MONEYLINE"): (
+        "Favorite removed: MLB side opened and remained plus money without the required "
+        "five-point implied-probability move."
+    ),
+    ("mlb", "34726372", "MONEYLINE"): (
+        "Favorite removed after review: Miami opened plus money and crossed to negative "
+        "money, a suspended MLB Favorite cohort."
+    ),
+}
 
 
 def _manual_favorite_exclusion(row: pd.Series) -> str:

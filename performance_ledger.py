@@ -33,6 +33,10 @@ FAVORITE_KPI_EXCLUSIONS = {
         "Rule invalidated: Washington opened +123 and remained plus money at +108; "
         "the 3.2-point implied-probability move did not meet the MLB five-point standard."
     ),
+    ("34726372", "MONEYLINE"): (
+        "Rule invalidated after review: Miami opened +109 and crossed to negative money; "
+        "the MLB plus-to-minus Favorite cohort is suspended from official Favorites."
+    ),
 }
 LEDGER_COLUMNS = [
     "ledger_id", "event_id", "game", "sport", "scheduled_start", "market", "side",

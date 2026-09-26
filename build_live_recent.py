@@ -14,6 +14,7 @@ import pandas as pd
 import requests
 from red_fox_favorite import (
     FAVORITE_COLUMNS,
+    RULE_INVALIDATED_FAVORITE_REASONS,
     RULE_INVALIDATED_FAVORITES,
     VISIBILITY_INVALIDATED_FAVORITES,
 )
@@ -507,10 +508,13 @@ def apply_favorite_exclusions(frame: pd.DataFrame) -> pd.DataFrame:
         result.loc[invalid, "favorite_state"] = "not_qualified"
     if "favorite_reason" in result:
         result.loc[visibility_invalid, "favorite_reason"] = "Favorite removed: audited final-hour visibility failure."
-        result.loc[rule_invalid, "favorite_reason"] = (
-            "Favorite removed: MLB side opened and remained plus money without the required "
-            "five-point implied-probability move."
-        )
+        for index in result.index[rule_invalid]:
+            key = (
+                str(result.at[index, "sport"]).lower(),
+                str(result.at[index, "game_id"]),
+                str(result.at[index, "market_display"]).upper(),
+            )
+            result.at[index, "favorite_reason"] = RULE_INVALIDATED_FAVORITE_REASONS[key]
     return result
 
 
