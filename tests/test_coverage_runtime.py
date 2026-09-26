@@ -73,6 +73,8 @@ def test_hawaii_variants_have_one_identity(variant):
     ("N. Illinois", "Northern Illinois", "ncaaf"),
     ("Miami (FL)", "Miami Hurricanes", "ncaaf"),
     ("Miami (OH)", "Miami RedHawks", "ncaaf"),
+    ("USC", "USC Trojans", "ncaaf"),
+    ("USC", "Southern California", "ncaaf"),
     ("KC Chiefs", "Kansas City Chiefs", "nfl"),
     ("LV Raiders", "Las Vegas Raiders", "nfl"),
     ("NY Jets", "New York Jets", "nfl"),
@@ -88,6 +90,32 @@ def test_explicit_aliases(left, right, sport):
                                    ("Michigan", "Michigan State")])
 def test_distinct_schools_never_merge(a, b):
     assert team_identity(a, "ncaaf")[0] != team_identity(b, "ncaaf")[0]
+
+
+def test_usc_is_southern_california_and_never_south_carolina():
+    assert team_identity("USC", "ncaaf") == ("southern california", "IDENTIFIED")
+    assert team_identity("USC Trojans", "ncaaf") == ("southern california", "IDENTIFIED")
+    assert team_identity("South Carolina", "ncaaf") == ("south carolina", "IDENTIFIED")
+    assert team_identity("USC", "ncaaf")[0] != team_identity("South Carolina", "ncaaf")[0]
+
+
+def test_oregon_usc_matches_espn_southern_california_event():
+    game = "Oregon @ USC"
+    usc_event = dict(id="34226058", date=KICK, competitions=[dict(competitors=[
+        dict(homeAway="away", team=dict(
+            displayName="Oregon Ducks", shortDisplayName="Oregon", location="Oregon", abbreviation="ORE")),
+        dict(homeAway="home", team=dict(
+            displayName="USC Trojans", shortDisplayName="USC", location="USC", abbreviation="USC")),
+    ])])
+    result = match_games(
+        [game],
+        [usc_event],
+        "ncaaf",
+    )
+
+    assert game_identity(game, "ncaaf") == (("oregon", "southern california"), "IDENTIFIED")
+    assert result[game] == KICK
+    assert result.states[game] == "ESPN_MATCHED"
 
 
 def event(eid="1", away="UNLV Rebels", home="Hawai‘i Rainbow Warriors"):

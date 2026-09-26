@@ -14,7 +14,9 @@ def clean_name(value):
 
 
 # Explicit school identities. Never collapse directional schools, Miami campuses,
-# Nevada/UNLV, USC/South Carolina, or Saint/State using token overlap.
+# Nevada/UNLV, Southern California/South Carolina, or Saint/State using token
+# overlap. "USC" is an explicit Southern California identity because both the
+# DraftKings NCAAF feed and ESPN use it as that school's canonical short name.
 COLLEGE_ALIASES = {
     "unlv": "unlv", "nevada las vegas": "unlv", "university of nevada las vegas": "unlv",
     "unlv rebels": "unlv", "nevada las vegas rebels": "unlv",
@@ -32,6 +34,8 @@ COLLEGE_ALIASES = {
     "umass": "massachusetts", "massachusetts minutemen": "massachusetts",
     "ucf": "central florida", "ucf knights": "central florida", "central florida knights": "central florida",
     "usf": "south florida", "south florida bulls": "south florida",
+    "usc": "southern california", "usc trojans": "southern california",
+    "southern california trojans": "southern california",
     "byu": "brigham young", "byu cougars": "brigham young",
     "tcu": "texas christian", "tcu horned frogs": "texas christian",
     "smu": "southern methodist", "smu mustangs": "southern methodist",
@@ -52,7 +56,7 @@ COLLEGE_ALIASES = {
     "bgsu": "bowling green", "bowling green state": "bowling green",
     "jmu": "james madison", "odu": "old dominion", "ecu": "east carolina",
 }
-AMBIGUOUS_COLLEGE = {"miami", "usc", "uh", "state", "saint marys", "saint johns", "rainbow warriors"}
+AMBIGUOUS_COLLEGE = {"miami", "uh", "state", "saint marys", "saint johns", "rainbow warriors"}
 
 
 def team_identity(value, sport):
