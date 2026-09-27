@@ -287,6 +287,77 @@ def test_stale_last_qualified_handoff_is_excluded_from_official_favorites(tmp_pa
     assert pd.read_csv(tmp_path / "performance_favorites.csv").empty
 
 
+def test_requalified_last_handoff_remains_an_official_favorite(tmp_path):
+    row = frozen_row(
+        sport="ncaaf", game_id="florida-requalified", game="Ole Miss @ Florida",
+        kickoff_iso="2026-09-26T19:30:00Z",
+        market_display="SPREAD", supported_side="Florida -3.5",
+        favorite_side="Florida -3.5", favorite_rule_version="red_fox_favorite_v3",
+        favorite_final_qualified_at="2026-09-26T17:02:55Z",
+        final_pregame_state_at_utc="2026-09-26T17:01:53Z",
+        frozen_at_utc="2026-09-26T19:30:06Z",
+        freeze_method="favorite_tracking_last_qualified_at_or_before_start",
+        market_sides=json.dumps([
+            {
+                "flagged_side": "Florida -3.5", "open_line": "+1.5 (-115)",
+                "current_line": "-3.5 (-115)", "reaction": "Contrarian",
+            },
+            {"flagged_side": "Ole Miss +3.5", "current_line": "+3.5 (-105)"},
+        ]),
+    )
+    write(pd.DataFrame([row]), tmp_path / "live_recent.csv")
+    write(pd.DataFrame([
+        {
+            "recorded_at": "2026-09-26T17:02:55Z", "sport": "ncaaf",
+            "game_id": "florida-requalified", "market_display": "SPREAD",
+            "favorite_state": "qualified", "first_qualified_line": "-3.5 (-115)",
+        },
+        {
+            "recorded_at": "2026-09-26T18:42:52Z", "sport": "ncaaf",
+            "game_id": "florida-requalified", "market_display": "SPREAD",
+            "favorite_state": "not_qualified", "first_qualified_line": "-3.5 (-115)",
+        },
+        {
+            "recorded_at": "2026-09-26T19:02:44Z", "sport": "ncaaf",
+            "game_id": "florida-requalified", "market_display": "SPREAD",
+            "favorite_state": "qualified", "first_qualified_line": "-3.5 (-115)",
+        },
+        {
+            "recorded_at": "2026-09-26T19:32:46Z", "sport": "ncaaf",
+            "game_id": "florida-requalified", "market_display": "SPREAD",
+            "favorite_state": "not_qualified", "first_qualified_line": "-3.5 (-115)",
+        },
+    ]), tmp_path / "red_fox_favorite_tracking.csv")
+
+    update_performance_ledger(tmp_path, attach_results=False)
+    ledger = pd.read_csv(tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False)
+    favorites = pd.read_csv(tmp_path / "performance_favorites.csv", dtype=str, keep_default_na=False)
+
+    assert ledger.iloc[0].favorite_qualified == "yes"
+    assert ledger.iloc[0].candidate_decision == "accepted"
+    assert ledger.iloc[0].favorite_final_state == "qualified"
+    assert ledger.iloc[0].favorite_last_fell_off_at == "2026-09-26T18:42:52Z"
+    assert ledger.iloc[0].favorite_final_qualified_at == "2026-09-26T19:02:44Z"
+    assert favorites.iloc[0].event_id == "florida-requalified"
+
+    # Repair ledgers written by the former timestamp-comparison logic.
+    ledger.loc[0, "favorite_qualified"] = "no"
+    ledger.loc[0, "candidate_decision"] = "stale_handoff_invalidated"
+    ledger.loc[0, "candidate_decision_reason"] = "legacy false invalidation"
+    write(ledger, tmp_path / "performance_ledger.csv")
+
+    update_performance_ledger(tmp_path, attach_results=False)
+    repaired = pd.read_csv(tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False)
+    favorites = pd.read_csv(tmp_path / "performance_favorites.csv", dtype=str, keep_default_na=False)
+
+    assert repaired.iloc[0].favorite_qualified == "yes"
+    assert repaired.iloc[0].candidate_decision == "accepted"
+    assert repaired.iloc[0].candidate_decision_reason == (
+        "Accepted: the latest explicit pre-kickoff tracking state was qualified."
+    )
+    assert favorites.iloc[0].event_id == "florida-requalified"
+
+
 def test_freeze_uses_latest_source_state_before_kickoff_and_rejects_post_start(tmp_path):
     earlier = frozen_row(supported_side="NY Mets", final_pregame_price="", final_pregame_state_at_utc="2026-09-08T17:08:00Z")
     latest = frozen_row(

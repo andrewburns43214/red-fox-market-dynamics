@@ -885,14 +885,42 @@ def update_performance_ledger(
             ledger.loc[blank_reason & ledger["candidate_decision"].eq("late_invalidated"), "favorite_late_invalidated_reason"]
             .replace("", "Originally qualified, then suppressed by a late safety invalidation.")
         )
-        final_qualified_at = _utc_series(ledger.get("favorite_final_qualified_at", ""), ledger.index)
-        last_fell_off_at = _utc_series(ledger.get("favorite_last_fell_off_at", ""), ledger.index)
+        # A Live & Recent handoff can retain an older qualification timestamp
+        # even when tracking subsequently fell off and requalified before
+        # kickoff.  Judge the handoff by the latest explicit pre-kickoff state,
+        # not by comparing its retained timestamp with an earlier falloff.
+        latest_tracking_state = pd.Series(
+            [
+                _tracking_lifecycle(
+                    history,
+                    pd.Series({
+                        "sport": row.get("sport", ""),
+                        "game_id": row.get("event_id", ""),
+                        "market_display": row.get("market", ""),
+                    }),
+                    pd.to_datetime(row.get("scheduled_start", ""), errors="coerce", utc=True),
+                )["final_state"]
+                for _, row in ledger.iterrows()
+            ],
+            index=ledger.index,
+        )
         stale_handoff = (
             ledger.get("freeze_method", pd.Series("", index=ledger.index)).astype(str)
             .eq("favorite_tracking_last_qualified_at_or_before_start")
-            & final_qualified_at.notna()
-            & last_fell_off_at.notna()
-            & (last_fell_off_at >= final_qualified_at)
+            & latest_tracking_state.eq("not_qualified")
+        )
+        restored_handoff = (
+            ledger.get("freeze_method", pd.Series("", index=ledger.index)).astype(str)
+            .eq("favorite_tracking_last_qualified_at_or_before_start")
+            & latest_tracking_state.eq("qualified")
+            & ledger["candidate_decision"].eq("stale_handoff_invalidated")
+            & ~excluded
+            & ~late_invalidated
+        )
+        ledger.loc[restored_handoff, "favorite_qualified"] = "yes"
+        ledger.loc[restored_handoff, "candidate_decision"] = "accepted"
+        ledger.loc[restored_handoff, "candidate_decision_reason"] = (
+            "Accepted: the latest explicit pre-kickoff tracking state was qualified."
         )
         ledger.loc[stale_handoff, "favorite_qualified"] = "no"
         ledger.loc[stale_handoff, "candidate_decision"] = "stale_handoff_invalidated"
@@ -912,6 +940,8 @@ def update_performance_ledger(
             if lifecycle["history_available"] == "yes":
                 ever_fell_off = "yes" if int(_number(lifecycle["falloffs"]) or 0) > 0 else "no"
                 ledger.at[index, "favorite_first_qualified_at"] = lifecycle["first_qualified"] or row.get("favorite_first_qualified_at", "")
+                if lifecycle["final_state"] == "qualified":
+                    ledger.at[index, "favorite_final_qualified_at"] = lifecycle["last_qualified"]
                 ledger.at[index, "favorite_first_fell_off_at"] = lifecycle["first_fell_off"]
                 ledger.at[index, "favorite_last_fell_off_at"] = lifecycle["last_fell_off"]
                 ledger.at[index, "favorite_fell_off_before_kickoff"] = ever_fell_off
