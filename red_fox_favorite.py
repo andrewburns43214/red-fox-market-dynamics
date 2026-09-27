@@ -731,6 +731,12 @@ def _material_addition(row: pd.Series) -> tuple[bool, str]:
 def _material_removal(row: pd.Series, source: pd.Series | None) -> tuple[bool, bool, str]:
     if source is None:
         return False, False, "No prior frozen Favorite evidence was available."
+    if _truthy(row.get("return_toward_open")) and _truthy(row.get("active_worsening_reversal")):
+        return (
+            True,
+            True,
+            "Hard removal: the active game-week market fully returned toward its opener, erasing the qualifying move.",
+        )
     favorite_identity = _side_identity(source.get("favorite_side", ""))
     supported_identity = _side_identity(row.get("supported_side", ""))
     if supported_identity and supported_identity != favorite_identity:

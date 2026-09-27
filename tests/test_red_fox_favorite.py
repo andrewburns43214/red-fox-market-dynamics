@@ -908,6 +908,33 @@ def test_t20_destructive_line_reversal_suppresses_even_if_raw_rules_still_qualif
     assert "moved 1 against" in suppressed.iloc[0].favorite_late_invalidated_reason
 
 
+def test_t20_full_return_to_active_game_week_opener_is_hard_removal(tmp_path: Path):
+    original_side = side("NY Jets +6.5", "+6.5 (+100)", bets=27, money=17, open_line="+7 (+100)")
+    original = market("nfl", "SPREAD", pair_for(original_side), game_id="jets")
+    original["kickoff_iso"] = "2026-09-27T17:05:00Z"
+    for captured in ("2026-09-27T15:30:00Z", "2026-09-27T15:40:00Z"):
+        update_favorite_tracking(
+            apply_red_fox_favorites(pd.DataFrame([original]), as_of=captured), tmp_path, as_of=captured
+        )
+
+    returned_side = side(
+        "NY Jets +7", "+7 (-115)", bets=27, money=20, open_line="+7 (+100)",
+        path="Whipsaw", direction="LIMITED", return_toward_open=True, active_worsening=True,
+    )
+    returned = market("nfl", "SPREAD", pair_for(returned_side), game_id="jets", supported_side="NY Jets +7")
+    returned["kickoff_iso"] = "2026-09-27T17:05:00Z"
+    returned["return_toward_open"] = "true"
+    returned["active_worsening_reversal"] = "true"
+    reviewed = update_favorite_tracking(
+        apply_red_fox_favorites(pd.DataFrame([returned]), as_of="2026-09-27T16:52:00Z"),
+        tmp_path, as_of="2026-09-27T16:52:00Z",
+    )
+
+    assert reviewed.iloc[0].red_fox_favorite == "false"
+    assert reviewed.iloc[0].favorite_late_invalidated == "true"
+    assert "active game-week market" in reviewed.iloc[0].favorite_late_invalidated_reason
+
+
 def test_whipsaw_freshness_is_stricter_than_normal_market_freshness(tmp_path: Path):
     normal_side = side(
         "Away +3", "+3 (-110)", bets=25, money=20, open_line="+4.5 (-110)",
