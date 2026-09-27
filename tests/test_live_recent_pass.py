@@ -258,6 +258,43 @@ def test_favorite_handoff_keeps_a_final_requalification_after_an_earlier_falloff
     assert len(frozen) == 1
 
 
+def test_favorite_handoff_uses_only_selected_moneyline_after_spread_translation():
+    candidates = pd.DataFrame([
+        {
+            "sport": "nfl", "game_id": "34118258", "market_display": "SPREAD",
+            "kickoff_iso": "2026-09-27T17:00:00Z", "state_as_of_utc": "2026-09-27T16:23:24Z",
+            "red_fox_favorite": "true", "favorite_side": "JAX Jaguars -3",
+        },
+        {
+            "sport": "nfl", "game_id": "34118258", "market_display": "MONEYLINE",
+            "kickoff_iso": "2026-09-27T17:00:00Z", "state_as_of_utc": "2026-09-27T16:32:53Z",
+            "red_fox_favorite": "true", "favorite_side": "JAX Jaguars",
+        },
+    ])
+    tracking = pd.DataFrame([
+        {
+            "sport": "nfl", "game_id": "34118258", "market_display": "SPREAD",
+            "recorded_at": "2026-09-27T16:23:24Z", "favorite_state": "qualified",
+        },
+        {
+            "sport": "nfl", "game_id": "34118258", "market_display": "MONEYLINE",
+            "recorded_at": "2026-09-27T16:32:53Z", "favorite_state": "qualified",
+        },
+        {
+            "sport": "nfl", "game_id": "34118258", "market_display": "SPREAD",
+            "recorded_at": "2026-09-27T16:32:53Z", "favorite_state": "not_qualified",
+        },
+    ])
+
+    frozen = live.favorite_handoff_states(
+        candidates, datetime(2026, 9, 27, 17, 1, tzinfo=timezone.utc), tracking
+    )
+
+    assert len(frozen) == 1
+    assert frozen.iloc[0].market_display == "MONEYLINE"
+    assert frozen.iloc[0].favorite_side == "JAX Jaguars"
+
+
 def test_existing_live_recent_card_loses_badge_after_later_prekickoff_falloff():
     existing = pd.DataFrame([{
         "sport": "mlb", "game_id": "stale", "market_display": "MONEYLINE",
