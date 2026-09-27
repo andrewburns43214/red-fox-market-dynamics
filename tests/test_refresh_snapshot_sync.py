@@ -10,12 +10,28 @@ from refresh_anomaly_board import (
     filter_fresh_market_rows,
     filter_publication_eligible_markets,
     latest_synchronized_market_rows,
+    limit_nfl_history_to_active_game_week,
     load_current_snapshots,
     load_market_history,
     write_board_freshness,
     market_for,
     markets_for,
 )
+
+
+def test_nfl_active_week_history_excludes_stale_lookahead_opener():
+    history = pd.DataFrame([
+        {"sport": "nfl", "game_id": "jets", "timestamp": "2026-09-01T04:00:00Z", "dk_start_iso": "2026-09-27T17:00:00Z", "current_line": "NY Jets +9.5 @ -110"},
+        {"sport": "nfl", "game_id": "jets", "timestamp": "2026-09-20T22:50:00Z", "dk_start_iso": "2026-09-27T17:00:00Z", "current_line": "NY Jets +7 @ +100"},
+        {"sport": "nfl", "game_id": "jets", "timestamp": "2026-09-27T16:52:00Z", "dk_start_iso": "2026-09-27T17:00:00Z", "current_line": "NY Jets +7 @ -115"},
+        {"sport": "ncaaf", "game_id": "college", "timestamp": "2026-09-01T04:00:00Z", "dk_start_iso": "2026-09-27T17:00:00Z", "current_line": "Away +9.5 @ -110"},
+    ])
+
+    active = limit_nfl_history_to_active_game_week(history)
+
+    jets = active[active.game_id.eq("jets")]
+    assert jets.current_line.tolist() == ["NY Jets +7 @ +100", "NY Jets +7 @ -115"]
+    assert "college" in set(active.game_id)
 
 
 def test_current_window_is_bounded_while_eligible_market_keeps_lifetime_history(tmp_path):

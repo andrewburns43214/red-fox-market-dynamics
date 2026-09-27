@@ -23,6 +23,7 @@ DATA = Path(os.environ.get("REDFOX_DATA_DIR", "data"))
 
 PUBLIC_TIMEZONE = ZoneInfo("America/New_York")
 FOOTBALL_SPORTS = {"nfl", "ncaaf", "cfb"}
+NFL_ACTIVE_MARKET_WINDOW = pd.Timedelta(days=7)
 # The 2026 opening slate is available in the source before the first Tuesday
 # board rollover.  This bounded exception publishes only that slate; after
 # Sep. 14 the normal Tuesday-to-Monday NFL window applies without exception.
@@ -438,6 +439,26 @@ def load_market_history(path, market_keys, chunksize=100_000):
     return history.merge(market_keys, on=["sport", "game_id", "market_display"], how="inner")
 
 
+def limit_nfl_history_to_active_game_week(history):
+    """Exclude stale look-ahead prices from NFL movement classification.
+
+    DraftKings can retain an opener posted several weeks before kickoff.  That
+    price is useful audit history, but it must not manufacture a Favorite after
+    the active game-week market has reopened at a materially different number.
+    Keep the original snapshots untouched and evaluate NFL paths from the first
+    verified capture inside the final seven days before kickoff.
+    """
+    if history is None or history.empty:
+        return pd.DataFrame() if history is None else history.copy()
+    result = history.copy()
+    sport = result.get("sport", pd.Series("", index=result.index)).astype(str).str.lower()
+    captured = pd.to_datetime(result.get("timestamp", ""), errors="coerce", utc=True)
+    kickoff = pd.to_datetime(result.get("dk_start_iso", ""), errors="coerce", utc=True)
+    active_nfl = sport.eq("nfl") & kickoff.notna() & captured.notna()
+    stale_lookahead = active_nfl & captured.lt(kickoff - NFL_ACTIVE_MARKET_WINDOW)
+    return result.loc[~stale_lookahead].copy()
+
+
 def latest_synchronized_market_rows(active):
     """Return only the latest complete, same-timestamp two-side market states.
 
@@ -592,6 +613,7 @@ def _refresh(coverage):
     # no gate or retained observation; it only avoids dead work.
     history_keys = dashboard[["sport", "game_id", "market_display"]].drop_duplicates()
     history = load_market_history(snapshot_path, history_keys)
+    history = limit_nfl_history_to_active_game_week(history)
     history["side_key"] = [
         normalize_side_key(sport, market, side)
         for sport, market, side in zip(history["sport"], history["market_display"], history["side"])
