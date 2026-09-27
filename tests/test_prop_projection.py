@@ -102,6 +102,24 @@ def test_wrong_game_player_and_conflicting_team_suffix_are_rejected():
     assert attach_teams(flatten_event(event, now=NOW), event, rosters) == []
 
 
+def test_book_legal_name_matches_roster_nickname_for_borregales():
+    event = event_from_markets([
+        market("player_kicking_points", "Andres Borregales", 7.5, "AW"),
+    ])
+    rosters = {
+        "Away Wolves": ["Andy Borregales"],
+        "Home Bears": [],
+        "Away Wolves__tokens": ["AW"],
+        "Home Bears__tokens": ["HB"],
+    }
+
+    lines = canonical_player_lines(attach_teams(flatten_event(event, now=NOW), event, rosters))
+
+    assert len(lines) == 1
+    assert lines[0]["player_key"] == "andyborregales"
+    assert lines[0]["team"] == "Away Wolves"
+
+
 def test_canonical_line_prefers_book_count_then_central_threshold():
     rows = []
     for index, book in enumerate(("draftkings", "fanduel", "betmgm", "caesars", "pinnacle")):

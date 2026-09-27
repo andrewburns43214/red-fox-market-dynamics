@@ -22,6 +22,11 @@ from prop_projection_config import FAMILIES, SPORTS, STAT_SIGMA, SUPPLEMENTAL, T
 
 PLAYER_SUFFIX = re.compile(r"\s*\(([A-Za-z0-9 .&'-]{2,12})\)\s*$")
 MILESTONE_MARKERS = ("milestone", "alternate", "alt_", "1st_", "2plus", "3plus", "4plus", "longest")
+PLAYER_NAME_ALIASES = {
+    # ESPN's Patriots roster uses Andy while several major books publish the
+    # kicker's legal first name.  Both names refer to the same player.
+    "andresborregales": "andyborregales",
+}
 
 
 def utc_now():
@@ -40,7 +45,8 @@ def parse_time(value):
 def normalized_name(value):
     text = unicodedata.normalize("NFKD", str(value or "")).encode("ascii", "ignore").decode()
     text = PLAYER_SUFFIX.sub("", text).lower()
-    return re.sub(r"[^a-z0-9]", "", text)
+    key = re.sub(r"[^a-z0-9]", "", text)
+    return PLAYER_NAME_ALIASES.get(key, key)
 
 
 def matchup_key(sport, away, home):
