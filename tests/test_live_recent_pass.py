@@ -316,6 +316,25 @@ def test_existing_live_recent_card_loses_badge_after_later_prekickoff_falloff():
     assert "later explicit pregame falloff" in cleaned.favorite_reason
 
 
+def test_published_state_card_also_loses_badge_after_later_prekickoff_falloff():
+    existing = pd.DataFrame([{
+        "sport": "nfl", "game_id": "jets", "market_display": "SPREAD",
+        "kickoff_iso": "2026-09-27T17:05:00Z",
+        "freeze_method": "published_state_latest_at_or_before_start",
+        "red_fox_favorite": "true", "favorite_side": "NY Jets +6.5",
+        "favorite_state": "qualified", "favorite_originally_qualified": "true",
+    }])
+    tracking = pd.DataFrame([
+        {"sport": "nfl", "game_id": "jets", "market_display": "SPREAD", "recorded_at": "2026-09-27T16:32:00Z", "favorite_state": "qualified"},
+        {"sport": "nfl", "game_id": "jets", "market_display": "SPREAD", "recorded_at": "2026-09-27T16:52:00Z", "favorite_state": "not_qualified"},
+    ])
+
+    cleaned = live.suppress_stale_retained_favorites(existing, tracking).iloc[0]
+
+    assert cleaned.red_fox_favorite == "false"
+    assert cleaned.favorite_state == "not_qualified"
+
+
 def test_existing_live_recent_card_keeps_badge_after_final_requalification():
     existing = pd.DataFrame([{
         "sport": "nfl", "game_id": "requalified", "market_display": "SPREAD",

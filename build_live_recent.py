@@ -445,10 +445,11 @@ def suppress_stale_retained_favorites(
     favorite = result.get(
         "red_fox_favorite", pd.Series("false", index=result.index)
     ).astype(str).str.lower().isin({"1", "true", "yes"})
-    archived_handoff = result.get(
-        "freeze_method", pd.Series("", index=result.index)
-    ).astype(str).eq("favorite_tracking_last_qualified_at_or_before_start")
-    candidates = result.index[favorite & archived_handoff]
+    # Every frozen Favorite must agree with the latest explicit pre-kickoff
+    # tracking state.  A card first frozen from the published board can become
+    # stale just as an archive handoff can; limiting reconciliation to one
+    # freeze_method leaves that older badge customer-visible.
+    candidates = result.index[favorite]
     if candidates.empty:
         return result
 
