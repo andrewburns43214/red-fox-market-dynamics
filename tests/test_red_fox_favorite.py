@@ -262,8 +262,8 @@ def test_freeze_favorite_requires_strong_pressure_and_persistent_resistance():
     assert not is_favorite(result([market("mlb", "MONEYLINE", [candidate, small_move], supported_side="Underdog")]))
 
 
-def test_rule_tightening_uses_v4_version_and_tracking_history_append_only(tmp_path):
-    assert CONFIG.version == "red_fox_favorite_v4"
+def test_rule_tightening_uses_v5_version_and_tracking_history_append_only(tmp_path):
+    assert CONFIG.version == "red_fox_favorite_v5"
     legacy = result([market("mlb", "MONEYLINE", pair_for(side("Away", "+115", open_line="+150", price_move=6.0)))])
     update_favorite_tracking(legacy, tmp_path, as_of="2026-09-06T20:00:00Z")
     newly_ineligible = legacy.copy()
@@ -272,7 +272,7 @@ def test_rule_tightening_uses_v4_version_and_tracking_history_append_only(tmp_pa
     update_favorite_tracking(newly_ineligible, tmp_path, as_of="2026-09-06T20:01:00Z")
     ledger = pd.read_csv(tmp_path / "red_fox_favorite_tracking.csv", dtype=str, keep_default_na=False)
     assert ledger.favorite_state.tolist() == ["qualified", "not_qualified"]
-    assert ledger.favorite_rule_version.tolist() == ["red_fox_favorite_v4", "red_fox_favorite_v4"]
+    assert ledger.favorite_rule_version.tolist() == ["red_fox_favorite_v5", "red_fox_favorite_v5"]
     shadow = pd.read_csv(tmp_path / "red_fox_favorite_shadow.csv", dtype=str, keep_default_na=False)
     assert shadow.candidate_decision.tolist() == ["accepted", "rejected"]
     assert shadow.candidate_side.tolist() == ["Away", "Away"]
@@ -395,6 +395,93 @@ def test_secondary_moneyline_can_remain_favorite_when_team_is_laying_points():
     assert is_favorite(result([ml, spread]), 0)
 
 
+def test_confirmed_short_football_favorite_uses_moneyline_instead_of_spread():
+    jaguars_ml = side(
+        "JAX Jaguars", "-162", open_line="-118", bets=25, money=19,
+        path="Whipsaw", price_move=7.704, return_toward_open=True,
+        line_dir_changes=6, material_direction_changes=1,
+        whipsaw_retention=0.9307, whipsaw_confirmation_minutes=30.029,
+        max_excursion=8.278,
+    )
+    patriots_ml = side(
+        "NE Patriots", "+136", bets=75, money=81, reaction="Freeze",
+        direction="AGAINST", kpi=False, action_type="OBSERVE ONLY",
+        path="Whipsaw", price_move=8.122,
+    )
+    jaguars_spread = side(
+        "JAX Jaguars -3", "-3 (-105)", open_line="-1.5 (-105)",
+        bets=27, money=21, line_move=1.5,
+    )
+    patriots_spread = side(
+        "NE Patriots +3", "+3 (-115)", bets=73, money=79,
+        reaction="Freeze", direction="AGAINST", kpi=False,
+        action_type="OBSERVE ONLY",
+    )
+    frame = result([
+        market("nfl", "MONEYLINE", [jaguars_ml, patriots_ml], game_id="jags", supported_side="JAX Jaguars"),
+        market("nfl", "SPREAD", [jaguars_spread, patriots_spread], game_id="jags", rank=2,
+               supported_side="JAX Jaguars -3"),
+    ])
+
+    assert frame.loc[frame.market_display.eq("MONEYLINE"), "red_fox_favorite"].iloc[0] == "true"
+    assert frame.loc[frame.market_display.eq("MONEYLINE"), "favorite_side"].iloc[0] == "JAX Jaguars"
+    assert frame.loc[frame.market_display.eq("MONEYLINE"), "favorite_cross_market_state"].iloc[0] == "confirmation"
+    assert frame.loc[frame.market_display.eq("SPREAD"), "red_fox_favorite"].iloc[0] == "false"
+    assert "safer win condition" in frame.loc[frame.market_display.eq("MONEYLINE"), "favorite_reason"].iloc[0]
+
+
+def test_short_football_favorite_keeps_spread_when_moneyline_is_outside_price_band():
+    favorite_ml = side("Home", "-166", bets=25, money=19)
+    dog_ml = side("Away", "+140", bets=75, money=81, reaction="Watch", direction="AGAINST", kpi=False)
+    favorite_spread = side("Home -3", "-3 (-110)", open_line="-1.5 (-110)", bets=27, money=21, line_move=1.5)
+    dog_spread = side("Away +3", "+3 (-110)", bets=73, money=79, reaction="Watch", direction="AGAINST", kpi=False)
+    frame = result([
+        market("nfl", "MONEYLINE", [favorite_ml, dog_ml], game_id="expensive", supported_side="Home"),
+        market("nfl", "SPREAD", [favorite_spread, dog_spread], game_id="expensive", rank=2, supported_side="Home -3"),
+    ])
+
+    assert frame.loc[frame.market_display.eq("MONEYLINE"), "red_fox_favorite"].iloc[0] == "false"
+    assert frame.loc[frame.market_display.eq("SPREAD"), "red_fox_favorite"].iloc[0] == "true"
+
+
+def test_confirmed_market_translation_is_atomic_inside_closing_review_window(tmp_path: Path):
+    kickoff = "2026-09-06T21:00:00Z"
+    spread = market("nfl", "SPREAD", [
+        side("Home -3", "-3 (-105)", open_line="-1.5 (-105)", bets=27, money=21, line_move=1.5),
+        side("Away +3", "+3 (-115)", bets=73, money=79, reaction="Watch", direction="AGAINST", kpi=False),
+    ], game_id="atomic", supported_side="Home -3")
+    confirming_only_ml = market("nfl", "MONEYLINE", [
+        side("Home", "-162", open_line="-118", bets=25, money=19, reaction="Watch", kpi=False, price_move=7.7),
+        side("Away", "+136", bets=75, money=81, reaction="Watch", direction="AGAINST", kpi=False),
+    ], game_id="atomic", rank=2, supported_side="Home")
+    for row in (spread, confirming_only_ml):
+        row["kickoff_iso"] = kickoff
+
+    for captured in ("2026-09-06T19:20:00Z", "2026-09-06T19:30:00Z"):
+        initial = apply_red_fox_favorites(pd.DataFrame([spread, confirming_only_ml]), as_of=captured)
+        published = update_favorite_tracking(initial, tmp_path, as_of=captured)
+    assert published.loc[published.market_display.eq("SPREAD"), "red_fox_favorite"].iloc[0] == "true"
+
+    qualifying_ml = dict(confirming_only_ml)
+    qualifying_ml["market_sides"] = json.dumps([
+        side(
+            "Home", "-162", open_line="-118", bets=25, money=19,
+            path="Whipsaw", price_move=7.7, return_toward_open=True,
+            line_dir_changes=6, material_direction_changes=1,
+            whipsaw_retention=0.93, whipsaw_confirmation_minutes=30,
+            max_excursion=8.2,
+        ),
+        side("Away", "+136", bets=75, money=81, reaction="Watch", direction="AGAINST", kpi=False),
+    ])
+    translated = apply_red_fox_favorites(
+        pd.DataFrame([spread, qualifying_ml]), as_of="2026-09-06T20:30:00Z",
+    )
+    published = update_favorite_tracking(translated, tmp_path, as_of="2026-09-06T20:30:00Z")
+
+    assert published.loc[published.market_display.eq("MONEYLINE"), "red_fox_favorite"].iloc[0] == "true"
+    assert published.loc[published.market_display.eq("SPREAD"), "red_fox_favorite"].iloc[0] == "false"
+
+
 def test_negative_money_football_favorite_requires_strong_cross_market_final_state():
     texas_ml = market("ncaaf", "MONEYLINE", [
         side("Texas", "-142", bets=39, money=45, path="Whipsaw", line_dir_changes=13,
@@ -479,12 +566,20 @@ def test_path_aware_whipsaw_allows_intact_or_recovered_but_not_erased_move():
     {"material_direction_changes": 4},
     {"whipsaw_confirmation_ready": False},
     {"whipsaw_confirmation_minutes": 9.9},
-    {"return_toward_open": True},
 ])
-def test_partial_whipsaw_requires_retention_limited_churn_confirmation_and_no_return_to_open(change):
+def test_partial_whipsaw_requires_retention_limited_churn_and_confirmation(change):
     candidate = side("Away +6", "+6 (-110)", path="Whipsaw", direction="TOWARD")
     candidate.update(change)
     assert not is_favorite(result([market("nfl", "SPREAD", pair_for(candidate))]))
+
+
+def test_partial_whipsaw_can_retrace_when_most_of_the_move_remains_and_holds():
+    candidate = side(
+        "Away +6", "+6 (-110)", path="Whipsaw", direction="TOWARD",
+        return_toward_open=True, whipsaw_retention=0.9,
+        material_direction_changes=1, whipsaw_confirmation_minutes=30,
+    )
+    assert is_favorite(result([market("nfl", "SPREAD", pair_for(candidate))]))
 
 
 def test_recovered_whipsaw_remains_eligible_but_return_to_open_is_universally_disqualifying():

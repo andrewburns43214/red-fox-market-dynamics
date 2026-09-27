@@ -18,7 +18,7 @@ import pandas as pd
 
 @dataclass(frozen=True)
 class FavoriteConfig:
-    version: str = "red_fox_favorite_v4"
+    version: str = "red_fox_favorite_v5"
     spread_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
     primary_moneyline_sports: frozenset[str] = frozenset({"mlb", "nhl", "ufc"})
     secondary_moneyline_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
@@ -198,7 +198,7 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
         result.at[index, "favorite_final_qualified_at"] = captured_at
         result.at[index, "favorite_state"] = "qualified"
         result.at[index, "favorite_final_market_read"] = decision["market_read"]
-        result.at[index, "favorite_final_market_rank"] = row.get("board_rank", "")
+        result.at[index, "favorite_final_market_rank"] = str(row.get("board_rank", ""))
         result.at[index, "favorite_supporting_evidence"] = json.dumps(decision["evidence"], separators=(",", ":"))
         result.at[index, "favorite_whipsaw_state"] = decision["whipsaw_state"]
         result.at[index, "favorite_cross_market_state"] = decision["cross_market_state"]
@@ -223,7 +223,7 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
                 existing = str(result.at[pair_index, "market_rationale"] or "").strip()
                 if explanation not in existing:
                     result.at[pair_index, "market_rationale"] = " ".join(part for part in (existing, explanation) if part)
-    return result
+    return _prefer_confirmed_football_moneyline(result)
 
 
 def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) -> pd.DataFrame:
@@ -403,6 +403,18 @@ def _apply_visibility_lock(
     review_records: list[dict] = []
 
     keys = ("sport", "game_id", "market_display")
+    # A fully qualified cross-market preference is an atomic change in wager
+    # expression, not threshold flicker.  Preserve the ordinary freshness and
+    # safety checks, but do not let the per-market visibility lock temporarily
+    # restore the spread or suppress the replacement moneyline.
+    translation_roles = {}
+    for _, row in result.iterrows():
+        key = tuple(str(row.get(column, "")) for column in keys)
+        reason = str(row.get("favorite_reason", ""))
+        if reason.startswith("Selected over the matching "):
+            translation_roles[key] = "preferred_moneyline"
+        elif reason.startswith("Favorite expressed on the confirmed moneyline"):
+            translation_roles[key] = "superseded_spread"
     current_keys = {
         tuple(str(row.get(column, "")) for column in keys)
         for _, row in result.iterrows()
@@ -476,6 +488,10 @@ def _apply_visibility_lock(
             _set_review(result, index, "late_invalidated", stale_reason, at)
             if not _review_already_recorded(reviews, key, "late_invalidated"):
                 review_records.append(_review_record(row, at, "late_invalidated", "removal", stale_reason))
+            continue
+
+        if key in translation_roles:
+            _clear_pending_review(reviews, review_records, row, key, at)
             continue
 
         # A previously confirmed Favorite can legitimately recover after an
@@ -1025,30 +1041,38 @@ def _base_quality(side: dict) -> bool:
     context = _parts(side.get("context_chips"))
     if {"Market Lag", "Feed Risk", "Split Risk", "Split Cap"} & context:
         return False
-    if _truthy(side.get("return_toward_open")):
-        return False
     if _truthy(side.get("active_worsening_reversal")):
         return False
     if str(side.get("path", "")) == "Whipsaw" and not _truthy(side.get("whipsaw_recovered")):
-        retention = _number(side.get("whipsaw_retention_ratio"))
-        if retention is None:
-            current_move = _number(side.get("move_abs"))
-            maximum = _number(side.get("max_excursion"))
-            retention = current_move / maximum if current_move is not None and maximum and maximum > 0 else None
-        material_changes = _number(side.get("material_direction_changes"))
-        if material_changes is None:
-            material_changes = _number(side.get("line_dir_changes"))
-        if (
-            retention is None or retention < CONFIG.partial_whipsaw_min_retention
-            or material_changes is None
-            or material_changes > CONFIG.partial_whipsaw_max_material_direction_changes
-            or str(side.get("response_direction", "")).upper() != "TOWARD"
-            or not _has_meaningful_move(side)
-            or not _truthy(side.get("whipsaw_confirmation_ready"))
-            or (_number(side.get("whipsaw_confirmation_minutes")) or 0) < CONFIG.partial_whipsaw_confirmation_minutes
-        ):
+        if not _intact_partial_whipsaw(side):
             return False
+    elif _truthy(side.get("return_toward_open")):
+        return False
     return True
+
+
+def _intact_partial_whipsaw(side: dict) -> bool:
+    """Allow a retrace only when most of a meaningful move remains and has held."""
+    if str(side.get("path", "")) != "Whipsaw" or _truthy(side.get("whipsaw_recovered")):
+        return False
+    retention = _number(side.get("whipsaw_retention_ratio"))
+    if retention is None:
+        current_move = _number(side.get("move_abs"))
+        maximum = _number(side.get("max_excursion"))
+        retention = current_move / maximum if current_move is not None and maximum and maximum > 0 else None
+    material_changes = _number(side.get("material_direction_changes"))
+    if material_changes is None:
+        material_changes = _number(side.get("line_dir_changes"))
+    return bool(
+        retention is not None
+        and retention >= CONFIG.partial_whipsaw_min_retention
+        and material_changes is not None
+        and material_changes <= CONFIG.partial_whipsaw_max_material_direction_changes
+        and str(side.get("response_direction", "")).upper() == "TOWARD"
+        and _has_meaningful_move(side)
+        and _truthy(side.get("whipsaw_confirmation_ready"))
+        and (_number(side.get("whipsaw_confirmation_minutes")) or 0) >= CONFIG.partial_whipsaw_confirmation_minutes
+    )
 
 
 def _number_is_eligible(sport: str, market: str, value: float, side: dict, game_rows: pd.DataFrame | None) -> bool:
@@ -1137,12 +1161,21 @@ def _football_favorite_moneyline_gate(side: dict, spread: dict, spread_value: fl
         return False
     if spread_money > CONFIG.football_favorite_max_spread_money:
         return False
-    if _truthy(side.get("return_toward_open")) or _truthy(spread.get("return_toward_open")):
+    if _truthy(side.get("return_toward_open")) and not _intact_partial_whipsaw(side):
         return False
-    direction_changes = max(
-        int(_number(side.get("line_dir_changes")) or 0),
-        int(_number(spread.get("line_dir_changes")) or 0),
+    if _truthy(spread.get("return_toward_open")) and not _intact_partial_whipsaw(spread):
+        return False
+    side_changes = (
+        int(_number(side.get("material_direction_changes")) or 0)
+        if _intact_partial_whipsaw(side)
+        else int(_number(side.get("line_dir_changes")) or 0)
     )
+    spread_changes = (
+        int(_number(spread.get("material_direction_changes")) or 0)
+        if _intact_partial_whipsaw(spread)
+        else int(_number(spread.get("line_dir_changes")) or 0)
+    )
+    direction_changes = max(side_changes, spread_changes)
     if direction_changes > CONFIG.football_favorite_max_direction_changes:
         return False
     # A true home favorite can be shorter than the key number three, but that
@@ -1166,6 +1199,68 @@ def _corresponding_moneyline_state(spread_side: dict, game_rows: pd.DataFrame | 
     if meaningful and direction == "TOWARD":
         return "confirmation"
     return "neutral"
+
+
+def _prefer_confirmed_football_moneyline(frame: pd.DataFrame) -> pd.DataFrame:
+    """Express one short favorite thesis through its safer win condition.
+
+    A qualifying football team laying no more than four points can use its
+    negative moneyline only when that market independently qualifies, remains
+    inside the approved price band, and confirms the spread move.  The spread
+    is then suppressed so one correlated thesis cannot create two Favorites.
+    """
+    result = frame.copy()
+    football = {"nfl", "ncaaf", "cfb"}
+    for (sport, _game_id), game in result.groupby(["sport", "game_id"], dropna=False, sort=False):
+        if str(sport).lower() not in football:
+            continue
+        spread_rows = game[
+            game["market_display"].astype(str).str.upper().eq("SPREAD")
+            & game["red_fox_favorite"].map(_truthy)
+            & game["favorite_cross_market_state"].astype(str).eq("confirmation")
+        ]
+        moneyline_rows = game[
+            game["market_display"].astype(str).str.upper().eq("MONEYLINE")
+            & game["red_fox_favorite"].map(_truthy)
+        ]
+        for spread_index, spread_row in spread_rows.iterrows():
+            identity = _side_identity(spread_row.get("favorite_side"))
+            spread_side = next(
+                (item for item in _sides(spread_row) if _side_identity(item.get("flagged_side")) == identity),
+                None,
+            )
+            spread_value = _line_value(spread_side.get("current_line"), "SPREAD") if spread_side else None
+            if spread_value is None or not -CONFIG.secondary_moneyline_spread_max <= spread_value < 0:
+                continue
+            for moneyline_index, moneyline_row in moneyline_rows.iterrows():
+                if _side_identity(moneyline_row.get("favorite_side")) != identity:
+                    continue
+                moneyline_side = next(
+                    (item for item in _sides(moneyline_row) if _side_identity(item.get("flagged_side")) == identity),
+                    None,
+                )
+                price = _line_value(moneyline_side.get("current_line"), "MONEYLINE") if moneyline_side else None
+                if price is None or not CONFIG.moneyline_min <= price < 0:
+                    continue
+                _clear_favorite(
+                    result,
+                    spread_index,
+                    "Favorite expressed on the confirmed moneyline to use the safer win condition and avoid a duplicate correlated spread wager.",
+                )
+                result.at[moneyline_index, "favorite_cross_market_state"] = "confirmation"
+                result.at[moneyline_index, "favorite_reason"] = (
+                    f"Selected over the matching {spread_value:g} spread: the confirming moneyline at "
+                    f"{price:+g} is inside the approved price band and has the safer win condition."
+                )
+                try:
+                    evidence = json.loads(str(result.at[moneyline_index, "favorite_supporting_evidence"] or "{}"))
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    evidence = {}
+                evidence["cross_market"] = "confirmation"
+                evidence["preferred_over_spread"] = str(spread_row.get("favorite_side", ""))
+                result.at[moneyline_index, "favorite_supporting_evidence"] = json.dumps(evidence, separators=(",", ":"))
+                break
+    return result
 
 
 def _matching_market_side(game_rows: pd.DataFrame | None, market: str, side_name: object) -> dict | None:
