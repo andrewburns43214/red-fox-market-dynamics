@@ -404,13 +404,13 @@ def _retain_final_pregame(state, current, now):
     return output + keep
 
 
-def _seed_last_available(state, ledger_path):
-    """Recover the last valid read when upgrading an existing collector state."""
+def _seed_last_available(state, public_path):
+    """Recover current valid reads without scanning the append-only history."""
     if "last_available" in state:
         return
     recovered = {}
-    for record in _iter_jsonl(ledger_path):
-        projection = record.get("projection") if isinstance(record, dict) else None
+    payload = _read_json(public_path, {"projections": []})
+    for projection in payload.get("projections", []):
         if not isinstance(projection, dict) or projection.get("status") != "AVAILABLE":
             continue
         expected = SPORTS.get(str(projection.get("sport") or ""), {}).get("public_model_version")
@@ -551,7 +551,7 @@ def run_collection(client=None, resolver=None, force=False, now=None):
             state.get("projection_hashes", {}).pop(event_key, None)
             state.get("v2_projection_hashes", {}).pop(event_key, None)
             state.get("v2_error_hashes", {}).pop(event_key, None)
-    _seed_last_available(state, DATA_ROOT / "projection_ledger.jsonl")
+    _seed_last_available(state, PUBLIC_PATH)
     projections = _retain_final_pregame(state, projections, now)
     unresolved_failures = []
     for sport, config in SPORTS.items():

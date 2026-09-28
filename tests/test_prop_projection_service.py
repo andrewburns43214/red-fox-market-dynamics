@@ -238,7 +238,7 @@ def test_last_available_projection_survives_event_missing_from_latest_feed():
     assert retained["retained_reason"] == "event_missing_from_latest_feed"
 
 
-def test_existing_projection_ledger_seeds_last_available_state(tmp_path):
+def test_existing_public_payload_seeds_last_available_state_without_history_scan(tmp_path):
     state = {"published": {"nfl:eagles-bears": {"status": "UNAVAILABLE"}}}
     available = {
         "sport": "nfl", "event_id": "eagles-bears", "status": "AVAILABLE",
@@ -247,10 +247,10 @@ def test_existing_projection_ledger_seeds_last_available_state(tmp_path):
         "commence_time": (NOW + timedelta(hours=2)).isoformat(),
         "generated_at": (NOW - timedelta(minutes=10)).isoformat(),
     }
-    ledger = tmp_path / "projection_ledger.jsonl"
-    ledger.write_text(json.dumps({"projection": available}) + "\n", encoding="utf-8")
+    public = tmp_path / "prop_projections.json"
+    public.write_text(json.dumps({"projections": [available]}), encoding="utf-8")
 
-    service._seed_last_available(state, ledger)
+    service._seed_last_available(state, public)
     retained = service._retain_final_pregame(
         state,
         [{**available, "status": "UNAVAILABLE", "reason": "no_fresh_qualified_props"}],
