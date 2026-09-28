@@ -478,5 +478,5 @@ def project_event(sport, event, rosters, context=None, now=None):
 
 
 def public_projection(projection):
-    hidden = {"_private_lines", "components"}
+    hidden = {"_private_lines", "_legacy_benchmark", "components"}
     return {key: value for key, value in projection.items() if key not in hidden}

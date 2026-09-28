@@ -21,6 +21,7 @@ SPORTS = {
         "provider_key": "football_nfl",
         "enabled": True,
         "model_version": "prop_projection_nfl_v1",
+        "public_model_version": "prop_projection_nfl_v3_consensus_1",
         "markets": (
             "player_pass_yds", "player_pass_tds", "player_pass_interceptions",
             "player_rush_yds", "player_reception_yds", "player_receptions",
@@ -28,26 +29,33 @@ SPORTS = {
             "player_pass_attempts", "player_pass_completions", "player_rush_attempts",
             "player_reception_targets", "player_field_goals_made", "player_extra_points_made",
         ),
-        # In the same bulk request, but outside the paired-line score model.
-        # One-sided scorer prices need separate margin and allocation research.
-        "scorer_research_markets": ("player_anytime_td", "player_2plus_td", "player_1st_td"),
+        # In the same bulk request. V3 uses anytime/2+/3+ as an independent
+        # scorer surface; first TD remains research-only.
+        "scorer_research_markets": (
+            "player_anytime_td", "player_2plus_td", "player_3plus_td", "player_1st_td",
+        ),
     },
     "ncaaf": {
         "provider_key": "football_ncaaf",
         "enabled": True,
         "model_version": "prop_projection_ncaaf_v1",
+        "public_model_version": "prop_projection_ncaaf_v3_consensus_1",
         "markets": (
             "player_pass_yds", "player_pass_tds", "player_pass_interceptions",
             "player_rush_yds", "player_reception_yds", "player_receptions",
             "player_rush_tds", "player_reception_tds", "player_kicking_points",
             "player_pass_attempts", "player_pass_completions", "player_rush_attempts",
             "player_reception_targets", "player_field_goals_made", "player_extra_points_made",
+        ),
+        "scorer_research_markets": (
+            "player_anytime_td", "player_2plus_td", "player_3plus_td", "player_1st_td",
         ),
     },
     "mlb": {
         "provider_key": "baseball_mlb",
         "enabled": True,
         "model_version": "prop_projection_mlb_v1",
+        "public_model_version": "prop_projection_mlb_v3_consensus_1",
         "markets": (
             "pitcher_outs", "pitcher_hits_allowed", "pitcher_walks", "pitcher_earned_runs",
             "pitcher_strikeouts", "batter_hits", "batter_total_bases", "batter_home_runs",

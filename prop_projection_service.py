@@ -17,9 +17,10 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from prop_projection import normalized_name, observation_hash, parse_time, project_event, public_projection, utc_now
+from prop_projection import normalized_name, observation_hash, parse_time, public_projection, utc_now
 from prop_projection_config import API_BASE, LOCAL_DAILY_REQUEST_CAP, REQUEST_TIMEOUT_SECONDS, SPORTS
 from prop_projection_v2 import project_event_v2
+from prop_projection_v3 import project_event_v3
 from prop_projection_prospective import freeze_candidate, frozen_candidates, grade_candidate, performance_summary
 
 
@@ -361,7 +362,11 @@ def _retain_final_pregame(state, current, now):
             output.append(item)
             continue
         retained = last_available.get(key)
-        if retained and retained.get("status") == "AVAILABLE":
+        same_model = not (
+            retained and retained.get("model_version") and item.get("model_version")
+            and retained.get("model_version") != item.get("model_version")
+        )
+        if retained and retained.get("status") == "AVAILABLE" and same_model:
             output.append({
                 **retained,
                 "retained_last_available": True,
@@ -374,6 +379,11 @@ def _retain_final_pregame(state, current, now):
     keep = []
     active_keys = {f"{item.get('sport')}:{item.get('event_id')}" for item in current}
     for key, item in list(last_available.items()):
+        expected_model = SPORTS.get(str(item.get("sport") or ""), {}).get("public_model_version")
+        if expected_model and item.get("model_version") and item.get("model_version") != expected_model:
+            published.pop(key, None)
+            last_available.pop(key, None)
+            continue
         start = parse_time(item.get("commence_time"))
         if not start or (now - start).total_seconds() > 8 * 3600:
             published.pop(key, None)
@@ -402,6 +412,9 @@ def _seed_last_available(state, ledger_path):
     for record in _jsonl(ledger_path):
         projection = record.get("projection") if isinstance(record, dict) else None
         if not isinstance(projection, dict) or projection.get("status") != "AVAILABLE":
+            continue
+        expected = SPORTS.get(str(projection.get("sport") or ""), {}).get("public_model_version")
+        if projection.get("model_version") and projection.get("model_version") != expected:
             continue
         key = f"{projection.get('sport')}:{projection.get('event_id')}"
         recovered[key] = public_projection(projection)
@@ -469,12 +482,12 @@ def run_collection(client=None, resolver=None, force=False, now=None):
                         pass
             try:
                 rosters = rosters_by_event.get(str(event.get("id") or ""), {})
-                projection = project_event(sport, event, rosters, context=context, now=now)
+                projection = project_event_v3(sport, event, rosters, context=context, now=now)
             except Exception as error:
                 projection = {
                     "sport": sport, "event_id": str(event.get("id") or ""), "away_team": event.get("away_team", ""),
                     "home_team": event.get("home_team", ""), "commence_time": event.get("commence_time"),
-                    "model_version": config["model_version"], "provider": "PropLine", "generated_at": now.isoformat(),
+                    "model_version": config["public_model_version"], "provider": "PropLine", "generated_at": now.isoformat(),
                     "status": "UNAVAILABLE", "display_status": "Insufficient coverage",
                     "confidence": "INSUFFICIENT", "reason": f"validation_error:{type(error).__name__}",
                 }
@@ -484,7 +497,7 @@ def run_collection(client=None, resolver=None, force=False, now=None):
             projection_digest = hashlib.sha256(json.dumps({"projection": hashable_projection, "canonical_lines": private_lines}, sort_keys=True, default=str).encode()).hexdigest()
             _append_changed(DATA_ROOT / "projection_ledger.jsonl", audit, projection_digest, state.get("projection_hashes", {}).get(event_key))
             state.setdefault("projection_hashes", {})[event_key] = projection_digest
-            # v2 is private shadow research. It reuses the exact v1 canonical
+            # v2 is private shadow research. It reuses the exact canonical
             # lines, makes no provider request, and never enters PUBLIC_PATH.
             shadow = {}
             try:

@@ -115,9 +115,10 @@ def test_poll_cadence_changes_by_lead_time():
             assert service._poll_interval_seconds(events(lead), NOW, sport) == interval
         assert service._poll_interval_seconds([], NOW, sport) == 10800
         assert service._poll_interval_seconds(events(72) + events(0.5), NOW, sport) == 600
-    assert {"player_anytime_td", "player_2plus_td", "player_1st_td"} == set(
+    assert {"player_anytime_td", "player_2plus_td", "player_3plus_td", "player_1st_td"} == set(
         service.SPORTS["nfl"]["scorer_research_markets"]
     )
+    assert service.SPORTS["ncaaf"]["scorer_research_markets"] == service.SPORTS["nfl"]["scorer_research_markets"]
 
 
 @pytest.mark.parametrize("boundary_hours,at_boundary,just_above", [
@@ -227,6 +228,35 @@ def test_existing_projection_ledger_seeds_last_available_state(tmp_path):
     assert retained["status"] == "AVAILABLE"
     assert retained["retained_last_available"] is True
     assert retained["away_mean"] == 24.1
+
+
+def test_old_model_is_not_retained_over_a_v3_rejection():
+    state = {"last_available": {"nfl:game-1": {
+        "sport": "nfl", "event_id": "game-1", "status": "AVAILABLE",
+        "model_version": "prop_projection_nfl_v1", "away_mean": 30, "home_mean": 17,
+        "commence_time": (NOW + timedelta(hours=2)).isoformat(),
+    }}}
+    current = [{
+        "sport": "nfl", "event_id": "game-1", "status": "UNAVAILABLE",
+        "model_version": "prop_projection_nfl_v3_consensus_1",
+        "reason": "projection_methods_disagree",
+        "commence_time": (NOW + timedelta(hours=2)).isoformat(),
+    }]
+
+    result = service._retain_final_pregame(state, current, NOW)
+
+    assert result == current
+
+
+def test_old_model_is_not_retained_when_event_is_missing_during_migration():
+    state = {"last_available": {"nfl:game-1": {
+        "sport": "nfl", "event_id": "game-1", "status": "AVAILABLE",
+        "model_version": "prop_projection_nfl_v1", "away_mean": 30, "home_mean": 17,
+        "commence_time": (NOW + timedelta(hours=2)).isoformat(),
+    }}}
+
+    assert service._retain_final_pregame(state, [], NOW) == []
+    assert state["last_available"] == {}
 
 
 def test_provider_outage_uses_cache_and_never_raises(monkeypatch, tmp_path):

@@ -8,7 +8,9 @@ from prop_projection import (
     devig_pair,
     flatten_event,
     project_event,
+    public_projection,
 )
+from prop_projection_v3 import project_event_v3
 
 
 NOW = datetime(2026, 9, 19, 16, 0, tzinfo=timezone.utc)
@@ -313,4 +315,82 @@ def test_no_game_line_or_red_fox_decision_input_exists():
     source = inspect.getsource(prop_projection).lower()
     for forbidden in ("moneyline", "game_total", "market_read", "supported_side", "red_fox_favorite", "anomaly_board"):
         assert forbidden not in source
+
+    import prop_projection_v3
+
+    v3_source = inspect.getsource(prop_projection_v3).lower()
+    for forbidden in ("moneyline", "game_total", "market_read", "supported_side", "red_fox_favorite", "anomaly_board"):
+        assert forbidden not in v3_source
+
+
+def _add_scorer_surface(event, rosters, price=130):
+    for prefix, team, token in (("Away", "Away Wolves", "AW"), ("Home", "Home Bears", "HB")):
+        scorers = [f"{prefix} RB", f"{prefix} RB2", f"{prefix} WR1", f"{prefix} WR2", f"{prefix} TE"]
+        rosters[team].extend(name for name in scorers if name not in rosters[team])
+        for book in event["bookmakers"]:
+            book["markets"].append({
+                "key": "player_anytime_td",
+                "outcomes": [{
+                    "name": name, "description": f"{name} ({token})", "price": price,
+                    "point": None, "last_seen_at": NOW.isoformat(),
+                } for name in scorers],
+            })
+
+
+@pytest.mark.parametrize("sport", ["nfl", "ncaaf"])
+def test_v3_football_publishes_only_when_independent_scoring_methods_agree(sport):
+    event, rosters = football_fixture(sport)
+    for prefix, team, token in (("Away", "Away Wolves", "AW"), ("Home", "Home Bears", "HB")):
+        rosters[team].append(f"{prefix} RB2")
+        for book in event["bookmakers"]:
+            book["markets"].append(market("player_rush_tds", f"{prefix} RB2", 0.5, token))
+    _add_scorer_surface(event, rosters)
+
+    result = project_event_v3(sport, event, rosters, now=NOW)
+
+    assert result["status"] == "AVAILABLE"
+    assert result["model_version"] == f"prop_projection_{sport}_v3_consensus_1"
+    assert result["projection_method"] == "paired_scoring_props_and_scorer_ladder_consensus"
+    assert result["_legacy_benchmark"]["model_version"] == f"prop_projection_{sport}_v1"
+    assert "_legacy_benchmark" not in public_projection(result)
+    assert all(team["gap_points"] <= 4.5 for team in result["agreement"]["teams"].values())
+    assert all(anchor["role"] == "scoring" for anchor in result["anchors"])
+
+
+def test_v3_football_rejects_yards_proxy_and_missing_scorer_confirmation():
+    event, rosters = football_fixture("nfl")
+    for book in event["bookmakers"]:
+        book["markets"] = [item for item in book["markets"] if item["key"] != "player_rush_tds"]
+
+    result = project_event_v3("nfl", event, rosters, now=NOW)
+
+    assert result["status"] == "UNAVAILABLE"
+    assert result["reason"] == "insufficient_independent_scoring_methods"
+    assert "away_score" not in result
+
+
+def test_v3_football_rejects_large_method_disagreement():
+    event, rosters = football_fixture("nfl")
+    for prefix, team, token in (("Away", "Away Wolves", "AW"), ("Home", "Home Bears", "HB")):
+        rosters[team].append(f"{prefix} RB2")
+        for book in event["bookmakers"]:
+            book["markets"].append(market("player_rush_tds", f"{prefix} RB2", 0.5, token))
+    _add_scorer_surface(event, rosters, price=900)
+
+    result = project_event_v3("nfl", event, rosters, now=NOW)
+
+    assert result["status"] == "UNAVAILABLE"
+    assert result["reason"] == "projection_methods_disagree"
+
+
+def test_v3_mlb_uses_discrete_conversion_and_three_estimator_consensus():
+    event, rosters, context = mlb_fixture()
+
+    result = project_event_v3("mlb", event, rosters, context=context, now=NOW)
+
+    assert result["status"] == "AVAILABLE"
+    assert result["model_version"] == "prop_projection_mlb_v3_consensus_1"
+    assert result["projection_method"] == "independent_run_estimator_consensus"
+    assert all(team["estimator_count"] == 4 for team in result["agreement"]["teams"].values())
+    assert all(team["consensus_range"] <= 2.1 for team in result["agreement"]["teams"].values())
 

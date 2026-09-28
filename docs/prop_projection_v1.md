@@ -1,5 +1,9 @@
 # Red Fox Market Intelligence — Props-Only Projection v1
 
+> Historical specification. V1 ledger rows remain unchanged, but new customer
+> projections use the selective V3 consensus gate documented in
+> `docs/prop_projection_v3.md`.
+
 ## Isolation contract
 
 The subsystem reads PropLine player props, official roster sources, MLB game
