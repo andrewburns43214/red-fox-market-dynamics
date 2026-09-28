@@ -444,6 +444,7 @@ def project_event(sport, event, rosters, context=None, now=None):
         return {
             **result, "status": "UNAVAILABLE", "display_status": "Insufficient coverage",
             "reason": "insufficient_verified_prop_coverage",
+            "_private_lines": lines,
         }
     away, home = event["away_team"], event["home_team"]
     if sport in {"nfl", "ncaaf"}:
@@ -456,6 +457,7 @@ def project_event(sport, event, rosters, context=None, now=None):
             return {
                 **result, "status": "UNAVAILABLE", "display_status": "Insufficient coverage",
                 "reason": "missing_scoring_components", "confidence": "INSUFFICIENT",
+                "_private_lines": lines,
             }
     result.update({
         "status": "AVAILABLE", "away_score": int(round(away_mean)), "home_score": int(round(home_mean)),

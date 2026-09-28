@@ -238,7 +238,7 @@ def test_old_model_is_not_retained_over_a_v3_rejection():
     }}}
     current = [{
         "sport": "nfl", "event_id": "game-1", "status": "UNAVAILABLE",
-        "model_version": "prop_projection_nfl_v3_consensus_1",
+        "model_version": "prop_projection_nfl_v3_best_1",
         "reason": "projection_methods_disagree",
         "commence_time": (NOW + timedelta(hours=2)).isoformat(),
     }]

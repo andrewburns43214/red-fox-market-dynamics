@@ -44,7 +44,7 @@ def test_all_expected_scores_show_two_decimals_and_source_age():
     assert "source line up to " in BOARD
     assert "ageAtPublication+elapsedMinutes" in BOARD
     assert "rushing TDs estimated from yards" not in BOARD
-    assert "Paired TD/kicking props and the scorer ladder independently agree." in BOARD
+    assert "The touchdown-scorer surface is the primary score" in BOARD
     assert "Waiting for verified props for " in BOARD
 
 

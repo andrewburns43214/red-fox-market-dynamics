@@ -1,9 +1,9 @@
-"""Strict customer-facing props-only consensus projection.
+"""Customer-facing best-available props-only score projection.
 
-V3 is deliberately a publication gate as well as a model.  It publishes only
-when independent scoring methods are both complete and reasonably close.  The
-legacy projection remains available to the private ledger for comparison, but
-never supplies a missing V3 scoring component.
+V3 always publishes the strongest usable prop-derived reconstruction and
+labels its evidence quality separately. Independent agreement earns Verified;
+incomplete or conflicting confirmation remains visible as Best Available.
+The legacy projection remains in the private ledger for comparison.
 """
 
 from __future__ import annotations
@@ -35,10 +35,14 @@ MAX_FOOTBALL_METHOD_GAP_POINTS = 4.5  # three quarters of one touchdown
 MAX_MLB_ESTIMATOR_RANGE = 2.1  # one published team-score standard deviation
 
 
+def _model_version(sport):
+    return f"prop_projection_{sport}_v3_best_1"
+
+
 def _unavailable(legacy, reason, detail, *, agreement=None):
     result = {
         **legacy,
-        "model_version": f"prop_projection_{legacy['sport']}_v3_consensus_1",
+        "model_version": _model_version(legacy["sport"]),
         "status": "UNAVAILABLE",
         "display_status": "Projection not qualified",
         "confidence": "INSUFFICIENT",
@@ -77,7 +81,8 @@ def _scorer_surface(sport, event, rosters, now):
     A one-sided market cannot be perfectly de-vigged.  Across books, the lowest
     implied probability is the least expensive quote and therefore the most
     conservative observable estimate.  At least two books per included player
-    and three books per team are required before it can publish.
+    are retained so the system can publish a clearly labeled best-available
+    estimate; book depth determines the quality tier.
     """
     teams = (event["away_team"], event["home_team"])
     indexes = {team: {normalized_name(name) for name in rosters.get(team, [])} for team in teams}
@@ -123,8 +128,6 @@ def _scorer_surface(sport, event, rosters, now):
 
     ladders = defaultdict(dict)
     for (team, player_key, rung), books in quotes.items():
-        if len(books) < 2:
-            continue
         # Best offered price has the lowest raw implied probability and is the
         # conservative choice when the provider does not expose a paired No.
         chosen_book, chosen = min(books.items(), key=lambda item: item[1]["probability"])
@@ -175,11 +178,11 @@ def _football_team(lines, scorer_players, team):
     kicker = _best(lines, team, "player_kicking_points")
     field_goals = _best(lines, team, "player_field_goals_made")
     extra_points = _best(lines, team, "player_extra_points_made")
-    if kicker and kicker["book_count"] >= 2:
+    if kicker:
         kicking = kicker["v2_mean"]
         kicking_method = "direct_kicker_points"
         kicking_books = kicker["book_count"]
-    elif field_goals and extra_points and min(field_goals["book_count"], extra_points["book_count"]) >= 2:
+    elif field_goals and extra_points:
         kicking = 3 * field_goals["v2_mean"] + extra_points["v2_mean"]
         kicking_method = "field_goals_plus_extra_points"
         kicking_books = min(field_goals["book_count"], extra_points["book_count"])
@@ -188,19 +191,27 @@ def _football_team(lines, scorer_players, team):
         kicking_method = "missing"
         kicking_books = 0
     scorer_books = {book for player in scorer_players for book in player["books"]}
-    structural_ready = bool(
-        passing and passing["book_count"] >= 2 and len(rushing) >= 2
-        and all(line["book_count"] >= 2 for line in rushing) and kicking is not None
-    )
-    scorer_ready = len(scorer_players) >= 5 and len(scorer_books) >= 3
-    structural_td = passing["v2_mean"] + sum(line["v2_mean"] for line in rushing) if structural_ready else None
+    rush_yards = [line for line in lines if line["team"] == team and line["market"] == "player_rush_yds"]
+    if rushing:
+        rushing_td = sum(line["v2_mean"] for line in rushing)
+        rushing_method = "direct_rushing_td_props"
+    elif rush_yards:
+        rushing_td = sum(line["v2_mean"] for line in rush_yards) / 92.0
+        rushing_method = "rushing_yards_proxy"
+    else:
+        rushing_td = None
+        rushing_method = "missing"
+    structural_ready = bool(passing and rushing_td is not None and kicking is not None)
+    scorer_ready = len(scorer_players) >= 5 and len(scorer_books) >= 1
+    structural_td = passing["v2_mean"] + rushing_td if structural_ready else None
     scorer_td = sum(player["td_mean"] for player in scorer_players) if scorer_ready else None
     structural_points = 6 * structural_td + kicking if structural_td is not None else None
     scorer_points = 6 * scorer_td + kicking if scorer_td is not None and kicking is not None else None
     return {
         "ready": structural_ready and scorer_ready,
         "passing_td": passing["v2_mean"] if passing else None,
-        "rushing_td": sum(line["v2_mean"] for line in rushing) if rushing else None,
+        "rushing_td": rushing_td,
+        "rushing_method": rushing_method,
         "kicking": kicking,
         "kicking_method": kicking_method,
         "kicking_books": kicking_books,
@@ -228,25 +239,41 @@ def _football_projection(sport, event, rosters, legacy, lines, now):
         } for team in teams},
     }
     if not all(components[team]["ready"] for team in teams):
-        return _unavailable(
-            legacy, "insufficient_independent_scoring_methods",
-            "Requires paired passing TDs, at least two paired rushing-TD players, reliable kicking, and a five-player/three-book anytime-TD surface for each team.",
-            agreement=agreement,
-        )
-    if any(components[team]["method_gap_points"] > MAX_FOOTBALL_METHOD_GAP_POINTS for team in teams):
-        return _unavailable(
-            legacy, "projection_methods_disagree",
-            "The paired scoring props and scorer ladder differ by more than 4.5 points for at least one team.",
-            agreement=agreement,
-        )
-    means = {team: statistics.mean((components[team]["structural_points"], components[team]["scorer_points"])) for team in teams}
-    high = all(
+        # Legacy coverage can be broad while one team lacks a usable scoring
+        # reconstruction. Only this true absence suppresses the score.
+        if not all(components[team]["structural_points"] is not None or components[team]["scorer_points"] is not None for team in teams):
+            return _unavailable(
+                legacy, "missing_usable_scoring_props",
+                "At least one team has no usable scorer surface or paired scoring reconstruction.",
+                agreement=agreement,
+            )
+    means = {}
+    methods = {}
+    for team in teams:
+        item = components[team]
+        if item["scorer_points"] is not None:
+            # Touchdown-scorer prices are the most direct team-scoring surface.
+            # Structural props confirm quality but do not drag the primary read
+            # back toward the former yardage proxy.
+            means[team] = item["scorer_points"]
+            methods[team] = "touchdown_scorer_surface"
+        else:
+            means[team] = item["structural_points"]
+            methods[team] = "paired_scoring_reconstruction"
+    verified = all(
+        components[team]["ready"]
+        and components[team]["scorer_book_count"] >= 3
+        and components[team]["method_gap_points"] <= MAX_FOOTBALL_METHOD_GAP_POINTS
+        and components[team]["rushing_method"] == "direct_rushing_td_props"
+        for team in teams
+    )
+    high = verified and all(
         components[team]["scorer_player_count"] >= 8
         and components[team]["scorer_book_count"] >= 4
         and components[team]["method_gap_points"] <= 3.0
         for team in teams
     )
-    confidence = "HIGH" if high else "MODERATE"
+    confidence = "HIGH" if high else ("MODERATE" if verified else "LIMITED")
     anchors = []
     for team in teams:
         passing = _best(converted, team, "player_pass_tds")
@@ -256,10 +283,10 @@ def _football_projection(sport, event, rosters, legacy, lines, now):
             anchors.append({"team": team, "player": player["player"], "market": "player_anytime_td", "line": player["anytime_price"], "book_count": player["book_count"], "role": "scoring"})
     result = {
         **legacy,
-        "model_version": f"prop_projection_{sport}_v3_consensus_1",
+        "model_version": _model_version(sport),
         "status": "AVAILABLE",
         "confidence": confidence,
-        "display_status": f"Props-Only · Verified {confidence.title()}",
+        "display_status": f"Props-Only · Verified {confidence.title()}" if verified else "Props-Only · Best Available",
         "away_mean": round(means[teams[0]], 2),
         "home_mean": round(means[teams[1]], 2),
         "away_score": int(round(means[teams[0]])),
@@ -267,7 +294,9 @@ def _football_projection(sport, event, rosters, legacy, lines, now):
         "components": components,
         "agreement": agreement,
         "anchors": anchors[:7],
-        "projection_method": "paired_scoring_props_and_scorer_ladder_consensus",
+        "projection_method": "touchdown_scorer_surface_primary" if all(methods[team] == "touchdown_scorer_surface" for team in teams) else "best_available_scoring_reconstruction",
+        "team_methods": methods,
+        "quality_warning": None if verified else "Best available prop-derived score; independent confirmation is incomplete or disagrees.",
         "score_distribution": {"away_sd": 6.8, "home_sd": 6.8},
     }
     return result
@@ -276,7 +305,7 @@ def _football_projection(sport, event, rosters, legacy, lines, now):
 def _mlb_projection(legacy, lines, context, now):
     shadow = project_event_v2("mlb", legacy, lines, context=context, now=now)
     if shadow.get("status") != "SHADOW_AVAILABLE":
-        return _unavailable(legacy, "missing_independent_run_estimators", "At least three independent run estimators are required for both teams.")
+        return _unavailable(legacy, "missing_usable_scoring_props", "No usable run estimator is available for both teams.")
     teams = (legacy["away_team"], legacy["home_team"])
     components = shadow.get("components", {})
     ranges = {}
@@ -295,19 +324,18 @@ def _mlb_projection(legacy, lines, context, now):
             "estimators": [item["name"] for item in estimates],
         }
     agreement = {"gate": "tightest_three_independent_run_estimators", "maximum_consensus_range": MAX_MLB_ESTIMATOR_RANGE, "teams": ranges}
-    if any(ranges[team]["estimator_count"] < 3 for team in teams):
-        return _unavailable(legacy, "missing_independent_run_estimators", "At least three independent run estimators are required for both teams.", agreement=agreement)
-    if any(ranges[team]["consensus_range"] > MAX_MLB_ESTIMATOR_RANGE for team in teams):
-        return _unavailable(legacy, "projection_methods_disagree", "No three independent MLB run estimators agree within one team-score standard deviation.", agreement=agreement)
+    if any(ranges[team]["estimator_count"] < 1 for team in teams):
+        return _unavailable(legacy, "missing_usable_scoring_props", "At least one run estimator is required for both teams.", agreement=agreement)
     consensus = shadow["variants"]["consensus_candidate"]
-    high = legacy.get("confidence") == "HIGH" and all(ranges[team]["estimator_count"] >= 4 and ranges[team]["full_range"] <= 1.25 for team in teams)
-    confidence = "HIGH" if high else "MODERATE"
+    verified = all(ranges[team]["estimator_count"] >= 3 and ranges[team]["consensus_range"] <= MAX_MLB_ESTIMATOR_RANGE for team in teams)
+    high = verified and legacy.get("confidence") == "HIGH" and all(ranges[team]["estimator_count"] >= 4 and ranges[team]["full_range"] <= 1.25 for team in teams)
+    confidence = "HIGH" if high else ("MODERATE" if verified else "LIMITED")
     return {
         **legacy,
-        "model_version": "prop_projection_mlb_v3_consensus_1",
+        "model_version": _model_version("mlb"),
         "status": "AVAILABLE",
         "confidence": confidence,
-        "display_status": f"Props-Only · Verified {confidence.title()}",
+        "display_status": f"Props-Only · Verified {confidence.title()}" if verified else "Props-Only · Best Available",
         "away_mean": round(consensus["away_mean"], 2),
         "home_mean": round(consensus["home_mean"], 2),
         "away_score": consensus["away_score"],
@@ -315,11 +343,12 @@ def _mlb_projection(legacy, lines, context, now):
         "components": components,
         "agreement": agreement,
         "projection_method": "independent_run_estimator_consensus",
+        "quality_warning": None if verified else "Best available prop-derived score; fewer than three estimators agree within the verification range.",
     }
 
 
 def project_event_v3(sport, event, rosters, context=None, now=None):
-    """Run legacy parsing/identity checks, then apply the strict V3 gate."""
+    """Run identity checks, then publish the strongest usable V3 estimate."""
     now = now or utc_now()
     legacy = project_event(sport, event, rosters, context=context, now=now)
     legacy_benchmark = {
@@ -328,11 +357,12 @@ def project_event_v3(sport, event, rosters, context=None, now=None):
             "away_score", "home_score", "reason",
         )
     }
-    legacy["model_version"] = f"prop_projection_{sport}_v3_consensus_1"
-    if legacy.get("status") != "AVAILABLE":
+    legacy["model_version"] = _model_version(sport)
+    lines = legacy.get("_private_lines", [])
+    recoverable = legacy.get("reason") in {"insufficient_verified_prop_coverage", "missing_scoring_components"}
+    if legacy.get("status") != "AVAILABLE" and not (recoverable and lines):
         legacy["_legacy_benchmark"] = legacy_benchmark
         return legacy
-    lines = legacy.get("_private_lines", [])
     if sport in {"nfl", "ncaaf"}:
         result = _football_projection(sport, event, rosters, legacy, lines, now)
     elif sport == "mlb":

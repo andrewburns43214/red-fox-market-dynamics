@@ -349,27 +349,28 @@ def test_v3_football_publishes_only_when_independent_scoring_methods_agree(sport
     result = project_event_v3(sport, event, rosters, now=NOW)
 
     assert result["status"] == "AVAILABLE"
-    assert result["model_version"] == f"prop_projection_{sport}_v3_consensus_1"
-    assert result["projection_method"] == "paired_scoring_props_and_scorer_ladder_consensus"
+    assert result["model_version"] == f"prop_projection_{sport}_v3_best_1"
+    assert result["projection_method"] == "touchdown_scorer_surface_primary"
     assert result["_legacy_benchmark"]["model_version"] == f"prop_projection_{sport}_v1"
     assert "_legacy_benchmark" not in public_projection(result)
     assert all(team["gap_points"] <= 4.5 for team in result["agreement"]["teams"].values())
     assert all(anchor["role"] == "scoring" for anchor in result["anchors"])
 
 
-def test_v3_football_rejects_yards_proxy_and_missing_scorer_confirmation():
+def test_v3_football_keeps_best_available_score_when_only_yards_proxy_is_available():
     event, rosters = football_fixture("nfl")
     for book in event["bookmakers"]:
         book["markets"] = [item for item in book["markets"] if item["key"] != "player_rush_tds"]
 
     result = project_event_v3("nfl", event, rosters, now=NOW)
 
-    assert result["status"] == "UNAVAILABLE"
-    assert result["reason"] == "insufficient_independent_scoring_methods"
-    assert "away_score" not in result
+    assert result["status"] == "AVAILABLE"
+    assert result["confidence"] == "LIMITED"
+    assert result["display_status"] == "Props-Only · Best Available"
+    assert result["projection_method"] == "best_available_scoring_reconstruction"
 
 
-def test_v3_football_rejects_large_method_disagreement():
+def test_v3_football_shows_scorer_primary_score_despite_large_method_disagreement():
     event, rosters = football_fixture("nfl")
     for prefix, team, token in (("Away", "Away Wolves", "AW"), ("Home", "Home Bears", "HB")):
         rosters[team].append(f"{prefix} RB2")
@@ -379,8 +380,28 @@ def test_v3_football_rejects_large_method_disagreement():
 
     result = project_event_v3("nfl", event, rosters, now=NOW)
 
-    assert result["status"] == "UNAVAILABLE"
-    assert result["reason"] == "projection_methods_disagree"
+    assert result["status"] == "AVAILABLE"
+    assert result["confidence"] == "LIMITED"
+    assert result["projection_method"] == "touchdown_scorer_surface_primary"
+    assert result["quality_warning"]
+
+
+def test_v3_football_shows_one_book_scorer_surface_as_best_available():
+    event, rosters = football_fixture("nfl")
+    for prefix, team, token in (("Away", "Away Wolves", "AW"), ("Home", "Home Bears", "HB")):
+        rosters[team].append(f"{prefix} RB2")
+        for book in event["bookmakers"]:
+            book["markets"].append(market("player_rush_tds", f"{prefix} RB2", 0.5, token))
+    _add_scorer_surface(event, rosters)
+    for book in event["bookmakers"][1:]:
+        book["markets"] = [item for item in book["markets"] if item["key"] != "player_anytime_td"]
+
+    result = project_event_v3("nfl", event, rosters, now=NOW)
+
+    assert result["status"] == "AVAILABLE"
+    assert result["projection_method"] == "touchdown_scorer_surface_primary"
+    assert result["confidence"] == "LIMITED"
+    assert result["display_status"] == "Props-Only · Best Available"
 
 
 def test_v3_mlb_uses_discrete_conversion_and_three_estimator_consensus():
@@ -389,7 +410,7 @@ def test_v3_mlb_uses_discrete_conversion_and_three_estimator_consensus():
     result = project_event_v3("mlb", event, rosters, context=context, now=NOW)
 
     assert result["status"] == "AVAILABLE"
-    assert result["model_version"] == "prop_projection_mlb_v3_consensus_1"
+    assert result["model_version"] == "prop_projection_mlb_v3_best_1"
     assert result["projection_method"] == "independent_run_estimator_consensus"
     assert all(team["estimator_count"] == 4 for team in result["agreement"]["teams"].values())
     assert all(team["consensus_range"] <= 2.1 for team in result["agreement"]["teams"].values())

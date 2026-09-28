@@ -78,5 +78,5 @@ fix_dup_contradiction_precompute.py
 fix_signal_ledger_hard17.py
 repair_signal_ledger.py
 sl_list_events.py
-.pytest-tmp*/
+.pytest-*/
 .test-temp/

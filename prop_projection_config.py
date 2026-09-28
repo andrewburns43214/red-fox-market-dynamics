@@ -21,7 +21,7 @@ SPORTS = {
         "provider_key": "football_nfl",
         "enabled": True,
         "model_version": "prop_projection_nfl_v1",
-        "public_model_version": "prop_projection_nfl_v3_consensus_1",
+        "public_model_version": "prop_projection_nfl_v3_best_1",
         "markets": (
             "player_pass_yds", "player_pass_tds", "player_pass_interceptions",
             "player_rush_yds", "player_reception_yds", "player_receptions",
@@ -39,7 +39,7 @@ SPORTS = {
         "provider_key": "football_ncaaf",
         "enabled": True,
         "model_version": "prop_projection_ncaaf_v1",
-        "public_model_version": "prop_projection_ncaaf_v3_consensus_1",
+        "public_model_version": "prop_projection_ncaaf_v3_best_1",
         "markets": (
             "player_pass_yds", "player_pass_tds", "player_pass_interceptions",
             "player_rush_yds", "player_reception_yds", "player_receptions",
@@ -55,7 +55,7 @@ SPORTS = {
         "provider_key": "baseball_mlb",
         "enabled": True,
         "model_version": "prop_projection_mlb_v1",
-        "public_model_version": "prop_projection_mlb_v3_consensus_1",
+        "public_model_version": "prop_projection_mlb_v3_best_1",
         "markets": (
             "pitcher_outs", "pitcher_hits_allowed", "pitcher_walks", "pitcher_earned_runs",
             "pitcher_strikeouts", "batter_hits", "batter_total_bases", "batter_home_runs",
