@@ -91,6 +91,8 @@ def test_production_deploy_is_fast_forward_verified_and_health_gated():
     script = (monitor.Path(__file__).resolve().parents[1] / "ops" / "deploy_production.sh").read_text(encoding="utf-8")
     assert 'git merge --ff-only "origin/$BRANCH"' in script
     assert '"$PY" -m pytest -q' in script
+    assert '"$PY" -m compileall -q' in script
+    assert "import main, refresh_anomaly_board, prop_projection_service, prop_health_monitor" in script
     assert 'nginx -t' in script
     assert '"$ROOT/ops/run_prop_collection.sh"' in script
     assert "REDFOX_PROP_FORCE=1" in script

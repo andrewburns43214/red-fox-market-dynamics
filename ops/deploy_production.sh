@@ -30,7 +30,17 @@ git fetch --prune origin "$BRANCH"
 git merge --ff-only "origin/$BRANCH"
 revision=$(git rev-parse HEAD)
 
-"$PY" -m pytest -q
+if "$PY" -c "import pytest" >/dev/null 2>&1; then
+  "$PY" -m pytest -q
+else
+  # Production intentionally omits development-only pytest. Still fail before
+  # publication on syntax or import errors; the full suite remains the Git
+  # release gate before this script is invoked.
+  "$PY" -m compileall -q \
+    main.py refresh_anomaly_board.py prop_projection_service.py \
+    prop_projection_v3.py prop_health_monitor.py performance_ledger.py snapshot_store.py
+  "$PY" -c "import main, refresh_anomaly_board, prop_projection_service, prop_health_monitor"
+fi
 install -m 0644 deploy/redfox-board-locations.conf /etc/nginx/redfox-board-locations.conf
 nginx -t
 systemctl reload nginx
