@@ -1282,6 +1282,8 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .prop-score-anchors li { margin:2px 0; }
 .prop-score-unavailable { background:#f5f6f7; border-color:var(--border); }
 .prop-score-unavailable .prop-score-value { color:var(--text2); font:750 11px/1.3 var(--sans); }
+.prop-score-retained { border-color:#dfc27a; background:#fff9e9; }
+.prop-score-retained .prop-score-meta { color:#7c5b12; }
 .detail-market-switcher { margin-top:11px; }
 .detail-market-switcher .movement-tabs { justify-content:flex-start; }
 .detail-rationale,.detail-rank-note { white-space:normal; overflow-wrap:anywhere; word-break:normal; }
@@ -1293,6 +1295,14 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .movement-tabs { display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; }
 .movement-tab { border:1px solid var(--border); border-radius:999px; padding:4px 7px; background:#fff; color:var(--text3); font:700 9px var(--sans); cursor:pointer; }
 .movement-tab.on { background:#f8e2df; border-color:#e7afa8; color:#a33f38; }
+.movement-svg { cursor:crosshair; touch-action:pan-y; }
+.movement-scrub-guide { opacity:0; pointer-events:none; }
+.movement-scrub-guide.is-active { opacity:1; }
+.movement-scrub-point { pointer-events:none; }
+.movement-scrub-point.is-active { fill:#dd4a40; fill-opacity:.18; stroke:#dd4a40; stroke-width:2; }
+.movement-inspector { display:flex; flex-wrap:wrap; align-items:center; gap:5px 12px; min-height:32px; margin:7px 0 2px; padding:7px 9px; border-radius:7px; background:#f7f1ef; border-left:3px solid #dd4a40; color:#5d3430; font:700 9px/1.35 var(--sans); font-variant-numeric:tabular-nums; }
+.movement-inspector-time { color:var(--text); font-weight:800; }
+.movement-inspector-value { white-space:nowrap; }
 .movement-facts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:8px; }
 .movement-fact { padding:7px 8px; border-radius:6px; background:rgba(255,255,255,.72); }
 .movement-fact span { display:block; font:700 9px var(--sans); letter-spacing:.055em; color:var(--text3); text-transform:uppercase; }
@@ -1585,7 +1595,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .mobile-sheet[hidden]{display:none}.mobile-sheet{position:fixed;z-index:500;inset:0;background:rgba(8,14,18,.38);display:flex;align-items:flex-end}.mobile-sheet-panel{width:100%;max-height:min(72dvh,600px);overflow:auto;border-radius:18px 18px 0 0;background:#fff;padding:0 16px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -12px 36px rgba(8,14,18,.16)}.mobile-sheet-panel header{position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;padding:14px 0 12px;background:#fff;border-bottom:1px solid var(--border)}.mobile-sheet-panel header strong{font-size:16px}.mobile-sheet-panel header button{width:34px;height:34px;border:0;border-radius:50%;background:var(--bg2);font-size:24px;color:var(--text2)}.mobile-sheet-list{display:grid;gap:8px;padding:14px 0}.mobile-sheet-list button,.mobile-sheet-action{width:100%;min-height:48px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);text-align:left;font:600 14px var(--sans)}.mobile-saved-row{display:grid;grid-template-columns:minmax(0,1fr) 48px;gap:8px}.mobile-sheet-list .mobile-saved-open{min-width:0;overflow-wrap:anywhere}.mobile-sheet-list .mobile-saved-remove{width:48px;padding:0;text-align:center;color:var(--red);font-size:24px;line-height:1}.mobile-sheet-empty{padding:24px 0;color:var(--text3);font-size:14px;line-height:1.5}.mobile-sheet-action{display:block;margin-top:10px;text-decoration:none}.mobile-sheet-action.primary{border-color:var(--red);background:var(--red);color:#fff;text-align:center}
   .tabs{padding-left:12px;padding-right:12px;gap:4px}.tab{font-size:11px;padding:0 10px}.tab .tbadge{min-width:22px;padding:2px 6px}.sfilters{position:absolute;left:0;right:0;top:100%;display:flex;overflow-x:auto;gap:6px;padding:8px 12px;background:#fff;border-bottom:1px solid var(--border);scrollbar-width:none}.sfilters::-webkit-scrollbar{display:none}.schip{flex:0 0 auto;min-height:32px;padding:6px 12px}.app-board-controls{margin-top:48px}.app-board-controls::before{content:'Market';position:sticky;left:-12px;display:flex;align-items:center;padding-right:7px;background:rgba(250,249,246,.96);color:var(--text3);font:700 9px var(--mono);letter-spacing:.08em;text-transform:uppercase}
   .live-recent{padding:16px 12px 24px}.live-recent-head h2{font-size:20px}.live-game-card{border-radius:12px;padding:14px}.live-game-badges .red-fox-favorite-badge{width:108px;height:32px;max-width:calc(100% - 42px)}.live-save{width:40px;height:40px;font-size:25px}.live-market-side-row{grid-template-columns:minmax(116px,42%) minmax(0,1fr);padding:8px 6px}.live-market-side-row.is-supported{background:rgba(21,134,106,.08)}.live-market-meta{font-family:var(--sans);font-size:11px;line-height:1.38}
-  #drill-overlay .game-detail-modal .game-detail-content{padding:12px 12px 24px!important}#drill-overlay .game-detail-modal .game-detail-content>div:first-child{margin:0 0 10px!important;padding:0!important;border:0!important}#drill-overlay .game-detail-modal .game-detail-content>div:first-child>.sport-chip,#drill-overlay .game-detail-modal .game-detail-content>div:first-child>.spchip,#drill-overlay .game-detail-modal .detail-game-heading,#drill-overlay .game-detail-modal .detail-game-meta,#drill-overlay .game-detail-modal .detail-frozen-status{display:none!important}#drill-overlay .game-detail-modal .detail-market-switcher{margin-top:0}.movement-chart{padding:10px;margin:10px 0}.movement-chart-note{font-size:9px;line-height:1.3}.movement-svg{touch-action:none}.movement-scrub-point{pointer-events:none}.movement-scrub-point.is-active{fill:#0f6f7f;fill-opacity:.18;stroke:#0f6f7f;stroke-width:2}.movement-inspector{min-height:30px;margin:6px 0 2px;padding:7px 8px;border-radius:6px;background:#eef5f5;color:var(--text2);font:600 9px/1.3 var(--sans)}.movement-facts{gap:5px}.movement-fact{padding:7px}.market-journey{margin:10px 0;padding:10px}.journey-event{padding-bottom:9px!important}.market-story{padding:11px;margin:10px 0}.detail-proof{padding:11px}.detail-observations{display:none!important}.detail-proof.is-open .detail-observations{display:block!important}.detail-observations-toggle{display:inline-flex;align-items:center;justify-content:center;width:100%;min-height:42px;margin-top:10px;border:1px solid var(--border2);border-radius:8px;background:#fff;color:var(--accent);font:700 11px var(--sans);cursor:pointer}
+  #drill-overlay .game-detail-modal .game-detail-content{padding:12px 12px 24px!important}#drill-overlay .game-detail-modal .game-detail-content>div:first-child{margin:0 0 10px!important;padding:0!important;border:0!important}#drill-overlay .game-detail-modal .game-detail-content>div:first-child>.sport-chip,#drill-overlay .game-detail-modal .game-detail-content>div:first-child>.spchip,#drill-overlay .game-detail-modal .detail-game-heading,#drill-overlay .game-detail-modal .detail-game-meta,#drill-overlay .game-detail-modal .detail-frozen-status{display:none!important}#drill-overlay .game-detail-modal .detail-market-switcher{margin-top:0}.movement-chart{padding:10px;margin:10px 0}.movement-chart-note{font-size:9px;line-height:1.3}.movement-svg{touch-action:pan-y}.movement-scrub-point{pointer-events:none}.movement-scrub-point.is-active{fill:#0f6f7f;fill-opacity:.18;stroke:#0f6f7f;stroke-width:2}.movement-inspector{min-height:30px;margin:6px 0 2px;padding:7px 8px;border-radius:6px;background:#eef5f5;color:var(--text2);font:600 9px/1.3 var(--sans)}.movement-facts{gap:5px}.movement-fact{padding:7px}.market-journey{margin:10px 0;padding:10px}.journey-event{padding-bottom:9px!important}.market-story{padding:11px;margin:10px 0}.detail-proof{padding:11px}.detail-observations{display:none!important}.detail-proof.is-open .detail-observations{display:block!important}.detail-observations-toggle{display:inline-flex;align-items:center;justify-content:center;width:100%;min-height:42px;margin-top:10px;border:1px solid var(--border2);border-radius:8px;background:#fff;color:var(--accent);font:700 11px var(--sans);cursor:pointer}
   /* Desktop-derived Red Fox treatment: decisive black chrome and restrained red accents. */
   .topbar{height:calc(58px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 12px 0!important;background:#050708!important;border-color:#20272a!important;box-shadow:none!important}.tl{min-width:0}.logo-wrap{margin:0!important;padding:0!important;border:0!important}.wm-main,.wm-main span{color:#ed4c43!important;font-size:18px!important;letter-spacing:-.055em}.wm-sup{margin-left:2px!important;color:#fff!important;font-size:7px!important;letter-spacing:.2em}.live-badge{display:none!important}.mobile-header-search{display:flex;align-items:center;gap:5px;width:112px;margin-left:auto;padding:7px 8px;border:1px solid #343b3f;border-radius:7px;background:#161b1e;color:#aab3b7}.mobile-header-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#fff;font:500 11px var(--sans)}.mobile-header-search input::placeholder{color:#aab3b7}.mobile-board-refresh{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 44px;width:44px;height:44px;margin-left:6px;border:0;background:transparent;color:#d7dcde;cursor:pointer}.mobile-board-refresh::before{content:'';position:absolute;inset:3px;border:1px solid #343b3f;border-radius:7px;background:#161b1e}.mobile-board-refresh svg{position:relative;z-index:1;width:20px;height:20px;stroke-width:1.9}.mobile-board-refresh:focus-visible{outline:2px solid #ed4c43;outline-offset:0;border-radius:9px}.mobile-board-refresh:disabled{cursor:wait;opacity:.58}.mobile-board-refresh.is-refreshing svg{animation:mobile-refresh-spin .8s linear infinite}@keyframes mobile-refresh-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.mobile-board-refresh.is-refreshing svg{animation:none}}.tabs{top:calc(58px + env(safe-area-inset-top));border-color:var(--border2);background:#fff}.app-board-controls{position:fixed!important;top:calc(152px + env(safe-area-inset-top));left:0;right:0;margin:0!important;background:#fff;border-color:var(--border2)}.board{padding-top:108px!important}
   .mobile-nav{background:#050708!important;border-color:#20272a!important}.mobile-nav button{color:#fff!important}.mobile-nav button.active{color:#ed4c43!important}.mobile-nav button span{color:currentColor}.mobile-nav button:not(.active){opacity:.78}
@@ -3605,6 +3615,7 @@ function movementChart(rows, market, selectedTimestamp='', selectedSide=''){
   const number=value=>{ const parsed=Number(value); return Number.isFinite(parsed)?parsed:null; };
   const compact=value=>Number.isInteger(value)?String(value):Number(value).toFixed(1).replace(/\.0$/,'');
   const signed=value=>{ const parsed=number(value); return parsed===null?'--':(parsed>0?'+':'')+Math.round(parsed); };
+  const percent=value=>{ const parsed=number(value); return parsed===null?'--':compact(parsed)+'%'; };
   const lineLabel=row=>{
     const display=String(row.line_display||'').trim();
     const priceStart=display.indexOf(' (');
@@ -3651,8 +3662,10 @@ function movementChart(rows, market, selectedTimestamp='', selectedSide=''){
     }).join('');
     const first=rows[0], last=rows[rows.length-1];
     const xLabels=`<text x="${padLeft}" y="${height-3}" fill="#74808a" font-size="8" font-family="var(--mono)">${timeLabel(first)}</text><text x="${width-padRight}" y="${height-3}" text-anchor="end" fill="#74808a" font-size="8" font-family="var(--mono)">${timeLabel(last)}</text>`;
-    const scrubPoints=points.map((point,index)=>`<circle class="movement-scrub-point" data-index="${index}" data-time="${escHtml(timeLabel(rows[index]))}" data-value="${escHtml(view.pointLabel(rows[index]))}" data-bets="${escHtml(compact(number(rows[index].bets_pct))+'%')}" data-money="${escHtml(compact(number(rows[index].money_pct))+'%')}" cx="${point[0]}" cy="${point[1]}" r="12" fill="transparent"/>`).join('');
-    return `<div class="movement-panel" data-movement-view="${view.key}" style="display:${view.key==='market'?'block':'none'}"><div class="movement-chart-note">${view.note}</div><svg class="movement-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${view.title} trajectory"><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#dd4a40" stop-opacity=".25"/><stop offset="1" stop-color="#dd4a40" stop-opacity=".02"/></linearGradient></defs>${ticks}<path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${polyline}" fill="none" stroke="#dd4a40" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#dd4a40" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#dd4a40"/>${selectedMarker}${scrubPoints}${xLabels}</svg><div class="movement-facts"><div class="movement-fact"><span>Start</span><b>${view.pointLabel(first)}</b></div><div class="movement-fact"><span>Current</span><b>${view.pointLabel(last)}</b></div><div class="movement-fact"><span>High</span><b>${view.axisLabel(max)}</b></div><div class="movement-fact"><span>Low</span><b>${view.axisLabel(min)}</b></div></div></div>`;
+    const scrubPoints=points.map((point,index)=>`<circle class="movement-scrub-point" data-index="${index}" data-time="${escHtml(timeLabel(rows[index]))}" data-line="${escHtml(lineLabel(rows[index]))}" data-price="${escHtml(signed(rows[index].price_odds))}" data-bets="${escHtml(percent(rows[index].bets_pct))}" data-money="${escHtml(percent(rows[index].money_pct))}" cx="${point[0]}" cy="${point[1]}" r="12" fill="transparent"/>`).join('');
+    const lineInspector=marketKey==='MONEYLINE'?'':`<span class="movement-inspector-value" data-inspector-line>Line ${escHtml(lineLabel(last))}</span>`;
+    const inspector=`<div class="movement-inspector" aria-label="Selected market observation"><span class="movement-inspector-time" data-inspector-time>${escHtml(timeLabel(last))}</span>${lineInspector}<span class="movement-inspector-value" data-inspector-price>Price ${escHtml(signed(last.price_odds))}</span><span class="movement-inspector-value" data-inspector-bets>Bets ${escHtml(percent(last.bets_pct))}</span><span class="movement-inspector-value" data-inspector-money>Money ${escHtml(percent(last.money_pct))}</span></div>`;
+    return `<div class="movement-panel" data-movement-view="${view.key}" style="display:${view.key==='market'?'block':'none'}"><div class="movement-chart-note">${view.note}</div><svg class="movement-svg" viewBox="0 0 ${width} ${height}" role="img" tabindex="0" aria-label="${view.title} trajectory. Move across the chart to inspect each observation."><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#dd4a40" stop-opacity=".25"/><stop offset="1" stop-color="#dd4a40" stop-opacity=".02"/></linearGradient></defs>${ticks}<path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${polyline}" fill="none" stroke="#dd4a40" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#dd4a40" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#dd4a40"/>${selectedMarker}<line class="movement-scrub-guide" x1="${points[points.length-1][0]}" y1="${padY}" x2="${points[points.length-1][0]}" y2="${height-padY}" stroke="#dd4a40" stroke-width="1.5" stroke-dasharray="3 3"/>${scrubPoints}${xLabels}</svg>${inspector}<div class="movement-facts"><div class="movement-fact"><span>Start</span><b>${view.pointLabel(first)}</b></div><div class="movement-fact"><span>Current</span><b>${view.pointLabel(last)}</b></div><div class="movement-fact"><span>High</span><b>${view.axisLabel(max)}</b></div><div class="movement-fact"><span>Low</span><b>${view.axisLabel(min)}</b></div></div></div>`;
   };
   const tabs=views.map(view=>`<button type="button" class="movement-tab ${view.key==='market'?'on':''}" onclick="setMovementView(this,'${view.key}')">${view.label}</button>`).join('');
   return `<div class="movement-chart" data-movement-chart><div class="movement-chart-head"><div><div class="movement-chart-title">Market trajectory</div><div class="movement-chart-note">${rows.length} timestamped observations for ${escHtml(selectedSideText)}.</div></div><div class="movement-tabs">${tabs}</div></div>${views.map(panel).join('')}</div>`;
@@ -3668,16 +3681,35 @@ function wireMovementScrub(chart){
   if(chart.dataset.scrubWired==='true') return;
   chart.dataset.scrubWired='true';
   chart.querySelectorAll('.movement-svg').forEach(svg=>{
+    const points=[...svg.querySelectorAll('.movement-scrub-point')]; if(!points.length)return;
+    const applyPoint=nearest=>{
+      svg.dataset.scrubIndex=nearest.dataset.index;
+      points.forEach(point=>point.classList.toggle('is-active',point===nearest));
+      const guide=svg.querySelector('.movement-scrub-guide');
+      if(guide){ guide.setAttribute('x1',nearest.getAttribute('cx')); guide.setAttribute('x2',nearest.getAttribute('cx')); guide.classList.add('is-active'); }
+      const panel=svg.closest('.movement-panel');
+      const set=(selector,value)=>{ const element=panel?.querySelector(selector); if(element)element.textContent=value; };
+      set('[data-inspector-time]',nearest.dataset.time);
+      set('[data-inspector-line]','Line '+nearest.dataset.line);
+      set('[data-inspector-price]','Price '+nearest.dataset.price);
+      set('[data-inspector-bets]','Bets '+nearest.dataset.bets);
+      set('[data-inspector-money]','Money '+nearest.dataset.money);
+    };
     const inspect=event=>{
       const rect=svg.getBoundingClientRect(), ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width));
-      const points=[...svg.querySelectorAll('.movement-scrub-point')]; if(!points.length)return;
       const targetX=ratio*640; let nearest=points[0], distance=Infinity;
       points.forEach(point=>{const d=Math.abs(Number(point.getAttribute('cx'))-targetX);if(d<distance){distance=d;nearest=point;}});
-      svg.querySelectorAll('.movement-scrub-point').forEach(point=>point.classList.toggle('is-active',point===nearest));
-      const panel=svg.closest('.movement-panel'), output=panel?.querySelector('.movement-inspector');
-      if(output) output.textContent=nearest.dataset.time+' · '+nearest.dataset.value+' · '+nearest.dataset.bets+' Bets · '+nearest.dataset.money+' Money';
+      applyPoint(nearest);
     };
-    svg.addEventListener('pointerdown',inspect); svg.addEventListener('pointermove',event=>{if(event.buttons)inspect(event);});
+    svg.addEventListener('pointerdown',event=>{ if(svg.setPointerCapture)svg.setPointerCapture(event.pointerId); inspect(event); });
+    svg.addEventListener('pointermove',event=>{ if(event.pointerType==='mouse'||event.buttons||svg.hasPointerCapture?.(event.pointerId))inspect(event); });
+    svg.addEventListener('keydown',event=>{
+      if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
+      event.preventDefault();
+      const current=Number(svg.dataset.scrubIndex||points.length-1);
+      applyPoint(points[Math.max(0,Math.min(points.length-1,current+(event.key==='ArrowLeft'?-1:1)))]);
+    });
+    applyPoint(points[points.length-1]);
   });
 }
 
@@ -5132,7 +5164,10 @@ function propScoreHtml(row){
   const homeValue=Number.isFinite(Number(prop.home_mean))?Number(prop.home_mean).toFixed(2):String(prop.home_score);
   const rushingProxy=Object.values(prop.coverage?.teams||{}).some(team=>team.scoring?.rushing_td_source==='RUSH_YARDS_PROXY');
   const proxyText=rushingProxy?' · rushing TDs estimated from yards':'';
-  return '<aside class="prop-score" aria-label="Props-only projected score"><div class="prop-score-label">'+(mlb?'Props-only expected runs':'Props-only expected points')+'</div><div class="prop-score-value">'+escHtml(prop.away_team)+' '+escHtml(awayValue)+' · '+escHtml(prop.home_team)+' '+escHtml(homeValue)+'</div><div class="prop-score-meta">'+escHtml(tier)+' · source line up to '+escHtml(ageText)+' old'+escHtml(proxyText)+'</div><details><summary>5–7 strongest anchors</summary><div class="prop-score-why">'+players+' verified players · '+books+' books · '+escHtml(families)+' · oldest line '+escHtml(ageText)+' old.'+propAnchorsHtml(prop.anchors)+'<div style="margin-top:5px">Broad prop coverage is collected; correlated markets validate or blend and are never independently double-counted. No spread, total, moneyline, Market Read, rank, or Favorite input.</div></div></details></aside>';
+  const retained=prop.retained_last_available===true||String(prop.retained_last_available).toLowerCase()==='true';
+  const retainedMeta=retained?'Last verified prop read · ':'';
+  const retainedDetail=retained?'<div style="margin-top:5px">The latest refresh did not pass the coverage gate, so this remains the last verified pregame prop read.</div>':'';
+  return '<aside class="prop-score'+(retained?' prop-score-retained':'')+'" aria-label="Props-only projected score"><div class="prop-score-label">'+(mlb?'Props-only expected runs':'Props-only expected points')+'</div><div class="prop-score-value">'+escHtml(prop.away_team)+' '+escHtml(awayValue)+' · '+escHtml(prop.home_team)+' '+escHtml(homeValue)+'</div><div class="prop-score-meta">'+escHtml(retainedMeta+tier)+' · source line up to '+escHtml(ageText)+' old'+escHtml(proxyText)+'</div><details><summary>5–7 strongest anchors</summary><div class="prop-score-why">'+players+' verified players · '+books+' books · '+escHtml(families)+' · oldest line '+escHtml(ageText)+' old.'+retainedDetail+propAnchorsHtml(prop.anchors)+'<div style="margin-top:5px">Broad prop coverage is collected; correlated markets validate or blend and are never independently double-counted. No spread, total, moneyline, Market Read, rank, or Favorite input.</div></div></details></aside>';
 }
 function renderGameDetail(){
   const state=window._gameDetailState; if(!state) return;
@@ -5177,6 +5212,7 @@ function renderGameDetail(){
   document.querySelector('#drill-overlay .drill-modal').classList.add('game-detail-modal');
   document.body.classList.add('game-detail-open');
   document.getElementById('drill-overlay').classList.add('open');
+  document.querySelectorAll('#drill-overlay [data-movement-chart]').forEach(wireMovementScrub);
 }
 async function openGameDetail(r,selectedSideLabel){
   if(!r) return;

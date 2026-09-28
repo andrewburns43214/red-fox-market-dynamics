@@ -351,18 +351,61 @@ def _event_change_summary(event, sport, digest, captured_at):
 
 def _retain_final_pregame(state, current, now):
     published = state.setdefault("published", {})
+    last_available = state.setdefault("last_available", {})
+    output = []
     for item in current:
-        published[f"{item.get('sport')}:{item.get('event_id')}"] = item
+        key = f"{item.get('sport')}:{item.get('event_id')}"
+        published[key] = item
+        if item.get("status") == "AVAILABLE":
+            last_available[key] = item
+            output.append(item)
+            continue
+        retained = last_available.get(key)
+        if retained and retained.get("status") == "AVAILABLE":
+            output.append({
+                **retained,
+                "retained_last_available": True,
+                "retained_at": now.isoformat(),
+                "latest_collection_status": item.get("status", "UNAVAILABLE"),
+                "retained_reason": item.get("reason") or "latest_read_not_qualified",
+            })
+        else:
+            output.append(item)
     keep = []
     active_keys = {f"{item.get('sport')}:{item.get('event_id')}" for item in current}
-    for key, item in list(published.items()):
+    for key, item in list(last_available.items()):
         start = parse_time(item.get("commence_time"))
         if not start or (now - start).total_seconds() > 8 * 3600:
             published.pop(key, None)
+            last_available.pop(key, None)
             continue
-        if key not in active_keys and start <= now and item.get("status") == "AVAILABLE":
+        if key in active_keys:
+            continue
+        if start <= now:
             keep.append({**item, "final_pregame": True})
-    return current + keep
+        else:
+            keep.append({
+                **item,
+                "retained_last_available": True,
+                "retained_at": now.isoformat(),
+                "latest_collection_status": "MISSING",
+                "retained_reason": "event_missing_from_latest_feed",
+            })
+    return output + keep
+
+
+def _seed_last_available(state, ledger_path):
+    """Recover the last valid read when upgrading an existing collector state."""
+    if "last_available" in state:
+        return
+    recovered = {}
+    for record in _jsonl(ledger_path):
+        projection = record.get("projection") if isinstance(record, dict) else None
+        if not isinstance(projection, dict) or projection.get("status") != "AVAILABLE":
+            continue
+        key = f"{projection.get('sport')}:{projection.get('event_id')}"
+        recovered[key] = public_projection(projection)
+    state["last_available"] = recovered
 
 
 def run_collection(client=None, resolver=None, force=False, now=None):
@@ -492,6 +535,7 @@ def run_collection(client=None, resolver=None, force=False, now=None):
             state.get("projection_hashes", {}).pop(event_key, None)
             state.get("v2_projection_hashes", {}).pop(event_key, None)
             state.get("v2_error_hashes", {}).pop(event_key, None)
+    _seed_last_available(state, DATA_ROOT / "projection_ledger.jsonl")
     projections = _retain_final_pregame(state, projections, now)
     payload = {"schema_version": 1, "generated_at": now.isoformat(), "projections": projections}
     # Nginx serves only this compact projection payload. Keep credentials,

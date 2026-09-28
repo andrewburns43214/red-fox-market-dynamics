@@ -158,6 +158,77 @@ def test_change_audit_is_compact_and_does_not_embed_raw_event():
     assert summary["outcome_count"] == 2
 
 
+@pytest.mark.parametrize("sport", ["nfl", "ncaaf", "mlb", "nba", "ncaab", "nhl"])
+def test_last_available_projection_survives_temporary_coverage_loss_for_every_sport(sport):
+    state = {}
+    available = {
+        "sport": sport, "event_id": "game-1", "status": "AVAILABLE",
+        "away_team": "Away", "home_team": "Home",
+        "away_mean": 21.25, "home_mean": 24.5,
+        "commence_time": (NOW + timedelta(hours=2)).isoformat(),
+        "generated_at": NOW.isoformat(),
+    }
+    first = service._retain_final_pregame(state, [available], NOW)
+    assert first == [available]
+
+    unavailable = {
+        **available, "status": "UNAVAILABLE", "away_mean": None, "home_mean": None,
+        "reason": "insufficient_verified_prop_coverage",
+        "generated_at": (NOW + timedelta(minutes=5)).isoformat(),
+    }
+    retained = service._retain_final_pregame(state, [unavailable], NOW + timedelta(minutes=5))[0]
+
+    assert retained["status"] == "AVAILABLE"
+    assert retained["away_mean"] == 21.25
+    assert retained["home_mean"] == 24.5
+    assert retained["retained_last_available"] is True
+    assert retained["latest_collection_status"] == "UNAVAILABLE"
+    assert retained["retained_reason"] == "insufficient_verified_prop_coverage"
+
+
+def test_last_available_projection_survives_event_missing_from_latest_feed():
+    state = {}
+    available = {
+        "sport": "nfl", "event_id": "eagles-bears", "status": "AVAILABLE",
+        "away_team": "Philadelphia Eagles", "home_team": "Chicago Bears",
+        "away_mean": 24.1, "home_mean": 20.4,
+        "commence_time": (NOW + timedelta(hours=2)).isoformat(),
+        "generated_at": NOW.isoformat(),
+    }
+    service._retain_final_pregame(state, [available], NOW)
+
+    retained = service._retain_final_pregame(state, [], NOW + timedelta(minutes=5))[0]
+
+    assert retained["event_id"] == "eagles-bears"
+    assert retained["retained_last_available"] is True
+    assert retained["latest_collection_status"] == "MISSING"
+    assert retained["retained_reason"] == "event_missing_from_latest_feed"
+
+
+def test_existing_projection_ledger_seeds_last_available_state(tmp_path):
+    state = {"published": {"nfl:eagles-bears": {"status": "UNAVAILABLE"}}}
+    available = {
+        "sport": "nfl", "event_id": "eagles-bears", "status": "AVAILABLE",
+        "away_team": "Philadelphia Eagles", "home_team": "Chicago Bears",
+        "away_mean": 24.1, "home_mean": 20.4,
+        "commence_time": (NOW + timedelta(hours=2)).isoformat(),
+        "generated_at": (NOW - timedelta(minutes=10)).isoformat(),
+    }
+    ledger = tmp_path / "projection_ledger.jsonl"
+    ledger.write_text(json.dumps({"projection": available}) + "\n", encoding="utf-8")
+
+    service._seed_last_available(state, ledger)
+    retained = service._retain_final_pregame(
+        state,
+        [{**available, "status": "UNAVAILABLE", "reason": "no_fresh_qualified_props"}],
+        NOW,
+    )[0]
+
+    assert retained["status"] == "AVAILABLE"
+    assert retained["retained_last_available"] is True
+    assert retained["away_mean"] == 24.1
+
+
 def test_provider_outage_uses_cache_and_never_raises(monkeypatch, tmp_path):
     data = tmp_path / "private"
     public = tmp_path / "public.json"

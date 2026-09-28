@@ -454,3 +454,18 @@ def test_mobile_counts_and_live_scores_use_centered_sans_numerals():
     assert "display:inline-flex!important;align-items:center;justify-content:center;min-width:23px!important;height:23px" in BOARD
     assert "font:700 9px/1 var(--sans)!important" in BOARD
     assert ".live-score{font-family:var(--sans)!important;font-style:normal!important" in BOARD
+
+
+def test_movement_chart_supports_live_mouse_touch_and_keyboard_scrubbing():
+    assert 'class="movement-inspector"' in BOARD
+    assert 'data-inspector-time' in BOARD
+    assert 'data-inspector-line' in BOARD
+    assert 'data-inspector-price' in BOARD
+    assert 'data-inspector-bets' in BOARD
+    assert 'data-inspector-money' in BOARD
+    assert 'class="movement-scrub-guide"' in BOARD
+    assert "event.pointerType==='mouse'" in BOARD
+    assert 'svg.setPointerCapture(event.pointerId)' in BOARD
+    assert "event.key!=='ArrowLeft'&&event.key!=='ArrowRight'" in BOARD
+    assert 'touch-action:pan-y' in BOARD
+    assert "document.querySelectorAll('#drill-overlay [data-movement-chart]').forEach(wireMovementScrub);" in BOARD

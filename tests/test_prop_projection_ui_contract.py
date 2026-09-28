@@ -21,9 +21,16 @@ def test_prop_score_is_cache_only_and_display_only():
 def test_desktop_and_mobile_header_placement_contract():
     assert ".detail-game-header .prop-score { order:3; flex:1 1 100%;" in BOARD
     assert "<div class=\"detail-game-header\">" in BOARD
-    assert "<aside class=\"prop-score\"" in BOARD
+    assert "<aside class=\"prop-score'+(retained?' prop-score-retained':'')+'\"" in BOARD
     assert "Props not open yet" in BOARD
     assert "Insufficient coverage" in BOARD
+
+
+def test_last_verified_prop_read_stays_visible_when_latest_refresh_drops_coverage():
+    assert "prop.retained_last_available===true" in BOARD
+    assert "Last verified prop read" in BOARD
+    assert "latest refresh did not pass the coverage gate" in BOARD
+    assert ".prop-score-retained" in BOARD
 
 
 def test_public_cache_is_explicitly_allowlisted():
