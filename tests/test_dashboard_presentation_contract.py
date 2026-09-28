@@ -469,5 +469,8 @@ def test_movement_chart_uses_clickable_market_moves_on_desktop_and_mobile():
     assert "point.addEventListener('click',()=>applyPoint(point))" in BOARD
     assert "event.key!=='Enter'&&event.key!==' '" in BOARD
     assert 'touch-action:pan-y' in BOARD
+    assert '.movement-svg { cursor:default; touch-action:pan-y; }' in BOARD
+    assert 'crosshair' not in BOARD
+    assert 'movement-scrub-point' not in BOARD
     assert "pointermove" not in BOARD[BOARD.index("function wireMovementScrub"):BOARD.index("async function openGameDetail", BOARD.index("function wireMovementScrub"))]
     assert "document.querySelectorAll('#drill-overlay [data-movement-chart]').forEach(wireMovementScrub);" in BOARD
