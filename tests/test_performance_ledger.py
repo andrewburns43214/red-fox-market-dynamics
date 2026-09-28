@@ -120,6 +120,24 @@ def test_ingests_directional_final_state_and_grades_without_reclassification(tmp
     assert unchanged.loc[unchanged.event_id.eq("101"), "supported_side"].iloc[0] == "NY Mets"
 
 
+def test_exact_duplicate_tracking_snapshots_do_not_inflate_lifecycle_counts(tmp_path):
+    write(pd.DataFrame([frozen_row()]), tmp_path / "live_recent.csv")
+    capture = {
+        "recorded_at": "2026-09-08T15:00:00Z", "sport": "mlb", "game_id": "101",
+        "market_display": "MONEYLINE", "favorite_state": "qualified",
+        "favorite_pathway": "low_support_contrarian", "first_qualified_line": "-105",
+    }
+    write(pd.DataFrame([capture, capture.copy()]), tmp_path / "red_fox_favorite_tracking.csv")
+
+    update_performance_ledger(tmp_path, attach_results=False)
+
+    row = pd.read_csv(
+        tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False,
+    ).iloc[0]
+    assert row["qualification_episode_count"] == "1"
+    assert row["qualifying_capture_count"] == "1"
+
+
 def test_v1_favorite_is_supported_side_only_and_unresolved_rows_remain_ungraded(tmp_path):
     write(pd.DataFrame([frozen_row(favorite_rule_version="red_fox_favorite_v1")]), tmp_path / "live_recent.csv")
     result = update_performance_ledger(tmp_path)

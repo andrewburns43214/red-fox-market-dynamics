@@ -379,7 +379,10 @@ def _tracking_lifecycle(history: pd.DataFrame, row: pd.Series, kickoff: pd.Times
     scoped = scoped[scoped["_at"].notna()]
     if pd.notna(kickoff):
         scoped = scoped[scoped["_at"] <= kickoff]
-    scoped = scoped.sort_values("_at", kind="mergesort")
+    # Legacy deployments occasionally appended the exact same capture twice.
+    # Preserve the raw audit file, but do not let those duplicates inflate
+    # lifecycle observations or qualification counts.
+    scoped = scoped.sort_values("_at", kind="mergesort").drop_duplicates(keep="last")
     if scoped.empty:
         return empty
     states = scoped.get("favorite_state", pd.Series("", index=scoped.index)).astype(str)
