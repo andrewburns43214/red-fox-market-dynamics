@@ -456,16 +456,18 @@ def test_mobile_counts_and_live_scores_use_centered_sans_numerals():
     assert ".live-score{font-family:var(--sans)!important;font-style:normal!important" in BOARD
 
 
-def test_movement_chart_supports_live_mouse_touch_and_keyboard_scrubbing():
+def test_movement_chart_uses_clickable_market_moves_on_desktop_and_mobile():
     assert 'class="movement-inspector"' in BOARD
+    assert 'class="movement-click-target"' in BOARD
+    assert 'class="movement-change-dot"' in BOARD
     assert 'data-inspector-time' in BOARD
     assert 'data-inspector-line' in BOARD
     assert 'data-inspector-price' in BOARD
     assert 'data-inspector-bets' in BOARD
     assert 'data-inspector-money' in BOARD
-    assert 'class="movement-scrub-guide"' in BOARD
-    assert "event.pointerType==='mouse'" in BOARD
-    assert 'svg.setPointerCapture(event.pointerId)' in BOARD
-    assert "event.key!=='ArrowLeft'&&event.key!=='ArrowRight'" in BOARD
+    assert "value!==movementValues[index-1]" in BOARD
+    assert "point.addEventListener('click',()=>applyPoint(point))" in BOARD
+    assert "event.key!=='Enter'&&event.key!==' '" in BOARD
     assert 'touch-action:pan-y' in BOARD
+    assert "pointermove" not in BOARD[BOARD.index("function wireMovementScrub"):BOARD.index("async function openGameDetail", BOARD.index("function wireMovementScrub"))]
     assert "document.querySelectorAll('#drill-overlay [data-movement-chart]').forEach(wireMovementScrub);" in BOARD

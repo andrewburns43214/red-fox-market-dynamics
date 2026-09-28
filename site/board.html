@@ -1295,13 +1295,17 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .movement-tabs { display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; }
 .movement-tab { border:1px solid var(--border); border-radius:999px; padding:4px 7px; background:#fff; color:var(--text3); font:700 9px var(--sans); cursor:pointer; }
 .movement-tab.on { background:#f8e2df; border-color:#e7afa8; color:#a33f38; }
-.movement-svg { cursor:crosshair; touch-action:pan-y; }
-.movement-scrub-guide { opacity:0; pointer-events:none; }
-.movement-scrub-guide.is-active { opacity:1; }
-.movement-scrub-point { pointer-events:none; }
-.movement-scrub-point.is-active { fill:#dd4a40; fill-opacity:.18; stroke:#dd4a40; stroke-width:2; }
-.movement-inspector { display:flex; flex-wrap:wrap; align-items:center; gap:5px 12px; min-height:32px; margin:7px 0 2px; padding:7px 9px; border-radius:7px; background:#f7f1ef; border-left:3px solid #dd4a40; color:#5d3430; font:700 9px/1.35 var(--sans); font-variant-numeric:tabular-nums; }
+.movement-plot { position:relative; }
+.movement-svg { touch-action:pan-y; }
+.movement-click-target { cursor:pointer; outline:none; -webkit-tap-highlight-color:transparent; }
+.movement-click-hit { fill:none; stroke:none; pointer-events:all; }
+.movement-change-dot { fill:#fff; stroke:#dd4a40; stroke-width:2; transition:r .12s ease,fill .12s ease; }
+.movement-click-target:hover .movement-change-dot,.movement-click-target:focus-visible .movement-change-dot { fill:#fbe5e2; r:6px; }
+.movement-click-target.is-active .movement-change-dot { fill:#dd4a40; r:6px; }
+.movement-inspector { position:absolute; z-index:2; display:grid; gap:3px; width:max-content; max-width:min(300px,calc(100% - 16px)); min-height:0!important; margin:0!important; padding:8px 10px; border:1px solid #e6b1aa; border-radius:7px; background:rgba(255,255,255,.97); box-shadow:0 6px 18px rgba(45,31,29,.14); color:#5d3430; font:700 11px/1.35 var(--sans)!important; font-variant-numeric:tabular-nums; pointer-events:none; }
+.movement-inspector[hidden] { display:none!important; }
 .movement-inspector-time { color:var(--text); font-weight:800; }
+.movement-inspector-values { display:flex; flex-wrap:wrap; gap:3px 10px; }
 .movement-inspector-value { white-space:nowrap; }
 .movement-facts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:8px; }
 .movement-fact { padding:7px 8px; border-radius:6px; background:rgba(255,255,255,.72); }
@@ -3642,6 +3646,9 @@ function movementChart(rows, market, selectedTimestamp='', selectedSide=''){
   const viewKeys=['market', ...(marketKey==='MONEYLINE'?[]:['price']), 'bets', 'money'];
   const views=viewKeys.map(makeView).filter(view=>view.values.every(value=>value!==null));
   if(!views.length) return '';
+  const movementValues=marketKey==='MONEYLINE'?rows.map(row=>number(row.price_odds)):rows.map(row=>number(row.line_value));
+  const movementIndexes=[];
+  movementValues.forEach((value,index)=>{ if(index>0&&value!==movementValues[index-1])movementIndexes.push(index); });
   const panel=view=>{
     const values=view.values;
     const min=Math.min(...values), max=Math.max(...values), span=max-min||1;
@@ -3662,10 +3669,14 @@ function movementChart(rows, market, selectedTimestamp='', selectedSide=''){
     }).join('');
     const first=rows[0], last=rows[rows.length-1];
     const xLabels=`<text x="${padLeft}" y="${height-3}" fill="#74808a" font-size="8" font-family="var(--mono)">${timeLabel(first)}</text><text x="${width-padRight}" y="${height-3}" text-anchor="end" fill="#74808a" font-size="8" font-family="var(--mono)">${timeLabel(last)}</text>`;
-    const scrubPoints=points.map((point,index)=>`<circle class="movement-scrub-point" data-index="${index}" data-time="${escHtml(timeLabel(rows[index]))}" data-line="${escHtml(lineLabel(rows[index]))}" data-price="${escHtml(signed(rows[index].price_odds))}" data-bets="${escHtml(percent(rows[index].bets_pct))}" data-money="${escHtml(percent(rows[index].money_pct))}" cx="${point[0]}" cy="${point[1]}" r="12" fill="transparent"/>`).join('');
+    const movementPoints=movementIndexes.map(index=>{
+      const point=points[index], row=rows[index];
+      const aria=`Market move ${timeLabel(row)}. Line ${lineLabel(row)}, price ${signed(row.price_odds)}, bets ${percent(row.bets_pct)}, money ${percent(row.money_pct)}`;
+      return `<g class="movement-click-target" role="button" tabindex="0" aria-label="${escHtml(aria)}" data-index="${index}" data-time="${escHtml(timeLabel(row))}" data-line="${escHtml(lineLabel(row))}" data-price="${escHtml(signed(row.price_odds))}" data-bets="${escHtml(percent(row.bets_pct))}" data-money="${escHtml(percent(row.money_pct))}"><circle class="movement-click-hit" cx="${point[0]}" cy="${point[1]}" r="14"/><circle class="movement-change-dot" cx="${point[0]}" cy="${point[1]}" r="4"/></g>`;
+    }).join('');
     const lineInspector=marketKey==='MONEYLINE'?'':`<span class="movement-inspector-value" data-inspector-line>Line ${escHtml(lineLabel(last))}</span>`;
-    const inspector=`<div class="movement-inspector" aria-label="Selected market observation"><span class="movement-inspector-time" data-inspector-time>${escHtml(timeLabel(last))}</span>${lineInspector}<span class="movement-inspector-value" data-inspector-price>Price ${escHtml(signed(last.price_odds))}</span><span class="movement-inspector-value" data-inspector-bets>Bets ${escHtml(percent(last.bets_pct))}</span><span class="movement-inspector-value" data-inspector-money>Money ${escHtml(percent(last.money_pct))}</span></div>`;
-    return `<div class="movement-panel" data-movement-view="${view.key}" style="display:${view.key==='market'?'block':'none'}"><div class="movement-chart-note">${view.note}</div><svg class="movement-svg" viewBox="0 0 ${width} ${height}" role="img" tabindex="0" aria-label="${view.title} trajectory. Move across the chart to inspect each observation."><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#dd4a40" stop-opacity=".25"/><stop offset="1" stop-color="#dd4a40" stop-opacity=".02"/></linearGradient></defs>${ticks}<path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${polyline}" fill="none" stroke="#dd4a40" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#dd4a40" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#dd4a40"/>${selectedMarker}<line class="movement-scrub-guide" x1="${points[points.length-1][0]}" y1="${padY}" x2="${points[points.length-1][0]}" y2="${height-padY}" stroke="#dd4a40" stroke-width="1.5" stroke-dasharray="3 3"/>${scrubPoints}${xLabels}</svg>${inspector}<div class="movement-facts"><div class="movement-fact"><span>Start</span><b>${view.pointLabel(first)}</b></div><div class="movement-fact"><span>Current</span><b>${view.pointLabel(last)}</b></div><div class="movement-fact"><span>High</span><b>${view.axisLabel(max)}</b></div><div class="movement-fact"><span>Low</span><b>${view.axisLabel(min)}</b></div></div></div>`;
+    const inspector=`<div class="movement-inspector" hidden aria-label="Selected market move"><span class="movement-inspector-time" data-inspector-time></span><span class="movement-inspector-values">${lineInspector}<span class="movement-inspector-value" data-inspector-price></span><span class="movement-inspector-value" data-inspector-bets></span><span class="movement-inspector-value" data-inspector-money></span></span></div>`;
+    return `<div class="movement-panel" data-movement-view="${view.key}" style="display:${view.key==='market'?'block':'none'}"><div class="movement-chart-note">${view.note}</div><div class="movement-plot"><svg class="movement-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${view.title} trajectory. Select a marked market move for details."><defs><linearGradient id="movementFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#dd4a40" stop-opacity=".25"/><stop offset="1" stop-color="#dd4a40" stop-opacity=".02"/></linearGradient></defs>${ticks}<path d="M${area} Z" fill="url(#movementFill)"/><polyline points="${polyline}" fill="none" stroke="#dd4a40" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${points[0][0]}" cy="${points[0][1]}" r="4" fill="#fff" stroke="#dd4a40" stroke-width="2"/><circle cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="4" fill="#dd4a40"/>${selectedMarker}${movementPoints}${xLabels}</svg>${inspector}</div><div class="movement-facts"><div class="movement-fact"><span>Start</span><b>${view.pointLabel(first)}</b></div><div class="movement-fact"><span>Current</span><b>${view.pointLabel(last)}</b></div><div class="movement-fact"><span>High</span><b>${view.axisLabel(max)}</b></div><div class="movement-fact"><span>Low</span><b>${view.axisLabel(min)}</b></div></div></div>`;
   };
   const tabs=views.map(view=>`<button type="button" class="movement-tab ${view.key==='market'?'on':''}" onclick="setMovementView(this,'${view.key}')">${view.label}</button>`).join('');
   return `<div class="movement-chart" data-movement-chart><div class="movement-chart-head"><div><div class="movement-chart-title">Market trajectory</div><div class="movement-chart-note">${rows.length} timestamped observations for ${escHtml(selectedSideText)}.</div></div><div class="movement-tabs">${tabs}</div></div>${views.map(panel).join('')}</div>`;
@@ -3681,35 +3692,31 @@ function wireMovementScrub(chart){
   if(chart.dataset.scrubWired==='true') return;
   chart.dataset.scrubWired='true';
   chart.querySelectorAll('.movement-svg').forEach(svg=>{
-    const points=[...svg.querySelectorAll('.movement-scrub-point')]; if(!points.length)return;
-    const applyPoint=nearest=>{
-      svg.dataset.scrubIndex=nearest.dataset.index;
-      points.forEach(point=>point.classList.toggle('is-active',point===nearest));
-      const guide=svg.querySelector('.movement-scrub-guide');
-      if(guide){ guide.setAttribute('x1',nearest.getAttribute('cx')); guide.setAttribute('x2',nearest.getAttribute('cx')); guide.classList.add('is-active'); }
-      const panel=svg.closest('.movement-panel');
+    const points=[...svg.querySelectorAll('.movement-click-target')]; if(!points.length)return;
+    const panel=svg.closest('.movement-panel'), plot=svg.closest('.movement-plot'), output=panel?.querySelector('.movement-inspector');
+    const applyPoint=point=>{
+      points.forEach(candidate=>candidate.classList.toggle('is-active',candidate===point));
       const set=(selector,value)=>{ const element=panel?.querySelector(selector); if(element)element.textContent=value; };
-      set('[data-inspector-time]',nearest.dataset.time);
-      set('[data-inspector-line]','Line '+nearest.dataset.line);
-      set('[data-inspector-price]','Price '+nearest.dataset.price);
-      set('[data-inspector-bets]','Bets '+nearest.dataset.bets);
-      set('[data-inspector-money]','Money '+nearest.dataset.money);
+      set('[data-inspector-time]',point.dataset.time);
+      set('[data-inspector-line]','Line '+point.dataset.line);
+      set('[data-inspector-price]','Price '+point.dataset.price);
+      set('[data-inspector-bets]','Bets '+point.dataset.bets);
+      set('[data-inspector-money]','Money '+point.dataset.money);
+      if(!output||!plot)return;
+      output.hidden=false;
+      const dot=point.querySelector('.movement-change-dot'), plotRect=plot.getBoundingClientRect(), dotRect=dot.getBoundingClientRect();
+      const left=Math.max(8,Math.min(plot.clientWidth-output.offsetWidth-8,dotRect.left-plotRect.left+(dotRect.width-output.offsetWidth)/2));
+      let top=dotRect.top-plotRect.top-output.offsetHeight-9;
+      if(top<6)top=dotRect.bottom-plotRect.top+9;
+      output.style.left=left+'px'; output.style.top=Math.min(top,plot.clientHeight-output.offsetHeight-6)+'px';
     };
-    const inspect=event=>{
-      const rect=svg.getBoundingClientRect(), ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width));
-      const targetX=ratio*640; let nearest=points[0], distance=Infinity;
-      points.forEach(point=>{const d=Math.abs(Number(point.getAttribute('cx'))-targetX);if(d<distance){distance=d;nearest=point;}});
-      applyPoint(nearest);
-    };
-    svg.addEventListener('pointerdown',event=>{ if(svg.setPointerCapture)svg.setPointerCapture(event.pointerId); inspect(event); });
-    svg.addEventListener('pointermove',event=>{ if(event.pointerType==='mouse'||event.buttons||svg.hasPointerCapture?.(event.pointerId))inspect(event); });
-    svg.addEventListener('keydown',event=>{
-      if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
-      event.preventDefault();
-      const current=Number(svg.dataset.scrubIndex||points.length-1);
-      applyPoint(points[Math.max(0,Math.min(points.length-1,current+(event.key==='ArrowLeft'?-1:1)))]);
+    points.forEach(point=>{
+      point.addEventListener('click',()=>applyPoint(point));
+      point.addEventListener('keydown',event=>{
+        if(event.key!=='Enter'&&event.key!==' ')return;
+        event.preventDefault(); applyPoint(point);
+      });
     });
-    applyPoint(points[points.length-1]);
   });
 }
 
