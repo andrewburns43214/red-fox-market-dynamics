@@ -85,6 +85,9 @@ def test_prop_runner_propagates_failure_exit_code():
     script = (monitor.Path(__file__).resolve().parents[1] / "ops" / "run_prop_collection.sh").read_text(encoding="utf-8")
     assert 'exit "$status"' in script
     assert 'REDFOX_PROP_FORCE' in script
+    assert 'REDFOX_PROP_TIMEOUT_SECONDS:-300' in script
+    assert 'prop collection SKIPPED active-lock' in script
+    assert '[[ "$status" == "75" ]]' in script
 
 
 def test_production_deploy_is_fast_forward_verified_and_health_gated():
@@ -96,5 +99,6 @@ def test_production_deploy_is_fast_forward_verified_and_health_gated():
     assert 'nginx -t' in script
     assert '"$ROOT/ops/run_prop_collection.sh"' in script
     assert "REDFOX_PROP_FORCE=1" in script
+    assert 'REDFOX_PROP_TIMEOUT_SECONDS:-420' in script
     assert '"$ROOT/run_all_sports.sh"' in script
     assert '"$ROOT/ops/redfox-healthcheck.sh"' in script

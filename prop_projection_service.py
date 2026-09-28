@@ -820,7 +820,9 @@ def main(argv=None):
     with process_lock() as acquired:
         if not acquired:
             print("[props] collector already running; skipped")
-            return 0
+            # EX_TEMPFAIL lets the wrapper distinguish lock contention from a
+            # completed collection. It must never emit a false DONE marker.
+            return 75
         try:
             payload = run_collection(force=args.force)
             try:

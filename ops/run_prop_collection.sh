@@ -20,10 +20,14 @@ PROP_ARGS=(collect)
 if [[ "${REDFOX_PROP_FORCE:-0}" == "1" ]]; then
   PROP_ARGS+=(--force)
 fi
-if timeout "${REDFOX_PROP_TIMEOUT_SECONDS:-120}" "$PY" prop_projection_service.py "${PROP_ARGS[@]}" >> "$LOG" 2>&1; then
+if timeout "${REDFOX_PROP_TIMEOUT_SECONDS:-300}" "$PY" prop_projection_service.py "${PROP_ARGS[@]}" >> "$LOG" 2>&1; then
   echo "--- $(date) prop collection DONE ---" >> "$LOG"
 else
   status=$?
+  if [[ "$status" == "75" ]]; then
+    echo "--- $(date) prop collection SKIPPED active-lock ---" >> "$LOG"
+    exit 0
+  fi
   echo "--- $(date) prop collection UNAVAILABLE exit=$status ---" >> "$LOG"
   exit "$status"
 fi

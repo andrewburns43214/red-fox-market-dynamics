@@ -21,6 +21,16 @@ def test_collect_cli_returns_nonzero_when_collection_raises(monkeypatch, capsys)
     assert "unavailable: RuntimeError" in capsys.readouterr().err
 
 
+def test_collect_cli_reports_lock_contention_as_temporary_skip(monkeypatch, capsys):
+    class Lock:
+        def __enter__(self): return False
+        def __exit__(self, *_): return False
+
+    monkeypatch.setattr(service, "process_lock", lambda: Lock())
+    assert service.main(["collect"]) == 75
+    assert "already running; skipped" in capsys.readouterr().out
+
+
 def team(display, abbreviation, name, location):
     return {
         "displayName": display, "shortDisplayName": name, "name": name,

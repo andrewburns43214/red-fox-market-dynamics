@@ -50,7 +50,7 @@ printf '%s\n' "$revision" > "$EXPECTED_REVISION_FILE"
 # deployment can be declared healthy.
 flock -u 202
 flock -u 200
-REDFOX_PROP_FORCE=1 REDFOX_PROP_TIMEOUT_SECONDS="${REDFOX_PROP_TIMEOUT_SECONDS:-180}" \
+REDFOX_PROP_FORCE=1 REDFOX_PROP_TIMEOUT_SECONDS="${REDFOX_PROP_TIMEOUT_SECONDS:-420}" \
   "$ROOT/ops/run_prop_collection.sh"
 "$ROOT/run_all_sports.sh"
 "$ROOT/ops/redfox-healthcheck.sh"
