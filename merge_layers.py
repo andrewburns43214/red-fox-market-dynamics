@@ -69,9 +69,11 @@ SITUATIONAL_DEFAULTS = {
     "home_rest_days": 1,
     "away_rest_days": 1,
     "b2b_flag": "",
-    "wind_mph": 0,
-    "temp_f": 70,
-    "precip_prob": 0,
+    # Weather providers return fractional observations.  Seed these columns as
+    # floats so pandas does not reject valid decimal updates on newer releases.
+    "wind_mph": 0.0,
+    "temp_f": 70.0,
+    "precip_prob": 0.0,
     "weather_flag": "",
     "weather_adj": 0.0,
     # Sport-specific context

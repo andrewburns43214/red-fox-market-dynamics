@@ -5,7 +5,7 @@ import pandas as pd
 
 
 BOARD = (Path(__file__).resolve().parents[1] / "site" / "board.html").read_text(encoding="utf-8")
-SANDBOX_BOARD = Path(__file__).resolve().parents[1] / "data" / "two_side_staging" / "anomaly_board.csv"
+PRESENTATION_CONTROLS = Path(__file__).resolve().parent / "fixtures" / "presentation_controls.json"
 SERVER = (Path(__file__).resolve().parents[1] / "serve.py").read_text(encoding="utf-8")
 
 
@@ -44,9 +44,9 @@ def test_tracked_board_owns_the_approved_toolbar_and_hides_legacy_surfaces():
 
 
 def _sandbox_side(game, market, name):
-    board = pd.read_csv(SANDBOX_BOARD, dtype=str, keep_default_na=False)
+    board = pd.DataFrame(json.loads(PRESENTATION_CONTROLS.read_text(encoding="utf-8")))
     row = board[(board.game == game) & (board.market_display == market)].iloc[0]
-    side = next(side for side in json.loads(row.market_sides) if side["flagged_side"] == name)
+    side = next(side for side in row.market_sides if side["flagged_side"] == name)
     return row, side
 
 

@@ -1,0 +1,20 @@
+[
+  {
+    "market_display": "MONEYLINE",
+    "flagged_side": "CLE Guardians",
+    "timestamp": "2026-09-02T17:41:45.939685+00:00",
+    "line_display": "-115",
+    "bets_pct": 0.0,
+    "money_pct": 0.0,
+    "first_anomaly_seen": "2026-09-03T01:01:00.582925+00:00"
+  },
+  {
+    "market_display": "MONEYLINE",
+    "flagged_side": "CLE Guardians",
+    "timestamp": "2026-09-03T01:01:00.582925+00:00",
+    "line_display": "-110",
+    "bets_pct": 19.0,
+    "money_pct": 0.0,
+    "first_anomaly_seen": "2026-09-03T01:01:00.582925+00:00"
+  }
+]

@@ -1580,7 +1580,7 @@ const HEAVY_ML_ODDS_THRESHOLD = -250;
   const market = (tr.dataset.market || "").toUpperCase();
 
   const colorVal = (tr.dataset.color || "").toUpperCase();
-  const colorNorm = colorVal.replace(/\s+/g, "_"); // "DARK GREEN" -> "DARK_GREEN"
+  const colorNorm = colorVal.replace(/\\s+/g, "_"); // "DARK GREEN" -> "DARK_GREEN"
 
   const mlOddsRaw = (tr.dataset.mlOdds || "").replaceAll("−", "-").trim();
   const mlOdds = mlOddsRaw ? parseInt(mlOddsRaw, 10) : NaN;

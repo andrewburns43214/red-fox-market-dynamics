@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BOARD = (ROOT / "site" / "board.html").read_text(encoding="utf-8")
-STAGING = ROOT / "data" / "two_side_staging"
+FROZEN_CONTROL = Path(__file__).resolve().parent / "fixtures" / "mlb_34608985_moneyline_guardians.json"
 
 
 def _timestamp(value):
@@ -26,7 +26,7 @@ def test_frozen_detail_uses_one_event_series_for_every_surface():
     # current publishable board after kickoff, so it must not be sourced from
     # the rolling board artifact.
     cutoff = _timestamp("2026-09-03T17:10:04.463575+00:00")
-    events = json.loads((STAGING / "anomaly_event_details" / "mlb--34608985.json").read_text())
+    events = json.loads(FROZEN_CONTROL.read_text(encoding="utf-8"))
     series = [
         row for row in events
         if row["market_display"] == "MONEYLINE"

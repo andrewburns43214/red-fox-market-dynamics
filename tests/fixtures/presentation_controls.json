@@ -1,0 +1,34 @@
+[
+  {
+    "game": "West Georgia @ Kennesaw State",
+    "market_display": "SPREAD",
+    "market_sides": [
+      {"flagged_side": "West Georgia +22.5", "open_line": "+23.5 (-105)", "current_line": "+22.5 (-108)", "path": "One-Way"},
+      {"flagged_side": "Kennesaw State -22.5", "open_line": "-23.5 (-115)", "current_line": "-22.5 (-112)", "path": "One-Way"}
+    ]
+  },
+  {
+    "game": "UTEP @ Oklahoma",
+    "market_display": "SPREAD",
+    "market_sides": [
+      {"flagged_side": "UTEP +40.5", "open_line": "+41.5 (-115)", "current_line": "+40.5 (-110)", "path": "One-Way"},
+      {"flagged_side": "Oklahoma -40.5", "open_line": "-41.5 (-105)", "current_line": "-40.5 (-110)", "path": "One-Way"}
+    ]
+  },
+  {
+    "game": "San Jose State @ Eastern Michigan",
+    "market_display": "MONEYLINE",
+    "market_sides": [
+      {"flagged_side": "Eastern Michigan", "open_line": "-155", "current_line": "-135", "path": "One-Way"},
+      {"flagged_side": "San Jose State", "open_line": "+130", "current_line": "+114", "path": "One-Way"}
+    ]
+  },
+  {
+    "game": "Ball State @ Ohio State",
+    "market_display": "SPREAD",
+    "market_sides": [
+      {"flagged_side": "Ball State +50.5", "open_line": "+50.5 (-112)", "current_line": "+50.5 (-112)", "path": "Whipsaw"},
+      {"flagged_side": "Ohio State -50.5", "open_line": "-50.5 (-108)", "current_line": "-50.5 (-108)", "path": "Whipsaw"}
+    ]
+  }
+]
