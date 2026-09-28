@@ -31,6 +31,17 @@ def test_collect_cli_reports_lock_contention_as_temporary_skip(monkeypatch, caps
     assert "already running; skipped" in capsys.readouterr().out
 
 
+def test_live_collect_does_not_scan_historical_resolution_ledger(monkeypatch):
+    class Lock:
+        def __enter__(self): return True
+        def __exit__(self, *_): return False
+
+    monkeypatch.setattr(service, "process_lock", lambda: Lock())
+    monkeypatch.setattr(service, "run_collection", lambda **_: {"collection_status": "OK", "projections": []})
+    monkeypatch.setattr(service, "run_resolution", lambda **_: (_ for _ in ()).throw(AssertionError("must not grade during live collect")))
+    assert service.main(["collect"]) == 0
+
+
 def team(display, abbreviation, name, location):
     return {
         "displayName": display, "shortDisplayName": name, "name": name,

@@ -409,7 +409,7 @@ def _seed_last_available(state, ledger_path):
     if "last_available" in state:
         return
     recovered = {}
-    for record in _jsonl(ledger_path):
+    for record in _iter_jsonl(ledger_path):
         projection = record.get("projection") if isinstance(record, dict) else None
         if not isinstance(projection, dict) or projection.get("status") != "AVAILABLE":
             continue
@@ -582,17 +582,19 @@ def run_collection(client=None, resolver=None, force=False, now=None):
     return payload
 
 
-def _jsonl(path):
+def _iter_jsonl(path):
     if not path.exists():
-        return []
-    rows = []
+        return
     with path.open(encoding="utf-8") as handle:
         for line in handle:
             try:
-                rows.append(json.loads(line))
+                yield json.loads(line)
             except ValueError:
                 continue
-    return rows
+
+
+def _jsonl(path):
+    return list(_iter_jsonl(path))
 
 
 def _shadow_digest(projection):
@@ -699,14 +701,16 @@ def _shadow_performance(rows):
 def run_resolution(client=None, now=None, force=False):
     """Privately join frozen pregame projections to final team scores."""
     now, client = now or utc_now(), client or PropLineClient()
-    ledger = _jsonl(DATA_ROOT / "projection_ledger.jsonl")
     latest = {}
-    for entry in ledger:
+    # The production ledger is intentionally append-only and may exceed a
+    # gigabyte. Stream it instead of loading the full history into RAM on a
+    # small production host.
+    for entry in _iter_jsonl(DATA_ROOT / "projection_ledger.jsonl"):
         projection = entry.get("projection", {})
         if projection.get("status") == "AVAILABLE":
             latest[f"{projection.get('sport')}:{projection.get('event_id')}"] = projection
     shadow_latest = {}
-    for entry in _jsonl(DATA_ROOT / "projection_v2_shadow_ledger.jsonl"):
+    for entry in _iter_jsonl(DATA_ROOT / "projection_v2_shadow_ledger.jsonl"):
         projection = entry.get("projection", {})
         if projection.get("status") == "SHADOW_AVAILABLE":
             key = f"{projection.get('sport')}:{projection.get('event_id')}"
@@ -825,10 +829,6 @@ def main(argv=None):
             return 75
         try:
             payload = run_collection(force=args.force)
-            try:
-                run_resolution(force=False)
-            except Exception:
-                pass
             available = sum(item.get("status") == "AVAILABLE" for item in payload["projections"])
             print(f"[props] published {available}/{len(payload['projections'])} available projections")
             if payload.get("collection_status") == "DEGRADED":
