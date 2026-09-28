@@ -16,8 +16,14 @@ if [ -r /etc/redfox-propline.env ]; then
 fi
 
 echo "--- $(date) prop collection START ---" >> "$LOG"
-if timeout "${REDFOX_PROP_TIMEOUT_SECONDS:-120}" "$PY" prop_projection_service.py collect >> "$LOG" 2>&1; then
+PROP_ARGS=(collect)
+if [[ "${REDFOX_PROP_FORCE:-0}" == "1" ]]; then
+  PROP_ARGS+=(--force)
+fi
+if timeout "${REDFOX_PROP_TIMEOUT_SECONDS:-120}" "$PY" prop_projection_service.py "${PROP_ARGS[@]}" >> "$LOG" 2>&1; then
   echo "--- $(date) prop collection DONE ---" >> "$LOG"
 else
-  echo "--- $(date) prop collection UNAVAILABLE ---" >> "$LOG"
+  status=$?
+  echo "--- $(date) prop collection UNAVAILABLE exit=$status ---" >> "$LOG"
+  exit "$status"
 fi

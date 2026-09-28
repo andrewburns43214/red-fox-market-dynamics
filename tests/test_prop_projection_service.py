@@ -10,6 +10,17 @@ import prop_projection_service as service
 NOW = datetime(2026, 9, 19, 16, 0, tzinfo=timezone.utc)
 
 
+def test_collect_cli_returns_nonzero_when_collection_raises(monkeypatch, capsys):
+    class Lock:
+        def __enter__(self): return True
+        def __exit__(self, *_): return False
+
+    monkeypatch.setattr(service, "process_lock", lambda: Lock())
+    monkeypatch.setattr(service, "run_collection", lambda **_: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert service.main(["collect"]) == 1
+    assert "unavailable: RuntimeError" in capsys.readouterr().err
+
+
 def team(display, abbreviation, name, location):
     return {
         "displayName": display, "shortDisplayName": name, "name": name,

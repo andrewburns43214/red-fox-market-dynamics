@@ -150,7 +150,9 @@ def _utc_series(values: object, index: pd.Index) -> pd.Series:
     parsed = pd.Series(pd.to_datetime(source, errors="coerce", utc=True), index=index)
     if not isinstance(parsed.dtype, pd.DatetimeTZDtype):
         parsed = parsed.dt.tz_localize("UTC")
-    return parsed
+    # pandas 3 preserves second-resolution datetimes for all-missing inputs.
+    # Keep the ledger contract stable at nanosecond UTC regardless of input.
+    return parsed.astype("datetime64[ns, UTC]")
 
 
 def _identity(value: object) -> str:

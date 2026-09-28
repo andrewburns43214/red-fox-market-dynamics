@@ -96,6 +96,15 @@ def test_healthcheck_resets_consecutive_failure_count_after_success():
     assert "/refresh anomaly board ERROR/ { publish_failures++; next }" in script
     assert "/snapshot DONE --sport/" in script
     assert "/snapshot ERROR --sport/" in script
+    assert 'MAX_UPSTREAM_ERRORS="${REDFOX_MAX_UPSTREAM_ERRORS:-1}"' in script
+
+
+def test_runner_propagates_pipeline_failures_and_writes_freshness_atomically():
+    script = (Path(__file__).resolve().parents[1] / "run_all_sports.sh").read_text(encoding="utf-8")
+    assert "PIPELINE_STATUS=1" in script
+    assert 'RUN END status=FAILED' in script
+    assert 'exit "$PIPELINE_STATUS"' in script
+    assert "os.replace(tmp, fp)" in script
 
 
 def test_fully_rejected_snapshot_fails_the_command_for_runner_visibility():

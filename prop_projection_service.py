@@ -426,6 +426,7 @@ def run_collection(client=None, resolver=None, force=False, now=None):
     state_path = DATA_ROOT / "state.json"
     state = _read_json(state_path, {"sports": {}, "event_hashes": {}, "event_seen": {}, "contexts": {}})
     projections = []
+    attempted_sports, successful_sports = [], []
     for sport, config in SPORTS.items():
         if not config["enabled"]:
             continue
@@ -437,6 +438,7 @@ def run_collection(client=None, resolver=None, force=False, now=None):
         due = force or _poll_due(last_poll, interval, now, sport)
         payload = cached
         if due:
+            attempted_sports.append(sport)
             try:
                 payload = client.bulk_odds(
                     config["provider_key"],
@@ -444,6 +446,7 @@ def run_collection(client=None, resolver=None, force=False, now=None):
                 )
                 _atomic_json(cached_path, payload)
                 state["sports"][sport] = {"last_poll": now.isoformat(), "last_success": now.isoformat()}
+                successful_sports.append(sport)
             except Exception as error:
                 # A bad credential or provider outage must not be retried by
                 # every five-minute RF runner. Record the attempt as a poll so
@@ -550,7 +553,27 @@ def run_collection(client=None, resolver=None, force=False, now=None):
             state.get("v2_error_hashes", {}).pop(event_key, None)
     _seed_last_available(state, DATA_ROOT / "projection_ledger.jsonl")
     projections = _retain_final_pregame(state, projections, now)
-    payload = {"schema_version": 1, "generated_at": now.isoformat(), "projections": projections}
+    unresolved_failures = []
+    for sport, config in SPORTS.items():
+        if not config.get("enabled"):
+            continue
+        sport_state = state.get("sports", {}).get(sport, {})
+        last_error = parse_time(sport_state.get("last_error_at"))
+        last_success = parse_time(sport_state.get("last_success"))
+        if last_error and (not last_success or last_error > last_success):
+            unresolved_failures.append({
+                "sport": sport,
+                "error": sport_state.get("last_error") or "upstream_collection_failed",
+            })
+    payload = {
+        "schema_version": 2,
+        "generated_at": now.isoformat(),
+        "collection_status": "DEGRADED" if unresolved_failures else "OK",
+        "attempted_sports": attempted_sports,
+        "successful_sports": successful_sports,
+        "failed_sports": unresolved_failures,
+        "projections": projections,
+    }
     # Nginx serves only this compact projection payload. Keep credentials,
     # state, observations, and the canonical-line ledger private while making
     # the atomically replaced public file readable by the web worker.
@@ -786,6 +809,7 @@ def main(argv=None):
                 print(json.dumps(run_resolution(force=args.force), indent=2))
             except Exception as error:
                 print(f"[props] resolution unavailable: {type(error).__name__}", file=sys.stderr)
+                return 1
         return 0
     if args.command == "shadow-backfill":
         with process_lock() as acquired:
@@ -805,11 +829,19 @@ def main(argv=None):
                 pass
             available = sum(item.get("status") == "AVAILABLE" for item in payload["projections"])
             print(f"[props] published {available}/{len(payload['projections'])} available projections")
+            if payload.get("collection_status") == "DEGRADED":
+                failures = ", ".join(
+                    f"{item.get('sport')}:{item.get('error')}"
+                    for item in payload.get("failed_sports", [])
+                )
+                print(f"[props] upstream collection degraded: {failures}", file=sys.stderr)
+                return 1
             return 0
         except Exception as error:
-            # The independent prop job must never fail because props are absent.
+            # Absence is represented in the payload. An exception is an actual
+            # failed run and must be visible to cron and health monitoring.
             print(f"[props] unavailable: {type(error).__name__}", file=sys.stderr)
-            return 0
+            return 1
 
 
 if __name__ == "__main__":

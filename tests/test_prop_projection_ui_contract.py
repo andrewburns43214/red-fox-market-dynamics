@@ -14,14 +14,14 @@ def test_prop_score_is_cache_only_and_display_only():
     assert "No spread, total, moneyline, Market Read, rank, or Favorite input" in BOARD
     assert "prop_projection_service.py collect" not in RUNNER
     prop_runner = (ROOT / "ops" / "run_prop_collection.sh").read_text(encoding="utf-8")
-    assert "prop_projection_service.py collect" in prop_runner
+    assert 'prop_projection_service.py "${PROP_ARGS[@]}"' in prop_runner
     assert "timeout" in prop_runner
 
 
 def test_desktop_and_mobile_header_placement_contract():
     assert ".detail-game-header .prop-score { order:3; flex:1 1 100%;" in BOARD
     assert "<div class=\"detail-game-header\">" in BOARD
-    assert "<aside class=\"prop-score'+(retained?' prop-score-retained':'')+'\"" in BOARD
+    assert "<aside class=\"prop-score'+(warned?' prop-score-retained':'')+'\"" in BOARD
     assert "Props not open yet" in BOARD
     assert "Insufficient coverage" in BOARD
 
@@ -31,6 +31,13 @@ def test_last_verified_prop_read_stays_visible_when_latest_refresh_drops_coverag
     assert "Last verified prop read" in BOARD
     assert "latest refresh did not pass the coverage gate" in BOARD
     assert ".prop-score-retained" in BOARD
+
+
+def test_stale_or_degraded_prop_scores_are_never_presented_as_current():
+    assert "propSourceAgeLimitMinutes" in BOARD
+    assert "STALE SOURCE" in BOARD
+    assert "UPSTREAM DEGRADED" in BOARD
+    assert "is not a current read" in BOARD
 
 
 def test_public_cache_is_explicitly_allowlisted():

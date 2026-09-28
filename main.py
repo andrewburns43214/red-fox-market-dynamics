@@ -803,6 +803,10 @@ def update_snapshots_with_espn_finals(lookback_days=None, now=None):
             continue
 
         away_score, home_score = match
+        # pandas 3 uses a strict StringArray for CSV columns read with
+        # dtype=str. Assign strings explicitly so maintenance cannot fail while
+        # merging integer ESPN scores into a live snapshot capture.
+        away_score, home_score = str(away_score), str(home_score)
         side_norm = _norm(side)
 
         # only set for team-side rows

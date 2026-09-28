@@ -29,6 +29,7 @@ LOG=/var/log/redfox_update.log
 PY="/opt/red-fox-market-dynamics/.venv/bin/python"
 
 echo "===== $(date) RUN START =====" >> "$LOG"
+PIPELINE_STATUS=0
 
 # Auto-detect active sports by month+day (skips preseason)
 MONTH=$(date +%-m)
@@ -78,6 +79,7 @@ for SPORT in $SPORTS; do
   echo "--- $(date) snapshot DONE --sport $SPORT ---" >> "$LOG"
   else
     echo "--- $(date) snapshot ERROR --sport $SPORT (continuing) ---" >> "$LOG"
+    PIPELINE_STATUS=1
   fi
   sleep 3
 done
@@ -96,11 +98,17 @@ from datetime import datetime, timezone
 fp = 'data/freshness.json'
 f = json.load(open(fp)) if os.path.exists(fp) else {}
 f['engine_ts'] = datetime.now(timezone.utc).isoformat()
-json.dump(f, open(fp, 'w'))
+tmp = fp + '.engine.' + str(os.getpid()) + '.tmp'
+with open(tmp, 'w') as handle:
+    json.dump(f, handle)
+    handle.flush()
+    os.fsync(handle.fileno())
+os.replace(tmp, fp)
 " >> "$LOG" 2>&1
   echo "--- $(date) refresh anomaly board DONE ---" >> "$LOG"
 else
   echo "--- $(date) refresh anomaly board ERROR ---" >> "$LOG"
+  PIPELINE_STATUS=1
 fi
 
 # publish (nginx serves directly from project dir)
@@ -111,11 +119,18 @@ if timeout 60 "$PY" schedule_visibility.py >> "$LOG" 2>&1; then
   echo "--- $(date) schedule visibility DONE ---" >> "$LOG"
 else
   echo "--- $(date) schedule visibility UNAVAILABLE ---" >> "$LOG"
+  PIPELINE_STATUS=1
 fi
 
 # Coverage health is independent of ranking/scoring and never changes the board.
 if ! "$PY" coverage_monitor.py >> "$LOG" 2>&1; then
   echo "--- $(date) COVERAGE ALERT: inspect publication_coverage.json ---" >> "$LOG"
+  PIPELINE_STATUS=1
 fi
 
-echo "===== $(date) RUN END =====" >> "$LOG"
+if (( PIPELINE_STATUS == 0 )); then
+  echo "===== $(date) RUN END status=OK =====" >> "$LOG"
+else
+  echo "===== $(date) RUN END status=FAILED =====" >> "$LOG"
+fi
+exit "$PIPELINE_STATUS"

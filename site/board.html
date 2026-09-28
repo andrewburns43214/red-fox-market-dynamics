@@ -5128,6 +5128,19 @@ function gamePropProjection(row){
   return nearby.sort((a,b)=>Math.abs(new Date(a.commence_time)-kickoff)-Math.abs(new Date(b.commence_time)-kickoff))[0]||null;
 }
 function propOpeningWindowHours(sport){ return ({nfl:48,ncaaf:36,nba:24,ncaab:24,nhl:24,mlb:12})[normSportKey(sport)]||24; }
+function propSourceAgeLimitMinutes(sport,leadMinutes){
+  const key=normSportKey(sport);
+  if(key==='nfl'||key==='ncaaf'){
+    if(leadMinutes<=60)return 25;
+    if(leadMinutes<=360)return 45;
+    if(leadMinutes<=1440)return 75;
+    if(leadMinutes<=2880)return 135;
+    return 195;
+  }
+  if(leadMinutes<=60)return 30;
+  if(leadMinutes<=360)return 45;
+  return 75;
+}
 function propUnavailableStatus(row,prop){
   if(prop?.status==='NOT_OPEN'||prop?.reason==='props_not_open_yet') return 'Props not open yet';
   if(prop?.display_status==='Projection not qualified') return 'Projection not qualified';
@@ -5175,10 +5188,15 @@ function propScoreHtml(row){
   const awayValue=Number.isFinite(Number(prop.away_mean))?Number(prop.away_mean).toFixed(2):String(prop.away_score);
   const homeValue=Number.isFinite(Number(prop.home_mean))?Number(prop.home_mean).toFixed(2):String(prop.home_score);
   const retained=prop.retained_last_available===true||String(prop.retained_last_available).toLowerCase()==='true';
-  const retainedMeta=retained?'Last verified prop read · ':'';
-  const retainedDetail=retained?'<div style="margin-top:5px">The latest refresh did not pass the coverage gate, so this remains the last verified pregame prop read.</div>':'';
+  const kickoff=new Date(prop.commence_time||row.kickoff_iso||row._game_time||row.kickoff_time||'');
+  const leadMinutes=Number.isNaN(kickoff.getTime())?Infinity:Math.max(0,(kickoff-Date.now())/60000);
+  const staleSource=Number.isFinite(age)&&age>propSourceAgeLimitMinutes(row.sport,leadMinutes);
+  const degradedFeed=String(prop._feed_status||'').toUpperCase()==='DEGRADED';
+  const freshnessWarning=staleSource?'STALE SOURCE · ':(degradedFeed?'UPSTREAM DEGRADED · ':(retained?'Last verified prop read · ':''));
+  const freshnessDetail=staleSource?'<div style="margin-top:5px">This prop source is older than the allowed game-window cadence. The score is retained for context and is not a current read.</div>':(degradedFeed?'<div style="margin-top:5px">The latest upstream collection is degraded. This score remains visible but is not certified current.</div>':(retained?'<div style="margin-top:5px">The latest refresh did not pass the coverage gate, so this remains the last verified pregame prop read.</div>':''));
   const agreementText=prop.quality_warning||(prop.projection_method==='touchdown_scorer_surface_primary'?'The touchdown-scorer surface is the primary score; paired scoring props determine verification quality.':(prop.projection_method==='independent_run_estimator_consensus'?'Independent run estimators form the best available consensus for each team.':'The best available prop scoring reconstruction is shown.'));
-  return '<aside class="prop-score'+(retained?' prop-score-retained':'')+'" aria-label="Props-only projected score"><div class="prop-score-label">'+(mlb?'Props-only expected runs':'Props-only expected points')+'</div><div class="prop-score-value">'+escHtml(prop.away_team)+' '+escHtml(awayValue)+' · '+escHtml(prop.home_team)+' '+escHtml(homeValue)+'</div><div class="prop-score-meta">'+escHtml(retainedMeta+tier)+' · source line up to '+escHtml(ageText)+' old</div><details><summary>5–7 strongest anchors</summary><div class="prop-score-why">'+players+' verified players · '+books+' books · '+escHtml(families)+' · oldest line '+escHtml(ageText)+' old.'+retainedDetail+propAnchorsHtml(prop.anchors)+'<div style="margin-top:5px">'+escHtml(agreementText)+' Broad prop coverage is collected; correlated markets validate or blend and are never independently double-counted. No spread, total, moneyline, Market Read, rank, or Favorite input.</div></div></details></aside>';
+  const warned=retained||staleSource||degradedFeed;
+  return '<aside class="prop-score'+(warned?' prop-score-retained':'')+'" aria-label="Props-only projected score"><div class="prop-score-label">'+(mlb?'Props-only expected runs':'Props-only expected points')+'</div><div class="prop-score-value">'+escHtml(prop.away_team)+' '+escHtml(awayValue)+' · '+escHtml(prop.home_team)+' '+escHtml(homeValue)+'</div><div class="prop-score-meta">'+escHtml(freshnessWarning+tier)+' · source line up to '+escHtml(ageText)+' old</div><details><summary>5–7 strongest anchors</summary><div class="prop-score-why">'+players+' verified players · '+books+' books · '+escHtml(families)+' · oldest line '+escHtml(ageText)+' old.'+freshnessDetail+propAnchorsHtml(prop.anchors)+'<div style="margin-top:5px">'+escHtml(agreementText)+' Broad prop coverage is collected; correlated markets validate or blend and are never independently double-counted. No spread, total, moneyline, Market Read, rank, or Favorite input.</div></div></details></aside>';
 }
 function renderGameDetail(){
   const state=window._gameDetailState; if(!state) return;
@@ -5319,7 +5337,7 @@ async function loadAll({forceRender=false}={}){
     window.redfoxAuthorizedFetch('/data/publication_coverage.json?_='+Date.now(),{cache:'no-store'}).then(response=>response.ok?response.json():null).catch(()=>null),
   ]);
   publicationCoverage=coverage;
-  propProjections=Array.isArray(props?.projections)?props.projections:[];
+  propProjections=Array.isArray(props?.projections)?props.projections.map(item=>({...item,_feed_status:props?.collection_status||''})):[];
   updateFreshness(freshJson);
   const dashRaw=(dash&&dash.length)?dash:[];
   allResults=results||MOCK_RESULTS;
