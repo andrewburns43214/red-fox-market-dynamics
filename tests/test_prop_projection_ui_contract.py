@@ -50,6 +50,7 @@ def test_all_expected_scores_show_two_decimals_and_source_age():
     assert "Number(prop.home_mean).toFixed(2)" in BOARD
     assert "source line up to " in BOARD
     assert "ageAtPublication+elapsedMinutes" in BOARD
+    assert "prop.oldest_observation_age_minutes??prop.coverage?.age_minutes" in BOARD
     assert "rushing TDs estimated from yards" not in BOARD
     assert "The touchdown-scorer surface is the primary score" in BOARD
     assert "Waiting for verified props for " in BOARD

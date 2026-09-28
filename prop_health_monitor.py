@@ -83,7 +83,11 @@ def inspect_prop_health(path: Path, now: datetime | None = None, max_payload_age
             except (TypeError, ValueError):
                 issues.append(f"{sport}:{event} invalid {field}")
         try:
-            source_age = float(item.get("oldest_observation_age_minutes"))
+            source_age = float(
+                item.get("oldest_observation_age_minutes")
+                if item.get("oldest_observation_age_minutes") is not None
+                else (item.get("coverage") or {}).get("age_minutes")
+            )
         except (TypeError, ValueError):
             issues.append(f"{sport}:{event} source age missing")
             continue

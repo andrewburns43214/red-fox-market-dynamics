@@ -369,5 +369,12 @@ def project_event_v3(sport, event, rosters, context=None, now=None):
         result = _mlb_projection(legacy, lines, context or {}, now)
     else:
         result = _unavailable(legacy, "sport_model_not_validated", "No sport-specific props-only score model has passed validation.")
+    # A V3 estimate may recover from a legacy missing-component result. In
+    # that path the compact coverage object has the authoritative source age,
+    # but legacy did not yet copy it to the top-level public field.
+    if result.get("oldest_observation_age_minutes") is None:
+        age = (result.get("coverage") or {}).get("age_minutes")
+        if age is not None:
+            result["oldest_observation_age_minutes"] = age
     result["_legacy_benchmark"] = legacy_benchmark
     return result

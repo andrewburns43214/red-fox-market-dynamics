@@ -68,6 +68,15 @@ def test_degraded_upstream_and_old_model_fail(tmp_path):
     assert any("wrong model" in issue for issue in report["issues"])
 
 
+def test_coverage_age_is_accepted_for_recovered_v3_projection(tmp_path):
+    path = tmp_path / "props.json"
+    item = projection()
+    item.pop("oldest_observation_age_minutes")
+    item["coverage"] = {"age_minutes": 12}
+    write_payload(path, projections=[item])
+    assert monitor.inspect_prop_health(path, now=NOW)["ok"] is True
+
+
 def test_missing_payload_fails_closed(tmp_path):
     report = monitor.inspect_prop_health(tmp_path / "missing.json", now=NOW)
     assert report == {"ok": False, "issues": ["prop payload missing"], "projection_count": 0}
