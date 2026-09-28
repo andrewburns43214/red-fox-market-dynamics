@@ -339,7 +339,8 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
                 records.append(_tracking_record(current.loc[index], at, first_line))
         elif prior is not None and str(prior.get("favorite_state", "")) == "qualified":
             record = {column: str(prior.get(column, "")) for column in TRACKING_COLUMNS}
-            rejection = str(row.get("favorite_reason", "")).strip()
+            sport = str(row.get("sport", "")).lower()
+            rejection = str(row.get("favorite_reason", "")).strip() if sport in {"ufc", "nhl"} else ""
             if not any(token in rejection.lower() for token in ("withheld", "failed", "removal", "unavailable")):
                 rejection = ""
             record.update(
@@ -945,19 +946,20 @@ def _material_removal(row: pd.Series, source: pd.Series | None) -> tuple[bool, b
     if side is None:
         return False, False, "The Favorite side was temporarily unavailable on one scrape."
     sport = str(row.get("sport", "")).lower()
-    context = _parts(side.get("context_chips")) | _parts(side.get("anomaly_chips"))
-    hard_risks = {"Feed Risk"}
-    if sport == "ufc":
-        hard_risks |= {"Bout Suspended", "Opponent Change", "Weight Miss", "Weigh-In Risk"}
-    elif sport == "nhl":
-        hard_risks |= {"Goalie Change", "Goalie Unconfirmed", "Goalie Risk"}
-    risks = sorted(context & hard_risks)
-    if risks:
-        return True, True, f"Hard removal: blocking {sport.upper()} risk state {', '.join(risks)}."
-    if sport in {"ufc", "nhl"} and str(side.get("data_badge", "")) != "Clean":
-        return True, True, f"Hard removal: {sport.upper()} market data is no longer Clean."
+    if sport in {"ufc", "nhl"}:
+        context = _parts(side.get("context_chips")) | _parts(side.get("anomaly_chips"))
+        hard_risks = {"Feed Risk"}
+        if sport == "ufc":
+            hard_risks |= {"Bout Suspended", "Opponent Change", "Weight Miss", "Weigh-In Risk"}
+        else:
+            hard_risks |= {"Goalie Change", "Goalie Unconfirmed", "Goalie Risk"}
+        risks = sorted(context & hard_risks)
+        if risks:
+            return True, True, f"Hard removal: blocking {sport.upper()} risk state {', '.join(risks)}."
+        if str(side.get("data_badge", "")) != "Clean":
+            return True, True, f"Hard removal: {sport.upper()} market data is no longer Clean."
     previous_line = source.get("current_line", "")
-    if market == "MONEYLINE":
+    if market == "MONEYLINE" and sport in {"ufc", "nhl"}:
         try:
             frozen_evidence = json.loads(str(source.get("favorite_supporting_evidence", "{}")))
         except (TypeError, ValueError, json.JSONDecodeError):
