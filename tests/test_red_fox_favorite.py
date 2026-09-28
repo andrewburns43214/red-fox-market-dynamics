@@ -61,6 +61,139 @@ def is_favorite(frame, index=0):
     return frame.iloc[index].red_fox_favorite == "true"
 
 
+def ncaaf_candidate(name="Away +4", current="+4 (-110)", opened="+5.5 (-110)", **kwargs):
+    context = kwargs.pop("context", "Market Move")
+    return side(
+        name, current, open_line=opened, line_move=1.5,
+        context=context, **kwargs,
+    )
+
+
+def ncaaf_moneyline(game_id="ncaaf-policy", team="Away", direction="TOWARD"):
+    return market("ncaaf", "MONEYLINE", [
+        side(team, "+135", open_line="+155", price_move=3.0, direction=direction),
+        side("Home", "-155", open_line="-180", bets=65, money=70,
+             reaction="Watch", direction="AGAINST", kpi=False, price_move=3.0),
+    ], game_id=game_id, rank=2, supported_side=team)
+
+
+def test_ncaaf_requires_confirmed_one_and_a_half_point_move_but_nfl_is_unchanged():
+    weak = side("Away +4", "+4 (-110)", open_line="+5 (-110)", line_move=1.0)
+    ncaaf = result([market("ncaaf", "SPREAD", pair_for(weak), supported_side="Away +4")])
+    assert not is_favorite(ncaaf)
+    assert ncaaf.iloc[0]._favorite_legacy_qualified == "true"
+    assert "1.5-point move" in ncaaf.iloc[0].favorite_reason
+
+    nfl = result([market("nfl", "SPREAD", pair_for(weak), supported_side="Away +4")])
+    assert is_favorite(nfl)
+    assert nfl.iloc[0].favorite_rule_version == "red_fox_favorite_v5"
+
+    strong_ncaaf = result([market(
+        "ncaaf", "SPREAD", pair_for(ncaaf_candidate()), supported_side="Away +4",
+    )])
+    assert is_favorite(strong_ncaaf)
+    assert strong_ncaaf.iloc[0].favorite_rule_version == "red_fox_favorite_v6"
+
+
+def test_ncaaf_short_spread_requires_affirmative_moneyline_confirmation():
+    candidate = ncaaf_candidate("Away +3", "+3 (-110)", "+4.5 (-110)")
+    spread = market("ncaaf", "SPREAD", pair_for(candidate), game_id="ncaaf-policy", supported_side="Away +3")
+    unconfirmed = result([spread])
+    assert not is_favorite(unconfirmed)
+    assert "Moneyline/cross-market confirmation" in unconfirmed.iloc[0].favorite_reason
+
+    confirmed = result([spread, ncaaf_moneyline()])
+    assert is_favorite(confirmed)
+    assert confirmed.iloc[0].favorite_cross_market_state == "confirmation"
+
+
+def test_ncaaf_moneyline_expression_cannot_bypass_the_spread_move_gate():
+    moneyline = market("ncaaf", "MONEYLINE", [
+        side("Home", "-140", open_line="-110", bets=30, money=25, price_move=5.0),
+        side("Away", "+120", bets=70, money=75, reaction="Watch", direction="AGAINST", kpi=False),
+    ], game_id="ncaaf-ml", supported_side="Home")
+    weak_spread = market("ncaaf", "SPREAD", [
+        side("Home -2.5", "-2.5 (-110)", open_line="-2 (-110)", bets=30, money=25),
+        side("Away +2.5", "+2.5 (-110)", bets=70, money=75, reaction="Watch", direction="AGAINST", kpi=False),
+    ], game_id="ncaaf-ml", rank=2, supported_side="Home -2.5")
+    weak = result([moneyline, weak_spread])
+    assert weak.loc[weak.market_display.eq("MONEYLINE"), "red_fox_favorite"].iloc[0] == "false"
+
+    strong_spread = market("ncaaf", "SPREAD", [
+        ncaaf_candidate("Home -2.5", "-2.5 (-110)", "-1 (-110)", bets=30, money=25),
+        side("Away +2.5", "+2.5 (-110)", bets=70, money=75, reaction="Watch", direction="AGAINST", kpi=False),
+    ], game_id="ncaaf-ml", rank=2, supported_side="Home -2.5")
+    strong = result([moneyline, strong_spread])
+    assert strong.loc[strong.market_display.eq("MONEYLINE"), "red_fox_favorite"].iloc[0] == "true"
+
+
+def test_ncaaf_key_number_exception_requires_cross_market_confirmation():
+    candidate = side("Away +2.5", "+2.5 (-110)", open_line="+3.5 (-110)", line_move=1.0)
+    candidate["key_numbers_crossed"] = "K3"
+    spread = market("ncaaf", "SPREAD", pair_for(candidate), game_id="ncaaf-policy", supported_side="Away +2.5")
+    assert not is_favorite(result([spread]))
+    confirmed = result([spread, ncaaf_moneyline()])
+    assert is_favorite(confirmed)
+    assert confirmed.iloc[0]._ncaaf_market_move_status == "key_number_exception"
+
+
+def test_ncaaf_stale_open_is_rejected_defensively():
+    candidate = ncaaf_candidate()
+    candidate["open_observed_at"] = "2026-08-20T20:00:00Z"
+    spread = market("ncaaf", "SPREAD", pair_for(candidate), supported_side="Away +4")
+    spread["kickoff_iso"] = "2026-09-06T21:00:00Z"
+    frame = result([spread])
+    assert not is_favorite(frame)
+    assert frame.iloc[0]._ncaaf_market_move_status == "stale_open"
+
+
+def test_ncaaf_requires_two_qualifying_observations_ten_minutes_apart(tmp_path):
+    spread = market("ncaaf", "SPREAD", pair_for(ncaaf_candidate()), supported_side="Away +4")
+    spread["kickoff_iso"] = "2026-09-06T23:00:00Z"
+    states = []
+    for captured in ("2026-09-06T20:00:00Z", "2026-09-06T20:05:00Z", "2026-09-06T20:10:00Z"):
+        raw = apply_red_fox_favorites(pd.DataFrame([spread]), as_of=captured)
+        published = update_favorite_tracking(raw, tmp_path, as_of=captured)
+        states.append(published.iloc[0].red_fox_favorite)
+    assert states == ["false", "false", "true"]
+    shadow = pd.read_csv(tmp_path / "red_fox_favorite_shadow.csv", dtype=str, keep_default_na=False)
+    last = shadow.iloc[-1]
+    assert last["legacy_candidate_decision"] == "accepted"
+    assert last["new_candidate_decision"] == "accepted"
+    assert last["ncaaf_move_gate_passed"] == "true"
+    assert last["ncaaf_market_move_status"] == "confirmed"
+    assert last["legacy_split_45_passed"] == "true"
+    assert last["shadow_split_40_passed"] == "true"
+    assert last["strict_whipsaw_shadow_passed"] == "true"
+
+
+def test_ncaaf_active_favorite_must_requalify_at_t20(tmp_path):
+    spread = market("ncaaf", "SPREAD", pair_for(ncaaf_candidate()), supported_side="Away +4")
+    spread["kickoff_iso"] = "2026-09-06T21:00:00Z"
+    for captured in ("2026-09-06T19:00:00Z", "2026-09-06T19:10:00Z"):
+        published = update_favorite_tracking(
+            apply_red_fox_favorites(pd.DataFrame([spread]), as_of=captured), tmp_path, as_of=captured,
+        )
+    assert published.iloc[0].red_fox_favorite == "true"
+
+    adverse = dict(spread)
+    candidate = ncaaf_candidate(current="+4.5 (-110)", opened="+5.5 (-110)")
+    adverse["market_sides"] = json.dumps(pair_for(candidate))
+    adverse["supported_side"] = "Away +4"
+    raw = apply_red_fox_favorites(pd.DataFrame([adverse]), as_of="2026-09-06T20:40:00Z")
+    locked = update_favorite_tracking(raw, tmp_path, as_of="2026-09-06T20:40:00Z")
+    assert locked.iloc[0].red_fox_favorite == "false"
+    assert locked.iloc[0].favorite_late_invalidated == "true"
+    assert "T−20 requalification failed" in locked.iloc[0].favorite_reason
+
+
+def test_ncaaf_unresolved_whipsaw_is_rejected_but_recovered_move_can_qualify():
+    active = ncaaf_candidate(path="Whipsaw", whipsaw_retention=0.9)
+    assert not is_favorite(result([market("ncaaf", "SPREAD", pair_for(active), supported_side="Away +4")]))
+    recovered = ncaaf_candidate(path="Whipsaw", context="Market Move | Whipsaw Recovered")
+    assert is_favorite(result([market("ncaaf", "SPREAD", pair_for(recovered), supported_side="Away +4")]))
+
+
 def test_seahawks_cardinals_injury_override_is_event_scoped():
     candidate = side("Arizona Cardinals +4.5", "+4.5 (-110)")
     game = market("nfl", "SPREAD", pair_for(candidate), game="Seattle Seahawks @ Arizona Cardinals")
@@ -201,14 +334,20 @@ def test_florida_state_key_three_recovered_freeze_without_confirmed_supported_si
 
 def test_freeze_resistance_path_qualifies_when_engine_confirms_the_fade_side():
     candidate, pressure = florida_state_path_b()
+    candidate.update({
+        "flagged_side": "Florida State +3.5", "action_side": "Florida State +3.5",
+        "open_line": "+5 (-110)", "current_line": "+3.5 (-115)",
+        "response_direction": "TOWARD", "line_move_abs": 1.5,
+        "context_chips": "Market Move | Whipsaw Recovered",
+    })
     pressure["kpi_eligible"] = True
     pressure["action_type"] = "FADE CANDIDATE"
-    pressure["action_side"] = "Florida State +3"
+    pressure["action_side"] = "Florida State +3.5"
     frame = result([market("ncaaf", "SPREAD", [candidate, pressure], game_id="smu-fsu",
-                           game="SMU @ Florida State", supported_side="Florida State +3")])
+                           game="SMU @ Florida State", supported_side="Florida State +3.5")])
     assert is_favorite(frame)
     assert frame.iloc[0].favorite_pathway == "low_support_freeze"
-    assert frame.iloc[0].favorite_side == "Florida State +3"
+    assert frame.iloc[0].favorite_side == "Florida State +3.5"
 
 
 def test_positive_secondary_moneyline_is_confirmation_only_when_team_gets_points():
@@ -262,8 +401,9 @@ def test_freeze_favorite_requires_strong_pressure_and_persistent_resistance():
     assert not is_favorite(result([market("mlb", "MONEYLINE", [candidate, small_move], supported_side="Underdog")]))
 
 
-def test_rule_tightening_uses_v5_version_and_tracking_history_append_only(tmp_path):
+def test_non_ncaaf_tracking_remains_v5_and_history_is_append_only(tmp_path):
     assert CONFIG.version == "red_fox_favorite_v5"
+    assert CONFIG.ncaaf_version == "red_fox_favorite_v6"
     legacy = result([market("mlb", "MONEYLINE", pair_for(side("Away", "+115", open_line="+150", price_move=6.0)))])
     update_favorite_tracking(legacy, tmp_path, as_of="2026-09-06T20:00:00Z")
     newly_ineligible = legacy.copy()
@@ -506,12 +646,12 @@ def test_negative_money_football_favorite_requires_strong_cross_market_final_sta
     assert is_favorite(result([houston_ml, houston_spread]), 0)
 
 
-def test_tighter_moneyline_favorite_gate_does_not_change_point_taking_spreads():
+def test_ncaaf_unresolved_whipsaw_does_not_qualify_even_when_point_taking():
     candidate = side("Appalachian State +6.5", "+6.5 (-108)", bets=41, money=19, path="Whipsaw")
     opponent = side("East Carolina -6.5", "-6.5 (-112)", bets=59, money=81,
                     reaction="Watch", direction="AGAINST", kpi=False)
-    assert is_favorite(result([market("ncaaf", "SPREAD", [candidate, opponent],
-                                      game="Appalachian State @ East Carolina")]))
+    assert not is_favorite(result([market("ncaaf", "SPREAD", [candidate, opponent],
+                                          game="Appalachian State @ East Carolina")]))
 
 
 def test_positive_secondary_moneyline_is_not_published_at_pickem():
@@ -656,7 +796,9 @@ def test_tracking_persists_first_qualification_and_records_subsequent_snapshots(
 
 
 def test_tracking_retains_full_favorite_handoff_candidate_after_board_disappearance(tmp_path: Path):
-    source = market("ncaaf", "SPREAD", pair_for(side("Florida Atlantic +4", "+4 (-108)", bets=20, money=19)),
+    source = market("ncaaf", "SPREAD", pair_for(ncaaf_candidate(
+        "Florida Atlantic +4", "+4 (-108)", "+5.5 (-108)", bets=20, money=19,
+    )),
                     game_id="34603696", game="Navy @ Florida Atlantic")
     # Keep this handoff test outside the final-hour visibility lock; final-hour
     # behavior has dedicated coverage below.
@@ -695,7 +837,7 @@ def test_visibility_invalidated_jacksonville_state_is_not_a_favorite():
 
 
 def test_new_favorite_requires_two_consecutive_scrapes(tmp_path: Path):
-    source = market("ncaaf", "SPREAD", pair_for(side("Away +3", "+3 (-110)", bets=30, money=20)))
+    source = market("ncaaf", "SPREAD", pair_for(ncaaf_candidate(bets=30, money=20)))
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
     qualified = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T20:10:00Z")
     locked = update_favorite_tracking(qualified, tmp_path, as_of="2026-09-06T20:10:00Z")
@@ -704,7 +846,7 @@ def test_new_favorite_requires_two_consecutive_scrapes(tmp_path: Path):
 
 
 def test_established_favorite_requires_two_nonqualifying_scrapes_before_t40(tmp_path: Path):
-    source = market("ncaaf", "SPREAD", pair_for(side("Away +3", "+3 (-110)", bets=30, money=20)))
+    source = market("ncaaf", "SPREAD", pair_for(ncaaf_candidate(bets=30, money=20)))
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:20:00Z", "2026-09-06T19:30:00Z"):
         qualified = apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured)
@@ -730,7 +872,7 @@ def test_established_favorite_requires_two_nonqualifying_scrapes_before_t40(tmp_
 
 
 def test_missing_market_requires_two_scrapes_to_remove_established_favorite_before_t40(tmp_path: Path):
-    source = market("ncaaf", "SPREAD", pair_for(side("Away +3", "+3 (-110)", bets=30, money=20)))
+    source = market("ncaaf", "SPREAD", pair_for(ncaaf_candidate(bets=30, money=20)))
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:20:00Z", "2026-09-06T19:30:00Z"):
         qualified = apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured)
@@ -744,7 +886,7 @@ def test_missing_market_requires_two_scrapes_to_remove_established_favorite_befo
 
 
 def test_review_window_keeps_confirmed_favorite_from_nonmaterial_falloff(tmp_path: Path):
-    source = market("ncaaf", "SPREAD", pair_for(side("Away +3", "+3 (-110)", bets=30, money=20)))
+    source = market("nfl", "SPREAD", pair_for(side("Away +3", "+3 (-110)", bets=30, money=20)))
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:40:00Z", "2026-09-06T19:50:00Z"):
         qualified = apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured)
@@ -758,7 +900,7 @@ def test_review_window_keeps_confirmed_favorite_from_nonmaterial_falloff(tmp_pat
 
 
 def test_review_window_rejects_nonmaterial_requalification(tmp_path: Path):
-    source = market("ncaaf", "SPREAD", pair_for(side("Away +3", "+3 (-110)", bets=30, money=20)))
+    source = market("nfl", "SPREAD", pair_for(side("Away +3", "+3 (-110)", bets=30, money=20)))
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
     first = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T19:40:00Z")
     update_favorite_tracking(first, tmp_path, as_of="2026-09-06T19:40:00Z")
@@ -774,7 +916,7 @@ def test_review_window_rejects_nonmaterial_requalification(tmp_path: Path):
 
 
 def test_material_addition_can_confirm_between_t40_and_t20(tmp_path: Path):
-    candidate = side("Away +3", "+3 (-110)", bets=25, money=20, open_line="+4.5 (-110)")
+    candidate = ncaaf_candidate(bets=25, money=20)
     source = market("ncaaf", "SPREAD", pair_for(candidate))
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
     first = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T20:25:00Z")
@@ -848,7 +990,7 @@ def test_prior_favorite_restores_after_full_stable_whipsaw_recovery_inside_t20(t
 
 
 def test_material_removal_requires_two_scrapes_between_t40_and_t20(tmp_path: Path):
-    original_side = side("Away +3", "+3 (-110)", bets=25, money=20, open_line="+4.5 (-110)")
+    original_side = ncaaf_candidate(bets=25, money=20)
     original = market("ncaaf", "SPREAD", pair_for(original_side))
     original["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:30:00Z", "2026-09-06T19:40:00Z"):
@@ -866,7 +1008,7 @@ def test_material_removal_requires_two_scrapes_between_t40_and_t20(tmp_path: Pat
 
 
 def test_t20_hard_supported_side_flip_suppresses_display_and_preserves_archive(tmp_path: Path):
-    candidate = side("Away +3", "+3 (-110)", bets=25, money=20, open_line="+4.5 (-110)")
+    candidate = ncaaf_candidate(bets=25, money=20)
     source = market("ncaaf", "SPREAD", pair_for(candidate))
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:30:00Z", "2026-09-06T19:40:00Z"):
@@ -889,13 +1031,13 @@ def test_t20_hard_supported_side_flip_suppresses_display_and_preserves_archive(t
 
 
 def test_t20_destructive_line_reversal_suppresses_even_if_raw_rules_still_qualify(tmp_path: Path):
-    original_side = side("Away +3", "+3 (-110)", bets=25, money=20, open_line="+4.5 (-110)")
+    original_side = ncaaf_candidate("Away +3.5", "+3.5 (-110)", "+5 (-110)", bets=25, money=20)
     original = market("ncaaf", "SPREAD", pair_for(original_side), game_id="destructive")
     original["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:30:00Z", "2026-09-06T19:40:00Z"):
         update_favorite_tracking(apply_red_fox_favorites(pd.DataFrame([original]), as_of=captured), tmp_path, as_of=captured)
 
-    reversed_side = side("Away +4", "+4 (-110)", bets=25, money=20, open_line="+4.5 (-110)")
+    reversed_side = ncaaf_candidate("Away +4", "+4 (-110)", "+5.5 (-110)", bets=25, money=20)
     reversed_row = market(
         "ncaaf", "SPREAD", pair_for(reversed_side), game_id="destructive", supported_side="Away +4",
     )
@@ -905,7 +1047,7 @@ def test_t20_destructive_line_reversal_suppresses_even_if_raw_rules_still_qualif
     suppressed = update_favorite_tracking(raw, tmp_path, as_of="2026-09-06T20:45:00Z")
     assert suppressed.iloc[0].red_fox_favorite == "false"
     assert suppressed.iloc[0].favorite_late_invalidated == "true"
-    assert "moved 1 against" in suppressed.iloc[0].favorite_late_invalidated_reason
+    assert "moved 0.5 against" in suppressed.iloc[0].favorite_late_invalidated_reason
 
 
 def test_t20_full_return_to_active_game_week_opener_is_hard_removal(tmp_path: Path):
@@ -940,7 +1082,7 @@ def test_whipsaw_freshness_is_stricter_than_normal_market_freshness(tmp_path: Pa
         "Away +3", "+3 (-110)", bets=25, money=20, open_line="+4.5 (-110)",
         source_latest_at="2026-09-06T20:20:00Z",
     )
-    normal = market("ncaaf", "SPREAD", pair_for(normal_side), game_id="normal")
+    normal = market("nfl", "SPREAD", pair_for(normal_side), game_id="normal")
     normal["kickoff_iso"] = "2026-09-06T21:00:00Z"
     normal_result = update_favorite_tracking(
         apply_red_fox_favorites(pd.DataFrame([normal]), as_of="2026-09-06T20:45:00Z"),
@@ -953,7 +1095,7 @@ def test_whipsaw_freshness_is_stricter_than_normal_market_freshness(tmp_path: Pa
         "Away +3", "+3 (-110)", bets=25, money=20, open_line="+4.5 (-110)", path="Whipsaw",
         source_latest_at="2026-09-06T20:20:00Z",
     )
-    whipsaw = market("ncaaf", "SPREAD", pair_for(whipsaw_side), game_id="whipsaw")
+    whipsaw = market("nfl", "SPREAD", pair_for(whipsaw_side), game_id="whipsaw")
     whipsaw["kickoff_iso"] = "2026-09-06T21:00:00Z"
     stale = update_favorite_tracking(
         apply_red_fox_favorites(pd.DataFrame([whipsaw]), as_of="2026-09-06T20:45:00Z"),

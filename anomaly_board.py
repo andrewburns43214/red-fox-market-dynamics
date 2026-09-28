@@ -1020,6 +1020,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         "reason": reason,
         "data_badge": data_badge,
         "observation_count": observation_count,
+        "open_observed_at": points[0]["timestamp"].isoformat(),
         "source_latest_at": points[-1]["timestamp"].isoformat(),
         "first_anomaly_seen": first_seen,
         "max_excursion": round(max_excursion, 3),

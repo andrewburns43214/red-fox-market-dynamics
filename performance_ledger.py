@@ -24,7 +24,7 @@ from anomaly_action_results import _grade_action
 SUPPORTED_SIDE_VALID_FROM = pd.Timestamp("2026-09-07T17:57:58Z")
 FAVORITE_VALID_FROM = pd.Timestamp("2026-09-07T22:11:12Z")
 FAVORITE_TRACKING_START_DATE = "2026-09-07"
-FAVORITE_RULE_VERSIONS = frozenset({"red_fox_favorite_v2", "red_fox_favorite_v3", "red_fox_favorite_v4", "red_fox_favorite_v5"})
+FAVORITE_RULE_VERSIONS = frozenset({"red_fox_favorite_v2", "red_fox_favorite_v3", "red_fox_favorite_v4", "red_fox_favorite_v5", "red_fox_favorite_v6"})
 FAVORITE_KPI_EXCLUSIONS = {
     ("34603681", "SPREAD"): (
         "Excluded: audited final-hour visibility failure invalidated the Favorite."
@@ -805,6 +805,40 @@ def _exports(ledger: pd.DataFrame, data_dir: Path) -> None:
     _atomic_csv(_cohort_kpis(combined), data_dir / EXPORT_FILES["cohort_kpis"])
 
 
+def _update_ncaaf_shadow_results(ledger: pd.DataFrame, data_dir: Path) -> None:
+    """Attach outcomes to prospective NCAAF shadow rows without reclassifying history."""
+    path = data_dir / "red_fox_favorite_shadow.csv"
+    shadow = _read_csv(path)
+    if shadow.empty or ledger.empty:
+        return
+    result_columns = ["closing_spread", "game_result", "grade", "units_won_lost", "clv"]
+    for column in result_columns:
+        if column not in shadow:
+            shadow[column] = ""
+    graded = ledger.loc[
+        ledger.get("sport", pd.Series("", index=ledger.index)).astype(str).str.lower().isin({"ncaaf", "cfb"})
+        & ledger.get("grade", pd.Series("", index=ledger.index)).astype(str).isin({"W", "L", "Push"})
+    ]
+    for index, row in shadow.iterrows():
+        if _text(row.get("sport")).lower() not in {"ncaaf", "cfb"}:
+            continue
+        matches = graded.loc[
+            graded["event_id"].astype(str).eq(_text(row.get("game_id")))
+            & graded["market"].astype(str).str.upper().eq(_text(row.get("market_display")).upper())
+        ]
+        if matches.empty:
+            continue
+        candidate = _identity(row.get("candidate_side"))
+        same_side = matches.loc[matches["side"].map(_identity).eq(candidate)]
+        matched = same_side.iloc[-1] if not same_side.empty else matches.iloc[-1]
+        shadow.at[index, "closing_spread"] = matched.get("closing_line", "")
+        shadow.at[index, "game_result"] = matched.get("market_result", "") or matched.get("final_score", "")
+        shadow.at[index, "grade"] = matched.get("grade", "")
+        shadow.at[index, "units_won_lost"] = matched.get("net_profit_units", "")
+        shadow.at[index, "clv"] = matched.get("clv", "")
+    _atomic_csv(shadow, path)
+
+
 def update_performance_ledger(
     data_dir: Path | str = "data",
     frozen_sources: list[Path] | None = None,
@@ -1006,6 +1040,7 @@ def update_performance_ledger(
     pd.testing.assert_frame_equal(before_classification.reset_index(drop=True), ledger.reindex(columns=CLASSIFICATION_COLUMNS).reset_index(drop=True))
     _atomic_csv(ledger.reindex(columns=LEDGER_COLUMNS), ledger_path)
     _exports(ledger, data_dir)
+    _update_ncaaf_shadow_results(ledger, data_dir)
     graded = ledger[ledger["grade"].isin(["W", "L", "Push"])]
     result = {
         "rows": int(len(ledger)), "new_rows": int(len(new_records)), "graded": int(len(graded)),

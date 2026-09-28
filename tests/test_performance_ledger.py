@@ -4,7 +4,12 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from performance_ledger import LEDGER_COLUMNS, _utc_series, update_performance_ledger
+from performance_ledger import (
+    LEDGER_COLUMNS,
+    _update_ncaaf_shadow_results,
+    _utc_series,
+    update_performance_ledger,
+)
 
 
 def frozen_row(**updates):
@@ -133,25 +138,26 @@ def test_rule_versions_share_one_official_record_while_version_remains_metadata(
         frozen_row(game_id="v3-game", favorite_rule_version="red_fox_favorite_v3"),
         frozen_row(game_id="v4-game", favorite_rule_version="red_fox_favorite_v4"),
         frozen_row(game_id="v5-game", favorite_rule_version="red_fox_favorite_v5"),
+        frozen_row(game_id="v6-game", favorite_rule_version="red_fox_favorite_v6"),
     ]), tmp_path / "live_recent.csv")
     write(pd.DataFrame([
         {"game_id": game_id, "team1": "NY Mets", "team1_score": "7", "team2": "MIA Marlins", "team2_score": "5"}
-        for game_id in ("v2-game", "v3-game", "v4-game", "v5-game")
+        for game_id in ("v2-game", "v3-game", "v4-game", "v5-game", "v6-game")
     ]), tmp_path / "final_scores_history.csv")
 
     result = update_performance_ledger(tmp_path)
     favorites = pd.read_csv(tmp_path / "performance_favorites.csv", dtype=str, keep_default_na=False)
     performance = json.loads((tmp_path / "favorite_performance.json").read_text(encoding="utf-8"))
 
-    assert result["favorites"]["wins"] == 4
-    assert performance["wins"] == 4
+    assert result["favorites"]["wins"] == 5
+    assert performance["wins"] == 5
     assert set(favorites["favorite_rule_version"]) == {
-        "red_fox_favorite_v2", "red_fox_favorite_v3", "red_fox_favorite_v4", "red_fox_favorite_v5",
+        "red_fox_favorite_v2", "red_fox_favorite_v3", "red_fox_favorite_v4", "red_fox_favorite_v5", "red_fox_favorite_v6",
     }
     cohorts = pd.read_csv(tmp_path / "favorite_cohort_kpis.csv", dtype=str, keep_default_na=False)
     version_rows = cohorts[(cohorts["dimension"] == "favorite_rule_version") & (cohorts["candidate_decision"] == "accepted")]
     assert set(version_rows["segment"]) == {
-        "red_fox_favorite_v2", "red_fox_favorite_v3", "red_fox_favorite_v4", "red_fox_favorite_v5",
+        "red_fox_favorite_v2", "red_fox_favorite_v3", "red_fox_favorite_v4", "red_fox_favorite_v5", "red_fox_favorite_v6",
     }
 
 
@@ -467,6 +473,28 @@ def test_spread_is_recorded_and_graded_at_first_confirmed_favorite_line(tmp_path
     ).iloc[0]
     assert migrated["side"] == "Team A +3.5"
     assert migrated["market_result"] == "Team A +3.5: Win"
+
+
+def test_ncaaf_shadow_captures_receive_result_units_close_and_clv(tmp_path):
+    write(pd.DataFrame([{
+        "capture_id": "capture", "sport": "ncaaf", "game_id": "college-1",
+        "market_display": "SPREAD", "candidate_side": "Away +4",
+    }]), tmp_path / "red_fox_favorite_shadow.csv")
+    ledger = pd.DataFrame([{
+        "sport": "ncaaf", "event_id": "college-1", "market": "SPREAD",
+        "side": "Away +4", "grade": "W", "market_result": "Away +4: Win",
+        "final_score": "Away 28, Home 24", "net_profit_units": "0.91",
+        "closing_line": "+3.5", "clv": "0.5",
+    }])
+
+    _update_ncaaf_shadow_results(ledger, tmp_path)
+
+    shadow = pd.read_csv(tmp_path / "red_fox_favorite_shadow.csv", dtype=str, keep_default_na=False).iloc[0]
+    assert shadow["closing_spread"] == "+3.5"
+    assert shadow["game_result"] == "Away +4: Win"
+    assert shadow["grade"] == "W"
+    assert shadow["units_won_lost"] == "0.91"
+    assert shadow["clv"] == "0.5"
 
 
 def test_admin_exports_are_protected_and_engine_refresh_does_not_import_ledger():
