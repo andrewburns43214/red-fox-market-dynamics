@@ -61,6 +61,14 @@ def is_favorite(frame, index=0):
     return frame.iloc[index].red_fox_favorite == "true"
 
 
+def active_primary_moneyline(sport, candidate, opponent=None, **kwargs):
+    row = market(sport, "MONEYLINE", pair_for(candidate, opponent), **kwargs)
+    row["kickoff_iso"] = (
+        "2026-09-07T20:00:00Z" if sport == "ufc" else "2026-09-07T12:00:00Z"
+    )
+    return row
+
+
 def ncaaf_candidate(name="Away +4", current="+4 (-110)", opened="+5.5 (-110)", **kwargs):
     context = kwargs.pop("context", "Market Move")
     return side(
@@ -295,7 +303,12 @@ def test_primary_moneyline_sports_and_boundaries_qualify(sport, price):
     )
     opponent = side("Opponent", f"{-price:+d}", bets=65, money=70, reaction="Watch",
                     direction="AGAINST", kpi=False, action_type="OBSERVE ONLY")
-    assert is_favorite(result([market(sport, "MONEYLINE", [candidate, opponent])]))
+    row = market(sport, "MONEYLINE", [candidate, opponent])
+    if sport in {"ufc", "nhl"}:
+        row["kickoff_iso"] = (
+            "2026-09-07T20:00:00Z" if sport == "ufc" else "2026-09-07T12:00:00Z"
+        )
+    assert is_favorite(result([row]))
 
 
 @pytest.mark.parametrize("price", [-166, 121, 125, 126])
@@ -365,10 +378,85 @@ def test_ufc_freeze_path_is_not_favorite_eligible_but_movement_backed_contrarian
     pressure = side("Favorite", "-130", bets=81, money=90, reaction="Freeze", direction="LIMITED",
                     action_type="FADE CANDIDATE", action_side="Underdog", path="Held",
                     evidence_role="Pressure Side", line_move=0, price_move=0)
-    assert not is_favorite(result([market("ufc", "MONEYLINE", [protected, pressure], supported_side="Underdog")]))
+    frozen = market("ufc", "MONEYLINE", [protected, pressure], supported_side="Underdog")
+    frozen["kickoff_iso"] = "2026-09-07T20:00:00Z"
+    assert not is_favorite(result([frozen]))
     contrarian = side("Underdog", "+110", bets=19, money=10, reaction="Contrarian",
                       direction="TOWARD", price_move=3.0)
-    assert is_favorite(result([market("ufc", "MONEYLINE", pair_for(contrarian), supported_side="Underdog")]))
+    assert is_favorite(result([active_primary_moneyline(
+        "ufc", contrarian, supported_side="Underdog",
+    )]))
+
+
+def test_ufc_and_nhl_require_strict_move_active_window_and_low_support_pathway():
+    weak_ufc = side("UFC candidate", "+105", price_move=2.99)
+    weak = active_primary_moneyline("ufc", weak_ufc, supported_side="UFC candidate")
+    frame = result([weak])
+    assert not is_favorite(frame)
+    assert "3 implied-probability points" in frame.iloc[0].favorite_reason
+
+    weak_nhl = side("NHL candidate", "+105", price_move=2.49)
+    assert not is_favorite(result([active_primary_moneyline(
+        "nhl", weak_nhl, supported_side="NHL candidate",
+    )]))
+
+    early = active_primary_moneyline(
+        "ufc", side("Early fighter", "+105", price_move=3.5), supported_side="Early fighter",
+    )
+    early["kickoff_iso"] = "2026-09-08T20:01:00Z"
+    frame = result([early])
+    assert not is_favorite(frame)
+    assert "T-36 hours" in frame.iloc[0].favorite_reason
+
+    moderate = side("Moderate team", "-120", bets=52, money=50, reaction="Follow", price_move=5.0)
+    assert not is_favorite(result([active_primary_moneyline(
+        "nhl", moderate, supported_side="Moderate team",
+    )]))
+
+
+def test_nhl_freeze_without_movement_remains_watch_only():
+    protected = side(
+        "NY Rangers", "+114", bets=8, money=4, reaction="Watch", direction="LIMITED",
+        kpi=False, action_type="OBSERVE ONLY", path="Held", line_move=0, price_move=0,
+        evidence_role="Resistance Side",
+    )
+    pressure = side(
+        "BOS Bruins", "-135", bets=92, money=96, reaction="Freeze", direction="LIMITED",
+        action_type="FADE CANDIDATE", action_side="NY Rangers", path="Held",
+        line_move=0, price_move=0, evidence_role="Pressure Side",
+    )
+    row = market("nhl", "MONEYLINE", [pressure, protected], supported_side="NY Rangers")
+    row["kickoff_iso"] = "2026-09-07T12:00:00Z"
+    frame = result([row])
+    assert not is_favorite(frame)
+    assert "low-support, movement-backed Contrarian pathway" in frame.iloc[0].favorite_reason
+
+
+def test_ufc_and_nhl_apply_strict_recovered_whipsaw_limits():
+    for sport in ("ufc", "nhl"):
+        weak_retention = side(
+            "Candidate", "+105", price_move=4.0, path="Whipsaw",
+            context="Whipsaw Recovered", whipsaw_retention=0.79,
+        )
+        assert not is_favorite(result([active_primary_moneyline(
+            sport, weak_retention, supported_side="Candidate",
+        )]))
+        too_many_turns = side(
+            "Candidate", "+105", price_move=4.0, path="Whipsaw",
+            context="Whipsaw Recovered", whipsaw_retention=0.9,
+            material_direction_changes=3,
+        )
+        assert not is_favorite(result([active_primary_moneyline(
+            sport, too_many_turns, supported_side="Candidate",
+        )]))
+        recovered = side(
+            "Candidate", "+105", price_move=4.0, path="Whipsaw",
+            context="Whipsaw Recovered", whipsaw_retention=0.8,
+            material_direction_changes=2,
+        )
+        assert is_favorite(result([active_primary_moneyline(
+            sport, recovered, supported_side="Candidate",
+        )]))
 
 
 @pytest.mark.parametrize("candidate_change,pressure_change", [
@@ -404,6 +492,8 @@ def test_freeze_favorite_requires_strong_pressure_and_persistent_resistance():
 def test_non_ncaaf_tracking_remains_v5_and_history_is_append_only(tmp_path):
     assert CONFIG.version == "red_fox_favorite_v5"
     assert CONFIG.ncaaf_version == "red_fox_favorite_v6"
+    assert CONFIG.ufc_version == "red_fox_favorite_ufc_v1"
+    assert CONFIG.nhl_version == "red_fox_favorite_nhl_v1"
     legacy = result([market("mlb", "MONEYLINE", pair_for(side("Away", "+115", open_line="+150", price_move=6.0)))])
     update_favorite_tracking(legacy, tmp_path, as_of="2026-09-06T20:00:00Z")
     newly_ineligible = legacy.copy()
@@ -446,7 +536,9 @@ def test_mlb_plus_money_requires_crossing_minus_or_five_probability_points():
     ]))
 
     same_shape_nhl = side("NHL underdog", "+108", open_line="+123", price_move=3.24)
-    assert is_favorite(result([market("nhl", "MONEYLINE", pair_for(same_shape_nhl), supported_side="NHL underdog")]))
+    assert is_favorite(result([active_primary_moneyline(
+        "nhl", same_shape_nhl, supported_side="NHL underdog",
+    )]))
 
 
 def test_similar_splits_without_resistance_or_protection_do_not_qualify():
@@ -825,6 +917,98 @@ def test_tracking_records_when_a_current_market_loses_favorite_status(tmp_path: 
     ledger = pd.read_csv(tmp_path / "red_fox_favorite_tracking.csv", dtype=str)
     assert ledger.favorite_state.tolist() == ["qualified", "not_qualified"]
     assert ledger.iloc[-1].disappearance_reason == "current qualification gates no longer satisfied"
+
+
+@pytest.mark.parametrize("sport", ["ufc", "nhl"])
+def test_ufc_and_nhl_require_two_qualifying_observations_fifteen_minutes_apart(
+    tmp_path: Path, sport: str,
+):
+    candidate = side("Candidate", "+105", open_line="+125", price_move=4.0)
+    source = active_primary_moneyline(sport, candidate, game_id=f"{sport}-persistent", supported_side="Candidate")
+    source["kickoff_iso"] = "2026-09-06T23:00:00Z"
+    states = []
+    for captured in ("2026-09-06T20:00:00Z", "2026-09-06T20:10:00Z", "2026-09-06T20:15:00Z"):
+        raw = apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured)
+        published = update_favorite_tracking(raw, tmp_path, as_of=captured)
+        states.append(published.iloc[0].red_fox_favorite)
+    assert states == ["false", "false", "true"]
+    assert published.iloc[0].favorite_rule_version == (
+        CONFIG.ufc_version if sport == "ufc" else CONFIG.nhl_version
+    )
+
+
+def test_ufc_single_soft_failure_is_held_but_second_failure_removes_with_exact_reason(tmp_path: Path):
+    candidate = side("Candidate", "+105", open_line="+125", price_move=4.0)
+    source = active_primary_moneyline("ufc", candidate, game_id="ufc-soft", supported_side="Candidate")
+    source["kickoff_iso"] = "2026-09-06T23:00:00Z"
+    for captured in ("2026-09-06T20:00:00Z", "2026-09-06T20:15:00Z"):
+        update_favorite_tracking(
+            apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured),
+            tmp_path, as_of=captured,
+        )
+
+    unconfirmed = dict(source, supported_side="")
+    first = update_favorite_tracking(
+        apply_red_fox_favorites(pd.DataFrame([unconfirmed]), as_of="2026-09-06T20:25:00Z"),
+        tmp_path, as_of="2026-09-06T20:25:00Z",
+    )
+    assert first.iloc[0].red_fox_favorite == "true"
+    assert first.iloc[0].favorite_review_state == "pending_removal"
+
+    second = update_favorite_tracking(
+        apply_red_fox_favorites(pd.DataFrame([unconfirmed]), as_of="2026-09-06T20:40:00Z"),
+        tmp_path, as_of="2026-09-06T20:40:00Z",
+    )
+    assert second.iloc[0].red_fox_favorite == "false"
+    tracking = pd.read_csv(tmp_path / "red_fox_favorite_tracking.csv", dtype=str, keep_default_na=False)
+    assert "no exact currently confirmed Supported Side" in tracking.iloc[-1].disappearance_reason
+
+
+@pytest.mark.parametrize("sport,risk", [("ufc", "Weight Miss"), ("nhl", "Goalie Unconfirmed")])
+def test_ufc_and_nhl_hard_risk_removes_immediately(tmp_path: Path, sport: str, risk: str):
+    candidate = side("Candidate", "+105", open_line="+125", price_move=4.0)
+    source = active_primary_moneyline(sport, candidate, game_id=f"{sport}-risk", supported_side="Candidate")
+    source["kickoff_iso"] = "2026-09-06T23:00:00Z"
+    for captured in ("2026-09-06T20:00:00Z", "2026-09-06T20:15:00Z"):
+        update_favorite_tracking(
+            apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured),
+            tmp_path, as_of=captured,
+        )
+
+    risky_candidate = dict(candidate, context_chips=risk)
+    risky = active_primary_moneyline(
+        sport, risky_candidate, game_id=f"{sport}-risk", supported_side="Candidate",
+    )
+    risky["kickoff_iso"] = source["kickoff_iso"]
+    removed = update_favorite_tracking(
+        apply_red_fox_favorites(pd.DataFrame([risky]), as_of="2026-09-06T20:20:00Z"),
+        tmp_path, as_of="2026-09-06T20:20:00Z",
+    )
+    assert removed.iloc[0].red_fox_favorite == "false"
+    assert risk in removed.iloc[0].favorite_reason
+
+
+def test_ufc_t30_requalification_rejects_adverse_probability_move(tmp_path: Path):
+    candidate = side("Candidate", "+100", open_line="+130", price_move=6.5)
+    source = active_primary_moneyline("ufc", candidate, game_id="ufc-lock", supported_side="Candidate")
+    source["kickoff_iso"] = "2026-09-06T21:00:00Z"
+    for captured in ("2026-09-06T19:00:00Z", "2026-09-06T19:15:00Z"):
+        update_favorite_tracking(
+            apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured),
+            tmp_path, as_of=captured,
+        )
+
+    adverse_candidate = side("Candidate", "+108", open_line="+130", price_move=4.6)
+    adverse = active_primary_moneyline(
+        "ufc", adverse_candidate, game_id="ufc-lock", supported_side="Candidate",
+    )
+    adverse["kickoff_iso"] = source["kickoff_iso"]
+    raw = apply_red_fox_favorites(pd.DataFrame([adverse]), as_of="2026-09-06T20:35:00Z")
+    assert raw.iloc[0].red_fox_favorite == "true"
+    locked = update_favorite_tracking(raw, tmp_path, as_of="2026-09-06T20:35:00Z")
+    assert locked.iloc[0].red_fox_favorite == "false"
+    assert locked.iloc[0].favorite_late_invalidated == "true"
+    assert "implied probability moved" in locked.iloc[0].favorite_late_invalidated_reason
 
 
 def test_visibility_invalidated_jacksonville_state_is_not_a_favorite():

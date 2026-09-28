@@ -20,6 +20,8 @@ import pandas as pd
 class FavoriteConfig:
     version: str = "red_fox_favorite_v5"
     ncaaf_version: str = "red_fox_favorite_v6"
+    ufc_version: str = "red_fox_favorite_ufc_v1"
+    nhl_version: str = "red_fox_favorite_nhl_v1"
     spread_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
     primary_moneyline_sports: frozenset[str] = frozenset({"mlb", "nhl", "ufc"})
     secondary_moneyline_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
@@ -58,8 +60,8 @@ class FavoriteConfig:
     partial_whipsaw_confirmation_minutes: int = 10
     normal_freshness_minutes: int = 30
     whipsaw_freshness_minutes: int = 20
-    freeze_disabled_sports: frozenset[str] = frozenset({"ufc"})
-    visibility_lock_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
+    freeze_disabled_sports: frozenset[str] = frozenset({"ufc", "nhl"})
+    visibility_lock_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb", "ufc", "nhl"})
     visibility_review_minutes: int = 40
     visibility_lock_minutes: int = 20
     visibility_confirmations: int = 2
@@ -71,6 +73,17 @@ class FavoriteConfig:
     ncaaf_active_market_window_days: int = 7
     ncaaf_shadow_split_max: float = 40.0
     ncaaf_shadow_short_split_max: float = 35.0
+    ufc_market_move_min: float = 3.0
+    nhl_market_move_min: float = 2.5
+    ufc_active_window_hours: float = 36.0
+    nhl_active_window_hours: float = 24.0
+    primary_moneyline_confirmation_minutes: int = 15
+    primary_moneyline_confirmation_max_gap_minutes: int = 30
+    primary_moneyline_lock_minutes: int = 30
+    primary_moneyline_whipsaw_min_retention: float = 0.80
+    primary_moneyline_whipsaw_max_direction_changes: int = 2
+    ufc_adverse_probability_points: float = 1.5
+    nhl_adverse_probability_points: float = 1.0
 
 
 CONFIG = FavoriteConfig()
@@ -203,7 +216,7 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
             result.at[index, "favorite_reason"] = manual_exclusion
             continue
         game_rows = groups.get((str(row.get("sport", "")).lower(), str(row.get("game_id", ""))))
-        legacy = _qualify_market(row, game_rows, enforce_ncaaf_policy=False)
+        legacy = _qualify_market(row, game_rows, enforce_ncaaf_policy=False, at=captured_at)
         if legacy:
             result.at[index, "_favorite_legacy_qualified"] = "true"
             result.at[index, "_favorite_legacy_side"] = legacy["side"]
@@ -216,7 +229,7 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
             rejection = _legacy_rejection_reason(row, supported, game_rows)
             result.at[index, "_favorite_legacy_reason"] = rejection
             result.at[index, "favorite_reason"] = rejection
-        decision = _qualify_market(row, game_rows)
+        decision = _qualify_market(row, game_rows, at=captured_at)
         if not decision:
             if legacy and str(row.get("sport", "")).lower() in {"ncaaf", "cfb"}:
                 side = next(
@@ -230,6 +243,10 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
                     result.at[index, "_ncaaf_decision_reason"] = gate["reason"]
                     result.at[index, "favorite_cross_market_state"] = cross_state
                     result.at[index, "favorite_reason"] = gate["reason"]
+            elif str(row.get("sport", "")).lower() in {"ufc", "nhl"}:
+                result.at[index, "favorite_reason"] = _primary_moneyline_rejection_reason(
+                    row, game_rows, captured_at,
+                )
             continue
         gate = decision.get("ncaaf_gate", {})
         if gate:
@@ -322,10 +339,13 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
                 records.append(_tracking_record(current.loc[index], at, first_line))
         elif prior is not None and str(prior.get("favorite_state", "")) == "qualified":
             record = {column: str(prior.get(column, "")) for column in TRACKING_COLUMNS}
+            rejection = str(row.get("favorite_reason", "")).strip()
+            if not any(token in rejection.lower() for token in ("withheld", "failed", "removal", "unavailable")):
+                rejection = ""
             record.update(
                 recorded_at=at,
                 favorite_state="not_qualified",
-                disappearance_reason="current qualification gates no longer satisfied",
+                disappearance_reason=rejection or "current qualification gates no longer satisfied",
             )
             records.append(record)
 
@@ -483,6 +503,16 @@ def _update_candidate_shadow(current: pd.DataFrame, data_dir: Path, at: str) -> 
     temporary.replace(path)
 
 
+def _visibility_review_minutes(sport: str) -> float:
+    return 40.0 if sport in {"ufc", "nhl"} else float(CONFIG.visibility_review_minutes)
+
+
+def _visibility_lock_minutes(sport: str) -> float:
+    if sport in {"ufc", "nhl"}:
+        return float(CONFIG.primary_moneyline_lock_minutes)
+    return float(CONFIG.visibility_lock_minutes)
+
+
 def _apply_visibility_lock(
     current: pd.DataFrame,
     history: pd.DataFrame,
@@ -550,7 +580,9 @@ def _apply_visibility_lock(
                 if not _review_already_recorded(reviews, key, "late_invalidated"):
                     review_records.append(_review_record(row, at, "late_invalidated", "removal", stale_reason))
                 continue
-            if minutes > CONFIG.visibility_review_minutes:
+            review_minutes = _visibility_review_minutes(identity[0])
+            lock_minutes = _visibility_lock_minutes(identity[0])
+            if minutes > review_minutes:
                 reason = "Favorite market temporarily absent; awaiting a second consecutive nonqualifying scrape."
                 if _review_confirmed(reviews, key, "removal", now):
                     review_records.append(_review_record(row, at, "applied", "removal", _latest_review_reason(reviews, key) or reason))
@@ -563,7 +595,12 @@ def _apply_visibility_lock(
                 held["_visibility_restored"] = "true"
                 additions.append(held)
                 review_records.append(_review_record(row, at, "pending", "removal", reason))
-            elif minutes <= CONFIG.visibility_review_minutes:
+            elif minutes <= review_minutes:
+                if identity[0] in {"ufc", "nhl"} and minutes <= lock_minutes:
+                    reason = f"Mandatory T−{lock_minutes:g} {identity[0].upper()} requalification failed: market unavailable."
+                    if not _review_already_recorded(reviews, key, "late_invalidated"):
+                        review_records.append(_review_record(row, at, "late_invalidated", "removal", reason))
+                    continue
                 held = row.copy()
                 held["favorite_reason"] = "Favorite retained through the closing review window."
                 held["_visibility_restored"] = "true"
@@ -587,6 +624,8 @@ def _apply_visibility_lock(
             continue
         if identity[0] not in CONFIG.visibility_lock_sports:
             continue
+        review_minutes = _visibility_review_minutes(identity[0])
+        lock_minutes = _visibility_lock_minutes(identity[0])
         raw_favorite = _truthy(row.get("red_fox_favorite"))
         active = _official_active(history, key, now)
         source = _archived_row(archived, key)
@@ -615,7 +654,7 @@ def _apply_visibility_lock(
             row = result.loc[index].copy()
             raw_favorite = True
 
-        if minutes > CONFIG.visibility_review_minutes:
+        if minutes > review_minutes:
             # Additions and ordinary removals both need two consecutive
             # ten-minute pulls. This prevents one-cycle classification or
             # source-availability flicker from changing an established slate.
@@ -637,7 +676,11 @@ def _apply_visibility_lock(
                     _set_review(result, index, "applied_removal", reason, at)
                     review_records.append(_review_record(row, at, "applied", "removal", reason))
                 else:
-                    reason = "Favorite failed one capture; awaiting a second consecutive nonqualifying scrape."
+                    reason = (
+                        str(row.get("favorite_reason", "")).strip()
+                        if identity[0] in {"ufc", "nhl"}
+                        else "Favorite failed one capture; awaiting a second consecutive nonqualifying scrape."
+                    ) or "Favorite failed one capture; awaiting a second consecutive nonqualifying scrape."
                     _restore_favorite(result, index, source)
                     result.at[index, "favorite_reason"] = "Favorite held through a single nonqualifying capture."
                     _set_review(result, index, "pending_removal", reason, at)
@@ -648,20 +691,20 @@ def _apply_visibility_lock(
                 _clear_pending_review(reviews, review_records, row, key, at)
             continue
 
-        if not 0 <= minutes <= CONFIG.visibility_review_minutes:
+        if not 0 <= minutes <= review_minutes:
             continue
 
-        if minutes <= CONFIG.visibility_lock_minutes:
+        if minutes <= lock_minutes:
             # Ordinary threshold flicker remains locked. A material addition
             # still needs its second confirmation; an adverse move suppresses
             # immediately.
-            if identity[0] in {"ncaaf", "cfb"} and active and not raw_favorite:
+            if identity[0] in {"ncaaf", "cfb", "ufc", "nhl"} and active and not raw_favorite:
                 reason = (
                     row.get("_ncaaf_decision_reason", "")
                     or row.get("favorite_reason", "")
-                    or "NCAAF Favorite failed mandatory T−20 requalification."
+                    or f"{identity[0].upper()} Favorite failed mandatory T−{lock_minutes:g} requalification."
                 )
-                reason = f"Mandatory T−20 requalification failed: {reason}"
+                reason = f"Mandatory T−{lock_minutes:g} requalification failed: {reason}"
                 _late_invalidate_favorite(result, index, reason, at)
                 _set_review(result, index, "late_invalidated", reason, at)
                 if not _review_already_recorded(reviews, key, "late_invalidated"):
@@ -794,6 +837,25 @@ def _review_confirmed(history: pd.DataFrame, key: tuple[str, str, str], action: 
         first_at = pd.to_datetime(pending.iloc[0].get("recorded_at", ""), errors="coerce", utc=True)
         gap = (now - first_at).total_seconds() / 60 if pd.notna(first_at) else -1
         return bool(gap >= CONFIG.ncaaf_confirmation_min_gap_minutes)
+    if key[0].lower() in {"ufc", "nhl"}:
+        terminals = scoped[scoped.get("review_state", pd.Series("", index=scoped.index)).astype(str) != "pending"]
+        if not terminals.empty:
+            terminal_at = pd.to_datetime(terminals.iloc[-1].get("recorded_at", ""), errors="coerce", utc=True)
+            if pd.notna(terminal_at):
+                scoped = scoped.loc[pd.to_datetime(scoped["recorded_at"], errors="coerce", utc=True) > terminal_at]
+        pending = scoped.loc[
+            scoped.get("review_state", pd.Series("", index=scoped.index)).astype(str).eq("pending")
+            & scoped.get("review_action", pd.Series("", index=scoped.index)).astype(str).eq(action)
+        ]
+        if pending.empty:
+            return False
+        pending_times = pd.to_datetime(pending["recorded_at"], errors="coerce", utc=True)
+        gaps = (now - pending_times).dt.total_seconds() / 60
+        return bool(gaps.between(
+            CONFIG.primary_moneyline_confirmation_minutes,
+            CONFIG.primary_moneyline_confirmation_max_gap_minutes,
+            inclusive="both",
+        ).any())
     prior = scoped.iloc[-1]
     prior_at = pd.to_datetime(prior.get("recorded_at", ""), errors="coerce", utc=True)
     return bool(
@@ -882,10 +944,48 @@ def _material_removal(row: pd.Series, source: pd.Series | None) -> tuple[bool, b
     side = next((item for item in _sides(row) if _side_identity(item.get("flagged_side")) == favorite_identity), None)
     if side is None:
         return False, False, "The Favorite side was temporarily unavailable on one scrape."
-    previous = _line_value(source.get("current_line", ""), market)
-    current = _line_value(side.get("current_line", ""), market)
-    against = (current - previous) if previous is not None and current is not None else 0
     sport = str(row.get("sport", "")).lower()
+    context = _parts(side.get("context_chips")) | _parts(side.get("anomaly_chips"))
+    hard_risks = {"Feed Risk"}
+    if sport == "ufc":
+        hard_risks |= {"Bout Suspended", "Opponent Change", "Weight Miss", "Weigh-In Risk"}
+    elif sport == "nhl":
+        hard_risks |= {"Goalie Change", "Goalie Unconfirmed", "Goalie Risk"}
+    risks = sorted(context & hard_risks)
+    if risks:
+        return True, True, f"Hard removal: blocking {sport.upper()} risk state {', '.join(risks)}."
+    if sport in {"ufc", "nhl"} and str(side.get("data_badge", "")) != "Clean":
+        return True, True, f"Hard removal: {sport.upper()} market data is no longer Clean."
+    previous_line = source.get("current_line", "")
+    if market == "MONEYLINE":
+        try:
+            frozen_evidence = json.loads(str(source.get("favorite_supporting_evidence", "{}")))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            frozen_evidence = {}
+        previous_line = frozen_evidence.get("current_line", previous_line)
+    previous = _line_value(previous_line, market)
+    current = _line_value(side.get("current_line", ""), market)
+    if market == "MONEYLINE" and sport in {"ufc", "nhl"}:
+        previous_probability = _american_implied_probability(previous)
+        current_probability = _american_implied_probability(current)
+        against = (
+            previous_probability - current_probability
+            if previous_probability is not None and current_probability is not None
+            else 0
+        )
+        threshold = (
+            CONFIG.ufc_adverse_probability_points
+            if sport == "ufc"
+            else CONFIG.nhl_adverse_probability_points
+        )
+        material = against >= threshold
+        return (
+            False,
+            material,
+            f"Material closing removal: implied probability moved {against:g} points against "
+            f"the Favorite (threshold {threshold:g}).",
+        )
+    against = (current - previous) if previous is not None and current is not None else 0
     threshold = 15 if market == "MONEYLINE" else (
         1.5 if sport in {"nba", "ncaab", "cbb"}
         else CONFIG.ncaaf_adverse_move_threshold if sport in {"ncaaf", "cfb"}
@@ -893,6 +993,12 @@ def _material_removal(row: pd.Series, source: pd.Series | None) -> tuple[bool, b
     )
     material = against >= threshold
     return False, material, f"Material closing removal: market moved {against:g} against the Favorite (threshold {threshold:g})."
+
+
+def _american_implied_probability(odds: float | None) -> float | None:
+    if odds is None or odds == 0:
+        return None
+    return 100.0 * (-odds / (-odds + 100.0) if odds < 0 else 100.0 / (odds + 100.0))
 
 
 def _confirmed_prior_favorite_recovery(row: pd.Series, source: pd.Series | None) -> tuple[bool, str]:
@@ -993,7 +1099,14 @@ def _late_invalidate_favorite(frame: pd.DataFrame, index: object, reason: str, a
 
 
 def _favorite_rule_version(sport: object) -> str:
-    return CONFIG.ncaaf_version if str(sport).lower() in {"ncaaf", "cfb"} else CONFIG.version
+    normalized = str(sport).lower()
+    if normalized in {"ncaaf", "cfb"}:
+        return CONFIG.ncaaf_version
+    if normalized == "ufc":
+        return CONFIG.ufc_version
+    if normalized == "nhl":
+        return CONFIG.nhl_version
+    return CONFIG.version
 
 
 def _legacy_rejection_reason(row: pd.Series, side: dict | None, game_rows: pd.DataFrame | None) -> str:
@@ -1032,6 +1145,7 @@ def _qualify_market(
     game_rows: pd.DataFrame | None,
     *,
     enforce_ncaaf_policy: bool = True,
+    at: str | None = None,
 ) -> dict | None:
     sport = str(row.get("sport", "")).lower()
     market = str(row.get("market_display", "")).upper()
@@ -1055,6 +1169,10 @@ def _qualify_market(
             continue
         pathway = _pathway(side, other, sport, market)
         if not pathway:
+            continue
+        if sport in {"ufc", "nhl"} and not _primary_moneyline_sport_gate(
+            row, side, pathway, at,
+        ):
             continue
         # Favorite is a narrower designation layered over the published
         # Market Read.  Never publish a Favorite when that same side is not
@@ -1114,6 +1232,119 @@ def _qualify_market(
         "market_read": str(side.get("anomaly_chips") or side.get("reaction", "")),
         "ncaaf_gate": ncaaf_gate,
     }
+
+
+def _primary_moneyline_sport_gate(
+    row: pd.Series,
+    side: dict,
+    pathway: str,
+    at: str | None,
+) -> bool:
+    """Apply forward-only strict qualification to UFC and NHL moneylines."""
+    sport = str(row.get("sport", "")).lower()
+    if sport not in {"ufc", "nhl"}:
+        return True
+    if str(row.get("market_display", "")).upper() != "MONEYLINE":
+        return False
+    # Split-only resistance and moderate-follow signals remain useful board
+    # context, but are not official UFC/NHL Favorites without a low-support,
+    # movement-backed Contrarian read.
+    if pathway != "low_support_contrarian":
+        return False
+    threshold = CONFIG.ufc_market_move_min if sport == "ufc" else CONFIG.nhl_market_move_min
+    if (
+        str(side.get("response_direction", "")).upper() != "TOWARD"
+        or (_number(side.get("price_move_pct")) or 0) < threshold
+    ):
+        return False
+    context = _parts(side.get("context_chips")) | _parts(side.get("anomaly_chips"))
+    hard_risks = (
+        {"Bout Suspended", "Opponent Change", "Weight Miss", "Weigh-In Risk"}
+        if sport == "ufc"
+        else {"Goalie Change", "Goalie Unconfirmed", "Goalie Risk"}
+    )
+    if context & hard_risks:
+        return False
+    kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
+    captured = pd.to_datetime(at, errors="coerce", utc=True)
+    if pd.isna(kickoff) or pd.isna(captured):
+        return False
+    hours = (kickoff - captured).total_seconds() / 3600.0
+    active_window = CONFIG.ufc_active_window_hours if sport == "ufc" else CONFIG.nhl_active_window_hours
+    if hours < 0 or hours > active_window:
+        return False
+    recovered = _truthy(side.get("whipsaw_recovered")) or "Whipsaw Recovered" in context
+    ever_whipsaw = recovered or str(side.get("path", "")) == "Whipsaw"
+    if ever_whipsaw:
+        if not recovered:
+            return False
+        if (_number(side.get("whipsaw_retention_ratio")) or 0) < CONFIG.primary_moneyline_whipsaw_min_retention:
+            return False
+        changes = int(_number(side.get("material_direction_changes")) or 0)
+        if changes > CONFIG.primary_moneyline_whipsaw_max_direction_changes:
+            return False
+    return True
+
+
+def _primary_moneyline_rejection_reason(
+    row: pd.Series,
+    game_rows: pd.DataFrame | None,
+    at: str | None,
+) -> str:
+    """Return the exact first failed UFC/NHL forward-policy gate."""
+    sport = str(row.get("sport", "")).lower()
+    label = sport.upper()
+    supported = str(row.get("supported_side", "")).strip()
+    side = _matching_market_side(game_rows, "MONEYLINE", supported) if supported else None
+    if side is None:
+        return f"{label} Favorite withheld: no exact currently confirmed Supported Side."
+    other = next(
+        (
+            item for item in _sides(row)
+            if _side_identity(item.get("flagged_side")) != _side_identity(side.get("flagged_side"))
+        ),
+        {},
+    )
+    pathway = _pathway(
+        side,
+        other,
+        sport,
+        "MONEYLINE",
+    )
+    if pathway != "low_support_contrarian":
+        return f"{label} Favorite withheld: requires the low-support, movement-backed Contrarian pathway."
+    threshold = CONFIG.ufc_market_move_min if sport == "ufc" else CONFIG.nhl_market_move_min
+    if str(side.get("response_direction", "")).upper() != "TOWARD":
+        return f"{label} Favorite withheld: movement is not toward the candidate."
+    if (_number(side.get("price_move_pct")) or 0) < threshold:
+        return f"{label} Favorite withheld: requires at least {threshold:g} implied-probability points toward the candidate."
+    context = _parts(side.get("context_chips")) | _parts(side.get("anomaly_chips"))
+    hard_risks = (
+        {"Bout Suspended", "Opponent Change", "Weight Miss", "Weigh-In Risk"}
+        if sport == "ufc"
+        else {"Goalie Change", "Goalie Unconfirmed", "Goalie Risk"}
+    )
+    risks = sorted(context & hard_risks)
+    if risks:
+        return f"{label} Favorite withheld: blocking risk state {', '.join(risks)}."
+    kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
+    captured = pd.to_datetime(at, errors="coerce", utc=True)
+    active_window = CONFIG.ufc_active_window_hours if sport == "ufc" else CONFIG.nhl_active_window_hours
+    if pd.isna(kickoff) or pd.isna(captured):
+        return f"{label} Favorite withheld: a verified scheduled start is required."
+    hours = (kickoff - captured).total_seconds() / 3600.0
+    if hours < 0:
+        return f"{label} Favorite withheld: the scheduled start has passed."
+    if hours > active_window:
+        return f"{label} Favorite withheld: official status begins inside T-{active_window:g} hours."
+    recovered = _truthy(side.get("whipsaw_recovered")) or "Whipsaw Recovered" in context
+    if str(side.get("path", "")) == "Whipsaw" and not recovered:
+        return f"{label} Favorite withheld: unresolved whipsaw movement."
+    if recovered and (_number(side.get("whipsaw_retention_ratio")) or 0) < CONFIG.primary_moneyline_whipsaw_min_retention:
+        return f"{label} Favorite withheld: recovered whipsaw retained less than 80% of its maximum move."
+    if recovered and int(_number(side.get("material_direction_changes")) or 0) > CONFIG.primary_moneyline_whipsaw_max_direction_changes:
+        return f"{label} Favorite withheld: recovered whipsaw exceeded two material direction changes."
+    return f"{label} Favorite withheld: current strict qualification gates were not satisfied."
 
 
 def _ncaaf_favorite_gate(row: pd.Series, side: dict, cross_state: str) -> dict:
