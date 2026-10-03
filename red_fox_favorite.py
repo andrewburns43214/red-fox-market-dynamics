@@ -19,7 +19,7 @@ import pandas as pd
 @dataclass(frozen=True)
 class FavoriteConfig:
     version: str = "red_fox_favorite_v5"
-    ncaaf_version: str = "red_fox_favorite_v6"
+    ncaaf_version: str = "red_fox_favorite_v7"
     ufc_version: str = "red_fox_favorite_ufc_v1"
     nhl_version: str = "red_fox_favorite_nhl_v1"
     spread_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
@@ -71,6 +71,9 @@ class FavoriteConfig:
     ncaaf_confirmation_min_gap_minutes: int = 10
     ncaaf_adverse_move_threshold: float = 0.5
     ncaaf_active_market_window_days: int = 7
+    ncaaf_partial_whipsaw_min_retention: float = 0.80
+    ncaaf_partial_whipsaw_max_material_direction_changes: int = 6
+    ncaaf_partial_whipsaw_confirmation_minutes: int = 30
     ncaaf_shadow_split_max: float = 40.0
     ncaaf_shadow_short_split_max: float = 35.0
     ufc_market_move_min: float = 3.0
@@ -1164,7 +1167,12 @@ def _qualify_market(
     candidates = []
     for side in sides:
         other = next((item for item in sides if item is not side), None)
-        if other is None or not _base_quality(side):
+        if other is None:
+            continue
+        base_quality = _base_quality(side)
+        if sport in {"ncaaf", "cfb"} and _intact_ncaaf_partial_whipsaw(side):
+            base_quality = True
+        if not base_quality:
             continue
         value = _line_value(side.get("current_line"), market)
         if value is None or not _number_is_eligible(sport, market, value, side, game_rows):
@@ -1389,12 +1397,17 @@ def _ncaaf_favorite_gate(row: pd.Series, side: dict, cross_state: str) -> dict:
             "NCAAF Favorite withheld: a spread of ±3 or less requires affirmative Moneyline/cross-market confirmation.",
         )
     recovered = _truthy(side.get("whipsaw_recovered")) or "Whipsaw Recovered" in context
-    if str(side.get("path", "")) == "Whipsaw" and not recovered:
+    intact_partial_whipsaw = _intact_ncaaf_partial_whipsaw(side)
+    if str(side.get("path", "")) == "Whipsaw" and not recovered and not intact_partial_whipsaw:
         return _ncaaf_gate_result(
             False, True, "unresolved_whipsaw", move,
-            "NCAAF Favorite withheld: active whipsaw movement has not fully recovered and stabilized.",
+            "NCAAF Favorite withheld: whipsaw movement has not retained at least 80% of the move, "
+            "stayed within six material direction changes, and held for 30 minutes.",
         )
-    if key_exception and not standard_move:
+    if intact_partial_whipsaw:
+        status = "stable_partial_whipsaw"
+        reason = "NCAAF Favorite confirmed by a materially intact whipsaw move that held for at least 30 minutes."
+    elif key_exception and not standard_move:
         reason = "NCAAF key-number exception confirmed: at least 1 point across 3 or 7 with Moneyline/cross-market support."
     else:
         reason = "NCAAF Favorite confirmed by a persistent market-supported move."
@@ -1590,6 +1603,36 @@ def _intact_partial_whipsaw(side: dict) -> bool:
         and _has_meaningful_move(side)
         and _truthy(side.get("whipsaw_confirmation_ready"))
         and (_number(side.get("whipsaw_confirmation_minutes")) or 0) >= CONFIG.partial_whipsaw_confirmation_minutes
+    )
+
+
+def _intact_ncaaf_partial_whipsaw(side: dict) -> bool:
+    """Allow a mature CFB move without requiring the path label to fully recover.
+
+    The ordinary partial-whipsaw gate remains unchanged for every other sport.
+    CFB receives a slightly wider churn allowance only when at least 80% of a
+    meaningful move remains, the move is still toward the candidate, and the
+    final state has held for 30 minutes. A return toward the opener remains a
+    hard rejection.
+    """
+    if str(side.get("path", "")) != "Whipsaw" or _truthy(side.get("whipsaw_recovered")):
+        return False
+    retention = _number(side.get("whipsaw_retention_ratio"))
+    material_changes = _number(side.get("material_direction_changes"))
+    if material_changes is None:
+        material_changes = _number(side.get("line_dir_changes"))
+    return bool(
+        retention is not None
+        and retention >= CONFIG.ncaaf_partial_whipsaw_min_retention
+        and material_changes is not None
+        and material_changes <= CONFIG.ncaaf_partial_whipsaw_max_material_direction_changes
+        and not _truthy(side.get("return_toward_open"))
+        and not _truthy(side.get("active_worsening_reversal"))
+        and str(side.get("response_direction", "")).upper() == "TOWARD"
+        and _has_meaningful_move(side)
+        and _truthy(side.get("whipsaw_confirmation_ready"))
+        and (_number(side.get("whipsaw_confirmation_minutes")) or 0)
+        >= CONFIG.ncaaf_partial_whipsaw_confirmation_minutes
     )
 
 

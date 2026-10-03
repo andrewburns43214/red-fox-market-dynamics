@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 import build_live_recent as live
 from live_score_monitor import evaluate
@@ -427,6 +428,42 @@ def test_arizona_system_miss_is_retroactively_classified_with_explicit_provenanc
     assert corrected.classification_original_publication == "missed"
     assert corrected.favorite_first_qualified_at == "2026-09-13T20:24:00Z"
     assert corrected.freeze_method == "retroactive_system_correction_from_retained_pregame_state"
+
+
+@pytest.mark.parametrize(
+    "game_id,side_name,open_line,current_line",
+    [
+        ("34708267", "Pittsburgh +2.5", "+6 (-110)", "+2.5 (-118)"),
+        ("34708269", "Northwestern +2.5", "+5.5 (-110)", "+2.5 (-105)"),
+    ],
+)
+def test_ncaaf_whipsaw_system_misses_are_retroactively_classified(
+    game_id, side_name, open_line, current_line,
+):
+    sides = [
+        {
+            "flagged_side": side_name, "bets_pct": 37, "money_pct": 39,
+            "open_line": open_line, "current_line": current_line, "path": "Whipsaw",
+        },
+        {
+            "flagged_side": "Opponent -2.5", "bets_pct": 63, "money_pct": 61,
+            "open_line": "-5.5 (-110)", "current_line": "-2.5 (-115)", "path": "Whipsaw",
+        },
+    ]
+    frozen = pd.DataFrame([{
+        "sport": "ncaaf", "game_id": game_id, "market_display": "SPREAD",
+        "market_sides": json.dumps(sides), "state_as_of_utc": "2026-10-02T23:48:29Z",
+        "final_pregame_state_at_utc": "2026-10-02T23:48:29Z",
+        "red_fox_favorite": "false", "supported_side": "",
+    }])
+
+    corrected = live.apply_classification_corrections(frozen).iloc[0]
+
+    assert corrected.red_fox_favorite == "true"
+    assert corrected.favorite_side == side_name
+    assert corrected.favorite_rule_version == "red_fox_favorite_v7"
+    assert corrected.classification_correction == "true"
+    assert corrected.classification_original_publication == "missed"
 
 
 def test_falcons_whipsaw_recovery_is_retroactively_classified_with_explicit_provenance():

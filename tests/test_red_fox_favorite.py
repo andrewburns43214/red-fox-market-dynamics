@@ -100,7 +100,7 @@ def test_ncaaf_requires_confirmed_one_and_a_half_point_move_but_nfl_is_unchanged
         "ncaaf", "SPREAD", pair_for(ncaaf_candidate()), supported_side="Away +4",
     )])
     assert is_favorite(strong_ncaaf)
-    assert strong_ncaaf.iloc[0].favorite_rule_version == "red_fox_favorite_v6"
+    assert strong_ncaaf.iloc[0].favorite_rule_version == "red_fox_favorite_v7"
 
 
 def test_ncaaf_short_spread_requires_affirmative_moneyline_confirmation():
@@ -200,6 +200,26 @@ def test_ncaaf_unresolved_whipsaw_is_rejected_but_recovered_move_can_qualify():
     assert not is_favorite(result([market("ncaaf", "SPREAD", pair_for(active), supported_side="Away +4")]))
     recovered = ncaaf_candidate(path="Whipsaw", context="Market Move | Whipsaw Recovered")
     assert is_favorite(result([market("ncaaf", "SPREAD", pair_for(recovered), supported_side="Away +4")]))
+
+
+def test_ncaaf_mature_partial_whipsaw_can_qualify_without_opening_the_faucet():
+    stable = ncaaf_candidate(
+        path="Whipsaw", whipsaw_retention=0.8, material_direction_changes=6,
+        whipsaw_confirmation_minutes=30,
+    )
+    qualified = result([market("ncaaf", "SPREAD", pair_for(stable), supported_side="Away +4")])
+    assert is_favorite(qualified)
+    assert qualified.iloc[0]._ncaaf_market_move_status == "stable_partial_whipsaw"
+
+    for change in (
+        {"whipsaw_retention": 0.799},
+        {"material_direction_changes": 7},
+        {"whipsaw_confirmation_minutes": 29.9},
+        {"return_toward_open": True},
+    ):
+        candidate = ncaaf_candidate(path="Whipsaw", **change)
+        rejected = result([market("ncaaf", "SPREAD", pair_for(candidate), supported_side="Away +4")])
+        assert not is_favorite(rejected)
 
 
 def test_seahawks_cardinals_injury_override_is_event_scoped():
@@ -491,7 +511,7 @@ def test_freeze_favorite_requires_strong_pressure_and_persistent_resistance():
 
 def test_non_ncaaf_tracking_remains_v5_and_history_is_append_only(tmp_path):
     assert CONFIG.version == "red_fox_favorite_v5"
-    assert CONFIG.ncaaf_version == "red_fox_favorite_v6"
+    assert CONFIG.ncaaf_version == "red_fox_favorite_v7"
     assert CONFIG.ufc_version == "red_fox_favorite_ufc_v1"
     assert CONFIG.nhl_version == "red_fox_favorite_nhl_v1"
     legacy = result([market("mlb", "MONEYLINE", pair_for(side("Away", "+115", open_line="+150", price_move=6.0)))])

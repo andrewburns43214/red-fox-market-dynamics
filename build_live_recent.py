@@ -48,6 +48,26 @@ EMPTY_COLUMNS = [
     "classification_correction_reason", "classification_original_publication",
 ]
 CLASSIFICATION_CORRECTIONS = {
+    ("ncaaf", "34708267", "SPREAD"): {
+        "side_prefix": "pittsburgh",
+        "recorded_at": "2026-10-03T02:55:00+00:00",
+        "rule_version": "red_fox_favorite_v7",
+        "reason": (
+            "Retroactive system-miss correction: Pittsburgh moved from +6 to +2.5 "
+            "on lower support with confirming Moneyline movement. The former NCAAF "
+            "whipsaw gate rejected the fully retained move even after it had stabilized."
+        ),
+    },
+    ("ncaaf", "34708269", "SPREAD"): {
+        "side_prefix": "northwestern",
+        "recorded_at": "2026-10-03T02:55:00+00:00",
+        "rule_version": "red_fox_favorite_v7",
+        "reason": (
+            "Retroactive system-miss correction: Northwestern moved from +5.5 to +2.5 "
+            "on lower support with confirming Moneyline movement. The former NCAAF "
+            "whipsaw churn ceiling over-penalized a materially intact final market move."
+        ),
+    },
     ("nfl", "34118231", "SPREAD"): {
         "side_prefix": "ari cardinals",
         "recorded_at": "2026-09-13T20:45:00+00:00",
