@@ -107,6 +107,15 @@ RULE_INVALIDATED_FAVORITE_REASONS = {
         "money, a suspended MLB Favorite cohort."
     ),
 }
+MANUAL_FAVORITE_INCLUSIONS = {
+    ("ncaaf", "34708335", "SPREAD"): {
+        "team": "San Jose State",
+        "reason": (
+            "Owner-approved event override: San Jose State is the confirmed low-support "
+            "resistance side against concentrated Hawaii pressure."
+        ),
+    },
+}
 
 
 def _manual_favorite_exclusion(row: pd.Series) -> str:
@@ -308,6 +317,7 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
     path = Path(data_dir) / "red_fox_favorite_tracking.csv"
     history = _read_tracking(path)
     current = _apply_visibility_lock(current, history, Path(data_dir), at)
+    current = _apply_manual_favorite_inclusions(current, at)
     keys = ["sport", "game_id", "market_display"]
     previous = {}
     if not history.empty:
@@ -378,6 +388,59 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
         "_favorite_legacy_reason", "_ncaaf_move_gate_passed",
         "_ncaaf_market_move_status", "_ncaaf_decision_reason",
     ], errors="ignore")
+
+
+def _apply_manual_favorite_inclusions(frame: pd.DataFrame, at: str) -> pd.DataFrame:
+    """Apply narrowly scoped owner decisions after the generic closing lock."""
+    result = frame.copy()
+    for index, row in result.iterrows():
+        key = (
+            str(row.get("sport", "")).lower(),
+            str(row.get("game_id", "")),
+            str(row.get("market_display", "")).upper(),
+        )
+        override = MANUAL_FAVORITE_INCLUSIONS.get(key)
+        if not override:
+            continue
+        supported = str(row.get("supported_side", "")).strip()
+        if _side_identity(supported) != _side_identity(override["team"]):
+            continue
+        side = next(
+            (item for item in _sides(row) if _side_identity(item.get("flagged_side")) == _side_identity(override["team"])),
+            None,
+        )
+        if side is None:
+            continue
+        evidence = {
+            "reaction": str(side.get("reaction", "")),
+            "path": str(side.get("path", "")),
+            "bets_pct": _number(side.get("bets_pct")),
+            "money_pct": _number(side.get("money_pct")),
+            "open_line": str(side.get("open_line", "")),
+            "current_line": str(side.get("current_line", "")),
+            "observation_count": int(_number(side.get("observation_count")) or 0),
+            "cross_market": "confirmation",
+            "manual_event_override": True,
+        }
+        result.at[index, "red_fox_favorite"] = "true"
+        result.at[index, "favorite_side"] = str(side.get("flagged_side", supported))
+        result.at[index, "favorite_pathway"] = "manual_event_override"
+        result.at[index, "favorite_rule_version"] = _favorite_rule_version(row.get("sport", ""))
+        result.at[index, "favorite_first_qualified_at"] = at
+        result.at[index, "favorite_final_qualified_at"] = at
+        result.at[index, "favorite_state"] = "qualified"
+        result.at[index, "favorite_final_market_read"] = str(side.get("anomaly_chips") or side.get("reaction", ""))
+        result.at[index, "favorite_final_market_rank"] = str(row.get("board_rank", ""))
+        result.at[index, "favorite_supporting_evidence"] = json.dumps(evidence, separators=(",", ":"))
+        result.at[index, "favorite_whipsaw_state"] = "manual_event_override"
+        result.at[index, "favorite_cross_market_state"] = "confirmation"
+        result.at[index, "favorite_snapshot_id"] = _snapshot_id(row, at)
+        result.at[index, "favorite_reason"] = override["reason"]
+        result.at[index, "favorite_originally_qualified"] = "true"
+        result.at[index, "favorite_review_state"] = "applied_override"
+        result.at[index, "favorite_review_reason"] = override["reason"]
+        result.at[index, "favorite_review_at"] = at
+    return result
 
 
 def _update_candidate_shadow(current: pd.DataFrame, data_dir: Path, at: str) -> None:

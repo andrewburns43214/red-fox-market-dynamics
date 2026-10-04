@@ -222,6 +222,29 @@ def test_ncaaf_mature_partial_whipsaw_can_qualify_without_opening_the_faucet():
         assert not is_favorite(rejected)
 
 
+def test_owner_override_publishes_only_san_jose_state_spread(tmp_path: Path):
+    candidate = side(
+        "San Jose State +2.5", "+2.5 (-102)", open_line="+3 (-115)",
+        bets=31, money=17, path="Whipsaw", line_move=0.5,
+    )
+    pressure = side(
+        "Hawaii -2.5", "-2.5 (-118)", open_line="-3 (-105)",
+        bets=69, money=83, reaction="Freeze", direction="AGAINST",
+        kpi=False, action_type="FADE CANDIDATE", path="Whipsaw",
+    )
+    row = market(
+        "ncaaf", "SPREAD", [candidate, pressure], game_id="34708335",
+        game="San Jose State @ Hawaii", supported_side="San Jose State +2.5",
+    )
+    row["kickoff_iso"] = "2026-10-04T03:59:00Z"
+    evaluated = apply_red_fox_favorites(pd.DataFrame([row]), as_of="2026-10-04T03:43:00Z")
+    published = update_favorite_tracking(evaluated, tmp_path, as_of="2026-10-04T03:43:00Z")
+    assert is_favorite(published)
+    assert published.iloc[0].favorite_side == "San Jose State +2.5"
+    assert published.iloc[0].favorite_pathway == "manual_event_override"
+    assert published.iloc[0].favorite_review_state == "applied_override"
+
+
 def test_seahawks_cardinals_injury_override_is_event_scoped():
     candidate = side("Arizona Cardinals +4.5", "+4.5 (-110)")
     game = market("nfl", "SPREAD", pair_for(candidate), game="Seattle Seahawks @ Arizona Cardinals")
