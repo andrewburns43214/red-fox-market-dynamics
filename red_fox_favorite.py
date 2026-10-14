@@ -61,7 +61,7 @@ class FavoriteConfig:
     normal_freshness_minutes: int = 30
     whipsaw_freshness_minutes: int = 20
     freeze_disabled_sports: frozenset[str] = frozenset({"ufc", "nhl"})
-    visibility_lock_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb", "ufc", "nhl"})
+    visibility_lock_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb", "mlb", "ufc", "nhl"})
     visibility_review_minutes: int = 40
     visibility_lock_minutes: int = 20
     visibility_confirmations: int = 2

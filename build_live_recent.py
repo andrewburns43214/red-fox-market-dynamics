@@ -89,6 +89,19 @@ CLASSIFICATION_CORRECTIONS = {
             "confirmed recovery from restoring the archived Favorite."
         ),
     },
+    ("nhl", "34799236", "MONEYLINE"): {
+        "side_prefix": "stl blues",
+        "recorded_at": "2026-10-13T23:40:10+00:00",
+        "first_qualified_at": "2026-10-13T12:07:38.971349+00:00",
+        "original_publication": "qualified_then_dropped",
+        "pathway": "low_support_contrarian",
+        "rule_version": "red_fox_favorite_nhl_v1",
+        "reason": (
+            "Audited continuity correction: St. Louis qualified before kickoff and the "
+            "final paired market strengthened from -105 to -125. A non-adverse pathway "
+            "transition incorrectly removed the Favorite at the kickoff handoff."
+        ),
+    },
 }
 SCOREBOARD_URLS = {
     "nfl": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
@@ -399,8 +412,87 @@ def final_pregame_states(previous: pd.DataFrame, now: datetime) -> pd.DataFrame:
     return started.drop(columns=["_kickoff", "_state_at"])
 
 
+def _favorite_side_identity(value: object) -> str:
+    text = re.sub(r"\s@\s[+-]\d+(?:\.\d+)?\s*$", "", str(value or "").strip())
+    text = re.sub(r"\s[+-]\d+(?:\.\d+)?(?:\s.*)?$", "", text)
+    return re.sub(r"[^a-z0-9]+", "", text.lower())
+
+
+def _market_movement_value(value: object, market: object) -> float | None:
+    numbers = re.findall(r"(?<![A-Za-z0-9])([+-]\d+(?:\.\d+)?)", str(value or ""))
+    if not numbers:
+        return None
+    try:
+        return float(numbers[-1] if str(market).upper() == "MONEYLINE" else numbers[0])
+    except ValueError:
+        return None
+
+
+def _confirm_favorite_with_final_raw_market(candidate: pd.Series, raw: pd.Series | None) -> dict | None:
+    """Return final side evidence when a retained Favorite did not move adversely."""
+    if raw is None or str(candidate.get("favorite_late_invalidated", "")).lower() in {"1", "true", "yes"}:
+        return None
+    try:
+        sides = [item for item in json.loads(str(raw.get("market_sides", "")) or "[]") if isinstance(item, dict)]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    favorite_identity = _favorite_side_identity(candidate.get("favorite_side", ""))
+    side = next(
+        (item for item in sides if _favorite_side_identity(item.get("flagged_side", "")) == favorite_identity),
+        None,
+    )
+    if side is None:
+        return None
+    market = candidate.get("market_display", "")
+    previous = _market_movement_value(candidate.get("current_line", ""), market)
+    current = _market_movement_value(side.get("current_line", ""), market)
+    if previous is None:
+        try:
+            evidence = json.loads(str(candidate.get("favorite_supporting_evidence", "")) or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            evidence = {}
+        previous = _market_movement_value(evidence.get("current_line", ""), market)
+    # In side-relative sportsbook notation, an increasing number is adverse:
+    # -105 -> -125 and +3.5 -> +2.5 strengthen; the reverse weakens.
+    if previous is None or current is None or current > previous:
+        return None
+    return side
+
+
+def _merge_final_raw_confirmation(candidate: pd.Series, raw: pd.Series, side: dict) -> pd.Series:
+    merged = candidate.copy()
+    for column in ("market_sides", "state_as_of_utc", "final_pregame_state_at_utc"):
+        value = raw.get(column, "")
+        if str(value).strip():
+            merged[column] = value
+    merged["current_line"] = side.get("current_line", merged.get("current_line", ""))
+    merged["bets_pct"] = side.get("bets_pct", merged.get("bets_pct", ""))
+    merged["money_pct"] = side.get("money_pct", merged.get("money_pct", ""))
+    merged["supported_side"] = merged.get("favorite_side", "")
+    merged["read_anchor_side"] = merged.get("favorite_side", "")
+    merged["directional_lean_side"] = merged.get("favorite_side", "")
+    merged["red_fox_favorite"] = "true"
+    merged["favorite_state"] = "qualified"
+    merged["favorite_reason"] = "Previously qualified Favorite confirmed by the final paired market without an adverse move."
+    try:
+        evidence = json.loads(str(merged.get("favorite_supporting_evidence", "")) or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        evidence = {}
+    evidence.update({
+        "bets_pct": side.get("bets_pct", ""),
+        "money_pct": side.get("money_pct", ""),
+        "current_line": side.get("current_line", ""),
+        "final_raw_confirmation": True,
+    })
+    merged["favorite_supporting_evidence"] = json.dumps(evidence, separators=(",", ":"))
+    return merged
+
+
 def favorite_handoff_states(
-    candidates: pd.DataFrame, now: datetime, tracking: pd.DataFrame | None = None
+    candidates: pd.DataFrame,
+    now: datetime,
+    tracking: pd.DataFrame | None = None,
+    market_candidates: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Freeze previously qualified Favorites even if the live board drops them.
 
@@ -415,6 +507,16 @@ def favorite_handoff_states(
         candidates.get("red_fox_favorite", pd.Series("false", index=candidates.index))
         .astype(str).str.lower().isin({"1", "true", "yes"})
     ].copy()
+    raw_lookup: dict[tuple[str, str, str], pd.Series] = {}
+    if market_candidates is not None and not market_candidates.empty:
+        raw = market_candidates.copy()
+        raw["_state_at"] = utc_series(raw.get("state_as_of_utc", ""), raw.index)
+        raw = raw.sort_values("_state_at", kind="mergesort")
+        raw_lookup = {
+            tuple(str(row.get(column, "")) for column in ("sport", "game_id", "market_display")): row
+            for _, row in raw.iterrows()
+        }
+    raw_confirmed: set[tuple[str, str, str]] = set()
     if tracking is not None and not tracking.empty and not favorite.empty:
         history = tracking.copy()
         history["_recorded_at"] = utc_series(history.get("recorded_at", ""), history.index)
@@ -430,13 +532,27 @@ def favorite_handoff_states(
             if pd.notna(kickoff):
                 scoped = scoped[scoped["_recorded_at"].notna() & (scoped["_recorded_at"] <= kickoff)]
             scoped = scoped.sort_values("_recorded_at", kind="mergesort")
-            # A later explicit nonqualification supersedes the last-qualified
-            # archive. Missing legacy tracking does not erase valid evidence.
-            keep.append(scoped.empty or str(scoped.iloc[-1].get("favorite_state", "")) == "qualified")
+            latest_qualified = scoped.empty or str(scoped.iloc[-1].get("favorite_state", "")) == "qualified"
+            key = tuple(str(candidate.get(column, "")) for column in ("sport", "game_id", "market_display"))
+            raw_row = raw_lookup.get(key)
+            confirmed_side = None if latest_qualified else _confirm_favorite_with_final_raw_market(candidate, raw_row)
+            if confirmed_side is not None and raw_row is not None:
+                favorite.loc[candidate.name] = _merge_final_raw_confirmation(candidate, raw_row, confirmed_side)
+                raw_confirmed.add(key)
+            # A threshold or classification falloff cannot erase an already
+            # qualified Favorite when the final paired market still confirms
+            # the same side. Explicit invalidations and adverse moves remain.
+            keep.append(latest_qualified or confirmed_side is not None)
         favorite = favorite.loc[pd.Series(keep, index=favorite.index)]
     frozen = final_pregame_states(favorite, now)
     if not frozen.empty:
         frozen["freeze_method"] = "favorite_tracking_last_qualified_at_or_before_start"
+        if raw_confirmed:
+            confirmed = pd.Series([
+                tuple(str(row.get(column, "")) for column in ("sport", "game_id", "market_display")) in raw_confirmed
+                for _, row in frozen.iterrows()
+            ], index=frozen.index)
+            frozen.loc[confirmed, "freeze_method"] = "favorite_confirmed_by_final_paired_market"
         invalidated = frozen.get("favorite_late_invalidated", pd.Series("false", index=frozen.index)).astype(str).str.lower().isin({"1", "true", "yes"})
         frozen.loc[invalidated, "red_fox_favorite"] = "false"
         frozen.loc[invalidated, "favorite_state"] = "late_invalidated"
@@ -595,19 +711,20 @@ def apply_classification_corrections(frame: pd.DataFrame) -> pd.DataFrame:
         result.at[index, "directional_lean_side"] = supported
         result.at[index, "red_fox_favorite"] = "true"
         result.at[index, "favorite_side"] = supported
-        result.at[index, "favorite_pathway"] = "low_support_contrarian"
+        result.at[index, "favorite_pathway"] = correction.get("pathway", "low_support_contrarian")
         result.at[index, "favorite_rule_version"] = correction["rule_version"]
-        result.at[index, "favorite_first_qualified_at"] = source_at
+        result.at[index, "favorite_first_qualified_at"] = correction.get("first_qualified_at", source_at)
         result.at[index, "favorite_final_qualified_at"] = source_at
         result.at[index, "favorite_state"] = "qualified_retroactive_system_correction"
         result.at[index, "favorite_final_market_read"] = "Contrarian"
         result.at[index, "favorite_supporting_evidence"] = json.dumps(evidence, separators=(",", ":"))
         result.at[index, "favorite_reason"] = correction["reason"]
-        result.at[index, "favorite_originally_qualified"] = "false"
+        original_publication = correction.get("original_publication", "missed")
+        result.at[index, "favorite_originally_qualified"] = "true" if original_publication == "qualified_then_dropped" else "false"
         result.at[index, "classification_correction"] = "true"
         result.at[index, "classification_corrected_at_utc"] = correction["recorded_at"]
         result.at[index, "classification_correction_reason"] = correction["reason"]
-        result.at[index, "classification_original_publication"] = "missed"
+        result.at[index, "classification_original_publication"] = original_publication
         result.at[index, "freeze_method"] = "retroactive_system_correction_from_retained_pregame_state"
     return result
 
@@ -730,12 +847,12 @@ def main(scores_only: bool = False) -> None:
         started = final_pregame_states(previous, now)
         if not started.empty:
             rows.append(started)
+    market_candidates = read_csv_or_empty(MARKET_CANDIDATES)
     candidates = read_csv_or_empty(FAVORITE_CANDIDATES)
     if not candidates.empty:
-        favorite_started = favorite_handoff_states(candidates, now, tracking)
+        favorite_started = favorite_handoff_states(candidates, now, tracking, market_candidates)
         if not favorite_started.empty:
             rows.append(favorite_started)
-    market_candidates = read_csv_or_empty(MARKET_CANDIDATES)
     if not market_candidates.empty:
         market_started = final_pregame_states(market_candidates, now)
         if not market_started.empty:

@@ -241,6 +241,44 @@ def test_favorite_handoff_rejects_a_later_explicit_prekickoff_falloff():
     assert frozen.empty
 
 
+def test_favorite_handoff_keeps_blues_when_final_paired_market_strengthens():
+    archived_sides = [
+        {"flagged_side": "STL Blues", "bets_pct": 30, "money_pct": 35, "open_line": "+110", "current_line": "-105"},
+        {"flagged_side": "OTT Senators", "bets_pct": 70, "money_pct": 65, "open_line": "-130", "current_line": "-115"},
+    ]
+    candidate = pd.DataFrame([{
+        "sport": "nhl", "game_id": "34799236", "market_display": "MONEYLINE",
+        "kickoff_iso": "2026-10-13T23:40:00Z", "state_as_of_utc": "2026-10-13T18:38:04Z",
+        "market_sides": json.dumps(archived_sides), "current_line": "-105",
+        "red_fox_favorite": "true", "favorite_side": "STL Blues", "favorite_state": "qualified",
+        "favorite_supporting_evidence": json.dumps({"current_line": "-105", "bets_pct": 30, "money_pct": 35}),
+    }])
+    tracking = pd.DataFrame([
+        {"sport": "nhl", "game_id": "34799236", "market_display": "MONEYLINE", "recorded_at": "2026-10-13T21:08:07Z", "favorite_state": "qualified"},
+        {"sport": "nhl", "game_id": "34799236", "market_display": "MONEYLINE", "recorded_at": "2026-10-13T21:47:53Z", "favorite_state": "not_qualified"},
+    ])
+    final_sides = [
+        {"flagged_side": "OTT Senators", "bets_pct": 62, "money_pct": 20, "open_line": "OTT Senators @ -130", "current_line": "OTT Senators @ +105"},
+        {"flagged_side": "STL Blues", "bets_pct": 38, "money_pct": 80, "open_line": "STL Blues @ +110", "current_line": "STL Blues @ -125"},
+    ]
+    market_candidates = pd.DataFrame([{
+        "sport": "nhl", "game_id": "34799236", "market_display": "MONEYLINE",
+        "kickoff_iso": "2026-10-13T23:40:00Z", "state_as_of_utc": "2026-10-13T23:37:27Z",
+        "final_pregame_state_at_utc": "2026-10-13T23:37:27Z", "market_sides": json.dumps(final_sides),
+    }])
+
+    frozen = live.favorite_handoff_states(
+        candidate, datetime(2026, 10, 13, 23, 41, tzinfo=timezone.utc), tracking, market_candidates,
+    )
+
+    assert len(frozen) == 1
+    assert frozen.iloc[0].red_fox_favorite == "true"
+    assert frozen.iloc[0].favorite_side == "STL Blues"
+    assert frozen.iloc[0].current_line == "STL Blues @ -125"
+    assert frozen.iloc[0].freeze_method == "favorite_confirmed_by_final_paired_market"
+    assert json.loads(frozen.iloc[0].favorite_supporting_evidence)["final_raw_confirmation"] is True
+
+
 def test_favorite_handoff_keeps_a_final_requalification_after_an_earlier_falloff():
     candidate = pd.DataFrame([{
         "sport": "nfl", "game_id": "requalified", "market_display": "SPREAD",
@@ -486,6 +524,27 @@ def test_falcons_whipsaw_recovery_is_retroactively_classified_with_explicit_prov
     assert corrected.classification_correction == "true"
     assert corrected.classification_original_publication == "missed"
     assert "whipsaw counter" in corrected.classification_correction_reason
+
+
+def test_blues_continuity_miss_is_corrected_as_originally_qualified():
+    sides = [
+        {"flagged_side": "OTT Senators", "bets_pct": 62, "money_pct": 20, "open_line": "OTT Senators @ -130", "current_line": "OTT Senators @ +105"},
+        {"flagged_side": "STL Blues", "bets_pct": 38, "money_pct": 80, "open_line": "STL Blues @ +110", "current_line": "STL Blues @ -125"},
+    ]
+    frozen = pd.DataFrame([{
+        "sport": "nhl", "game_id": "34799236", "market_display": "MONEYLINE",
+        "market_sides": json.dumps(sides), "state_as_of_utc": "2026-10-13T23:37:27Z",
+        "final_pregame_state_at_utc": "2026-10-13T23:37:27Z",
+        "red_fox_favorite": "false", "supported_side": "",
+    }])
+
+    corrected = live.apply_classification_corrections(frozen).iloc[0]
+
+    assert corrected.red_fox_favorite == "true"
+    assert corrected.favorite_side == "STL Blues"
+    assert corrected.favorite_originally_qualified == "true"
+    assert corrected.classification_original_publication == "qualified_then_dropped"
+    assert corrected.favorite_first_qualified_at == "2026-10-13T12:07:38.971349+00:00"
 
 
 def test_one_minute_worker_expires_started_board_only_after_freeze_window(tmp_path, monkeypatch):
