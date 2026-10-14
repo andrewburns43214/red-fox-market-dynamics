@@ -132,13 +132,16 @@ def test_live_recent_count_loads_on_board_startup_and_updates_both_badges():
     assert "updateLiveRecentBadges(groupLiveRecentRows(allLiveRecent).length);" in count_refresh
 
 
-def test_live_score_refresh_patches_score_fields_without_rebuilding_frozen_rows():
+def test_live_score_refresh_rebuilds_when_favorite_classification_changes():
     refresh = BOARD[BOARD.index("async function refreshLiveRecentScores()"):BOARD.index("function liveMarketSections(rows)")]
     assert "const scoreFields=['score_away','score_home','score_status','score_state'" in refresh
     assert "score.textContent=liveScoreText(game.first)" in refresh
     assert "status.textContent=liveDisplayStatus(game.first)" in refresh
     assert "frozenLiveRecord" not in refresh
-    assert "market_sides" not in refresh
+    assert "const favoriteSignature=game=>JSON.stringify" in refresh
+    assert "row.red_fox_favorite,row.favorite_side,row.favorite_state" in refresh
+    assert "oldFavoriteSignatures.get(game.key)!==favoriteSignature(game)" in refresh
+    assert "if(structural){allLiveRecent=rows;renderLiveRecent();return;}" in refresh
 
 
 def test_score_coverage_artifact_is_valid_json(tmp_path):

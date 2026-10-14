@@ -3063,7 +3063,14 @@ async function refreshLiveRecentScores(){
   const rows=await loadCSV(LIVE_RECENT_URL)||[], oldGames=groupLiveRecentRows(allLiveRecent), newGames=groupLiveRecentRows(rows);
   const oldKeys=oldGames.map(game=>game.key).join('\n'),newKeys=newGames.map(game=>game.key).join('\n');
   const oldStates=new Map(oldGames.map(game=>[game.key,liveState(game)]));
-  const structural=oldKeys!==newKeys||newGames.some(game=>oldStates.get(game.key)!==liveState(game));
+  const favoriteSignature=game=>JSON.stringify(game.rows.map(row=>[
+    row.market_display,row.red_fox_favorite,row.favorite_side,row.favorite_state,
+    row.favorite_final_market_rank,row.supported_side,row.market_sides,row.classification_correction
+  ]));
+  const oldFavoriteSignatures=new Map(oldGames.map(game=>[game.key,favoriteSignature(game)]));
+  const structural=oldKeys!==newKeys||newGames.some(game=>
+    oldStates.get(game.key)!==liveState(game)||oldFavoriteSignatures.get(game.key)!==favoriteSignature(game)
+  );
   const scores=new Map(newGames.map(game=>[game.key,game.first]));
   const scoreFields=['score_away','score_home','score_status','score_state','score_match_state','score_provider','score_provider_event_id','score_updated_at_utc','score_completed_at_utc'];
   allLiveRecent.forEach(row=>{const latest=scores.get(liveGameKey(row));if(latest)scoreFields.forEach(field=>{row[field]=latest[field]||'';});});
