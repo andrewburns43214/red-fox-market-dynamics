@@ -137,7 +137,7 @@ def append_snapshot_rows(path, rows, fields):
                 writer.writerows(rows)
 
 
-def compact_snapshot_history(path, *, retention_days=21, archive_dir=None, now=None):
+def compact_snapshot_history(path, *, retention_days=7, archive_dir=None, now=None):
     """Bound the hot CSV and preserve older rows in an immutable gzip archive."""
     now = now or datetime.now(timezone.utc)
     cutoff = now - timedelta(days=retention_days)
