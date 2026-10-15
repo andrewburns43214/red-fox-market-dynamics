@@ -73,7 +73,7 @@ def maintain(root, *, compact_snapshots=False, vacuum_coverage=False):
         with sqlite3.connect(store.path, timeout=120) as db:
             db.execute('VACUUM')
     snapshots = None
-    if compact_snapshots or (snapshot.exists() and snapshot.stat().st_size > 128 * 1024 * 1024):
+    if compact_snapshots or (snapshot.exists() and snapshot.stat().st_size > 256 * 1024 * 1024):
         snapshots = compact_snapshot_history(snapshot)
     return {'ledgers': ledgers, 'snapshots': snapshots}
 
