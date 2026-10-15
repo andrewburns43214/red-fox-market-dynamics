@@ -68,6 +68,7 @@ def maintain(root, *, compact_snapshots=False, vacuum_coverage=False):
         'observations': compact_jsonl(private / 'observations.jsonl', lambda row: row.get('captured_at'), cutoff),
     }
     store = CoverageStore(data)
+    store.prune()
     if vacuum_coverage and store.path.exists():
         with sqlite3.connect(store.path, timeout=120) as db:
             db.execute('VACUUM')

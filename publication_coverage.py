@@ -49,7 +49,6 @@ class CoverageStore:
                 CREATE INDEX IF NOT EXISTS transitions_market ON transitions(sport,game_id,market_display);
                 CREATE TABLE IF NOT EXISTS maintenance (key TEXT PRIMARY KEY, value TEXT);
             ''')
-        self.prune()
 
     def connect(self):
         return sqlite3.connect(self.path, timeout=30)
