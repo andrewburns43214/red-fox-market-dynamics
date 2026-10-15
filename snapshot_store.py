@@ -5,6 +5,8 @@ Network requests and final-score calculation must happen outside the transaction
 """
 from contextlib import contextmanager
 import csv
+from datetime import datetime, timedelta, timezone
+import gzip
 import os
 from pathlib import Path
 import shutil
@@ -15,6 +17,20 @@ import time
 import pandas as pd
 
 SCORE_FIELDS = ['final_score_for', 'final_score_against']
+MIN_ATOMIC_HEADROOM_BYTES = 64 * 1024 * 1024
+
+
+def cleanup_orphaned_snapshot_temps(path):
+    """Remove incomplete copy-on-write files while the snapshot lock is held."""
+    path = Path(path)
+    removed = 0
+    for temporary in path.parent.glob('.' + path.name + '.*.tmp'):
+        try:
+            removed += temporary.stat().st_size
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+    return removed
 
 
 @contextmanager
@@ -56,6 +72,9 @@ def snapshot_lock(path, timeout=30):
                     raise TimeoutError(f'Snapshot writer lock timed out: {path}') from error
                 time.sleep(.05)
         try:
+            # A timeout cannot run Python finally blocks. Once this lock is
+            # ours, no matching temporary belongs to a live writer.
+            cleanup_orphaned_snapshot_temps(path)
             yield path
         finally:
             release()
@@ -66,6 +85,10 @@ def atomic_snapshot(path, *, commit_if=None):
     """Caller holds snapshot_lock; failures before replace leave the CSV intact."""
     path = Path(path)
     existing = path.stat() if path.exists() else None
+    required = (existing.st_size if existing else 0) + MIN_ATOMIC_HEADROOM_BYTES
+    available = shutil.disk_usage(path.parent).free
+    if available < required:
+        raise OSError(28, f'Insufficient disk space for atomic snapshot commit: need {required} bytes, have {available}', str(path))
     fd, name = tempfile.mkstemp(prefix='.' + path.name + '.', suffix='.tmp', dir=path.parent)
     os.close(fd)
     temporary = Path(name)
@@ -112,6 +135,58 @@ def append_snapshot_rows(path, rows, fields):
                 if not has_content:
                     writer.writeheader()
                 writer.writerows(rows)
+
+
+def compact_snapshot_history(path, *, retention_days=21, archive_dir=None, now=None):
+    """Bound the hot CSV and preserve older rows in an immutable gzip archive."""
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=retention_days)
+    archive_dir = Path(archive_dir or (Path(path).parent / 'snapshot_archive'))
+    with snapshot_lock(path) as path:
+        if not path.exists() or path.stat().st_size == 0:
+            return {'kept': 0, 'archived': 0, 'archive': ''}
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        fd, active_name = tempfile.mkstemp(prefix='.' + path.name + '.compact.', suffix='.tmp', dir=path.parent)
+        os.close(fd)
+        active_temp = Path(active_name)
+        archive_name = archive_dir / f"snapshots-before-{cutoff:%Y%m%dT%H%M%SZ}.csv.gz"
+        archive_temp = archive_name.with_name('.' + archive_name.name + f'.{os.getpid()}.tmp')
+        kept = archived = 0
+        try:
+            with path.open(newline='', encoding='utf-8') as source, \
+                    active_temp.open('w', newline='', encoding='utf-8') as active, \
+                    gzip.open(archive_temp, 'wt', newline='', encoding='utf-8') as archive:
+                reader = csv.DictReader(source)
+                if not reader.fieldnames or 'timestamp' not in reader.fieldnames:
+                    raise ValueError('Snapshot CSV lacks timestamp column; original file preserved')
+                active_writer = csv.DictWriter(active, fieldnames=reader.fieldnames)
+                archive_writer = csv.DictWriter(archive, fieldnames=reader.fieldnames)
+                active_writer.writeheader()
+                archive_writer.writeheader()
+                for row in reader:
+                    try:
+                        captured = datetime.fromisoformat(str(row.get('timestamp', '')).replace('Z', '+00:00'))
+                        if captured.tzinfo is None:
+                            captured = captured.replace(tzinfo=timezone.utc)
+                    except (TypeError, ValueError):
+                        captured = now
+                    if captured >= cutoff:
+                        active_writer.writerow(row)
+                        kept += 1
+                    else:
+                        archive_writer.writerow(row)
+                        archived += 1
+            if not archived:
+                return {'kept': kept, 'archived': 0, 'archive': ''}
+            # Archive first: an interruption can duplicate old rows on a
+            # later pass, but can never destroy historical evidence.
+            os.replace(archive_temp, archive_name)
+            os.chmod(active_temp, stat.S_IMODE(path.stat().st_mode))
+            os.replace(active_temp, path)
+            return {'kept': kept, 'archived': archived, 'archive': str(archive_name)}
+        finally:
+            active_temp.unlink(missing_ok=True)
+            archive_temp.unlink(missing_ok=True)
 
 
 def merge_final_scores(path, evaluated, original_scores):

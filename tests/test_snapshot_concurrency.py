@@ -1,6 +1,7 @@
 import csv
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+import gzip
 import json
 import multiprocessing
 from pathlib import Path
@@ -285,3 +286,24 @@ def test_incomplete_identity_cannot_apply_finals_to_unrelated_rows(tmp_path):
     with pytest.raises(ValueError, match='identity'):
         store.merge_final_scores(path, evaluated.drop(columns=['timestamp']), observed)
     assert path.read_bytes() == original
+
+
+def test_next_writer_reclaims_timeout_orphan_before_atomic_copy(tmp_path):
+    path = tmp_path / 'snapshots.csv'
+    pd.DataFrame(pair()).to_csv(path, index=False)
+    orphan = tmp_path / '.snapshots.csv.abandoned.tmp'
+    orphan.write_bytes(b'x' * 1024)
+    store.append_snapshot_rows(path, pair('new'), main.SNAPSHOT_FIELDS)
+    assert not orphan.exists()
+    assert len(read(path)) == 4
+
+
+def test_compaction_keeps_hot_rows_and_archives_history(tmp_path):
+    path = tmp_path / 'snapshots.csv'
+    now = datetime(2026, 10, 15, tzinfo=timezone.utc)
+    pd.DataFrame(pair('old', (now - timedelta(days=30)).isoformat()) + pair('recent', (now - timedelta(days=1)).isoformat())).to_csv(path, index=False)
+    result = store.compact_snapshot_history(path, retention_days=21, now=now)
+    assert result['kept'] == result['archived'] == 2
+    assert read(path).game_id.tolist() == ['recent', 'recent']
+    with gzip.open(result['archive'], 'rt', encoding='utf-8') as archived:
+        assert pd.read_csv(archived, dtype=str).game_id.tolist() == ['old', 'old']

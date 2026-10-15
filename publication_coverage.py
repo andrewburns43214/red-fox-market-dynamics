@@ -1,5 +1,5 @@
 """Durable internal discovery/exclusion journal. No scoring or public row writes."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import gzip
 import hashlib
 import json
@@ -47,10 +47,30 @@ class CoverageStore:
                 CREATE TABLE IF NOT EXISTS transitions (run_id TEXT, sport TEXT, game_id TEXT,
                     market_display TEXT, recorded_at TEXT, state TEXT, payload TEXT);
                 CREATE INDEX IF NOT EXISTS transitions_market ON transitions(sport,game_id,market_display);
+                CREATE TABLE IF NOT EXISTS maintenance (key TEXT PRIMARY KEY, value TEXT);
             ''')
+        self.prune()
 
     def connect(self):
         return sqlite3.connect(self.path, timeout=30)
+
+    def prune(self, now=None, interval_hours=24):
+        """Bound raw evidence without changing the latest market inventory."""
+        now = now or datetime.now(timezone.utc)
+        with self.connect() as db:
+            previous = db.execute("SELECT value FROM maintenance WHERE key='last_prune'").fetchone()
+            if previous:
+                try:
+                    if now - datetime.fromisoformat(previous[0]) < timedelta(hours=interval_hours):
+                        return False
+                except ValueError:
+                    pass
+            db.execute("DELETE FROM pages WHERE captured_at < ?", ((now - timedelta(hours=48)).isoformat(),))
+            db.execute("DELETE FROM transitions WHERE recorded_at < ?", ((now - timedelta(days=14)).isoformat(),))
+            db.execute("DELETE FROM runs WHERE started_at < ?", ((now - timedelta(days=14)).isoformat(),))
+            db.execute("INSERT OR REPLACE INTO maintenance VALUES ('last_prune', ?)", (now.isoformat(),))
+            db.execute("PRAGMA optimize")
+        return True
 
     def begin(self, kind, sport="", now=None):
         run_id = uuid.uuid4().hex

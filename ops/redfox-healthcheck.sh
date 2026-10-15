@@ -10,6 +10,7 @@ MAX_LIVE_RECENT_AGE_MINUTES="${REDFOX_MAX_LIVE_RECENT_AGE_MINUTES:-5}"
 MAX_PROP_PAYLOAD_AGE_MINUTES="${REDFOX_MAX_PROP_PAYLOAD_AGE_MINUTES:-20}"
 MAX_DISK_PERCENT="${REDFOX_MAX_DISK_PERCENT:-85}"
 MAX_UPSTREAM_ERRORS="${REDFOX_MAX_UPSTREAM_ERRORS:-1}"
+MIN_FREE_GB="${REDFOX_MIN_FREE_GB:-5}"
 
 mkdir -p "$STATE_DIR"
 issues=()
@@ -45,6 +46,8 @@ fi
 
 disk_percent=$(df -P "$ROOT" | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
 (( disk_percent < MAX_DISK_PERCENT )) || issues+=("disk ${disk_percent}%")
+free_kb=$(df -Pk "$ROOT" | awk 'NR==2 {print $4}')
+(( free_kb >= MIN_FREE_GB * 1024 * 1024 )) || issues+=("disk free below ${MIN_FREE_GB}GiB")
 
 # A completed run is the runner's authoritative success marker.  Count only
 # recent, explicit scrape/refresh errors; historical log lines are irrelevant.

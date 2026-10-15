@@ -31,6 +31,13 @@ PY="/opt/red-fox-market-dynamics/.venv/bin/python"
 echo "===== $(date) RUN START =====" >> "$LOG"
 PIPELINE_STATUS=0
 
+# Reclaim timeout debris and bound hot histories before scraping. This is
+# idempotent; expensive compaction runs only after a size threshold is crossed.
+if ! timeout 180 "$PY" ops/redfox-storage-maintenance.py --root "$(pwd)" >> "$LOG" 2>&1; then
+  echo "--- $(date) storage maintenance ERROR (continuing) ---" >> "$LOG"
+  PIPELINE_STATUS=1
+fi
+
 # Auto-detect active sports by month+day (skips preseason)
 MONTH=$(date +%-m)
 DAY=$(date +%-d)
