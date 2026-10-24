@@ -9,5 +9,5 @@ ExecStart=/usr/bin/flock -n /var/lock/redfox-performance.lock /opt/red-fox-marke
 User=root
 Nice=15
 IOSchedulingClass=idle
-RuntimeMaxSec=90
+TimeoutStartSec=90
 
