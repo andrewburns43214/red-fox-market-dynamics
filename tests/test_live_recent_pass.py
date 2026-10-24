@@ -507,6 +507,39 @@ def test_ncaaf_whipsaw_system_misses_are_retroactively_classified(
     assert corrected.classification_original_publication == "missed"
 
 
+def test_south_carolina_system_miss_is_visible_in_live_recent_with_ledger_provenance():
+    sides = [
+        {
+            "flagged_side": "South Carolina", "bets_pct": 29, "money_pct": 57,
+            "open_line": "South Carolina @ +130", "current_line": "South Carolina @ -135",
+            "path": "Pregame snapshot",
+        },
+        {
+            "flagged_side": "Tennessee", "bets_pct": 71, "money_pct": 43,
+            "open_line": "Tennessee @ -155", "current_line": "Tennessee @ +114",
+            "path": "Pregame snapshot",
+        },
+    ]
+    frozen = pd.DataFrame([{
+        "sport": "ncaaf", "game_id": "34827209", "market_display": "MONEYLINE",
+        "market_sides": json.dumps(sides),
+        "state_as_of_utc": "2026-10-24T19:25:59.443821+00:00",
+        "final_pregame_state_at_utc": "2026-10-24T19:25:59.443821+00:00",
+        "red_fox_favorite": "false", "supported_side": "",
+    }])
+
+    corrected = live.apply_classification_corrections(frozen).iloc[0]
+
+    assert corrected.red_fox_favorite == "true"
+    assert corrected.favorite_side == "South Carolina"
+    assert corrected.favorite_pathway == "low_ticket_high_money_contrarian"
+    assert corrected.favorite_rule_version == "red_fox_favorite_v8"
+    assert corrected.favorite_first_qualified_at == "2026-10-20T03:50:09.703470+00:00"
+    assert corrected.favorite_final_qualified_at == "2026-10-24T19:25:59.443821+00:00"
+    assert corrected.classification_correction == "true"
+    assert corrected.classification_original_publication == "missed"
+
+
 def test_falcons_whipsaw_recovery_is_retroactively_classified_with_explicit_provenance():
     sides = [
         {"flagged_side": "GB Packers -4.5", "bets_pct": 69, "money_pct": 65, "open_line": "GB Packers -6.5 @ -115", "current_line": "GB Packers -4.5 @ -112", "path": "Pregame snapshot"},

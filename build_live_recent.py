@@ -48,6 +48,18 @@ EMPTY_COLUMNS = [
     "classification_correction_reason", "classification_original_publication",
 ]
 CLASSIFICATION_CORRECTIONS = {
+    ("ncaaf", "34827209", "MONEYLINE"): {
+        "side_prefix": "south carolina",
+        "recorded_at": "2026-10-24T23:18:37.807937+00:00",
+        "first_qualified_at": "2026-10-20T03:50:09.703470+00:00",
+        "pathway": "low_ticket_high_money_contrarian",
+        "rule_version": "red_fox_favorite_v8",
+        "reason": (
+            "Retroactive system correction: South Carolina retained a six-point spread move and "
+            "confirmed plus-to-minus moneyline move while low ticket share developed concentrated "
+            "money support; the former 45% money cutoff incorrectly removed the Favorite."
+        ),
+    },
     ("ncaaf", "34708267", "SPREAD"): {
         "side_prefix": "pittsburgh",
         "recorded_at": "2026-10-03T02:55:00+00:00",
