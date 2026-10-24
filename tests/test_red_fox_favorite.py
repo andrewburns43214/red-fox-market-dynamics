@@ -100,7 +100,7 @@ def test_ncaaf_requires_confirmed_one_and_a_half_point_move_but_nfl_is_unchanged
         "ncaaf", "SPREAD", pair_for(ncaaf_candidate()), supported_side="Away +4",
     )])
     assert is_favorite(strong_ncaaf)
-    assert strong_ncaaf.iloc[0].favorite_rule_version == "red_fox_favorite_v7"
+    assert strong_ncaaf.iloc[0].favorite_rule_version == "red_fox_favorite_v8"
 
 
 def test_ncaaf_short_spread_requires_affirmative_moneyline_confirmation():
@@ -113,6 +113,77 @@ def test_ncaaf_short_spread_requires_affirmative_moneyline_confirmation():
     confirmed = result([spread, ncaaf_moneyline()])
     assert is_favorite(confirmed)
     assert confirmed.iloc[0].favorite_cross_market_state == "confirmation"
+
+
+def test_ncaaf_low_ticket_concentrated_money_continues_with_confirmed_move():
+    spread = market("ncaaf", "SPREAD", [
+        side(
+            "South Carolina -2.5", "-2.5 (-110)", open_line="+3.5 (-115)",
+            bets=30, money=51, line_move=6.0, context="Market Move",
+        ),
+        side(
+            "Tennessee +2.5", "+2.5 (-110)", bets=70, money=49,
+            reaction="Watch", direction="AGAINST", kpi=False,
+            action_type="OBSERVE ONLY",
+        ),
+    ], game_id="sharp-money-cfb", supported_side="South Carolina -2.5")
+    moneyline = market("ncaaf", "MONEYLINE", [
+        side(
+            "South Carolina", "-135", open_line="+130", bets=30, money=51,
+            price_move=14.0, context="Market Move",
+        ),
+        side(
+            "Tennessee", "+114", open_line="-155", bets=70, money=49,
+            reaction="Watch", direction="AGAINST", kpi=False,
+            action_type="OBSERVE ONLY",
+        ),
+    ], game_id="sharp-money-cfb", rank=2, supported_side="South Carolina")
+
+    frame = result([spread, moneyline])
+
+    assert frame.loc[frame.market_display.eq("MONEYLINE"), "red_fox_favorite"].iloc[0] == "true"
+    assert frame.loc[frame.market_display.eq("SPREAD"), "red_fox_favorite"].iloc[0] == "false"
+    assert frame.loc[frame.market_display.eq("MONEYLINE"), "favorite_pathway"].iloc[0] == (
+        "low_ticket_high_money_contrarian"
+    )
+    assert frame.loc[frame.market_display.eq("MONEYLINE"), "favorite_rule_version"].iloc[0] == (
+        "red_fox_favorite_v8"
+    )
+
+
+def test_ncaaf_concentrated_money_lane_requires_confirmation_and_stays_capped():
+    candidate = side(
+        "Away -4", "-4 (-110)", open_line="+2 (-110)", bets=30, money=51,
+        line_move=6.0, context="Market Move",
+    )
+    opponent = side(
+        "Home +4", "+4 (-110)", bets=70, money=49, reaction="Watch",
+        direction="AGAINST", kpi=False, action_type="OBSERVE ONLY",
+    )
+    spread = market(
+        "ncaaf", "SPREAD", [candidate, opponent],
+        game_id="sharp-money-guard", supported_side="Away -4",
+    )
+    neutral_ml = market("ncaaf", "MONEYLINE", [
+        side("Away", "-150", open_line="-145", bets=30, money=51, price_move=1.0, direction="LIMITED"),
+        side("Home", "+130", bets=70, money=49, reaction="Watch", direction="LIMITED",
+             kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="sharp-money-guard", rank=2, supported_side="Away")
+    assert not is_favorite(result([spread, neutral_ml]), 0)
+
+    over_cap = dict(spread)
+    over_cap["market_sides"] = json.dumps([
+        side(
+            "Away -4", "-4 (-110)", open_line="+2 (-110)", bets=30, money=66,
+            line_move=6.0, context="Market Move",
+        ),
+        side(
+            "Home +4", "+4 (-110)", bets=70, money=34, reaction="Watch",
+            direction="AGAINST", kpi=False, action_type="OBSERVE ONLY",
+        ),
+    ])
+    confirming_ml = ncaaf_moneyline(game_id="sharp-money-guard", team="Away")
+    assert not is_favorite(result([over_cap, confirming_ml]), 0)
 
 
 def test_ncaaf_moneyline_expression_cannot_bypass_the_spread_move_gate():
@@ -534,7 +605,7 @@ def test_freeze_favorite_requires_strong_pressure_and_persistent_resistance():
 
 def test_non_ncaaf_tracking_remains_v5_and_history_is_append_only(tmp_path):
     assert CONFIG.version == "red_fox_favorite_v5"
-    assert CONFIG.ncaaf_version == "red_fox_favorite_v7"
+    assert CONFIG.ncaaf_version == "red_fox_favorite_v8"
     assert CONFIG.ufc_version == "red_fox_favorite_ufc_v1"
     assert CONFIG.nhl_version == "red_fox_favorite_nhl_v1"
     legacy = result([market("mlb", "MONEYLINE", pair_for(side("Away", "+115", open_line="+150", price_move=6.0)))])

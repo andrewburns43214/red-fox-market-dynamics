@@ -19,7 +19,7 @@ import pandas as pd
 @dataclass(frozen=True)
 class FavoriteConfig:
     version: str = "red_fox_favorite_v5"
-    ncaaf_version: str = "red_fox_favorite_v7"
+    ncaaf_version: str = "red_fox_favorite_v8"
     basketball_version: str = "red_fox_favorite_basketball_v2"
     ufc_version: str = "red_fox_favorite_ufc_v1"
     nhl_version: str = "red_fox_favorite_nhl_v1"
@@ -79,6 +79,10 @@ class FavoriteConfig:
     ncaaf_partial_whipsaw_confirmation_minutes: int = 30
     ncaaf_shadow_split_max: float = 40.0
     ncaaf_shadow_short_split_max: float = 35.0
+    ncaaf_sharp_money_max_bets: float = 35.0
+    ncaaf_sharp_money_min: float = 46.0
+    ncaaf_sharp_money_max: float = 65.0
+    ncaaf_sharp_money_min_gap: float = 15.0
     ufc_market_move_min: float = 3.0
     nhl_market_move_min: float = 2.5
     ufc_active_window_hours: float = 36.0
@@ -1317,10 +1321,17 @@ def _qualify_market(
             ncaaf_gate, cross_state = _ncaaf_gate_for_market(row, side, game_rows)
             if not ncaaf_gate["passed"]:
                 continue
+            if pathway == "low_ticket_high_money_contrarian" and cross_state != "confirmation":
+                continue
         candidates.append((side, pathway, cross_state, ncaaf_gate, basketball_gate))
     if not candidates:
         return None
-    priority = {"low_support_contrarian": 0, "low_support_freeze": 1, "moderate_support_follow": 2}
+    priority = {
+        "low_support_contrarian": 0,
+        "low_ticket_high_money_contrarian": 1,
+        "low_support_freeze": 2,
+        "moderate_support_follow": 3,
+    }
     side, pathway, cross_state, ncaaf_gate, basketball_gate = min(
         candidates, key=lambda item: priority[item[1]],
     )
@@ -1354,6 +1365,9 @@ def _qualify_market(
         })
     reason = {
         "low_support_contrarian": "Lower-supported side received a meaningful, intact move toward it.",
+        "low_ticket_high_money_contrarian": (
+            "Low-ticket side retained concentrated money support while the confirmed spread and moneyline moves remained intact."
+        ),
         "low_support_freeze": "Lower-supported side is protected by the engine's actionable, persistent resistance state.",
         "moderate_support_follow": "Moderately supported side received a meaningful, intact confirming move.",
     }[pathway]
@@ -1722,6 +1736,21 @@ def _pathway(side: dict, other: dict, sport: str, market: str) -> str:
     reaction = str(side.get("reaction", ""))
     if low and reaction == "Contrarian" and toward and _truthy(side.get("kpi_eligible")):
         return "low_support_contrarian"
+    sharp_money_continuation = (
+        sport in {"ncaaf", "cfb"}
+        and bets <= CONFIG.ncaaf_sharp_money_max_bets
+        and CONFIG.ncaaf_sharp_money_min <= money <= CONFIG.ncaaf_sharp_money_max
+        and money - bets >= CONFIG.ncaaf_sharp_money_min_gap
+        and bets < other_bets
+        and money > other_money
+    )
+    if (
+        sharp_money_continuation
+        and reaction == "Contrarian"
+        and toward
+        and _truthy(side.get("kpi_eligible"))
+    ):
+        return "low_ticket_high_money_contrarian"
     if low and _is_favorite_resistance(side, other, sport, market):
         return "low_support_freeze"
     moderate = (
@@ -1929,11 +1958,31 @@ def _number_is_eligible(sport: str, market: str, value: float, side: dict, game_
     # thesis.  Pick'em does not manufacture a positive-spread expression.
     if value > 0 or spread_value > 0:
         return False
-    if sport in {"nfl", "ncaaf", "cfb"} and not _football_favorite_moneyline_gate(
-        side, spread, spread_value
-    ):
-        return False
+    if sport in {"nfl", "ncaaf", "cfb"}:
+        ncaaf_sharp_money = (
+            sport in {"ncaaf", "cfb"}
+            and _ncaaf_sharp_money_profile(side)
+            and _ncaaf_sharp_money_profile(spread)
+        )
+        if not ncaaf_sharp_money and not _football_favorite_moneyline_gate(
+            side, spread, spread_value,
+        ):
+            return False
     return True
+
+
+def _ncaaf_sharp_money_profile(side: dict | None) -> bool:
+    if not side:
+        return False
+    bets = _number(side.get("bets_pct"))
+    money = _number(side.get("money_pct"))
+    return bool(
+        bets is not None
+        and money is not None
+        and bets <= CONFIG.ncaaf_sharp_money_max_bets
+        and CONFIG.ncaaf_sharp_money_min <= money <= CONFIG.ncaaf_sharp_money_max
+        and money - bets >= CONFIG.ncaaf_sharp_money_min_gap
+    )
 
 
 def _mlb_plus_money_conviction_gate(side: dict, current_value: float) -> bool:

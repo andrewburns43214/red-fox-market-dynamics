@@ -248,6 +248,46 @@ def test_retroactive_system_correction_is_included_and_disclosed_in_favorite_led
     assert ledger.iloc[0].freeze_method == "retroactive_system_correction_from_retained_pregame_state"
 
 
+def test_south_carolina_system_omission_is_repaired_from_retained_pregame_state(tmp_path):
+    row = frozen_row(
+        sport="ncaaf", game_id="34827209", game="Tennessee @ South Carolina",
+        kickoff_iso="2026-10-24T19:30:00Z", frozen_at_utc="2026-10-24T19:30:05Z",
+        state_as_of_utc="2026-10-24T19:25:59.443821+00:00",
+        final_pregame_state_at_utc="2026-10-24T19:25:59.443821+00:00",
+        market_display="MONEYLINE", flagged_side="South Carolina",
+        supported_side="", red_fox_favorite="false", favorite_side="",
+        favorite_rule_version="", favorite_first_qualified_at="",
+        favorite_final_qualified_at="",
+        market_sides=json.dumps([
+            {
+                "flagged_side": "South Carolina", "open_line": "+130",
+                "current_line": "-135", "reaction": "Contrarian",
+                "path": "One-Way", "bets_pct": "29", "money_pct": "57",
+                "price_move_pct": "14.0", "observation_count": "100",
+            },
+            {
+                "flagged_side": "Tennessee", "open_line": "-155",
+                "current_line": "+114", "bets_pct": "71", "money_pct": "43",
+            },
+        ]),
+    )
+    write(pd.DataFrame([row]), tmp_path / "live_recent.csv")
+
+    result = update_performance_ledger(tmp_path, attach_results=False)
+    ledger = pd.read_csv(tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False)
+
+    assert result["rows"] == 1
+    assert ledger.iloc[0].event_id == "34827209"
+    assert ledger.iloc[0].market == "MONEYLINE"
+    assert ledger.iloc[0].side == "South Carolina"
+    assert ledger.iloc[0].favorite_qualified == "yes"
+    assert ledger.iloc[0].favorite_rule_version == "red_fox_favorite_v8"
+    assert ledger.iloc[0].favorite_pathway == "low_ticket_high_money_contrarian"
+    assert ledger.iloc[0].classification_correction == "yes"
+    assert ledger.iloc[0].classification_original_publication == "missed"
+    assert "former 45% money cutoff" in ledger.iloc[0].classification_correction_reason
+
+
 def test_visibility_invalidated_game_is_removed_from_favorite_kpi(tmp_path):
     row = frozen_row(
         sport="ncaaf", game_id="34603681", game="Jacksonville State @ Ohio",

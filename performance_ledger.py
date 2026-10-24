@@ -41,6 +41,7 @@ FAVORITE_RULE_VERSIONS = frozenset({
     "red_fox_favorite_v5",
     "red_fox_favorite_v6",
     "red_fox_favorite_v7",
+    "red_fox_favorite_v8",
     "red_fox_favorite_basketball_v1",
     "red_fox_favorite_basketball_v2",
     "red_fox_favorite_ufc_v1",
@@ -62,6 +63,19 @@ FAVORITE_KPI_EXCLUSIONS = {
         "Rule invalidated after review: Miami opened +109 and crossed to negative money; "
         "the MLB plus-to-minus Favorite cohort is suspended from official Favorites."
     ),
+}
+RETROACTIVE_FAVORITE_INCLUSIONS = {
+    ("34827209", "MONEYLINE"): {
+        "team": "South Carolina",
+        "first_qualified_at": "2026-10-20T03:50:09.703470+00:00",
+        "final_qualified_at": "2026-10-24T19:25:59.443821+00:00",
+        "corrected_at": "2026-10-24T23:18:37.807937+00:00",
+        "reason": (
+            "Retroactive system correction: South Carolina retained a six-point spread move and "
+            "confirmed plus-to-minus moneyline move while low ticket share developed concentrated "
+            "money support; the former 45% money cutoff incorrectly removed the Favorite."
+        ),
+    },
 }
 LEDGER_COLUMNS = [
     "ledger_id", "event_id", "game", "sport", "scheduled_start", "market", "side",
@@ -627,6 +641,59 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
     return records
 
 
+def _apply_retroactive_favorite_inclusions(frame: pd.DataFrame) -> pd.DataFrame:
+    """Repair proved system omissions from retained pregame source evidence."""
+    result = frame.copy()
+    if result.empty or not {"game_id", "market_display"}.issubset(result.columns):
+        return result
+    for index, row in result.iterrows():
+        key = (_text(row.get("game_id")), _text(row.get("market_display")).upper())
+        correction = RETROACTIVE_FAVORITE_INCLUSIONS.get(key)
+        if not correction:
+            continue
+        try:
+            sides = [
+                item for item in json.loads(_text(row.get("market_sides")) or "[]")
+                if isinstance(item, dict)
+            ]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            sides = []
+        team = correction["team"]
+        side = next((item for item in sides if _identity(item.get("flagged_side")) == _identity(team)), None)
+        if side is None:
+            continue
+        evidence = {
+            "reaction": _text(side.get("reaction")),
+            "path": _text(side.get("path")),
+            "bets_pct": _number(side.get("bets_pct")),
+            "money_pct": _number(side.get("money_pct")),
+            "open_line": _text(side.get("open_line")),
+            "current_line": _text(side.get("current_line")),
+            "observation_count": int(_number(side.get("observation_count")) or 0),
+            "cross_market": "confirmation",
+            "retroactive_system_correction": True,
+        }
+        result.at[index, "supported_side"] = team
+        result.at[index, "red_fox_favorite"] = "true"
+        result.at[index, "favorite_side"] = team
+        result.at[index, "favorite_pathway"] = "low_ticket_high_money_contrarian"
+        result.at[index, "favorite_rule_version"] = "red_fox_favorite_v8"
+        result.at[index, "favorite_first_qualified_at"] = correction["first_qualified_at"]
+        result.at[index, "favorite_final_qualified_at"] = correction["final_qualified_at"]
+        result.at[index, "favorite_state"] = "qualified"
+        result.at[index, "favorite_final_market_read"] = _text(side.get("anomaly_chips")) or _text(side.get("reaction"))
+        result.at[index, "favorite_supporting_evidence"] = json.dumps(evidence, separators=(",", ":"))
+        result.at[index, "favorite_cross_market_state"] = "confirmation"
+        result.at[index, "favorite_originally_qualified"] = "true"
+        result.at[index, "favorite_reason"] = correction["reason"]
+        result.at[index, "classification_correction"] = "true"
+        result.at[index, "classification_corrected_at_utc"] = correction["corrected_at"]
+        result.at[index, "classification_correction_reason"] = correction["reason"]
+        result.at[index, "classification_original_publication"] = "missed"
+        result.at[index, "freeze_method"] = "retroactive_system_correction_from_retained_pregame_state"
+    return result
+
+
 def _score_map(scores: pd.DataFrame) -> dict[str, pd.Series]:
     if scores.empty or "game_id" not in scores:
         return {}
@@ -988,7 +1055,7 @@ def update_performance_ledger(
     candidates = []
     source_frames = []
     for source in sources:
-        frame = _read_csv(Path(source))
+        frame = _apply_retroactive_favorite_inclusions(_read_csv(Path(source)))
         source_frames.append(frame)
         candidates.extend(_frozen_records(frame, history, str(Path(source))))
     existing_ids = set(ledger.get("ledger_id", pd.Series(dtype=str)).astype(str))
