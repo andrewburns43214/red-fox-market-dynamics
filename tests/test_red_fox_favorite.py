@@ -674,7 +674,7 @@ def test_secondary_moneyline_can_remain_favorite_when_team_is_laying_points():
     frame = result([ml, spread])
     assert is_favorite(frame, 0)
     assert not is_favorite(frame, 1)
-    assert frame.iloc[0].favorite_rule_version == "red_fox_favorite_basketball_v1"
+    assert frame.iloc[0].favorite_rule_version == "red_fox_favorite_basketball_v2"
 
 
 @pytest.mark.parametrize("sport", ["nba", "ncaab"])
@@ -733,6 +733,117 @@ def test_basketball_short_favorite_moneyline_can_qualify_without_spread_movement
 
     assert frame.red_fox_favorite.tolist() == ["true", "false"]
     assert "no spread movement is required" in frame.iloc[0].favorite_reason
+
+
+def test_basketball_spread_signal_translates_without_second_full_moneyline_gate():
+    moneyline = market("nba", "MONEYLINE", [
+        side("Home", "-140", open_line="-135", price_move=1.0,
+             reaction="Watch", kpi=False, action_type="OBSERVE ONLY"),
+        side("Away", "+120", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="nba-translate", supported_side="Home")
+    spread = market("nba", "SPREAD", [
+        side("Home -2.5", "-2.5 (-110)", open_line="-1 (-110)", line_move=1.5),
+        side("Away +2.5", "+2.5 (-110)", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="nba-translate", rank=2, supported_side="Home -2.5")
+
+    frame = result([moneyline, spread])
+
+    assert frame.red_fox_favorite.tolist() == ["true", "false"]
+    assert frame.iloc[0].favorite_side == "Home"
+    assert "1.5-point-or-greater spread signal" in frame.iloc[0].favorite_reason
+
+
+def test_basketball_short_favorite_exception_keeps_meaningful_moneyline_threshold():
+    moneyline = market("nba", "MONEYLINE", [
+        side("Home", "-130", open_line="-125", price_move=1.0),
+        side("Away", "+110", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="nba-short-weak", supported_side="Home")
+    spread = market("nba", "SPREAD", [
+        side("Home -1.5", "-1.5 (-110)", line_move=0),
+        side("Away +1.5", "+1.5 (-110)", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="nba-short-weak", rank=2, supported_side="Home -1.5")
+
+    frame = result([moneyline, spread])
+
+    assert frame.red_fox_favorite.tolist() == ["false", "false"]
+    assert "2.5 implied-probability points" in frame.iloc[0].favorite_reason
+
+
+def test_basketball_spread_and_price_windows_exclude_heavy_extremes():
+    dog_ml = market("nba", "MONEYLINE", [
+        side("Dog", "+300", open_line="+330", price_move=1.0),
+        side("Favorite", "-400", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="nba-dog-window", rank=2, supported_side="Dog")
+    dog_eight = market("nba", "SPREAD", [
+        side("Dog +8", "+8 (-110)", open_line="+9.5 (-110)", line_move=1.5),
+        side("Favorite -8", "-8 (-110)", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="nba-dog-window", supported_side="Dog +8")
+    assert is_favorite(result([dog_eight, dog_ml]), 0)
+
+    dog_too_large = dict(dog_eight)
+    dog_too_large["market_sides"] = json.dumps([
+        side("Dog +8.5", "+8.5 (-110)", open_line="+10 (-110)", line_move=1.5),
+        side("Favorite -8.5", "-8.5 (-110)", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ])
+    dog_too_large["supported_side"] = "Dog +8.5"
+    assert not is_favorite(result([dog_too_large, dog_ml]), 0)
+
+    expensive_ml = market("nba", "MONEYLINE", [
+        side("Home", "-170", open_line="-160", price_move=1.0),
+        side("Away", "+145", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="nba-price-window", supported_side="Home")
+    favorite_spread = market("nba", "SPREAD", [
+        side("Home -4", "-4 (-110)", open_line="-2.5 (-110)", line_move=1.5),
+        side("Away +4", "+4 (-110)", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="nba-price-window", rank=2, supported_side="Home -4")
+    assert result([expensive_ml, favorite_spread]).red_fox_favorite.eq("false").all()
+
+
+def test_basketball_uses_normal_two_capture_protection_against_one_cycle_falloff(tmp_path):
+    kickoff = "2026-09-07T20:00:00Z"
+    confirming_ml = market("nba", "MONEYLINE", [
+        side("Away", "+135", open_line="+145", price_move=1.0),
+        side("Home", "-155", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="nba-stable", rank=2, supported_side="Away")
+    qualifying_spread = market("nba", "SPREAD", [
+        side("Away +3", "+3 (-110)", open_line="+4.5 (-110)", line_move=1.5),
+        side("Home -3", "-3 (-110)", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="nba-stable", supported_side="Away +3")
+    for row in (qualifying_spread, confirming_ml):
+        row["kickoff_iso"] = kickoff
+
+    for captured in ("2026-09-06T18:00:00Z", "2026-09-06T18:15:00Z"):
+        board = apply_red_fox_favorites(pd.DataFrame([qualifying_spread, confirming_ml]), as_of=captured)
+        published = update_favorite_tracking(board, tmp_path, as_of=captured)
+    assert published.loc[published.market_display.eq("SPREAD"), "red_fox_favorite"].iloc[0] == "true"
+
+    weak_spread = dict(qualifying_spread)
+    weak_spread["market_sides"] = json.dumps([
+        side("Away +3.5", "+3.5 (-110)", open_line="+4.5 (-110)", line_move=1.0),
+        side("Home -3.5", "-3.5 (-110)", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ])
+    weak_spread["supported_side"] = "Away +3.5"
+    board = apply_red_fox_favorites(
+        pd.DataFrame([weak_spread, confirming_ml]), as_of="2026-09-06T18:30:00Z",
+    )
+    published = update_favorite_tracking(board, tmp_path, as_of="2026-09-06T18:30:00Z")
+
+    assert published.loc[published.market_display.eq("SPREAD"), "red_fox_favorite"].iloc[0] == "true"
+    assert "single nonqualifying capture" in published.loc[
+        published.market_display.eq("SPREAD"), "favorite_reason"
+    ].iloc[0]
 
 
 def test_basketball_requires_full_spread_move_and_moneyline_confirmation():

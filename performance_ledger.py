@@ -42,6 +42,7 @@ FAVORITE_RULE_VERSIONS = frozenset({
     "red_fox_favorite_v6",
     "red_fox_favorite_v7",
     "red_fox_favorite_basketball_v1",
+    "red_fox_favorite_basketball_v2",
     "red_fox_favorite_ufc_v1",
     "red_fox_favorite_nhl_v1",
 })

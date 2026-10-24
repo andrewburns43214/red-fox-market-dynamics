@@ -20,7 +20,7 @@ import pandas as pd
 class FavoriteConfig:
     version: str = "red_fox_favorite_v5"
     ncaaf_version: str = "red_fox_favorite_v7"
-    basketball_version: str = "red_fox_favorite_basketball_v1"
+    basketball_version: str = "red_fox_favorite_basketball_v2"
     ufc_version: str = "red_fox_favorite_ufc_v1"
     nhl_version: str = "red_fox_favorite_nhl_v1"
     spread_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
@@ -327,7 +327,8 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
                 existing = str(result.at[pair_index, "market_rationale"] or "").strip()
                 if explanation not in existing:
                     result.at[pair_index, "market_rationale"] = " ".join(part for part in (existing, explanation) if part)
-    return _prefer_confirmed_football_moneyline(result)
+    result = _prefer_confirmed_football_moneyline(result)
+    return _prefer_basketball_moneyline_expression(result)
 
 
 def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) -> pd.DataFrame:
@@ -338,7 +339,6 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
     history = _read_tracking(path)
     current = _apply_visibility_lock(current, history, Path(data_dir), at)
     current = _apply_manual_favorite_inclusions(current, at)
-    current = _enforce_basketball_final_expression(current)
     keys = ["sport", "game_id", "market_display"]
     started_frozen_keys: set[tuple[str, str, str]] = set()
     archive_path = Path(data_dir) / "red_fox_favorite_freeze_candidates.csv"
@@ -1201,42 +1201,6 @@ def _clear_favorite(frame: pd.DataFrame, index: object, reason: str) -> None:
     frame.at[index, "favorite_reason"] = reason
 
 
-def _enforce_basketball_final_expression(frame: pd.DataFrame) -> pd.DataFrame:
-    """Prevent a visibility restore from reviving an obsolete correlated bet."""
-    result = frame.copy()
-    if result.empty or not {"sport", "game_id"}.issubset(result.columns):
-        return result
-    basketball = {"nba", "ncaab", "cbb"}
-    groups = {
-        (str(sport).lower(), str(game_id)): group
-        for (sport, game_id), group in result.groupby(
-            ["sport", "game_id"], dropna=False, sort=False,
-        )
-    }
-    for index, row in result.iterrows():
-        sport = str(row.get("sport", "")).lower()
-        if sport not in basketball or not _truthy(row.get("red_fox_favorite")):
-            continue
-        game_rows = groups.get((sport, str(row.get("game_id", ""))))
-        decision = _qualify_market(row, game_rows)
-        if decision is not None:
-            continue
-        supported = next(
-            (
-                item for item in _sides(row)
-                if _side_identity(item.get("flagged_side"))
-                == _side_identity(row.get("favorite_side") or row.get("supported_side"))
-            ),
-            None,
-        )
-        reason = "Basketball Favorite removed: current single-thesis rules no longer qualify this market."
-        if supported is not None:
-            gate, _ = _basketball_gate_for_market(row, supported, game_rows)
-            reason = gate["reason"]
-        _clear_favorite(result, index, reason)
-    return result
-
-
 def _late_invalidate_favorite(frame: pd.DataFrame, index: object, reason: str, at: str) -> None:
     _clear_favorite(frame, index, reason)
     frame.at[index, "favorite_originally_qualified"] = "true"
@@ -1416,9 +1380,11 @@ def _basketball_gate_for_market(
 
     Point receivers are expressed only through the spread. Teams laying points
     are expressed only through the moneyline. The normal confirmation is a
-    1.5-point spread move plus meaningful moneyline movement toward the same
-    team. A team laying no more than 1.5 points may qualify through meaningful
-    moneyline support without a spread move.
+    1.5-point spread move plus clean, aligned moneyline evidence toward the same
+    team; the confirming moneyline does not have to independently clear a
+    second movement threshold. A team laying no more than 1.5 points may still
+    qualify without a spread move, but that exception does require meaningful
+    moneyline movement.
     """
     market = str(row.get("market_display", "")).upper()
     spread = side if market == "SPREAD" else _matching_market_side(
@@ -1427,17 +1393,19 @@ def _basketball_gate_for_market(
     moneyline = side if market == "MONEYLINE" else _matching_market_side(
         game_rows, "MONEYLINE", side.get("flagged_side"),
     )
+    moneyline_row = row if market == "MONEYLINE" else _matching_market_row(
+        game_rows, "MONEYLINE", side.get("flagged_side"),
+    )
     spread_value = _line_value((spread or {}).get("current_line"), "SPREAD")
     spread_move = _number((spread or {}).get("line_move_abs")) or 0.0
     moneyline_move = _number((moneyline or {}).get("price_move_pct")) or 0.0
-    moneyline_support = bool(
-        moneyline
-        and str(moneyline.get("response_direction", "")).upper() == "TOWARD"
+    moneyline_alignment = _basketball_moneyline_alignment(moneyline)
+    moneyline_support = moneyline_alignment == "confirmation"
+    meaningful_moneyline_support = bool(
+        moneyline_support
         and moneyline_move >= CONFIG.meaningful_moneyline_price_move
     )
-    cross_state = "confirmation" if moneyline_support else (
-        "unavailable" if moneyline is None else "neutral"
-    )
+    cross_state = moneyline_alignment
 
     def outcome(passed: bool, expression: str, reason: str) -> tuple[dict, str]:
         return ({
@@ -1469,34 +1437,66 @@ def _basketball_gate_for_market(
             )
         return outcome(
             True, "spread",
-            "Basketball Favorite confirmed by a 1.5-point-or-greater spread move with moneyline support; the team is receiving points, so the spread is the sole recorded Favorite.",
+            "Basketball Favorite confirmed by a 1.5-point-or-greater spread move with aligned moneyline support; the team is receiving points, so the spread is the sole recorded Favorite.",
         )
 
-    if market != "MONEYLINE":
+    moneyline_value = _line_value((moneyline or {}).get("current_line"), "MONEYLINE")
+    eligible_moneyline_expression = bool(
+        moneyline_value is not None
+        and CONFIG.moneyline_min <= moneyline_value < 0
+        and abs(spread_value) <= CONFIG.secondary_moneyline_spread_max
+        and moneyline_row is not None
+        and _side_identity(moneyline_row.get("supported_side"))
+        == _side_identity(moneyline.get("flagged_side"))
+    )
+    if not eligible_moneyline_expression:
         return outcome(
             False, "moneyline",
-            "Basketball Favorite is expressed on the moneyline because the supported team is not receiving points.",
+            "Basketball Favorite withheld: a team laying points requires an eligible matching moneyline from -165 up to negative money and a spread no larger than four points.",
         )
     short_favorite = abs(spread_value) <= CONFIG.basketball_short_favorite_spread_max
+    if market == "MONEYLINE" and short_favorite and spread_move < CONFIG.basketball_spread_move_min:
+        if not meaningful_moneyline_support:
+            return outcome(
+                False, "moneyline",
+                f"Basketball Favorite withheld: the no-spread-move exception requires at least {CONFIG.meaningful_moneyline_price_move:g} implied-probability points of moneyline support.",
+            )
+        return outcome(
+            True, "moneyline",
+            "Basketball Favorite confirmed by meaningful moneyline support at pick'em through -1.5; no spread movement is required, and the moneyline is the sole recorded Favorite.",
+        )
+    if spread_move < CONFIG.basketball_spread_move_min:
+        return outcome(
+            False, "moneyline",
+            f"Basketball Favorite withheld: requires at least a {CONFIG.basketball_spread_move_min:g}-point spread move with aligned moneyline support.",
+        )
     if not moneyline_support:
         return outcome(
             False, "moneyline",
-            "Basketball Favorite withheld: meaningful moneyline movement toward the supported team is required.",
-        )
-    if not short_favorite and spread_move < CONFIG.basketball_spread_move_min:
-        return outcome(
-            False, "moneyline",
-            f"Basketball Favorite withheld: requires at least a {CONFIG.basketball_spread_move_min:g}-point spread move with moneyline support.",
-        )
-    if short_favorite:
-        return outcome(
-            True, "moneyline",
-            "Basketball Favorite confirmed by moneyline support at a spread of -1.5 or shorter; no spread movement is required, and the moneyline is the sole recorded Favorite.",
+            "Basketball Favorite withheld: the qualifying spread move requires clean moneyline movement aligned toward the same team.",
         )
     return outcome(
         True, "moneyline",
-        "Basketball Favorite confirmed by a 1.5-point-or-greater spread move with moneyline support; the team is laying points, so the moneyline is the sole recorded Favorite.",
+        "Basketball Favorite confirmed by a 1.5-point-or-greater spread move with aligned moneyline support; the team is laying points, so the moneyline is the sole recorded Favorite.",
     )
+
+
+def _basketball_moneyline_alignment(moneyline: dict | None) -> str:
+    """Return reliable directional support without imposing a second threshold."""
+    if not moneyline:
+        return "unavailable"
+    if (
+        str(moneyline.get("data_badge", "")) != "Clean"
+        or int(_number(moneyline.get("observation_count")) or 0) < CONFIG.minimum_observations
+    ):
+        return "unavailable"
+    direction = str(moneyline.get("response_direction", "")).upper()
+    move = _number(moneyline.get("price_move_pct")) or 0.0
+    if direction == "TOWARD" and move > 0:
+        return "confirmation"
+    if direction == "AGAINST" and move >= CONFIG.meaningful_moneyline_price_move:
+        return "contradiction"
+    return "neutral"
 
 
 def _primary_moneyline_sport_gate(
@@ -2079,6 +2079,98 @@ def _prefer_confirmed_football_moneyline(frame: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _prefer_basketball_moneyline_expression(frame: pd.DataFrame) -> pd.DataFrame:
+    """Translate one qualifying laying-points thesis to one moneyline result.
+
+    Unlike football, the basketball spread supplies the qualifying pathway and
+    the matching moneyline supplies reliable cross-market alignment plus the
+    safer expression. Requiring the moneyline to clear the complete Favorite
+    pathway again would create an unnecessary second threshold and delay the
+    signal until much of its price value had disappeared.
+    """
+    result = frame.copy()
+    basketball = {"nba", "ncaab", "cbb"}
+    for (sport, _game_id), game in result.groupby(["sport", "game_id"], dropna=False, sort=False):
+        if str(sport).lower() not in basketball:
+            continue
+        spread_rows = game[
+            game["market_display"].astype(str).str.upper().eq("SPREAD")
+            & game["red_fox_favorite"].map(_truthy)
+        ]
+        moneyline_rows = game[game["market_display"].astype(str).str.upper().eq("MONEYLINE")]
+        for spread_index, spread_row in spread_rows.iterrows():
+            identity = _side_identity(spread_row.get("favorite_side"))
+            spread_side = next(
+                (item for item in _sides(spread_row) if _side_identity(item.get("flagged_side")) == identity),
+                None,
+            )
+            spread_value = _line_value(spread_side.get("current_line"), "SPREAD") if spread_side else None
+            if spread_value is None or not -CONFIG.secondary_moneyline_spread_max <= spread_value <= 0:
+                continue
+            moneyline_match = None
+            for moneyline_index, moneyline_row in moneyline_rows.iterrows():
+                moneyline_side = next(
+                    (item for item in _sides(moneyline_row) if _side_identity(item.get("flagged_side")) == identity),
+                    None,
+                )
+                price = _line_value(moneyline_side.get("current_line"), "MONEYLINE") if moneyline_side else None
+                if (
+                    moneyline_side is not None
+                    and price is not None
+                    and CONFIG.moneyline_min <= price < 0
+                    and _side_identity(moneyline_row.get("supported_side")) == identity
+                    and _basketball_moneyline_alignment(moneyline_side) == "confirmation"
+                ):
+                    moneyline_match = (moneyline_index, moneyline_row, moneyline_side, price)
+                    break
+            if moneyline_match is None:
+                _clear_favorite(
+                    result,
+                    spread_index,
+                    "Basketball Favorite withheld: the supported team is laying points but no eligible, aligned moneyline expression is available.",
+                )
+                continue
+            moneyline_index, moneyline_row, moneyline_side, price = moneyline_match
+            spread_values = {column: result.at[spread_index, column] for column in FAVORITE_COLUMNS}
+            _clear_favorite(
+                result,
+                spread_index,
+                "Favorite expressed on the confirmed basketball moneyline to avoid a duplicate correlated spread wager.",
+            )
+            if not _truthy(result.at[moneyline_index, "red_fox_favorite"]):
+                for column, value in spread_values.items():
+                    result.at[moneyline_index, column] = value
+            result.at[moneyline_index, "red_fox_favorite"] = "true"
+            result.at[moneyline_index, "favorite_side"] = str(moneyline_side.get("flagged_side", ""))
+            result.at[moneyline_index, "favorite_rule_version"] = CONFIG.basketball_version
+            result.at[moneyline_index, "favorite_state"] = "qualified"
+            result.at[moneyline_index, "favorite_cross_market_state"] = "confirmation"
+            result.at[moneyline_index, "favorite_final_market_rank"] = str(moneyline_row.get("board_rank", ""))
+            result.at[moneyline_index, "favorite_snapshot_id"] = _snapshot_id(
+                moneyline_row,
+                str(result.at[moneyline_index, "favorite_final_qualified_at"]),
+            )
+            result.at[moneyline_index, "favorite_reason"] = (
+                f"Selected over the matching {spread_value:g} basketball spread: the 1.5-point-or-greater "
+                f"spread signal is confirmed by aligned moneyline support; the team is laying points, "
+                f"so {price:+g} is the sole Favorite expression inside the approved price band."
+            )
+            try:
+                evidence = json.loads(str(result.at[moneyline_index, "favorite_supporting_evidence"] or "{}"))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                evidence = {}
+            evidence.update({
+                "cross_market": "confirmation",
+                "basketball_expression": "moneyline",
+                "expression_price": price,
+                "preferred_over_spread": str(spread_row.get("favorite_side", "")),
+            })
+            result.at[moneyline_index, "favorite_supporting_evidence"] = json.dumps(
+                evidence, separators=(",", ":"),
+            )
+    return result
+
+
 def _matching_market_side(game_rows: pd.DataFrame | None, market: str, side_name: object) -> dict | None:
     if game_rows is None or game_rows.empty:
         return None
@@ -2088,6 +2180,21 @@ def _matching_market_side(game_rows: pd.DataFrame | None, market: str, side_name
         for side in _sides(row):
             if _side_identity(side.get("flagged_side")) == target:
                 return side
+    return None
+
+
+def _matching_market_row(
+    game_rows: pd.DataFrame | None,
+    market: str,
+    side_name: object,
+) -> pd.Series | None:
+    if game_rows is None or game_rows.empty:
+        return None
+    target = _side_identity(side_name)
+    rows = game_rows[game_rows["market_display"].astype(str).str.upper().eq(market)]
+    for _, row in rows.iterrows():
+        if any(_side_identity(side.get("flagged_side")) == target for side in _sides(row)):
+            return row
     return None
 
 
