@@ -1553,7 +1553,11 @@ def _first_anomaly_seen(points, reaction, path_label, stale_dk, market, latest_r
         held = move_abs <= hold_threshold if market == "MONEYLINE" else (
             line_move_abs <= HOLD_MOVE_BY_MARKET[market] and price_move_abs <= HOLD_PRICE_MOVE_PCT
         )
-        toward_side = _move_toward_side(points[: index + 1], market, latest_row)
+        # Direction depends only on the opening observation and this point.
+        # Slicing the growing prefix copied the full history on every pass,
+        # turning long-running markets into quadratic work and eventually
+        # pushing the entire board publisher beyond its watchdog.
+        toward_side = _move_toward_side((points[0], point), market, latest_row)
         bets_pct = points[index]["bets_pct"]
         money_pct = points[index]["money_pct"]
         capped = _is_split_capped(bets_pct, money_pct)

@@ -221,15 +221,34 @@ class PublicationCoverage:
 
     def publish(self, board, board_path, window_filter):
         published = keys(board)
+        inventory = list(self.store.inventory())
+        # Publication windows are vectorized by contract. Calling the filter
+        # once per discovered market rebuilt pandas objects thousands of times
+        # and consumed nearly half of the live publisher's watchdog budget.
+        probes = pd.DataFrame([
+            {
+                "_coverage_position": position,
+                "sport": str(item.get("sport", "")),
+                "dk_start_iso": item.get("dk_start_iso", ""),
+            }
+            for position, item in enumerate(inventory)
+        ])
+        if probes.empty:
+            in_window_positions = set()
+            kickoffs = pd.Series(dtype="datetime64[ns, UTC]")
+        else:
+            windowed = window_filter(probes, now=self.now)
+            in_window_positions = set(windowed.get("_coverage_position", pd.Series(dtype=int)))
+            kickoffs = pd.to_datetime(probes["dk_start_iso"], utc=True, errors="coerce")
+        enabled_sports = active_sports(self.now)
         records = []
-        for item in self.store.inventory():
+        for position, item in enumerate(inventory):
             key = tuple(str(item.get(k, "")) for k in KEYS)
-            kickoff = pd.to_datetime(item.get("dk_start_iso", ""), utc=True, errors="coerce")
+            kickoff = kickoffs.iloc[position] if position < len(kickoffs) else pd.NaT
             supported = key[0] in {"nfl", "ncaaf", "nba", "ncaab", "mlb", "nhl", "ufc"} and key[2] in {"MONEYLINE", "SPREAD", "TOTAL"}
-            probe = pd.DataFrame([dict(sport=key[0], dk_start_iso=kickoff)])
-            in_window = bool(pd.notna(kickoff) and len(window_filter(probe, now=self.now)))
+            in_window = position in in_window_positions
             pregame = bool(pd.notna(kickoff) and kickoff > self.now - pd.Timedelta(minutes=5))
-            enabled = key[0] in active_sports(self.now)
+            enabled = key[0] in enabled_sports
             league_verified = item.get("discovery_basis") != "RAW_DK_HEADER" or item.get("league_identified") is True
             target = supported and enabled and league_verified and in_window and pregame
             if not league_verified:
@@ -257,13 +276,16 @@ class PublicationCoverage:
                       "last_capture_at": self.last_captures.get(key, item.get("last_capture_at", "")),
                       "last_complete_pair_at": self.last_pairs.get(key, item.get("last_complete_pair_at", "")),
                       "publication_run_id": self.run_id, "as_of": self.now.isoformat()}
-            capture = pd.to_datetime(record["last_capture_at"], utc=True, errors="coerce")
-            record["capture_age_minutes"] = (self.now - capture).total_seconds() / 60 if pd.notna(capture) else None
-            pair_capture = pd.to_datetime(record["last_complete_pair_at"], utc=True, errors="coerce")
-            record["complete_pair_age_minutes"] = (self.now - pair_capture).total_seconds() / 60 if pd.notna(pair_capture) else None
             records.append(record)
-        self.store.update(records, self.run_id, "PUBLICATION_ACCOUNTED")
         frame = pd.DataFrame(records)
+        if not frame.empty:
+            capture = pd.to_datetime(frame["last_capture_at"], utc=True, errors="coerce")
+            pair_capture = pd.to_datetime(frame["last_complete_pair_at"], utc=True, errors="coerce")
+            frame["capture_age_minutes"] = (self.now - capture).dt.total_seconds() / 60
+            frame["complete_pair_age_minutes"] = (self.now - pair_capture).dt.total_seconds() / 60
+            frame = frame.where(pd.notna(frame), None)
+            records = frame.to_dict("records")
+        self.store.update(records, self.run_id, "PUBLICATION_ACCOUNTED")
         summary = {"run_id": self.run_id, "as_of": self.now.isoformat(), "board_sha256": hashlib.sha256(Path(board_path).read_bytes()).hexdigest(), "sports": {}}
         # Keep the last verified schedule context visible for the few seconds
         # between this atomic board publish and the schedule refresh. Remove

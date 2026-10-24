@@ -184,6 +184,36 @@ def test_rule_versions_share_one_official_record_while_version_remains_metadata(
     }
 
 
+def test_ufc_winner_history_grades_moneyline_without_team_scores(tmp_path, monkeypatch):
+    row = frozen_row(
+        sport="ufc", game_id="34808047", game="Cody Chovancek vs Su Young You",
+        kickoff_iso="2026-10-17T21:15:00Z", supported_side="Su Young You",
+        favorite_side="Su Young You", favorite_rule_version="red_fox_favorite_ufc_v1",
+        market_sides=json.dumps([
+            {"flagged_side": "Su Young You", "open_line": "+124", "current_line": "+105", "reaction": "Contrarian"},
+            {"flagged_side": "Cody Chovancek", "open_line": "-148", "current_line": "-125"},
+        ]),
+    )
+    write(pd.DataFrame([row]), tmp_path / "live_recent.csv")
+    write(pd.DataFrame([{
+        "game_id": "34808047", "winner": "SuYoung You", "loser": "Cody Chovancek",
+        "result": "SuYoung You defeated Cody Chovancek", "score_provider": "espn_ufc_scoreboard",
+        "score_source": "ESPN UFC scoreboard", "score_provider_event_id": "401919643",
+        "resolved_at_utc": "2026-10-18T01:00:00Z",
+    }]), tmp_path / "ufc_results_history.csv")
+    monkeypatch.setattr("performance_ledger._fetch_ufc_results", lambda ledger: pd.DataFrame())
+
+    result = update_performance_ledger(tmp_path)
+    graded = pd.read_csv(tmp_path / "performance_favorites.csv", dtype=str, keep_default_na=False).iloc[0]
+
+    assert result["favorites"]["wins"] == 1
+    assert result["favorites"]["losses"] == 0
+    assert graded["grade"] == "W"
+    assert graded["final_score"] == "SuYoung You defeated Cody Chovancek"
+    assert graded["score_provider"] == "espn_ufc_scoreboard"
+    assert graded["audit_status"] == "graded"
+
+
 def test_retroactive_system_correction_is_included_and_disclosed_in_favorite_ledger(tmp_path):
     row = frozen_row(
         sport="nfl", game_id="34118231", game="ARI Cardinals @ LA Chargers",

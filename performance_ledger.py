@@ -17,6 +17,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pandas as pd
+import requests
 
 from anomaly_action_results import _grade_action
 
@@ -642,6 +643,87 @@ def _scores_from_frozen(frozen: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(records)
 
 
+def _fetch_ufc_results(ledger: pd.DataFrame, now=None) -> pd.DataFrame:
+    """Resolve completed UFC moneylines from ESPN's bout-level scoreboard.
+
+    Team score feeds do not represent combat sports. Match the two retained
+    fighter identities to a completed ESPN bout and preserve its explicit
+    winner instead of manufacturing numeric scores.
+    """
+    if ledger.empty:
+        return pd.DataFrame()
+    current = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    current = current.tz_localize("UTC") if current.tzinfo is None else current.tz_convert("UTC")
+    starts = pd.to_datetime(ledger.get("scheduled_start", ""), errors="coerce", utc=True)
+    pending = ledger.loc[
+        ledger.get("sport", pd.Series("", index=ledger.index)).astype(str).str.lower().eq("ufc")
+        & ledger.get("market", pd.Series("", index=ledger.index)).astype(str).str.upper().eq("MONEYLINE")
+        & ~ledger.get("grade", pd.Series("", index=ledger.index)).astype(str).isin({"W", "L", "Push"})
+        & ledger.get("event_id", pd.Series("", index=ledger.index)).astype(str).str.fullmatch(r"\d+")
+        & starts.notna() & starts.le(current)
+        & starts.ge(current - pd.Timedelta(days=21))
+    ].copy()
+    if pending.empty:
+        return pd.DataFrame()
+    pending["_date"] = starts.loc[pending.index].dt.strftime("%Y%m%d")
+    records: list[dict] = []
+    for date, dated in pending.groupby("_date", sort=False):
+        try:
+            response = requests.get(
+                "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard",
+                params={"dates": date}, timeout=12,
+            )
+            response.raise_for_status()
+            events = response.json().get("events", [])
+        except (requests.RequestException, ValueError, TypeError):
+            continue
+        bouts = []
+        for event in events:
+            for bout in event.get("competitions", []):
+                status = bout.get("status", {}).get("type", {})
+                competitors = bout.get("competitors", [])
+                if not status.get("completed") or len(competitors) != 2:
+                    continue
+                names = [
+                    _text(item.get("athlete", {}).get("displayName") or item.get("athlete", {}).get("fullName"))
+                    for item in competitors
+                ]
+                winners = [name for name, item in zip(names, competitors) if item.get("winner") is True]
+                if len(winners) != 1 or not all(names):
+                    continue
+                winner = winners[0]
+                loser = names[1] if _identity(names[0]) == _identity(winner) else names[0]
+                bouts.append((frozenset(map(_identity, names)), winner, loser, _text(bout.get("id"))))
+        for _, row in dated.iterrows():
+            fighters = re.split(r"\s+vs\.?\s+", _text(row.get("game")), maxsplit=1, flags=re.I)
+            if len(fighters) != 2:
+                continue
+            target = frozenset(map(_identity, fighters))
+            matches = [bout for bout in bouts if bout[0] == target]
+            if len(matches) != 1:
+                continue
+            _, winner, loser, provider_id = matches[0]
+            records.append({
+                "game_id": _text(row.get("event_id")), "winner": winner, "loser": loser,
+                "result": f"{winner} defeated {loser}", "score_provider": "espn_ufc_scoreboard",
+                "score_source": "ESPN UFC scoreboard", "score_provider_event_id": provider_id,
+                "resolved_at_utc": current.isoformat(),
+            })
+    return pd.DataFrame(records)
+
+
+def _refresh_ufc_result_history(ledger: pd.DataFrame, data_dir: Path) -> pd.DataFrame:
+    path = data_dir / "ufc_results_history.csv"
+    history = _read_csv(path)
+    fetched = _fetch_ufc_results(ledger)
+    if fetched.empty:
+        return history
+    updated = pd.concat([history, fetched], ignore_index=True, sort=False) if not history.empty else fetched
+    updated = updated.drop_duplicates("game_id", keep="last")
+    _atomic_csv(updated, path)
+    return updated
+
+
 def _american_profit(price: object) -> float | None:
     odds = _number(price)
     if odds is None or -100 < odds < 100 or odds == 0:
@@ -701,18 +783,26 @@ def _attach_results(ledger: pd.DataFrame, scores: pd.DataFrame) -> pd.DataFrame:
             else:
                 result.at[index, "audit_status"] = "awaiting_final_score"
             continue
-        grade_row = {
+        winner = _text(score.get("winner"))
+        loser = _text(score.get("loser"))
+        if _text(row.get("sport")).lower() == "ufc" and winner and loser:
+            side = _identity(row.get("side"))
+            grade = "WIN" if side == _identity(winner) else "LOSS" if side == _identity(loser) else "UNRESOLVED"
+        else:
+            grade_row = {
             "market_display": row.get("market", ""), "action_side": row.get("side", ""),
             "team1": score.get("team1", ""), "team1_score": score.get("team1_score", ""),
             "team2": score.get("team2", ""), "team2_score": score.get("team2_score", ""),
-        }
-        grade = _grade_action(grade_row)
+            }
+            grade = _grade_action(grade_row)
         if grade == "UNRESOLVED":
             result.at[index, "audit_status"] = "ambiguous_score_or_side_match"
             continue
         team1, team2 = _text(score.get("team1")), _text(score.get("team2"))
         score1, score2 = _text(score.get("team1_score")), _text(score.get("team2_score"))
-        result.at[index, "final_score"] = f"{team1} {score1} - {team2} {score2}"
+        result.at[index, "final_score"] = (
+            _text(score.get("result")) if winner and loser else f"{team1} {score1} - {team2} {score2}"
+        )
         result.at[index, "market_result"] = f"{_text(row.get('side'))}: {grade.title()}"
         result.at[index, "grade"] = {"WIN": "W", "LOSS": "L", "PUSH": "Push"}[grade]
         win_profit = _american_profit(row.get("decision_price"))
@@ -832,19 +922,32 @@ def _update_ncaaf_shadow_results(ledger: pd.DataFrame, data_dir: Path) -> None:
     graded = ledger.loc[
         ledger.get("sport", pd.Series("", index=ledger.index)).astype(str).str.lower().isin({"ncaaf", "cfb"})
         & ledger.get("grade", pd.Series("", index=ledger.index)).astype(str).isin({"W", "L", "Push"})
-    ]
-    for index, row in shadow.iterrows():
-        if _text(row.get("sport")).lower() not in {"ncaaf", "cfb"}:
+    ].copy()
+    if graded.empty:
+        return
+    # The former row-by-row DataFrame filtering made this two-minute worker run
+    # continuously as shadow history grew. Build constant-time lookup maps and
+    # touch only college-football shadow rows.
+    graded["_event_market"] = list(zip(
+        graded["event_id"].astype(str), graded["market"].astype(str).str.upper(),
+    ))
+    graded["_side_identity"] = graded["side"].map(_identity)
+    exact = {
+        (row["_event_market"], row["_side_identity"]): row
+        for _, row in graded.iterrows()
+    }
+    fallback = {row["_event_market"]: row for _, row in graded.iterrows()}
+    scoped = shadow.get("sport", pd.Series("", index=shadow.index)).astype(str).str.lower().isin({"ncaaf", "cfb"})
+    for index in shadow.index[scoped]:
+        key = (
+            _text(shadow.at[index, "game_id"]),
+            _text(shadow.at[index, "market_display"]).upper(),
+        )
+        matched = exact.get((key, _identity(shadow.at[index, "candidate_side"])))
+        if matched is None:
+            matched = fallback.get(key)
+        if matched is None:
             continue
-        matches = graded.loc[
-            graded["event_id"].astype(str).eq(_text(row.get("game_id")))
-            & graded["market"].astype(str).str.upper().eq(_text(row.get("market_display")).upper())
-        ]
-        if matches.empty:
-            continue
-        candidate = _identity(row.get("candidate_side"))
-        same_side = matches.loc[matches["side"].map(_identity).eq(candidate)]
-        matched = same_side.iloc[-1] if not same_side.empty else matches.iloc[-1]
         shadow.at[index, "closing_spread"] = matched.get("closing_line", "")
         shadow.at[index, "game_result"] = matched.get("market_result", "") or matched.get("final_score", "")
         shadow.at[index, "grade"] = matched.get("grade", "")
@@ -1048,6 +1151,7 @@ def update_performance_ledger(
     if attach_results:
         score_frames = [_read_csv(data_dir / "final_scores_history.csv")]
         score_frames.extend(_scores_from_frozen(frame) for frame in source_frames)
+        score_frames.append(_refresh_ufc_result_history(ledger, data_dir))
         scores = pd.concat([frame for frame in score_frames if not frame.empty], ignore_index=True, sort=False) if any(not frame.empty for frame in score_frames) else pd.DataFrame()
         ledger = _attach_results(ledger, scores)
     # Outcome attachment may never mutate the frozen classification fields.

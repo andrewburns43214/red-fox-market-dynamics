@@ -43,6 +43,8 @@ MONTH=$(date +%-m)
 DAY=$(date +%-d)
 MMDD="${MONTH}$(printf '%02d' $DAY)"  # e.g. "307" for Mar 7, "1122" for Nov 22
 
+# UFC is event-based and has the shortest useful market window. Capture it
+# first so a slow league cannot starve the fight card of fresh observations.
 SPORTS="ufc"  # UFC always on
 
 # Helper: check if today is within a date range (handles year-wrap)
@@ -61,17 +63,17 @@ in_season() {
 # Start each sport a bit before opening day so upcoming slates are already flowing.
 # Offseason runs stay safe because the scraper simply returns no events.
 # NFL: Aug 1 - Feb 25
-if in_season 801 225; then SPORTS="nfl $SPORTS"; fi
+if in_season 801 225; then SPORTS="$SPORTS nfl"; fi
 # NCAAF: Aug 1 - Feb 1
-if in_season 801 201; then SPORTS="ncaaf $SPORTS"; fi
+if in_season 801 201; then SPORTS="$SPORTS ncaaf"; fi
 # MLB: Mar 1 - Nov 15
-if in_season 301 1115; then SPORTS="mlb $SPORTS"; fi
+if in_season 301 1115; then SPORTS="$SPORTS mlb"; fi
 # NBA: Oct 1 - Jul 15
-if in_season 1001 715; then SPORTS="nba $SPORTS"; fi
+if in_season 1001 715; then SPORTS="$SPORTS nba"; fi
 # NHL: Sep 20 - Jul 15
-if in_season 920 715; then SPORTS="nhl $SPORTS"; fi
+if in_season 920 715; then SPORTS="$SPORTS nhl"; fi
 # NCAAB: Oct 1 - Apr 15
-if in_season 1001 415; then SPORTS="ncaab $SPORTS"; fi
+if in_season 1001 415; then SPORTS="$SPORTS ncaab"; fi
 
 echo "--- active sports: $SPORTS ---" >> "$LOG"
 SNAPSHOT_TIMEOUT_SECONDS="${REDFOX_SNAPSHOT_TIMEOUT_SECONDS:-120}"

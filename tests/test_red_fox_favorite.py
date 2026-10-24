@@ -980,6 +980,31 @@ def test_ufc_and_nhl_require_two_qualifying_observations_fifteen_minutes_apart(
     )
 
 
+def test_ufc_kickoff_handoff_does_not_create_a_false_falloff(tmp_path: Path):
+    candidate = side("Candidate", "+105", open_line="+125", price_move=4.0)
+    source = active_primary_moneyline("ufc", candidate, game_id="ufc-started", supported_side="Candidate")
+    source["kickoff_iso"] = "2026-09-06T21:00:00Z"
+    for captured in ("2026-09-06T19:00:00Z", "2026-09-06T19:15:00Z"):
+        published = update_favorite_tracking(
+            apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured),
+            tmp_path, as_of=captured,
+        )
+    assert published.iloc[0].red_fox_favorite == "true"
+
+    after_start = update_favorite_tracking(
+        apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T21:01:00Z"),
+        tmp_path, as_of="2026-09-06T21:01:00Z",
+    )
+    assert after_start.iloc[0].red_fox_favorite == "true"
+    assert after_start.iloc[0].favorite_review_state == "locked_at_start"
+
+    empty = after_start.iloc[0:0].copy()
+    update_favorite_tracking(empty, tmp_path, as_of="2026-09-06T21:06:00Z")
+    tracking = pd.read_csv(tmp_path / "red_fox_favorite_tracking.csv", dtype=str, keep_default_na=False)
+    assert tracking.iloc[-1].favorite_state == "qualified"
+    assert not tracking.favorite_state.eq("not_qualified").any()
+
+
 def test_ufc_single_soft_failure_is_held_but_second_failure_removes_with_exact_reason(tmp_path: Path):
     candidate = side("Candidate", "+105", open_line="+125", price_move=4.0)
     source = active_primary_moneyline("ufc", candidate, game_id="ufc-soft", supported_side="Candidate")

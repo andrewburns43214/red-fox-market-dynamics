@@ -319,6 +319,19 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
     current = _apply_visibility_lock(current, history, Path(data_dir), at)
     current = _apply_manual_favorite_inclusions(current, at)
     keys = ["sport", "game_id", "market_display"]
+    started_frozen_keys: set[tuple[str, str, str]] = set()
+    archive_path = Path(data_dir) / "red_fox_favorite_freeze_candidates.csv"
+    try:
+        archive = pd.read_csv(archive_path, dtype=str, keep_default_na=False)
+    except (OSError, pd.errors.EmptyDataError):
+        archive = pd.DataFrame()
+    if not archive.empty and all(column in archive for column in (*keys, "kickoff_iso")):
+        now = pd.Timestamp(at)
+        now = now.tz_localize("UTC") if now.tzinfo is None else now.tz_convert("UTC")
+        kickoff = pd.to_datetime(archive["kickoff_iso"], errors="coerce", utc=True)
+        official = archive.get("red_fox_favorite", pd.Series("false", index=archive.index)).map(_truthy)
+        for _, frozen in archive.loc[official & kickoff.notna() & kickoff.le(now)].iterrows():
+            started_frozen_keys.add(tuple(str(frozen.get(column, "")) for column in keys))
     previous = {}
     if not history.empty:
         ordered = history.sort_values("recorded_at", kind="mergesort")
@@ -368,6 +381,10 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
     # Live & Recent row.
     for key, prior in previous.items():
         if key in current_keys or str(prior.get("favorite_state", "")) != "qualified":
+            continue
+        # Kickoff removes a market from the live pregame board, but it must not
+        # rewrite the official qualification history as a Favorite fall-off.
+        if key in started_frozen_keys:
             continue
         record = {column: str(prior.get(column, "")) for column in TRACKING_COLUMNS}
         record.update(recorded_at=at, favorite_state="not_qualified", disappearance_reason="no longer published or eligible")
@@ -696,6 +713,11 @@ def _apply_visibility_lock(
         raw_favorite = _truthy(row.get("red_fox_favorite"))
         active = _official_active(history, key, now)
         source = _archived_row(archived, key)
+        if minutes < 0 and active:
+            _restore_favorite(result, index, source)
+            result.at[index, "favorite_reason"] = "Official Favorite retained after kickoff handoff."
+            _set_review(result, index, "locked_at_start", result.at[index, "favorite_reason"], at)
+            continue
         stale_reason = _freshness_failure(row, source, now)
         if stale_reason and (raw_favorite or active):
             _late_invalidate_favorite(result, index, stale_reason, at)
