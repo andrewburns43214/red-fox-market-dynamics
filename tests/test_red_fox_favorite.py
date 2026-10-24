@@ -1360,7 +1360,7 @@ def test_whipsaw_freshness_is_stricter_than_normal_market_freshness(tmp_path: Pa
 
 def test_customer_badge_and_sort_contract_preserve_active_market_semantics():
     board = (Path(__file__).resolve().parents[1] / "site" / "board.html").read_text(encoding="utf-8")
-    assert 'src="assets/red-fox-favorite.png" alt="Red Fox Favorite"' in board
+    assert 'src="assets/red-fox-favorite.png" alt="${alt}"' in board
     assert "const favorite=isRedFoxFavorite(r);" in board
     assert "if(isRedFoxFavorite(r)) tr.classList.add('favorite-row');" in board
     assert "selected=rows.find(row=>String(row.market_display||'').toUpperCase()===requested)||favoriteRows[0]||rows[0]" in board

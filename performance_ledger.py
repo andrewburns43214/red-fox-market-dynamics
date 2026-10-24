@@ -25,6 +25,15 @@ from anomaly_action_results import _grade_action
 SUPPORTED_SIDE_VALID_FROM = pd.Timestamp("2026-09-07T17:57:58Z")
 FAVORITE_VALID_FROM = pd.Timestamp("2026-09-07T22:11:12Z")
 FAVORITE_TRACKING_START_DATE = "2026-09-07"
+FAVORITE_SPORTS = (
+    ("mlb", "MLB"),
+    ("nba", "NBA"),
+    ("ncaab", "NCAAB"),
+    ("ncaaf", "CFB"),
+    ("nfl", "NFL"),
+    ("nhl", "NHL"),
+    ("ufc", "UFC"),
+)
 FAVORITE_RULE_VERSIONS = frozenset({
     "red_fox_favorite_v2",
     "red_fox_favorite_v3",
@@ -1165,8 +1174,14 @@ def update_performance_ledger(
         "supported": summary(graded),
         "favorites": summary(graded[graded["favorite_qualified"].eq("yes")]),
     }
+    favorite_rows = graded[graded["favorite_qualified"].eq("yes")]
+    favorite_sport = favorite_rows.get("sport", pd.Series("", index=favorite_rows.index, dtype=str)).astype(str).str.strip().str.lower()
+    sport_records = []
+    for sport, label in FAVORITE_SPORTS:
+        sport_records.append({"sport": sport, "label": label, **summary(favorite_rows[favorite_sport.eq(sport)])})
     _atomic_json({
         **result["favorites"],
+        "sports": sport_records,
         "tracking_start_date": FAVORITE_TRACKING_START_DATE,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }, data_dir / "favorite_performance.json")

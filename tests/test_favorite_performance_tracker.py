@@ -17,6 +17,7 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
             "ledger_id": str(index),
             "favorite_qualified": "yes",
             "grade": grade,
+            "sport": ["nfl", "nfl", "nba", "nfl"][index],
         })
     pd.DataFrame(rows).to_csv(tmp_path / "performance_ledger.csv", index=False)
 
@@ -28,6 +29,16 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
     assert payload["pushes"] == 1
     assert payload["win_rate_excluding_pushes"] == 0.666667
     assert payload["tracking_start_date"] == FAVORITE_TRACKING_START_DATE
+    assert [row["label"] for row in payload["sports"]] == ["MLB", "NBA", "NCAAB", "CFB", "NFL", "NHL", "UFC"]
+    nfl = next(row for row in payload["sports"] if row["sport"] == "nfl")
+    assert nfl == {
+        "sport": "nfl", "label": "NFL", "wins": 2, "losses": 0,
+        "pushes": 1, "total_graded": 3, "win_rate_excluding_pushes": 1.0,
+    }
+    nba = next(row for row in payload["sports"] if row["sport"] == "nba")
+    assert nba["wins"] == 0
+    assert nba["losses"] == 1
+    assert nba["win_rate_excluding_pushes"] == 0.0
 
 
 def test_tracker_uses_one_shared_payload_for_desktop_mobile_and_guide():
@@ -40,8 +51,19 @@ def test_tracker_uses_one_shared_payload_for_desktop_mobile_and_guide():
     assert "let favoritePerformance=null;" in BOARD
     assert "favoritePerformanceFooter()" in BOARD
     assert 'class="favorite-guide-record"' in BOARD
-    assert "footer.textContent=text?`Record: ${text.record} · ${text.rate} · ${text.since}`:'';" in BOARD
+    assert "footer.innerHTML=favoritePerformanceFooterContent(text);" in BOARD
+    assert 'class="favorite-guide-sports-title">Record by sport</div>' in BOARD
+    assert 'class="favorite-performance-sports" aria-label="Red Fox Favorite win percentage by sport"' in BOARD
     assert "10 Graded" not in BOARD
+
+
+def test_every_favorite_logo_routes_to_the_same_information_modal():
+    assert "favorite=game.hasFavorite?favoriteBadge(favoriteContext):'';" in BOARD
+    assert "onclick=\"event.stopPropagation();hideFavoriteTooltip();openSignalGuide('Red Fox Favorite')\"" in BOARD
+    assert 'class="favorite-performance-logo-button"' in BOARD
+    assert "onclick=\"event.stopPropagation();openSignalGuide('Red Fox Favorite')\"" in BOARD
+    assert "overlay.classList.toggle('favorite-guide-open',requested==='Red Fox Favorite');" in BOARD
+    assert "overlay.classList.remove('open','favorite-guide-open');" in BOARD
 
 
 def test_performance_widget_uses_crisp_cropped_brand_gold_frame_and_sans_record_numbers():

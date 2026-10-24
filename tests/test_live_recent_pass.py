@@ -104,7 +104,7 @@ def test_live_recent_cards_highlight_only_persisted_favorite_market_and_saved_st
     assert "const favorites=gameRows.filter(isRedFoxFavorite);" in BOARD
     assert "favoriteMarkets" in BOARD
     assert 'class="live-game-badges"' in BOARD
-    assert 'title="Red Fox Favorite pregame market:' in BOARD
+    assert "`Red Fox Favorite pregame market: ${escHtml(detail)}`" in BOARD
     assert "const favoriteIdentities=new Set(sides.map(item=>isRedFoxFavorite(item.row)" in BOARD
     assert "favoriteIdentities.size===1" in BOARD
     assert "item.supported?' is-supported':''" in BOARD

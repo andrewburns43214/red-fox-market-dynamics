@@ -209,7 +209,7 @@ def test_red_fox_favorite_guide_section_and_tooltip_are_isolated_copy_additions(
     assert "Matches Red Fox’s preferred wager criteria based on market support, movement, price/number, and data quality." in BOARD
     assert 'aria-describedby="favorite-badge-tooltip"' in BOARD
     assert 'onmouseenter="showFavoriteTooltip(this)"' in BOARD
-    assert "onclick=\"event.stopPropagation();hideFavoriteTooltip();openSignalGuide(\\'Red Fox Favorite\\')\"" in BOARD
+    assert "onclick=\"event.stopPropagation();hideFavoriteTooltip();openSignalGuide('Red Fox Favorite')\"" in BOARD
 
 
 def test_favorite_badge_hover_and_exact_guide_navigation_share_authoritative_copy():
