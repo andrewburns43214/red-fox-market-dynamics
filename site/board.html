@@ -1525,6 +1525,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .sandbox-static-search input{width:160px;border:0;outline:0;background:transparent;color:var(--text);font:500 10px var(--sans)}
   .sandbox-action-widgets{display:flex;align-items:center;gap:4px;padding:0 0 7px;border-bottom:1px solid var(--border)}
   .sandbox-action-widgets{position:relative}.sandbox-action-widgets button{display:inline-flex;align-items:center;gap:4px;border:1px solid #050708;border-radius:7px;background:#050708;color:#fff;padding:4px 6px;font:500 8px/1 var(--sans);cursor:pointer}
+  .sandbox-action-widgets .favorite-performance-logo-button,.sandbox-action-widgets .favorite-performance-logo-button:hover,.sandbox-action-widgets .favorite-performance-logo-button:active{display:block;border:0!important;border-radius:4px!important;background:transparent!important;color:inherit!important;padding:0!important;box-shadow:none!important}
   .favorite-performance-desktop{display:flex;height:27px;margin-left:auto;padding:0 8px;border:1px solid var(--border);border-radius:5px;background:#fff;box-shadow:0 1px 2px rgba(20,33,39,.03)}
   .favorite-performance-mobile{display:none!important}
   .sandbox-action-widgets button svg{width:10px;height:10px;stroke-width:1.9}
@@ -5611,7 +5612,11 @@ function normalizeFavoritePerformance(payload){
     const sportWins=Math.max(0,Number.parseInt(item&&item.wins,10)||0), sportLosses=Math.max(0,Number.parseInt(item&&item.losses,10)||0), sportPushes=Math.max(0,Number.parseInt(item&&item.pushes,10)||0);
     const sportDecisions=sportWins+sportLosses;
     return {sport,label,wins:sportWins,losses:sportLosses,pushes:sportPushes,gradedDecisions:sportDecisions,winPercentage:sportDecisions?sportWins/sportDecisions*100:null};
-  }).filter(item=>item.sport&&item.label);
+  }).filter(item=>item.sport&&item.label).sort((a,b)=>{
+    if(a.winPercentage===null) return b.winPercentage===null?a.label.localeCompare(b.label):1;
+    if(b.winPercentage===null) return -1;
+    return b.winPercentage-a.winPercentage||a.label.localeCompare(b.label);
+  });
   return {wins,losses,pushes,winPercentage:gradedDecisions?wins/gradedDecisions*100:0,trackingStartDate,sports};
 }
 function favoritePerformanceDate(value){

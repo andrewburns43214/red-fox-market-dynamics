@@ -1179,6 +1179,11 @@ def update_performance_ledger(
     sport_records = []
     for sport, label in FAVORITE_SPORTS:
         sport_records.append({"sport": sport, "label": label, **summary(favorite_rows[favorite_sport.eq(sport)])})
+    sport_records.sort(key=lambda record: (
+        record["win_rate_excluding_pushes"] == "",
+        -float(record["win_rate_excluding_pushes"] or 0),
+        record["label"],
+    ))
     _atomic_json({
         **result["favorites"],
         "sports": sport_records,

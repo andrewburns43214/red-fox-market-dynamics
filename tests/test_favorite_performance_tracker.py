@@ -29,7 +29,7 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
     assert payload["pushes"] == 1
     assert payload["win_rate_excluding_pushes"] == 0.666667
     assert payload["tracking_start_date"] == FAVORITE_TRACKING_START_DATE
-    assert [row["label"] for row in payload["sports"]] == ["MLB", "NBA", "NCAAB", "CFB", "NFL", "NHL", "UFC"]
+    assert [row["label"] for row in payload["sports"]] == ["NFL", "NBA", "CFB", "MLB", "NCAAB", "NHL", "UFC"]
     nfl = next(row for row in payload["sports"] if row["sport"] == "nfl")
     assert nfl == {
         "sport": "nfl", "label": "NFL", "wins": 2, "losses": 0,
@@ -73,6 +73,13 @@ def test_performance_widget_uses_crisp_cropped_brand_gold_frame_and_sans_record_
     assert ".favorite-performance-desktop .favorite-performance-brand{width:136px;left:-15px;top:-9px;}" in BOARD
     assert "object-fit:cover" not in BOARD
     assert "border:1px solid #c79532;" in BOARD
+    assert ".sandbox-action-widgets .favorite-performance-logo-button" in BOARD
+    assert "background:transparent!important" in BOARD
+
+
+def test_sport_percentages_are_sorted_best_to_worst_with_ungraded_last():
+    assert "b.winPercentage-a.winPercentage||a.label.localeCompare(b.label)" in BOARD
+    assert "if(a.winPercentage===null)" in BOARD
 
 
 def test_drill_in_uses_reference_sans_face_for_all_numeric_surfaces():
