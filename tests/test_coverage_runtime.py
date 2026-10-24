@@ -384,8 +384,9 @@ def test_monitor_can_certify_a_fresh_complete_consistent_run(tmp_path):
     assert healthy, result["issues"]
     (tmp_path / "freshness.json").write_text('{"board_source_state":"PARTIAL_RETAINED"}')
     result, healthy = check(tmp_path, now=NOW.to_pydatetime())
-    assert not healthy
+    assert healthy
     assert "RETAINED_SOURCE_MARKETS" in result["issues"]
+    assert result["warnings"] == ["RETAINED_SOURCE_MARKETS"]
 
 
 def test_unchanged_publication_does_not_duplicate_historical_state_transitions(tmp_path):

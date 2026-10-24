@@ -61,8 +61,14 @@ def check(data_dir, now=None, max_age_minutes=25):
                 issues.append("INTERRUPTED_COVERAGE_RUN")
     except (OSError, ValueError, TypeError, KeyError, sqlite3.Error) as error:
         return {"issues": ["COVERAGE_EVIDENCE_UNAVAILABLE"], "detail": str(error)}, False
+    # Retained markets are an intentional, visibly badged continuity fallback.
+    # Keep reporting them for operators, but do not turn an otherwise complete
+    # capture/publication cycle into a failed run.  The stale-age and
+    # reconciliation checks above remain hard failures.
+    warning_codes = {"RETAINED_SOURCE_MARKETS"}
     summary["issues"] = issues
-    return summary, not issues
+    summary["warnings"] = [issue for issue in issues if issue in warning_codes]
+    return summary, not any(issue not in warning_codes for issue in issues)
 
 
 def main():
