@@ -7,4 +7,7 @@ Type=oneshot
 WorkingDirectory=/opt/red-fox-market-dynamics
 ExecStart=/usr/bin/flock -n /var/lock/redfox-performance.lock /opt/red-fox-market-dynamics/.venv/bin/python /opt/red-fox-market-dynamics/performance_ledger.py
 User=root
+Nice=15
+IOSchedulingClass=idle
+RuntimeMaxSec=90
 
