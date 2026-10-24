@@ -41,10 +41,15 @@ FAVORITE_RULE_VERSIONS = frozenset({
     "red_fox_favorite_v5",
     "red_fox_favorite_v6",
     "red_fox_favorite_v7",
+    "red_fox_favorite_basketball_v1",
     "red_fox_favorite_ufc_v1",
     "red_fox_favorite_nhl_v1",
 })
 FAVORITE_KPI_EXCLUSIONS = {
+    ("34877187", "SPREAD"): (
+        "Excluded as a duplicate correlated basketball thesis: Orlando was laying points, "
+        "so its official Red Fox Favorite result is recorded once through the moneyline."
+    ),
     ("34603681", "SPREAD"): (
         "Excluded: audited final-hour visibility failure invalidated the Favorite."
     ),

@@ -666,8 +666,106 @@ def test_secondary_moneyline_uses_spread_size_gate_and_routes_point_receivers_to
 
 def test_secondary_moneyline_can_remain_favorite_when_team_is_laying_points():
     ml = market("ncaab", "MONEYLINE", pair_for(side("Home", "-120")))
-    spread = market("ncaab", "SPREAD", pair_for(side("Home -2", "-2 (-110)")), rank=2)
-    assert is_favorite(result([ml, spread]), 0)
+    spread = market(
+        "ncaab", "SPREAD",
+        pair_for(side("Home -2", "-2 (-110)", open_line="-0.5 (-110)", line_move=1.5)),
+        rank=2,
+    )
+    frame = result([ml, spread])
+    assert is_favorite(frame, 0)
+    assert not is_favorite(frame, 1)
+    assert frame.iloc[0].favorite_rule_version == "red_fox_favorite_basketball_v1"
+
+
+@pytest.mark.parametrize("sport", ["nba", "ncaab"])
+def test_basketball_point_receiver_is_recorded_once_on_the_spread(sport):
+    spread = market(sport, "SPREAD", [
+        side("Away +2.5", "+2.5 (-110)", open_line="+4 (-110)", line_move=1.5),
+        side("Home -2.5", "-2.5 (-110)", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id=f"{sport}-dog", supported_side="Away +2.5")
+    moneyline = market(sport, "MONEYLINE", [
+        side("Away", "+115", open_line="+130", price_move=3.0),
+        side("Home", "-135", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id=f"{sport}-dog", rank=2, supported_side="Away")
+
+    frame = result([spread, moneyline])
+
+    assert frame.red_fox_favorite.tolist() == ["true", "false"]
+    assert "receiving points" in frame.iloc[0].favorite_reason
+    assert frame.red_fox_favorite.map(lambda value: value == "true").sum() == 1
+
+
+@pytest.mark.parametrize("sport", ["nba", "ncaab"])
+def test_basketball_team_laying_points_is_recorded_once_on_moneyline(sport):
+    moneyline = market(sport, "MONEYLINE", [
+        side("Home", "-140", open_line="-120", price_move=3.0),
+        side("Away", "+120", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id=f"{sport}-favorite", supported_side="Home")
+    spread = market(sport, "SPREAD", [
+        side("Home -2.5", "-2.5 (-110)", open_line="-1 (-110)", line_move=1.5),
+        side("Away +2.5", "+2.5 (-110)", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id=f"{sport}-favorite", rank=2, supported_side="Home -2.5")
+
+    frame = result([moneyline, spread])
+
+    assert frame.red_fox_favorite.tolist() == ["true", "false"]
+    assert "laying points" in frame.iloc[0].favorite_reason
+    assert frame.red_fox_favorite.map(lambda value: value == "true").sum() == 1
+
+
+def test_basketball_short_favorite_moneyline_can_qualify_without_spread_movement():
+    moneyline = market("nba", "MONEYLINE", [
+        side("Home", "-135", open_line="-115", price_move=3.0),
+        side("Away", "+115", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="nba-short", supported_side="Home")
+    spread = market("nba", "SPREAD", [
+        side("Home -1.5", "-1.5 (-110)", line_move=0),
+        side("Away +1.5", "+1.5 (-110)", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="nba-short", rank=2, supported_side="Home -1.5")
+
+    frame = result([moneyline, spread])
+
+    assert frame.red_fox_favorite.tolist() == ["true", "false"]
+    assert "no spread movement is required" in frame.iloc[0].favorite_reason
+
+
+def test_basketball_requires_full_spread_move_and_moneyline_confirmation():
+    weak_spread = market("nba", "SPREAD", [
+        side("Away +3", "+3 (-110)", open_line="+4 (-110)", line_move=1.0),
+        side("Home -3", "-3 (-110)", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="nba-gates", supported_side="Away +3")
+    moneyline = market("nba", "MONEYLINE", [
+        side("Away", "+125", open_line="+145", price_move=3.0),
+        side("Home", "-145", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ], game_id="nba-gates", rank=2, supported_side="Away")
+    weak = result([weak_spread, moneyline])
+    assert not is_favorite(weak, 0)
+    assert "1.5-point spread move" in weak.iloc[0].favorite_reason
+
+    strong_spread = dict(weak_spread)
+    strong_spread["market_sides"] = json.dumps([
+        side("Away +2.5", "+2.5 (-110)", open_line="+4 (-110)", line_move=1.5),
+        side("Home -2.5", "-2.5 (-110)", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ])
+    strong_spread["supported_side"] = "Away +2.5"
+    unsupported_ml = dict(moneyline)
+    unsupported_ml["market_sides"] = json.dumps([
+        side("Away", "+125", open_line="+145", price_move=3.0, direction="LIMITED"),
+        side("Home", "-145", bets=65, money=70, reaction="Watch",
+             direction="AGAINST", kpi=False, action_type="OBSERVE ONLY"),
+    ])
+    no_confirmation = result([strong_spread, unsupported_ml])
+    assert not is_favorite(no_confirmation, 0)
+    assert "confirming moneyline support" in no_confirmation.iloc[0].favorite_reason
 
 
 def test_confirmed_short_football_favorite_uses_moneyline_instead_of_spread():
@@ -814,7 +912,10 @@ def test_corresponding_moneyline_confirmation_neutral_and_contradiction(directio
 
 
 def test_corresponding_moneyline_can_confirm_outside_its_own_favorite_range():
-    spread = market("ncaab", "SPREAD", pair_for(side("Away +4", "+4 (-110)")))
+    spread = market(
+        "ncaab", "SPREAD",
+        pair_for(side("Away +4", "+4 (-110)", open_line="+5.5 (-110)", line_move=1.5)),
+    )
     ml = market("ncaab", "MONEYLINE", [
         side("Away", "+180", direction="TOWARD", price_move=3.0),
         side("Home", "-220", bets=65, money=70, reaction="Watch", direction="AGAINST", kpi=False),

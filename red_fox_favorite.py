@@ -20,6 +20,7 @@ import pandas as pd
 class FavoriteConfig:
     version: str = "red_fox_favorite_v5"
     ncaaf_version: str = "red_fox_favorite_v7"
+    basketball_version: str = "red_fox_favorite_basketball_v1"
     ufc_version: str = "red_fox_favorite_ufc_v1"
     nhl_version: str = "red_fox_favorite_nhl_v1"
     spread_sports: frozenset[str] = frozenset({"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"})
@@ -41,6 +42,8 @@ class FavoriteConfig:
     minimum_observations: int = 3
     meaningful_spread_move: float = 0.5
     meaningful_moneyline_price_move: float = 2.5
+    basketball_spread_move_min: float = 1.5
+    basketball_short_favorite_spread_max: float = 1.5
     # An MLB side that opened and remains plus money has not demonstrated the
     # same market conviction as an underdog that was bet through pick'em.  It
     # therefore needs a stronger probability move than the generic market-read
@@ -255,6 +258,23 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
                     result.at[index, "_ncaaf_decision_reason"] = gate["reason"]
                     result.at[index, "favorite_cross_market_state"] = cross_state
                     result.at[index, "favorite_reason"] = gate["reason"]
+            elif str(row.get("sport", "")).lower() in {"nba", "ncaab", "cbb"}:
+                supported = next(
+                    (
+                        item for item in _sides(row)
+                        if _side_identity(item.get("flagged_side"))
+                        == _side_identity(row.get("supported_side"))
+                    ),
+                    None,
+                )
+                if supported is None:
+                    result.at[index, "favorite_reason"] = (
+                        "Basketball Favorite withheld: no exact currently confirmed Supported Side."
+                    )
+                else:
+                    gate, cross_state = _basketball_gate_for_market(row, supported, game_rows)
+                    result.at[index, "favorite_cross_market_state"] = cross_state
+                    result.at[index, "favorite_reason"] = gate["reason"]
             elif str(row.get("sport", "")).lower() in {"ufc", "nhl"}:
                 result.at[index, "favorite_reason"] = _primary_moneyline_rejection_reason(
                     row, game_rows, captured_at,
@@ -318,6 +338,7 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
     history = _read_tracking(path)
     current = _apply_visibility_lock(current, history, Path(data_dir), at)
     current = _apply_manual_favorite_inclusions(current, at)
+    current = _enforce_basketball_final_expression(current)
     keys = ["sport", "game_id", "market_display"]
     started_frozen_keys: set[tuple[str, str, str]] = set()
     archive_path = Path(data_dir) / "red_fox_favorite_freeze_candidates.csv"
@@ -1180,6 +1201,42 @@ def _clear_favorite(frame: pd.DataFrame, index: object, reason: str) -> None:
     frame.at[index, "favorite_reason"] = reason
 
 
+def _enforce_basketball_final_expression(frame: pd.DataFrame) -> pd.DataFrame:
+    """Prevent a visibility restore from reviving an obsolete correlated bet."""
+    result = frame.copy()
+    if result.empty or not {"sport", "game_id"}.issubset(result.columns):
+        return result
+    basketball = {"nba", "ncaab", "cbb"}
+    groups = {
+        (str(sport).lower(), str(game_id)): group
+        for (sport, game_id), group in result.groupby(
+            ["sport", "game_id"], dropna=False, sort=False,
+        )
+    }
+    for index, row in result.iterrows():
+        sport = str(row.get("sport", "")).lower()
+        if sport not in basketball or not _truthy(row.get("red_fox_favorite")):
+            continue
+        game_rows = groups.get((sport, str(row.get("game_id", ""))))
+        decision = _qualify_market(row, game_rows)
+        if decision is not None:
+            continue
+        supported = next(
+            (
+                item for item in _sides(row)
+                if _side_identity(item.get("flagged_side"))
+                == _side_identity(row.get("favorite_side") or row.get("supported_side"))
+            ),
+            None,
+        )
+        reason = "Basketball Favorite removed: current single-thesis rules no longer qualify this market."
+        if supported is not None:
+            gate, _ = _basketball_gate_for_market(row, supported, game_rows)
+            reason = gate["reason"]
+        _clear_favorite(result, index, reason)
+    return result
+
+
 def _late_invalidate_favorite(frame: pd.DataFrame, index: object, reason: str, at: str) -> None:
     _clear_favorite(frame, index, reason)
     frame.at[index, "favorite_originally_qualified"] = "true"
@@ -1192,6 +1249,8 @@ def _favorite_rule_version(sport: object) -> str:
     normalized = str(sport).lower()
     if normalized in {"ncaaf", "cfb"}:
         return CONFIG.ncaaf_version
+    if normalized in {"nba", "ncaab", "cbb"}:
+        return CONFIG.basketball_version
     if normalized == "ufc":
         return CONFIG.ufc_version
     if normalized == "nhl":
@@ -1282,16 +1341,25 @@ def _qualify_market(
             cross_state = _corresponding_moneyline_state(side, game_rows)
             if cross_state == "contradiction":
                 continue
+        basketball_gate = {}
+        if sport in {"nba", "ncaab", "cbb"}:
+            basketball_gate, cross_state = _basketball_gate_for_market(
+                row, side, game_rows,
+            )
+            if not basketball_gate["passed"]:
+                continue
         ncaaf_gate = {}
         if enforce_ncaaf_policy and sport in {"ncaaf", "cfb"}:
             ncaaf_gate, cross_state = _ncaaf_gate_for_market(row, side, game_rows)
             if not ncaaf_gate["passed"]:
                 continue
-        candidates.append((side, pathway, cross_state, ncaaf_gate))
+        candidates.append((side, pathway, cross_state, ncaaf_gate, basketball_gate))
     if not candidates:
         return None
     priority = {"low_support_contrarian": 0, "low_support_freeze": 1, "moderate_support_follow": 2}
-    side, pathway, cross_state, ncaaf_gate = min(candidates, key=lambda item: priority[item[1]])
+    side, pathway, cross_state, ncaaf_gate, basketball_gate = min(
+        candidates, key=lambda item: priority[item[1]],
+    )
     context = _parts(side.get("context_chips"))
     whipsaw_state = "recovered" if _truthy(side.get("whipsaw_recovered")) or "Whipsaw Recovered" in context else (
         "partial_retrace_intact" if str(side.get("path", "")) == "Whipsaw" else "none"
@@ -1313,6 +1381,13 @@ def _qualify_market(
             "ncaaf_market_move_status": ncaaf_gate["market_move_status"],
             "open_observed_at": str(side.get("open_observed_at", "")),
         })
+    if basketball_gate:
+        evidence.update({
+            "basketball_spread": basketball_gate["spread"],
+            "basketball_spread_move": basketball_gate["spread_move"],
+            "basketball_moneyline_move": basketball_gate["moneyline_move"],
+            "basketball_expression": basketball_gate["expression"],
+        })
     reason = {
         "low_support_contrarian": "Lower-supported side received a meaningful, intact move toward it.",
         "low_support_freeze": "Lower-supported side is protected by the engine's actionable, persistent resistance state.",
@@ -1320,13 +1395,108 @@ def _qualify_market(
     }[pathway]
     if ncaaf_gate:
         reason = f"{reason} {ncaaf_gate['reason']}"
+    if basketball_gate:
+        reason = f"{reason} {basketball_gate['reason']}"
     return {
         "side": str(side.get("flagged_side", "")), "pathway": pathway,
         "cross_market_state": cross_state, "whipsaw_state": whipsaw_state,
         "evidence": evidence, "reason": reason,
         "market_read": str(side.get("anomaly_chips") or side.get("reaction", "")),
         "ncaaf_gate": ncaaf_gate,
+        "basketball_gate": basketball_gate,
     }
+
+
+def _basketball_gate_for_market(
+    row: pd.Series,
+    side: dict,
+    game_rows: pd.DataFrame | None,
+) -> tuple[dict, str]:
+    """Select one NBA/NCAAB expression and require cross-market support.
+
+    Point receivers are expressed only through the spread. Teams laying points
+    are expressed only through the moneyline. The normal confirmation is a
+    1.5-point spread move plus meaningful moneyline movement toward the same
+    team. A team laying no more than 1.5 points may qualify through meaningful
+    moneyline support without a spread move.
+    """
+    market = str(row.get("market_display", "")).upper()
+    spread = side if market == "SPREAD" else _matching_market_side(
+        game_rows, "SPREAD", side.get("flagged_side"),
+    )
+    moneyline = side if market == "MONEYLINE" else _matching_market_side(
+        game_rows, "MONEYLINE", side.get("flagged_side"),
+    )
+    spread_value = _line_value((spread or {}).get("current_line"), "SPREAD")
+    spread_move = _number((spread or {}).get("line_move_abs")) or 0.0
+    moneyline_move = _number((moneyline or {}).get("price_move_pct")) or 0.0
+    moneyline_support = bool(
+        moneyline
+        and str(moneyline.get("response_direction", "")).upper() == "TOWARD"
+        and moneyline_move >= CONFIG.meaningful_moneyline_price_move
+    )
+    cross_state = "confirmation" if moneyline_support else (
+        "unavailable" if moneyline is None else "neutral"
+    )
+
+    def outcome(passed: bool, expression: str, reason: str) -> tuple[dict, str]:
+        return ({
+            "passed": passed,
+            "spread": spread_value,
+            "spread_move": spread_move,
+            "moneyline_move": moneyline_move,
+            "expression": expression,
+            "reason": reason,
+        }, cross_state)
+
+    if spread_value is None:
+        return outcome(False, "none", "Basketball Favorite withheld: a matching spread is required.")
+    if spread_value > 0:
+        if market != "SPREAD":
+            return outcome(
+                False, "spread",
+                "Basketball Favorite is expressed on the positive spread because the supported team is receiving points.",
+            )
+        if spread_move < CONFIG.basketball_spread_move_min:
+            return outcome(
+                False, "spread",
+                f"Basketball Favorite withheld: requires at least a {CONFIG.basketball_spread_move_min:g}-point spread move.",
+            )
+        if not moneyline_support:
+            return outcome(
+                False, "spread",
+                "Basketball Favorite withheld: the qualifying spread move requires confirming moneyline support.",
+            )
+        return outcome(
+            True, "spread",
+            "Basketball Favorite confirmed by a 1.5-point-or-greater spread move with moneyline support; the team is receiving points, so the spread is the sole recorded Favorite.",
+        )
+
+    if market != "MONEYLINE":
+        return outcome(
+            False, "moneyline",
+            "Basketball Favorite is expressed on the moneyline because the supported team is not receiving points.",
+        )
+    short_favorite = abs(spread_value) <= CONFIG.basketball_short_favorite_spread_max
+    if not moneyline_support:
+        return outcome(
+            False, "moneyline",
+            "Basketball Favorite withheld: meaningful moneyline movement toward the supported team is required.",
+        )
+    if not short_favorite and spread_move < CONFIG.basketball_spread_move_min:
+        return outcome(
+            False, "moneyline",
+            f"Basketball Favorite withheld: requires at least a {CONFIG.basketball_spread_move_min:g}-point spread move with moneyline support.",
+        )
+    if short_favorite:
+        return outcome(
+            True, "moneyline",
+            "Basketball Favorite confirmed by moneyline support at a spread of -1.5 or shorter; no spread movement is required, and the moneyline is the sole recorded Favorite.",
+        )
+    return outcome(
+        True, "moneyline",
+        "Basketball Favorite confirmed by a 1.5-point-or-greater spread move with moneyline support; the team is laying points, so the moneyline is the sole recorded Favorite.",
+    )
 
 
 def _primary_moneyline_sport_gate(

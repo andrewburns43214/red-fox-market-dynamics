@@ -307,6 +307,28 @@ def test_reviewed_miami_favorite_is_rule_invalidated_and_removed_from_kpi(tmp_pa
     assert pd.read_csv(tmp_path / "performance_favorites.csv").empty
 
 
+def test_orlando_duplicate_spread_is_removed_from_official_favorite_kpi(tmp_path):
+    row = frozen_row(
+        sport="nba", game_id="34877187", game="MIN Timberwolves @ ORL Magic",
+        market_display="SPREAD", supported_side="ORL Magic -1.5",
+        favorite_side="ORL Magic -1.5", favorite_rule_version="red_fox_favorite_v5",
+        market_sides=json.dumps([
+            {"flagged_side": "ORL Magic -1.5", "current_line": "-1.5 (-110)", "reaction": "Contrarian"},
+            {"flagged_side": "MIN Timberwolves +1.5", "current_line": "+1.5 (-110)"},
+        ]),
+    )
+    write(pd.DataFrame([row]), tmp_path / "live_recent.csv")
+
+    update_performance_ledger(tmp_path, attach_results=False)
+
+    ledger = pd.read_csv(tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False)
+    assert ledger.iloc[0].favorite_qualified == "no"
+    assert ledger.iloc[0].candidate_decision == "rule_invalidated"
+    assert ledger.iloc[0].classification_correction == "yes"
+    assert "duplicate correlated basketball thesis" in ledger.iloc[0].candidate_decision_reason
+    assert pd.read_csv(tmp_path / "performance_favorites.csv").empty
+
+
 def test_late_invalidated_favorite_is_audited_but_excluded_from_official_kpis(tmp_path):
     row = frozen_row(
         red_fox_favorite="false", favorite_state="late_invalidated",
