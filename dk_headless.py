@@ -284,8 +284,14 @@ def find_splits_records_in_json(obj: Any) -> List[Dict[str, Any]]:
 
 import re
 
-def parse_dk_start_text_to_utc_iso(start_text: str) -> str:
-    """Convert DK splits start text like '1/10, 04:30PM' (ET) to UTC ISO 'YYYY-MM-DDTHH:MM:SSZ'."""
+def parse_dk_start_text_to_utc_iso(start_text: str, now_et=None) -> str:
+    """Convert the current and legacy DK start labels from Eastern to UTC.
+
+    DK changed its rendered label from ``1/10, 04:30PM`` to
+    ``Mon 11/2 · 8:20 PM ET`` on November 2, 2026.  Keep both forms explicit
+    so a presentation-only punctuation change cannot blank every kickoff and
+    force the board onto retained captures.
+    """
     try:
         from datetime import datetime, timezone
         from zoneinfo import ZoneInfo
@@ -293,7 +299,14 @@ def parse_dk_start_text_to_utc_iso(start_text: str) -> str:
         s = (start_text or '').strip()
         if not s:
             return ''
-        m = re.search(r'(\d{1,2})/(\d{1,2}),\s*(\d{1,2}):(\d{2})(AM|PM)', s, re.I)
+        m = re.search(
+            r'(?:\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+)?'
+            r'(\d{1,2})/(\d{1,2})'
+            r'(?:\s*,\s*|\s*[·•]\s*)'
+            r'(\d{1,2}):(\d{2})\s*(AM|PM)(?:\s*ET)?\b',
+            s,
+            re.I,
+        )
         if not m:
             return ''
         mon = int(m.group(1)); day = int(m.group(2))
@@ -301,10 +314,16 @@ def parse_dk_start_text_to_utc_iso(start_text: str) -> str:
         ap = m.group(5).upper()
         if ap == 'PM' and hh != 12: hh += 12
         if ap == 'AM' and hh == 12: hh = 0
-        now_et = datetime.now(ZoneInfo('America/New_York'))
+        now_et = now_et or datetime.now(ZoneInfo('America/New_York'))
+        if now_et.tzinfo is None:
+            now_et = now_et.replace(tzinfo=ZoneInfo('America/New_York'))
+        else:
+            now_et = now_et.astimezone(ZoneInfo('America/New_York'))
         year = now_et.year
-        if now_et.month == 12 and mon == 1:
-            year = now_et.year + 1
+        if mon < now_et.month - 6:
+            year += 1
+        elif mon > now_et.month + 6:
+            year -= 1
         dt_local = datetime(year, mon, day, hh, mm, tzinfo=ZoneInfo('America/New_York'))
         dt_utc = dt_local.astimezone(timezone.utc)
         return dt_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -449,17 +468,18 @@ def dom_scrape_splits(html, sport):
             # sec is the tb-se event container for this row (set above)
             if sec is not None:
                 spans = sec.select('div.tb-se-title span')
-                # Pick the first span that looks like a real kickoff time, not screen-reader junk
-                _rx = re.compile(r'\b\d{1,2}/\d{1,2},\s*\d{1,2}:\d{2}\s*(AM|PM)\b')
+                # Pick the first span parsed as a real kickoff. DK has used
+                # both comma/no-weekday and weekday/middle-dot label formats.
                 for spn in spans:
                     t = spn.get_text(' ', strip=True) if spn else ''
                     if not t:
                         continue
                     if 'opens in a new tab' in t.lower():
                         continue
-                    if _rx.search(t):
+                    parsed_start = parse_dk_start_text_to_utc_iso(t)
+                    if parsed_start:
                         dk_start_text = t
-                        dk_start_iso = parse_dk_start_text_to_utc_iso(dk_start_text)
+                        dk_start_iso = parsed_start
                         break
         except Exception:
             dk_start_text = ''
