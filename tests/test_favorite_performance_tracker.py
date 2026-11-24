@@ -39,6 +39,8 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
     assert nba["wins"] == 0
     assert nba["losses"] == 1
     assert nba["win_rate_excluding_pushes"] == 0.0
+    assert payload["ever_displayed"]["wins"] == 2
+    assert payload["ever_displayed"]["losses"] == 1
 
 
 def test_tracker_uses_one_shared_payload_for_desktop_mobile_and_guide():
@@ -52,7 +54,8 @@ def test_tracker_uses_one_shared_payload_for_desktop_mobile_and_guide():
     assert "favoritePerformanceFooter()" in BOARD
     assert 'class="favorite-guide-record"' in BOARD
     assert "footer.innerHTML=favoritePerformanceFooterContent(text);" in BOARD
-    assert 'class="favorite-guide-sports-title">Record by sport</div>' in BOARD
+    assert "Every displayed Favorite" in BOARD
+    assert "Every displayed signal by sport" in BOARD
     assert 'class="favorite-performance-sports" aria-label="Red Fox Favorite win percentage by sport"' in BOARD
     assert "10 Graded" not in BOARD
 

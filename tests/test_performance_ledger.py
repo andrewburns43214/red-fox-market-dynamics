@@ -516,6 +516,51 @@ def test_all_missing_source_times_remain_explicitly_utc_aware():
     assert str(parsed.dtype) == "datetime64[ns, UTC]"
 
 
+def test_ufc_displayed_favorite_missing_from_live_recent_is_retained_and_graded(tmp_path, monkeypatch):
+    tracking = [
+        {
+            "recorded_at": "2026-10-03T09:46:31Z", "sport": "ufc", "game_id": "fight-1",
+            "game": "Fighter A vs Fighter B", "market_display": "MONEYLINE",
+            "favorite_state": "qualified", "favorite_side": "Fighter B",
+            "favorite_pathway": "low_support_contrarian", "favorite_rule_version": "red_fox_favorite_ufc_v1",
+            "first_qualified_line": "+105", "current_line": "+105", "open_line": "+124",
+            "reaction": "Contrarian", "path": "One-Way", "snapshot_id": "first",
+        },
+        {
+            "recorded_at": "2026-10-03T20:00:00Z", "sport": "ufc", "game_id": "fight-1",
+            "game": "Fighter A vs Fighter B", "market_display": "MONEYLINE",
+            "favorite_state": "not_qualified", "favorite_side": "Fighter B",
+            "favorite_pathway": "low_support_contrarian", "favorite_rule_version": "red_fox_favorite_ufc_v1",
+            "current_line": "+110", "final_pregame_line": "+110", "reaction": "Watch",
+            "snapshot_id": "last",
+        },
+    ]
+    write(pd.DataFrame(tracking), tmp_path / "red_fox_favorite_tracking.csv")
+    write(pd.DataFrame([{
+        "sport": "ufc", "game_id": "fight-1", "market_display": "MONEYLINE",
+        "kickoff_iso": "2026-10-03T20:45:00Z",
+    }]), tmp_path / "red_fox_favorite_shadow.csv")
+    monkeypatch.setattr("performance_ledger._fetch_ufc_results", lambda ledger: pd.DataFrame([{
+        "game_id": "fight-1", "winner": "Fighter B", "loser": "Fighter A",
+        "result": "Fighter B defeated Fighter A", "score_provider": "espn_ufc_scoreboard",
+        "score_source": "ESPN UFC scoreboard", "score_provider_event_id": "bout-1",
+        "resolved_at_utc": "2026-10-04T00:00:00Z",
+    }]))
+
+    result = update_performance_ledger(tmp_path)
+
+    assert result["rows"] == 1
+    assert result["favorites"]["total_graded"] == 0
+    row = pd.read_csv(tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False).iloc[0]
+    assert row["favorite_originally_qualified"] == "yes"
+    assert row["favorite_qualified"] == "no"
+    assert row["candidate_decision"] == "fell_off_before_start"
+    assert row["grade"] == "W"
+    payload = json.loads((tmp_path / "favorite_performance.json").read_text(encoding="utf-8"))
+    assert payload["ever_displayed"]["wins"] == 1
+    assert next(item for item in payload["ever_displayed"]["sports"] if item["sport"] == "ufc")["wins"] == 1
+
+
 def test_roi_and_clv_use_first_qualified_price_against_final_pregame_close(tmp_path):
     row = frozen_row(
         market_sides=json.dumps([
