@@ -3411,7 +3411,12 @@ function gameSaved(game){ return typeof window.isSavedGame==='function'&&window.
 function sortBoardGames(games){
   return games.sort((a,b)=>{
     let result=0;
-    if(boardSortMode==='FAVORITES') result=Number(b.hasFavorite)-Number(a.hasFavorite)||a.bestFavoriteRank-b.bestFavoriteRank;
+    if(boardSortMode==='FAVORITES'){
+      result=Number(b.hasFavorite)-Number(a.hasFavorite);
+      if(!result&&a.hasFavorite&&b.hasFavorite){
+        result=gameKickoffTime(a)-gameKickoffTime(b)||a.bestFavoriteRank-b.bestFavoriteRank;
+      }
+    }
     else if(boardSortMode==='DATE') result=gameKickoffTime(a)-gameKickoffTime(b);
     else if(boardSortMode==='MARKET') result=gameMarketOrder(a)-gameMarketOrder(b);
     else if(boardSortMode==='SAVED') result=Number(gameSaved(b))-Number(gameSaved(a));
