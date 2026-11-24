@@ -12,6 +12,37 @@ from publication_coverage import CoverageStore
 from snapshot_store import compact_snapshot_history, snapshot_lock
 
 
+FAVORITE_SHADOW_TEMP_GLOB = '.red_fox_favorite_shadow.csv.*.tmp'
+STALE_ATOMIC_TEMP_MINUTES = 15
+
+
+def remove_stale_atomic_temps(data, *, now=None, minimum_age_minutes=STALE_ATOMIC_TEMP_MINUTES):
+    """Remove abandoned Favorite-shadow commits without touching live ledgers.
+
+    The performance worker is terminated by a watchdog when it overruns.  A
+    termination can bypass Python cleanup and strand a full CSV copy.  Only the
+    UUID-named atomic-write files are eligible here, and a grace period keeps a
+    currently running writer out of scope.
+    """
+    data = Path(data).resolve()
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    cutoff = current.timestamp() - (float(minimum_age_minutes) * 60)
+    removed = 0
+    removed_bytes = 0
+    for temporary in data.glob(FAVORITE_SHADOW_TEMP_GLOB):
+        if not temporary.is_file() or temporary.parent.resolve() != data:
+            continue
+        stat = temporary.stat()
+        if stat.st_mtime > cutoff:
+            continue
+        temporary.unlink(missing_ok=True)
+        removed += 1
+        removed_bytes += stat.st_size
+    return {'files': removed, 'bytes': removed_bytes}
+
+
 def parse_time(value):
     try:
         return datetime.fromisoformat(str(value).replace('Z', '+00:00'))
@@ -56,6 +87,7 @@ def compact_jsonl(path, timestamp_getter, cutoff, *, key_getter=None, max_bytes=
 
 def maintain(root, *, compact_snapshots=False, vacuum_coverage=False):
     data = root / 'data'
+    stale_atomic_temps = remove_stale_atomic_temps(data)
     snapshot = data / 'snapshots.csv'
     with snapshot_lock(snapshot):
         pass
@@ -77,7 +109,11 @@ def maintain(root, *, compact_snapshots=False, vacuum_coverage=False):
     compact_bytes = int(os.environ.get("REDFOX_SNAPSHOT_COMPACT_BYTES", str(96 * 1024 * 1024)))
     if compact_snapshots or (snapshot.exists() and snapshot.stat().st_size > compact_bytes):
         snapshots = compact_snapshot_history(snapshot)
-    return {'ledgers': ledgers, 'snapshots': snapshots}
+    return {
+        'stale_atomic_temps': stale_atomic_temps,
+        'ledgers': ledgers,
+        'snapshots': snapshots,
+    }
 
 
 def main():
