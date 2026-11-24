@@ -2102,7 +2102,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   <div class="red-fox-tooltip favorite-badge-tooltip" id="favorite-badge-tooltip" role="tooltip" hidden><strong>Red Fox Favorite</strong><span>Matches Red Fox’s preferred wager criteria based on market support, movement, price/number, and data quality.</span></div>
   <dialog class="favorite-history" id="favorite-history" aria-labelledby="favorite-history-title">
     <div class="favorite-history-header">
-      <div><h2 id="favorite-history-title"></h2><p id="favorite-history-record"></p></div>
+      <div><h2 id="favorite-history-title"></h2><p id="favorite-history-record"></p><p id="favorite-history-logic-record" hidden></p></div>
       <button type="button" id="favorite-history-close" aria-label="Close sport history" autofocus>&times;</button>
     </div>
     <p class="favorite-history-empty" id="favorite-history-empty" hidden></p>
@@ -5669,7 +5669,7 @@ function normalizeFavoritePerformance(payload){
     return b.winPercentage-a.winPercentage||a.label.localeCompare(b.label);
   });
   const games=Array.isArray(payload.games)?payload.games.filter(row=>row&&['W','L','Push'].includes(row.grade)):null;
-  return {wins,losses,pushes,winPercentage:gradedDecisions?wins/gradedDecisions*100:0,trackingStartDate,sports,games};
+  return {wins,losses,pushes,winPercentage:gradedDecisions?wins/gradedDecisions*100:0,trackingStartDate,sports,games,logicRecords:payload.logic_change_records||{}};
 }
 function favoritePerformanceDate(value){
   const parsed=new Date(value+'T12:00:00Z');
@@ -5740,6 +5740,12 @@ function setupFavoriteHistory(){
     const rows=games?.filter(row=>normSportKey(row.sport)===selectedSport)||[];
     document.getElementById('favorite-history-title').textContent=sport.label+' Favorite history';
     document.getElementById('favorite-history-record').textContent=sport.record+' · '+sport.rate;
+    const logic=document.getElementById('favorite-history-logic-record');
+    const cohort=favoritePerformance.logicRecords[selectedSport];
+    logic.hidden=!cohort;
+    const logicDecisions=cohort?cohort.wins+cohort.losses:0;
+    const logicRate=logicDecisions?` · ${(100*cohort.wins/logicDecisions).toFixed(1)}%`:'';
+    logic.textContent=cohort?`${cohort.wins}-${cohort.losses}-${cohort.pushes}${logicRate} · 11/24 Logic changes`:'';
     document.getElementById('favorite-history-rows').innerHTML=rows.map(row=>{
       const date=new Date(row.scheduled_start||'');
       const day=Number.isNaN(date.getTime())?'—':dateFormat.format(date);

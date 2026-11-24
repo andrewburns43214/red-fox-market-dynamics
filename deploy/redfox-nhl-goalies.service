@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh confirmed NHL goalies for Red Fox Favorites
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/red-fox-market-dynamics
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python /opt/red-fox-market-dynamics/favorite_nhl_goalies.py
+TimeoutStartSec=25
+Nice=10

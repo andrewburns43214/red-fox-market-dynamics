@@ -18,6 +18,7 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
             "favorite_qualified": "yes",
             "grade": grade,
             "sport": ["nfl", "nfl", "nba", "nfl"][index],
+            "favorite_rule_version": "red_fox_favorite_20261124" if index == 2 else "",
             "game": f"Game {index}",
             "scheduled_start": f"2026-09-{index+10}T20:00:00Z",
             "side": "Away +3",
@@ -53,6 +54,9 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
     assert nba["wins"] == 0
     assert nba["losses"] == 1
     assert nba["win_rate_excluding_pushes"] == 0.0
+    assert set(payload["logic_change_records"]) == {"ncaab", "nba", "nhl"}
+    assert payload["logic_change_records"]["nba"]["losses"] == 1
+    assert payload["logic_change_records"]["ncaab"]["total_graded"] == 0
     assert [row["game"] for row in payload["games"]] == ["Game 3", "Game 2", "Game 1", "Game 0"]
     assert [row["grade"] for row in payload["games"] if row["sport"] == "nfl"] == ["Push", "W", "W"]
     assert payload["games"][0]["decision_price"] == "-110"

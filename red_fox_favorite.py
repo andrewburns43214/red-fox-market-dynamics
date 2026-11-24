@@ -185,7 +185,11 @@ SHADOW_COLUMNS = [
 ]
 
 
-def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
+NOV24_SPORTS = frozenset({"ncaab", "nba", "nhl"})
+NOV24_VERSION = "red_fox_favorite_20261124"
+
+
+def apply_red_fox_favorites(board: pd.DataFrame, as_of=None, *, nov24_goalies: dict | None = None) -> pd.DataFrame:
     """Add deterministic Favorite fields without changing row order or rank."""
     if board is None:
         return pd.DataFrame(columns=FAVORITE_COLUMNS)
@@ -249,6 +253,8 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
             result.at[index, "_favorite_legacy_reason"] = rejection
             result.at[index, "favorite_reason"] = rejection
         decision = _qualify_market(row, game_rows, at=captured_at)
+        if not decision and nov24_goalies is not None and identity[0] in NOV24_SPORTS:
+            decision = _nov24_decision(row, game_rows, captured_at, nov24_goalies)
         if not decision:
             if legacy and str(row.get("sport", "")).lower() in {"ncaaf", "cfb"}:
                 side = next(
@@ -297,11 +303,18 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
             if opener_mismatch and not current_mismatch:
                 opener_blocked_games.add((str(row.get("sport", "")).lower(), str(row.get("game_id", ""))))
             continue
+        if decision.get("nov24") and not str(row.get("supported_side") or "").strip():
+            # The addition provides direct directional evidence. An existing
+            # contradictory Supported Side is never overwritten by this path.
+            result.at[index, "supported_side"] = decision["side"]
+            result.at[index, "_nov24_added_support"] = True
         snapshot_id = _snapshot_id(row, captured_at)
         result.at[index, "red_fox_favorite"] = "true"
         result.at[index, "favorite_side"] = decision["side"]
         result.at[index, "favorite_pathway"] = decision["pathway"]
-        result.at[index, "favorite_rule_version"] = _favorite_rule_version(row.get("sport", ""))
+        result.at[index, "favorite_rule_version"] = (
+            NOV24_VERSION if decision.get("nov24") else _favorite_rule_version(row.get("sport", ""))
+        )
         result.at[index, "favorite_first_qualified_at"] = captured_at
         result.at[index, "favorite_final_qualified_at"] = captured_at
         result.at[index, "favorite_state"] = "qualified"
@@ -332,7 +345,15 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None) -> pd.DataFrame:
                 if explanation not in existing:
                     result.at[pair_index, "market_rationale"] = " ".join(part for part in (existing, explanation) if part)
     result = _prefer_confirmed_football_moneyline(result)
-    return _prefer_basketball_moneyline_expression(result)
+    result = _prefer_basketball_moneyline_expression(result)
+    if nov24_goalies is not None:
+        picked = result["red_fox_favorite"].map(_truthy)
+        added = result["favorite_rule_version"].eq(NOV24_VERSION)
+        existing_games = set(zip(result.loc[picked & ~added, "sport"], result.loc[picked & ~added, "game_id"]))
+        for index, row in result.loc[picked & added].iterrows():
+            if (row["sport"], row["game_id"]) in existing_games:
+                _clear_favorite(result, index, "Existing Favorite takes precedence over the new pathway.")
+    return result
 
 
 def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) -> pd.DataFrame:
@@ -380,6 +401,9 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
             first_line = prior_first or str(row.get("current_line", ""))
         else:
             first_line = str(row.get("current_line", "")) if favorite else ""
+        if favorite and str(row.get("favorite_rule_version")) == NOV24_VERSION:
+            if prior is None or not prior_first:
+                first_line = json.loads(str(row["favorite_supporting_evidence"]))["current_line"]
         same_snapshot = (
             favorite and prior is not None
             and str(prior.get("favorite_state", "")) == "qualified"
@@ -650,6 +674,13 @@ def _apply_visibility_lock(
     review_records: list[dict] = []
 
     keys = ("sport", "game_id", "market_display")
+    extra_slates = {}
+    if not archived.empty and "favorite_rule_version" in archived:
+        for _, row in archived.loc[archived["favorite_rule_version"].eq(NOV24_VERSION)].iterrows():
+            start = pd.to_datetime(row.get("kickoff_iso"), errors="coerce", utc=True)
+            if pd.notna(start):
+                slate = (row.get("sport"), start.tz_convert("America/New_York").date())
+                extra_slates[slate] = str(row.get("game_id"))
     # A fully qualified cross-market preference is an atomic change in wager
     # expression, not threshold flicker.  Preserve the ordinary freshness and
     # safety checks, but do not let the per-market visibility lock temporarily
@@ -753,6 +784,54 @@ def _apply_visibility_lock(
 
         if key in translation_roles:
             _clear_pending_review(reviews, review_records, row, key, at)
+            continue
+
+        if (raw_favorite and active and source is not None
+                and str(source.get("favorite_rule_version")) == NOV24_VERSION
+                and _side_identity(row.get("favorite_side")) == _side_identity(source.get("favorite_side"))):
+            result.at[index, "favorite_rule_version"] = NOV24_VERSION
+            if identity[0] == "nhl":
+                old_pair = json.loads(str(source.get("favorite_supporting_evidence", "{}"))).get("confirmed_goalies")
+                new_pair = json.loads(str(row.get("favorite_supporting_evidence", "{}"))).get("confirmed_goalies")
+                if old_pair and new_pair and old_pair != new_pair:
+                    reason = "11/24 NHL Favorite invalidated after a confirmed starting-goalie change."
+                    _late_invalidate_favorite(result, index, reason, at)
+                    _set_review(result, index, "late_invalidated", reason, at)
+                    review_records.append(_review_record(row, at, "late_invalidated", "removal", reason))
+                    continue
+
+        if raw_favorite and not active and str(row.get("favorite_rule_version")) == NOV24_VERSION:
+            # Extra paths can qualify before closing review only. Keep the
+            # old closing-window and kickoff safeguards for all official rows.
+            slate = (identity[0], kickoff.tz_convert("America/New_York").date())
+            if minutes <= review_minutes or extra_slates.get(slate, identity[1]) != identity[1]:
+                _clear_favorite(result, index, "11/24 pathway held by the closing window or slate limit.")
+                _clear_pending_review(reviews, review_records, row, key, at)
+                continue
+            evidence = json.loads(str(row["favorite_supporting_evidence"]))
+            signature = [_side_identity(row["favorite_side"]), evidence.get("confirmed_goalies")]
+            stamps = evidence["confirmation_sources"]
+            reason = "11/24 confirmation:" + json.dumps([signature, stamps], separators=(",", ":"))
+            pending = _review_rows(reviews, key)
+            if not pending.empty:
+                last = pending.iloc[-1]
+                previous = pd.to_datetime(last.get("recorded_at"), errors="coerce", utc=True)
+                gap = (now - previous).total_seconds() / 60 if pd.notna(previous) else -1
+                last_reason = str(last.get("reason", ""))
+                if (last.get("review_state") == "pending" and last.get("review_action") == "addition"
+                        and last_reason.startswith("11/24 confirmation:")):
+                    previous_signature, previous_stamps = json.loads(last_reason.split(":", 1)[1])
+                    minimum = 15 if identity[0] == "nhl" else 10
+                    if previous_signature == signature and 0 <= gap <= 30:
+                        fresh = all(pd.Timestamp(new) > pd.Timestamp(old) for new, old in zip(stamps, previous_stamps))
+                        if gap >= minimum and fresh:
+                            extra_slates[slate] = identity[1]
+                            review_records.append(_review_record(row, at, "applied", "addition", reason))
+                            continue
+                        _clear_favorite(result, index, "11/24 pathway awaits a fresh second confirmation.")
+                        continue
+            _clear_favorite(result, index, "11/24 pathway awaits a fresh second confirmation.")
+            review_records.append(_review_record(row, at, "pending", "addition", reason))
             continue
 
         # A previously confirmed Favorite can legitimately recover after an
@@ -882,7 +961,18 @@ def _apply_visibility_lock(
                 if material:
                     _set_review(result, index, "pending_removal", reason, at)
                     review_records.append(_review_record(row, at, "pending", "removal", reason))
+    if "_nov24_added_support" in result or result["favorite_rule_version"].eq(NOV24_VERSION).any():
+        picked = result["red_fox_favorite"].map(_truthy)
+        added = result["favorite_rule_version"].eq(NOV24_VERSION)
+        legacy_games = set(zip(result.loc[picked & ~added, "sport"], result.loc[picked & ~added, "game_id"]))
+        for index, row in result.loc[picked & added].iterrows():
+            if (row["sport"], row["game_id"]) in legacy_games:
+                _late_invalidate_favorite(result, index, "11/24 pathway superseded by the existing Favorite pathway.", at)
     _write_review(review_path, reviews, review_records)
+    if "_nov24_added_support" in result:
+        provisional = result["_nov24_added_support"].eq(True) & ~result["red_fox_favorite"].map(_truthy)
+        result.loc[provisional, "supported_side"] = ""
+        result = result.drop(columns=["_nov24_added_support"])
     return result
 
 
@@ -1255,6 +1345,94 @@ def _legacy_rejection_reason(row: pd.Series, side: dict | None, game_rows: pd.Da
     if market == "SPREAD" and _corresponding_moneyline_state(side, game_rows) == "contradiction":
         return "Legacy Favorite rejected: corresponding Moneyline contradicted the spread candidate."
     return "Legacy Favorite rejected: one or more legacy quality gates did not qualify."
+
+
+def _fresh_nov24_side(side: dict, now: pd.Timestamp) -> bool:
+    observed = pd.to_datetime(side.get("source_latest_at"), errors="coerce", utc=True)
+    return bool(pd.notna(observed) and pd.Timedelta(0) <= now - observed <= pd.Timedelta(minutes=12))
+
+
+def _nov24_decision(row, game_rows, at, goalie_cache):
+    sport = str(row.get("sport", "")).lower()
+    market = str(row.get("market_display", "")).upper()
+    now = pd.Timestamp(at)
+    kickoff = pd.to_datetime(row.get("kickoff_iso"), errors="coerce", utc=True)
+    if pd.isna(kickoff) or not pd.Timedelta(0) < kickoff - now <= pd.Timedelta(hours=24):
+        return None
+    basketball = sport in {"nba", "ncaab"} and market == "SPREAD"
+    if not basketball and (sport != "nhl" or market != "MONEYLINE"):
+        return None
+    goalies = None
+    if sport == "nhl":
+        from favorite_nhl_goalies import confirmed_goalies
+        goalies = confirmed_goalies(goalie_cache, str(row.get("game", "")), kickoff, now)
+        if not goalies:
+            return None
+    sides = _sides(row)
+    if len(sides) != 2:
+        return None
+    supported = _side_identity(row.get("supported_side", ""))
+    for side, other in ((sides[0], sides[1]), (sides[1], sides[0])):
+        name = str(side.get("flagged_side", ""))
+        identity = _side_identity(name)
+        if not identity or identity == _side_identity(other.get("flagged_side", "")):
+            continue
+        if (supported and supported != identity) or str(other.get("reaction", "")) in {"Contrarian", "Follow"}:
+            continue
+        if any(
+            str(item.get("reaction", "")) == "Freeze"
+            and _truthy(item.get("kpi_eligible"))
+            and _side_identity(item.get("action_side", "")) != identity
+            for item in sides
+        ):
+            continue
+        bets, money = _number(side.get("bets_pct")), _number(side.get("money_pct"))
+        value = _line_value(side.get("current_line"), market)
+        if (bets is None or money is None or not 0 <= bets <= 45 or value is None
+                or not _number_is_eligible(sport, market, value, side, game_rows)
+                or not _base_quality(side) or not _fresh_nov24_side(side, now)):
+            continue
+        sources = [str(side["source_latest_at"])]
+        if basketball:
+            opened = _line_value(side.get("open_line"), market)
+            move = opened - value if opened is not None else 0
+            if not (value > 0 and 0 <= money <= 45 and 1 <= move < CONFIG.basketball_spread_move_min):
+                continue
+            moneyline = _matching_market_side(game_rows, "MONEYLINE", name)
+            ml_row = _matching_market_row(game_rows, "MONEYLINE", name)
+            if (not moneyline or ml_row is None or not _base_quality(moneyline)
+                    or not _fresh_nov24_side(moneyline, now)
+                    or _basketball_moneyline_alignment(moneyline) != "confirmation"
+                    or _side_identity(ml_row.get("supported_side", "")) not in {"", identity}
+                    or _truthy(ml_row.get("cross_market_mismatch"))
+                    or _truthy(ml_row.get("cross_market_opener_mismatch_verified"))):
+                continue
+            if sport == "nba" and (_number(moneyline.get("price_move_pct")) or 0) < CONFIG.meaningful_moneyline_price_move:
+                continue
+            pathway, cross_state = "low_support_contrarian", "confirmation"
+            sources.append(str(moneyline["source_latest_at"]))
+            reason = "11/24 one-point spread exception: fresh same-side spread and moneyline movement."
+        else:
+            if not bets + 15 <= money <= 100 or not _primary_moneyline_sport_gate(row, side, "low_support_contrarian", at):
+                continue
+            pathway, cross_state = "low_ticket_high_money_contrarian", "not_applicable"
+            reason = "11/24 NHL low-ticket, higher-money continuation with both starting goalies confirmed."
+        return {
+            "nov24": True, "side": name, "pathway": pathway,
+            "cross_market_state": cross_state,
+            "whipsaw_state": "recovered" if _truthy(side.get("whipsaw_recovered")) else "none",
+            "market_read": str(side.get("anomaly_chips") or side.get("reaction", "")),
+            "reason": reason,
+            "evidence": {
+                "reaction": str(side.get("reaction", "")), "path": str(side.get("path", "")),
+                "bets_pct": bets, "money_pct": money, "open_line": side.get("open_line", ""),
+                "current_line": side.get("current_line", ""), "confirmed_goalies": list(goalies or ()),
+                "cross_market": cross_state,
+                "confirmation_sources": sources,
+                "observation_count": int(_number(side.get("observation_count")) or 0),
+            },
+        }
+    return None
 
 
 def _qualify_market(

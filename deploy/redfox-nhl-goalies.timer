@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh the Red Fox NHL goalie cache every five minutes
+
+[Timer]
+OnBootSec=90s
+OnUnitInactiveSec=5min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

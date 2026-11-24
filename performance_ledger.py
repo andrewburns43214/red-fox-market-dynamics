@@ -20,6 +20,7 @@ import pandas as pd
 import requests
 
 from anomaly_action_results import _grade_action
+from red_fox_favorite import NOV24_SPORTS, NOV24_VERSION
 
 
 SUPPORTED_SIDE_VALID_FROM = pd.Timestamp("2026-09-07T17:57:58Z")
@@ -46,6 +47,7 @@ FAVORITE_RULE_VERSIONS = frozenset({
     "red_fox_favorite_basketball_v2",
     "red_fox_favorite_ufc_v1",
     "red_fox_favorite_nhl_v1",
+    NOV24_VERSION,
 })
 FAVORITE_KPI_EXCLUSIONS = {
     ("34877187", "SPREAD"): (
@@ -1260,6 +1262,10 @@ def update_performance_ledger(
     _atomic_json({
         **result["favorites"],
         "sports": sport_records,
+        "logic_change_records": {
+            sport: summary(favorite_rows[favorite_sport.eq(sport) & favorite_rows["favorite_rule_version"].eq(NOV24_VERSION)])
+            for sport in sorted(NOV24_SPORTS)
+        },
         "games": favorite_rows.sort_values(
             ["scheduled_start", "event_id"], ascending=False, kind="mergesort",
         )[[

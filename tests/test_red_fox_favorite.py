@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from red_fox_favorite import CONFIG, apply_red_fox_favorites, update_favorite_tracking
+from red_fox_favorite import CONFIG, NOV24_VERSION, apply_red_fox_favorites, update_favorite_tracking
 from build_live_recent import ensure_output_columns
 from audit_directional_integrity import audit as audit_directional_integrity
 
@@ -59,6 +59,57 @@ def result(rows):
 
 def is_favorite(frame, index=0):
     return frame.iloc[index].red_fox_favorite == "true"
+
+
+@pytest.mark.parametrize("sport", ["nba", "ncaab"])
+def test_nov24_one_point_exception_requires_two_fresh_confirmations(sport, tmp_path):
+    def capture(at, ml_direction="TOWARD"):
+        spread = side("Away +3.5", "+3.5 (-110)", open_line="+4.5 (-110)",
+                      reaction="Watch", kpi=False, source_latest_at=at)
+        moneyline = side("Away", "+130", open_line="+150", direction=ml_direction,
+                         price_move=3.5, source_latest_at=at)
+        rows = [
+            market(sport, "SPREAD", pair_for(spread), supported_side=""),
+            market(sport, "MONEYLINE", pair_for(moneyline), supported_side="Away"),
+        ]
+        for row in rows:
+            row["kickoff_iso"] = "2026-11-25T01:00:00Z"
+            row["state_as_of_utc"] = at
+        return apply_red_fox_favorites(pd.DataFrame(rows), as_of=at, nov24_goalies={})
+
+    first = "2026-11-24T22:00:00Z"
+    second = "2026-11-24T22:12:00Z"
+    assert not is_favorite(capture(first, "AGAINST"))
+    provisional = update_favorite_tracking(capture(first), tmp_path, as_of=first)
+    assert not is_favorite(provisional)
+    assert provisional.iloc[0].supported_side == ""
+    official = update_favorite_tracking(capture(second), tmp_path, as_of=second)
+    assert is_favorite(official)
+    assert official.iloc[0].favorite_rule_version == NOV24_VERSION
+    assert official.iloc[0].favorite_side == "Away +3.5"
+
+
+def test_nov24_nhl_requires_confirmed_goalies_and_higher_money(tmp_path):
+    def capture(at, goalies, *, money=65, cache_at=None):
+        away = side("Away", "-115", open_line="+105", bets=35, money=money,
+                    reaction="Watch", kpi=False, price_move=4.0, source_latest_at=at)
+        home = side("Home", "-105", bets=65, money=100-money,
+                    reaction="Watch", direction="AGAINST", kpi=False)
+        row = market("nhl", "MONEYLINE", [away, home], supported_side="")
+        row.update(kickoff_iso="2026-11-25T01:00:00Z", state_as_of_utc=at)
+        cache = {"20261124": {"observed_at": cache_at or at, "games": {"away @ home": goalies}}}
+        return apply_red_fox_favorites(pd.DataFrame([row]), as_of=at, nov24_goalies=cache)
+
+    first = "2026-11-24T22:00:00Z"
+    second = "2026-11-24T22:16:00Z"
+    assert not is_favorite(capture(first, []))
+    assert not is_favorite(capture(first, ["Goalie A", "Goalie B"], money=49))
+    assert not is_favorite(capture(second, ["Goalie A", "Goalie B"], cache_at=first))
+    assert not is_favorite(update_favorite_tracking(capture(first, ["Goalie A", "Goalie B"]), tmp_path, as_of=first))
+    official = update_favorite_tracking(capture(second, ["Goalie A", "Goalie B"]), tmp_path, as_of=second)
+    assert is_favorite(official)
+    assert official.iloc[0].favorite_rule_version == NOV24_VERSION
+    assert official.iloc[0].supported_side == "Away"
 
 
 def active_primary_moneyline(sport, candidate, opponent=None, **kwargs):

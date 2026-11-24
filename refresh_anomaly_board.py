@@ -16,6 +16,7 @@ from cross_market_integrity import CROSS_MARKET_COLUMNS, apply_cross_market_inte
 from cross_market_split import CROSS_MARKET_SPLIT_COLUMNS, apply_cross_market_split
 from main import infer_market_type, normalize_side_key
 from red_fox_favorite import FAVORITE_COLUMNS, REVIEW_BOARD_COLUMNS, apply_red_fox_favorites, update_favorite_tracking
+from favorite_nhl_goalies import read_goalies
 
 
 DATA = Path(os.environ.get("REDFOX_DATA_DIR", "data"))
@@ -656,7 +657,7 @@ def _refresh(coverage):
     board = select_market_leaders(board)
     board = apply_cross_market_integrity(board, history, as_of=newest_snapshot)
     board = apply_cross_market_split(board)
-    board = apply_red_fox_favorites(board, as_of=newest_snapshot)
+    board = apply_red_fox_favorites(board, as_of=newest_snapshot, nov24_goalies=read_goalies(DATA))
     # Persist the source observation time used for each published market.  The
     # downstream freeze worker can then select/validate the final state by
     # source time rather than by the minute at which its timer happens to run.
