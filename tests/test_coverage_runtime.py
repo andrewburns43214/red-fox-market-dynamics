@@ -14,6 +14,27 @@ from main import (
     validate_snapshot_rows,
 )
 from publication_coverage import CoverageStore, PublicationCoverage, ScrapeCoverage, keys
+
+
+def test_coverage_accounts_for_fresh_ncaab_reschedule_only(tmp_path):
+    now = pd.Timestamp("2026-11-24T22:38:52Z")
+    publication = PublicationCoverage(tmp_path, now)
+    inventory = [dict(
+        sport="ncaab", game_id=gid, market_display="SPREAD",
+        dk_start_iso="2026-11-24T22:30:00Z",
+    ) for gid in ("revised", "stale")]
+    publication.store.update(inventory, publication.run_id, "CAPTURED")
+    board = pd.DataFrame([dict(
+        sport="ncaab", game_id=gid, market_display="SPREAD",
+        kickoff_iso="2026-11-24T23:00:00Z", state_as_of_utc=seen, data_badge="Clean",
+    ) for gid, seen in (("revised", "2026-11-24T22:38:47Z"), ("stale", "2026-11-24T22:29:00Z"))])
+    path = tmp_path / "anomaly_board.csv"
+    board.to_csv(path, index=False)
+    summary = publication.publish(board, path, lambda rows, **_: rows)
+    assert summary["publication_conflicts"] == 1
+    coverage = pd.read_csv(tmp_path / "publication_coverage.csv").set_index("game_id")
+    assert coverage.loc["revised", "state"] == "PUBLISHED"
+    assert coverage.loc["stale", "state"] == "STARTED"
 from refresh_anomaly_board import filter_publication_eligible_markets, latest_synchronized_market_rows
 from coverage_monitor import check
 

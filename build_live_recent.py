@@ -141,6 +141,7 @@ SCOREBOARD_TEAM_ALIASES = {
     "mvsu": "mississippi valley st",
     "southern university": "southern",
     "ulm": "ul monroe",
+    "uic": "illinois chicago",
 }
 COMPOUND_NICKNAMES = (
     "blue jackets", "blue jays", "golden knights", "maple leafs",
@@ -248,12 +249,36 @@ def fetch_scoreboard(sport: str, now: datetime) -> tuple[dict[str, list[dict[str
             for key in keys:
                 if key:
                     games.setdefault(key, []).append(item)
+            if sport == "ncaab" and competition.get("neutralSite") is True:
+                # Neutral-site home/away can be reversed between providers.
+                # Index exact team-pair aliases only and keep score orientation
+                # aligned with the display row, not the ESPN designation.
+                reverse = dict(item, score_away=item["score_home"], score_home=item["score_away"])
+                for key in provider_game_keys(home_team, away_team, sport):
+                    games.setdefault("neutral:" + key, []).append(reverse)
     return games, "available" if fetched else "unavailable"
 
 
 def scoreboard(sport: str, now: datetime) -> dict[str, list[dict[str, str]]]:
     """Backward-compatible score map used by existing diagnostics."""
     return fetch_scoreboard(sport, now)[0]
+
+
+def match_live_score(scores, sport, matchup, kickoff):
+    if pd.isna(kickoff):
+        return None
+    key = game_key(matchup, sport)
+    ordered = scores.get(key, [])
+    if not ordered and sport == "ncaab":
+        neutral = [
+            item for item in scores.get("neutral:" + key, [])
+            if pd.notna(when := pd.to_datetime(item.get("event_time"), errors="coerce", utc=True))
+            and abs(when - kickoff) <= pd.Timedelta(minutes=90)
+        ]
+        if neutral:
+            return neutral[0] if len(neutral) == 1 else None
+    candidates = ordered or scores.get(signature_game_key(matchup, sport), [])
+    return min(candidates, key=lambda item: abs(pd.to_datetime(item["event_time"], errors="coerce", utc=True) - kickoff)) if candidates else None
 
 
 def read_csv_or_empty(path: Path) -> pd.DataFrame:
@@ -913,11 +938,8 @@ def main(scores_only: bool = False) -> None:
             for index in indices:
                 sport_key = str(sport).lower()
                 matchup = live.at[index, "game"]
-                candidates = scores.get(game_key(matchup, sport_key), [])
-                if not candidates:
-                    candidates = scores.get(signature_game_key(matchup, sport_key), [])
                 kickoff = pd.to_datetime(live.at[index, "kickoff_iso"], errors="coerce", utc=True)
-                score = min(candidates, key=lambda item: abs(pd.to_datetime(item["event_time"], errors="coerce", utc=True) - kickoff)) if candidates and pd.notna(kickoff) else None
+                score = match_live_score(scores, sport_key, matchup, kickoff)
                 if score:
                     previous_state = _text(live.at[index, "score_state"] if "score_state" in live else "").lower()
                     for column, value in score.items():

@@ -222,6 +222,15 @@ class PublicationCoverage:
     def publish(self, board, board_path, window_filter):
         published = keys(board)
         inventory = list(self.store.inventory())
+        delayed_ncaab = {}
+        if {"sport", "kickoff_iso", "state_as_of_utc"}.issubset(board.columns):
+            for row in board.loc[board["sport"].eq("ncaab")].to_dict("records"):
+                start = pd.to_datetime(row["kickoff_iso"], errors="coerce", utc=True)
+                seen = pd.to_datetime(row["state_as_of_utc"], errors="coerce", utc=True)
+                if (pd.notna(start) and pd.notna(seen)
+                        and self.now < start and self.now - pd.Timedelta(minutes=10) <= seen <= self.now
+                        and str(row.get("data_badge", "")).lower() != "retained"):
+                    delayed_ncaab[tuple(str(row.get(k, "")) for k in KEYS)] = (start, seen)
         # Publication windows are vectorized by contract. Calling the filter
         # once per discovered market rebuilt pandas objects thousands of times
         # and consumed nearly half of the live publisher's watchdog budget.
@@ -245,9 +254,14 @@ class PublicationCoverage:
         for position, item in enumerate(inventory):
             key = tuple(str(item.get(k, "")) for k in KEYS)
             kickoff = kickoffs.iloc[position] if position < len(kickoffs) else pd.NaT
+            effective_kickoff = kickoff
+            if key in delayed_ncaab and pd.notna(kickoff) and not item.get("capture_exclusion_reason"):
+                revised, seen = delayed_ncaab[key]
+                if kickoff <= self.now - pd.Timedelta(minutes=5) and kickoff < seen < revised <= kickoff + pd.Timedelta(hours=2):
+                    effective_kickoff = revised
             supported = key[0] in {"nfl", "ncaaf", "nba", "ncaab", "mlb", "nhl", "ufc"} and key[2] in {"MONEYLINE", "SPREAD", "TOTAL"}
             in_window = position in in_window_positions
-            pregame = bool(pd.notna(kickoff) and kickoff > self.now - pd.Timedelta(minutes=5))
+            pregame = bool(pd.notna(effective_kickoff) and effective_kickoff > self.now - pd.Timedelta(minutes=5))
             enabled = key[0] in enabled_sports
             league_verified = item.get("discovery_basis") != "RAW_DK_HEADER" or item.get("league_identified") is True
             target = supported and enabled and league_verified and in_window and pregame
@@ -276,6 +290,8 @@ class PublicationCoverage:
                       "last_capture_at": self.last_captures.get(key, item.get("last_capture_at", "")),
                       "last_complete_pair_at": self.last_pairs.get(key, item.get("last_complete_pair_at", "")),
                       "publication_run_id": self.run_id, "as_of": self.now.isoformat()}
+            if pd.notna(effective_kickoff) and effective_kickoff != kickoff:
+                record["publication_kickoff_iso"] = effective_kickoff.isoformat()
             records.append(record)
         frame = pd.DataFrame(records)
         if not frame.empty:

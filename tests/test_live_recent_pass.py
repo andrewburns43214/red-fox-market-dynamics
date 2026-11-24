@@ -13,6 +13,35 @@ ROOT = Path(__file__).resolve().parents[1]
 BOARD = (ROOT / "site" / "board.html").read_text(encoding="utf-8")
 
 
+def test_neutral_ncaab_matches_reversed_teams_and_swaps_scores(monkeypatch):
+    event = {
+        "id": "42", "date": "2026-11-24T18:30:00Z",
+        "status": {"type": {"state": "post"}},
+        "competitions": [{
+            "neutralSite": True,
+            "competitors": [
+                {"homeAway": "home", "team": {"location": "Rice", "displayName": "Rice Owls"}, "score": "62"},
+                {"homeAway": "away", "team": {"abbreviation": "UIC", "displayName": "UIC Flames"}, "score": "75"},
+            ],
+        }],
+    }
+    class Response:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {"events": [event]}
+
+    monkeypatch.setattr(live.requests, "get", lambda *args, **kwargs: Response())
+    at = pd.Timestamp("2026-11-24T18:30:00Z")
+    scores, _ = live.fetch_scoreboard("ncaab", at.to_pydatetime())
+    result = live.match_live_score(scores, "ncaab", "Rice @ Illinois Chicago", at)
+    assert (result["score_away"], result["score_home"]) == ("62", "75")
+    assert live.match_live_score(scores, "ncaab", "Rice @ Illinois Chicago", at + pd.Timedelta(hours=2)) is None
+    event["competitions"][0]["neutralSite"] = False
+    scores, _ = live.fetch_scoreboard("ncaab", at.to_pydatetime())
+    assert live.match_live_score(scores, "ncaab", "Rice @ Illinois Chicago", at) is None
+
+
 def test_provider_location_and_abbreviation_keys_cover_verified_cfb_mismatches():
     cases = [
         ("Western Kentucky @ Nevada", {"location": "Western Kentucky", "displayName": "Western Kentucky Hilltoppers"}, {"location": "Nevada", "displayName": "Nevada Wolf Pack"}),
