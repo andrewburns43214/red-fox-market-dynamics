@@ -9,5 +9,8 @@ ExecStart=/usr/bin/flock -n /var/lock/redfox-performance.lock /opt/red-fox-marke
 User=root
 Nice=15
 IOSchedulingClass=idle
-TimeoutStartSec=90
+# Production rebuilds can legitimately exceed 90 seconds while the frozen
+# Favorite shadow ledger is compacted. Keep the watchdog bounded, but allow a
+# complete atomic write instead of repeatedly killing it near completion.
+TimeoutStartSec=180
 
