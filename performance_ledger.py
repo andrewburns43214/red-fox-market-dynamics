@@ -1260,6 +1260,12 @@ def update_performance_ledger(
     _atomic_json({
         **result["favorites"],
         "sports": sport_records,
+        "games": favorite_rows.sort_values(
+            ["scheduled_start", "event_id"], ascending=False, kind="mergesort",
+        )[[
+            "sport", "game", "scheduled_start", "market", "side", "decision_line",
+            "decision_price", "closing_line", "closing_price", "final_score", "grade",
+        ]].fillna("").to_dict("records"),
         "tracking_start_date": FAVORITE_TRACKING_START_DATE,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }, data_dir / "favorite_performance.json")

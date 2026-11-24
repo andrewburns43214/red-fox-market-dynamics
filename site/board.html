@@ -1224,6 +1224,32 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .signal-guide-btn { display:none; align-items:center; gap:5px; border:1px solid var(--acc-brd); border-radius:999px; padding:5px 8px; background:var(--acc-bg); color:var(--accent); font:700 10px var(--sans); cursor:pointer; }
 .signal-guide-overlay { display:none; position:fixed; inset:0; z-index:1000; background:rgba(12,26,35,.42); align-items:flex-end; justify-content:center; }
 .signal-guide-overlay.open { display:flex; }
+.favorite-guide-sport[data-favorite-sport]{cursor:pointer;text-align:left;font-family:inherit}
+.favorite-guide-sport[data-favorite-sport]:hover{border-color:var(--text3)}
+.favorite-guide-sport[data-favorite-sport]:focus-visible,.favorite-history button:focus-visible,.favorite-history-scroll:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.favorite-history{margin:auto;padding:0;width:min(860px,calc(100% - 28px));max-width:none;max-height:calc(100dvh - 28px);border:1px solid var(--border);border-radius:16px;background:var(--bg);color:var(--text);font-family:var(--sans)}
+.favorite-history[open]{display:flex;flex-direction:column}
+.favorite-history::backdrop{background:rgba(12,26,35,.5)}
+.favorite-history-header,.favorite-history-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 14px}
+.favorite-history-header h2{margin:0;font:800 17px/1.2 var(--sans)}
+.favorite-history-header p{margin:4px 0 0;color:var(--text3);font-size:12px}
+.favorite-history button{min-width:44px;min-height:44px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text);font:800 18px/1 var(--sans);cursor:pointer}
+.favorite-history button:disabled{opacity:.4;cursor:default}
+.favorite-history-scroll{overflow:auto;overscroll-behavior:contain;min-height:0;scroll-padding-top:32px}
+.favorite-history table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;text-align:left;font-size:12px;line-height:1.3}
+.favorite-history th,.favorite-history td{padding:8px 10px;white-space:normal;overflow-wrap:anywhere;border-bottom:1px solid var(--border)}
+.favorite-history th{position:sticky;top:0;background:var(--bg2);z-index:1}
+.favorite-history th:nth-child(1){width:31%}.favorite-history th:nth-child(2){width:22%}.favorite-history th:nth-child(3){width:19%}
+.favorite-history td small{display:block;margin-top:2px;color:var(--text3);font-size:inherit}
+.favorite-history td strong[data-grade="W"]{color:var(--green)}.favorite-history td strong[data-grade="L"]{color:var(--red)}
+.favorite-history-controls{justify-content:flex-end}.favorite-history-controls[hidden],.favorite-history-scroll[hidden]{display:none}
+.favorite-history-empty{padding:14px;margin:0}
+@media(max-width:520px){
+  .favorite-history{width:calc(100% - 12px);max-height:calc(100dvh - 18px)}
+  .favorite-history-header,.favorite-history-controls{padding:6px 8px}
+  .favorite-history table{font-size:11px}
+  .favorite-history th,.favorite-history td{padding:6px 4px}
+}
 .signal-guide-sheet { width:min(680px,100%); max-height:min(78vh,760px); overflow:auto; background:#fff; border-radius:16px 16px 0 0; box-shadow:0 -20px 60px rgba(12,26,35,.24); }
 .signal-guide-head { position:sticky; top:0; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px 12px; background:#fff; border-bottom:1px solid var(--border); }
 .signal-guide-title { font-size:15px; font-weight:800; color:var(--text); }
@@ -2066,6 +2092,23 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
     </section>
   </div>
   <div class="red-fox-tooltip favorite-badge-tooltip" id="favorite-badge-tooltip" role="tooltip" hidden><strong>Red Fox Favorite</strong><span>Matches Red Fox’s preferred wager criteria based on market support, movement, price/number, and data quality.</span></div>
+  <dialog class="favorite-history" id="favorite-history" aria-labelledby="favorite-history-title">
+    <div class="favorite-history-header">
+      <div><h2 id="favorite-history-title"></h2><p id="favorite-history-record"></p></div>
+      <button type="button" id="favorite-history-close" aria-label="Close sport history" autofocus>&times;</button>
+    </div>
+    <p class="favorite-history-empty" id="favorite-history-empty" hidden></p>
+    <div class="favorite-history-scroll" id="favorite-history-scroll" tabindex="0" role="region" aria-label="Official Red Fox Favorite games">
+      <table>
+        <thead><tr><th scope="col">Game / date</th><th scope="col">Favorite</th><th scope="col">Market / odds</th><th scope="col">Result</th></tr></thead>
+        <tbody id="favorite-history-rows"></tbody>
+      </table>
+    </div>
+    <div class="favorite-history-controls" id="favorite-history-controls" hidden>
+      <button type="button" id="favorite-history-up" aria-label="Scroll games up">&uarr;</button>
+      <button type="button" id="favorite-history-down" aria-label="Scroll games down">&darr;</button>
+    </div>
+  </dialog>
   <div class="red-fox-tooltip cross-market-split-tooltip" id="cross-market-split-tooltip" role="tooltip" hidden><strong>Cross-Market Split</strong><span>Spread and Moneyline each have a confirmed supported side, and those sides are different teams.</span></div>
   <div class="red-fox-tooltip integrity-badge-tooltip" id="integrity-badge-tooltip" role="tooltip" hidden><strong>Cross-Market Mismatch</strong><span>The synchronized Spread and Moneyline imply materially different market positions.</span></div>
   <div class="red-fox-tooltip signal-chip-tooltip" id="signal-chip-tooltip" role="tooltip" hidden><strong id="signal-chip-tooltip-title"></strong><span id="signal-chip-tooltip-body"></span></div>
@@ -5617,7 +5660,8 @@ function normalizeFavoritePerformance(payload){
     if(b.winPercentage===null) return -1;
     return b.winPercentage-a.winPercentage||a.label.localeCompare(b.label);
   });
-  return {wins,losses,pushes,winPercentage:gradedDecisions?wins/gradedDecisions*100:0,trackingStartDate,sports};
+  const games=Array.isArray(payload.games)?payload.games.filter(row=>row&&['W','L','Push'].includes(row.grade)):null;
+  return {wins,losses,pushes,winPercentage:gradedDecisions?wins/gradedDecisions*100:0,trackingStartDate,sports,games};
 }
 function favoritePerformanceDate(value){
   const parsed=new Date(value+'T12:00:00Z');
@@ -5638,7 +5682,60 @@ function favoritePerformanceText(){
 }
 function favoritePerformanceSportCards(text){
   if(!text||!text.sports.length) return '';
-  return '<div class="favorite-guide-sports-title">Record by sport</div><div class="favorite-guide-sports">'+text.sports.map(item=>`<div class="favorite-guide-sport"><span class="favorite-guide-sport-name">${escHtml(item.label)}</span><span class="favorite-guide-sport-record">${escHtml(item.record)}</span><span class="favorite-guide-sport-rate">${escHtml(item.rate)}</span></div>`).join('')+'</div>';
+  return '<div class="favorite-guide-sports-title">Record by sport</div><div class="favorite-guide-sports">'+text.sports.map(item=>`<button class="favorite-guide-sport" type="button" data-favorite-sport="${escHtml(item.sport)}" aria-haspopup="dialog" aria-label="${escHtml(item.label+' '+item.record+', view games')}"><span class="favorite-guide-sport-name">${escHtml(item.label)}</span><span class="favorite-guide-sport-record">${escHtml(item.record)}</span><span class="favorite-guide-sport-rate">${escHtml(item.rate)}</span></button>`).join('')+'</div>';
+}
+function setupFavoriteHistory(){
+  const dialog=document.getElementById('favorite-history');
+  const scroll=document.getElementById('favorite-history-scroll');
+  const controls=document.getElementById('favorite-history-controls');
+  const up=document.getElementById('favorite-history-up');
+  const down=document.getElementById('favorite-history-down');
+  let selectedSport='';
+  const syncScroll=()=>{
+    const end=scroll.scrollHeight-scroll.clientHeight;
+    controls.hidden=scroll.hidden||end<=1;
+    up.disabled=scroll.scrollTop<=1;
+    down.disabled=scroll.scrollTop>=end-1;
+  };
+  const quote=(line,price)=>[line,price].filter(Boolean).join(' @ ')||'—';
+  const dateFormat=new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'America/New_York'});
+  const labels={W:'Win',L:'Loss',Push:'Push'};
+  document.getElementById('signal-guide-body').addEventListener('click',event=>{
+    const button=event.target.closest('[data-favorite-sport]');
+    if(!button||dialog.open) return;
+    selectedSport=button.dataset.favoriteSport;
+    const sport=favoritePerformanceText()?.sports.find(item=>item.sport===selectedSport);
+    if(!sport) return;
+    const games=favoritePerformance.games;
+    const rows=games?.filter(row=>normSportKey(row.sport)===selectedSport)||[];
+    document.getElementById('favorite-history-title').textContent=sport.label+' Favorite history';
+    document.getElementById('favorite-history-record').textContent=sport.record+' · '+sport.rate;
+    document.getElementById('favorite-history-rows').innerHTML=rows.map(row=>{
+      const date=new Date(row.scheduled_start||'');
+      const day=Number.isNaN(date.getTime())?'—':dateFormat.format(date);
+      const market=String(row.market||'').toUpperCase();
+      return `<tr><td>${escHtml(row.game||'—')}<small>${escHtml(day)}</small></td><td>${escHtml(row.side||'—')}</td><td>${escHtml(market==='MONEYLINE'?'Moneyline':market==='SPREAD'?'Spread':market||'—')}<small>Entry ${escHtml(quote(row.decision_line,row.decision_price))}<br>Close ${escHtml(quote(row.closing_line,row.closing_price))}</small></td><td><strong data-grade="${escHtml(row.grade)}">${escHtml(labels[row.grade])}</strong><small>${escHtml(row.final_score||'—')}</small></td></tr>`;
+    }).join('');
+    const empty=document.getElementById('favorite-history-empty');
+    scroll.hidden=!rows.length;
+    empty.hidden=Boolean(rows.length);
+    empty.textContent=games?'No graded Favorites for this sport.':'Game details are unavailable. Try again after the next refresh.';
+    controls.hidden=true;
+    dialog.showModal();
+    scroll.scrollTop=0;
+    syncScroll();
+  });
+  document.getElementById('favorite-history-close').addEventListener('click',()=>dialog.close());
+  dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});
+  dialog.addEventListener('close',()=>{
+    Array.from(document.querySelectorAll('[data-favorite-sport]'))
+      .find(button=>button.dataset.favoriteSport===selectedSport)?.focus();
+  });
+  const page=direction=>scroll.scrollBy({top:direction*Math.max(44,scroll.clientHeight-40),behavior:'instant'});
+  up.addEventListener('click',()=>page(-1));
+  down.addEventListener('click',()=>page(1));
+  scroll.addEventListener('scroll',syncScroll,{passive:true});
+  if(typeof ResizeObserver!=='undefined') new ResizeObserver(syncScroll).observe(scroll);
 }
 function favoritePerformanceFooterContent(text){
   if(!text) return '';
@@ -5673,6 +5770,7 @@ async function loadFavoritePerformance(){
   }catch(e){}
 }
 
+setupFavoriteHistory();
 loadAll();
 loadFavoritePerformance();
 setInterval(updateStats, 1000);

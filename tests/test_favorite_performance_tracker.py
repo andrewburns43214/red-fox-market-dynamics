@@ -18,7 +18,17 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
             "favorite_qualified": "yes",
             "grade": grade,
             "sport": ["nfl", "nfl", "nba", "nfl"][index],
+            "game": f"Game {index}",
+            "scheduled_start": f"2026-09-{index+10}T20:00:00Z",
+            "side": "Away +3",
+            "market": "SPREAD",
+            "decision_line": "+3",
+            "decision_price": "-110",
         })
+    rows.extend([
+        {"ledger_id": "excluded", "favorite_qualified": "no", "grade": "W", "sport": "nfl"},
+        {"ledger_id": "pending", "favorite_qualified": "yes", "grade": "", "sport": "nfl"},
+    ])
     pd.DataFrame(rows).to_csv(tmp_path / "performance_ledger.csv", index=False)
 
     update_performance_ledger(tmp_path, frozen_sources=[], attach_results=False)
@@ -39,6 +49,11 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
     assert nba["wins"] == 0
     assert nba["losses"] == 1
     assert nba["win_rate_excluding_pushes"] == 0.0
+    assert [row["game"] for row in payload["games"]] == ["Game 3", "Game 2", "Game 1", "Game 0"]
+    assert [row["grade"] for row in payload["games"] if row["sport"] == "nfl"] == ["Push", "W", "W"]
+    assert payload["games"][0]["decision_price"] == "-110"
+    assert "ledger_id" not in payload["games"][0]
+    assert "score_provider_event_id" not in payload["games"][0]
 
 
 def test_tracker_uses_one_shared_payload_for_desktop_mobile_and_guide():
