@@ -668,7 +668,11 @@ def _shadow_kickoff_map(path: Path, keys: set[tuple[str, str, str]]) -> dict[tup
     return starts
 
 
-def _tracking_fallback_records(history: pd.DataFrame, shadow_path: Path) -> list[dict]:
+def _tracking_fallback_records(
+    history: pd.DataFrame,
+    shadow_path: Path,
+    represented_keys: set[tuple[str, str, str]] | None = None,
+) -> list[dict]:
     """Preserve displayed Favorites omitted from the final Live & Recent handoff.
 
     The final explicit tracking state still controls official Favorite status;
@@ -684,6 +688,9 @@ def _tracking_fallback_records(history: pd.DataFrame, shadow_path: Path) -> list
         (_text(row.get("sport")).lower(), _text(row.get("game_id")), _text(row.get("market_display")).upper())
         for _, row in qualified.iterrows()
     }
+    qualified_keys -= represented_keys or set()
+    if not qualified_keys:
+        return []
     kickoffs = _shadow_kickoff_map(shadow_path, qualified_keys)
     records: list[dict] = []
     for key in sorted(qualified_keys):
@@ -1191,7 +1198,17 @@ def update_performance_ledger(
         frame = _apply_retroactive_favorite_inclusions(_read_csv(Path(source)))
         source_frames.append(frame)
         candidates.extend(_frozen_records(frame, history, str(Path(source))))
-    candidates.extend(_tracking_fallback_records(history, data_dir / "red_fox_favorite_shadow.csv"))
+    represented_keys = {
+        (_text(row.get("sport")).lower(), _text(row.get("event_id")), _text(row.get("market")).upper())
+        for _, row in ledger.iterrows()
+    }
+    represented_keys.update(
+        (_text(record.get("sport")).lower(), _text(record.get("event_id")), _text(record.get("market")).upper())
+        for record in candidates
+    )
+    candidates.extend(_tracking_fallback_records(
+        history, data_dir / "red_fox_favorite_shadow.csv", represented_keys,
+    ))
     existing_ids = set(ledger.get("ledger_id", pd.Series(dtype=str)).astype(str))
     new_records = []
     seen_ids = set(existing_ids)
