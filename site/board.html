@@ -5686,6 +5686,16 @@ function favoritePerformanceSportCards(text){
   if(!text||!text.sports.length) return '';
   return '<div class="favorite-guide-sports-title">Record by sport</div><div class="favorite-guide-sports">'+text.sports.map(item=>`<button class="favorite-guide-sport" type="button" data-favorite-sport="${escHtml(item.sport)}" aria-haspopup="dialog" aria-label="${escHtml(item.label+' '+item.record+', view games')}"><span class="favorite-guide-sport-name">${escHtml(item.label)}</span><span class="favorite-guide-sport-record">${escHtml(item.record)}</span><span class="favorite-guide-sport-rate">${escHtml(item.rate)}</span></button>`).join('')+'</div>';
 }
+function favoriteHistoryResult(row){
+  const result=String(row.final_score||'');
+  const score=result.match(/^(.+?)(\s+\d+(?:\.\d+)?\s+[-–—]\s+)(.+?)(\s+\d+(?:\.\d+)?)$/);
+  if(!score) return result||'—';
+  const key=name=>name.trim().toLowerCase().replace(/\s+st\.?$/,' state').replace(/^pitt$/,'pittsburgh');
+  const teams=String(row.game||'').split(/\s+@\s+/);
+  if(teams.length!==2||key(teams[0])===key(teams[1])) return result;
+  const teamName=name=>teams.find(team=>key(team)===key(name))||name;
+  return teamName(score[1])+score[2]+teamName(score[3])+score[4];
+}
 function setupFavoriteHistory(){
   const dialog=document.getElementById('favorite-history');
   const scroll=document.getElementById('favorite-history-scroll');
@@ -5723,7 +5733,7 @@ function setupFavoriteHistory(){
       const date=new Date(row.scheduled_start||'');
       const day=Number.isNaN(date.getTime())?'—':dateFormat.format(date);
       const market=String(row.market||'').toUpperCase();
-      return `<tr><td>${escHtml(row.game||'—')}<small>${escHtml(day)}</small></td><td>${escHtml(row.side||'—')}</td><td>${escHtml(market==='MONEYLINE'?'Moneyline':market==='SPREAD'?'Spread':market||'—')}<small>Entry ${escHtml(quote(row.decision_line,row.decision_price))}<br>Close ${escHtml(quote(row.closing_line,row.closing_price))}</small></td><td><strong data-grade="${escHtml(row.grade)}">${escHtml(labels[row.grade])}</strong><small>${escHtml(row.final_score||'—')}</small></td></tr>`;
+      return `<tr><td>${escHtml(row.game||'—')}<small>${escHtml(day)}</small></td><td>${escHtml(row.side||'—')}</td><td>${escHtml(market==='MONEYLINE'?'Moneyline':market==='SPREAD'?'Spread':market||'—')}<small>Entry ${escHtml(quote(row.decision_line,row.decision_price))}<br>Close ${escHtml(quote(row.closing_line,row.closing_price))}</small></td><td><strong data-grade="${escHtml(row.grade)}">${escHtml(labels[row.grade])}</strong><small>${escHtml(favoriteHistoryResult(row))}</small></td></tr>`;
     }).join('');
     const empty=document.getElementById('favorite-history-empty');
     scroll.hidden=!rows.length;
