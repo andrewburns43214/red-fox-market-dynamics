@@ -22,8 +22,12 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
             "scheduled_start": f"2026-09-{index+10}T20:00:00Z",
             "side": "Away +3",
             "market": "SPREAD",
+            "open_line": "+4",
+            "open_price": "-108",
             "decision_line": "+3",
             "decision_price": "-110",
+            "bets_pct": "0" if index == 3 else "35.0",
+            "money_pct": "61" if index != 3 else "",
         })
     rows.extend([
         {"ledger_id": "excluded", "favorite_qualified": "no", "grade": "W", "sport": "nfl"},
@@ -52,6 +56,10 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
     assert [row["game"] for row in payload["games"]] == ["Game 3", "Game 2", "Game 1", "Game 0"]
     assert [row["grade"] for row in payload["games"] if row["sport"] == "nfl"] == ["Push", "W", "W"]
     assert payload["games"][0]["decision_price"] == "-110"
+    assert (payload["games"][0]["open_line"], payload["games"][0]["open_price"]) == ("+4", "-108")
+    assert payload["games"][0]["bets_pct"] == "0"
+    assert payload["games"][0]["money_pct"] == ""
+    assert payload["games"][2]["money_pct"] == "61"
     assert "ledger_id" not in payload["games"][0]
     assert "score_provider_event_id" not in payload["games"][0]
 
