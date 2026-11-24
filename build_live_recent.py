@@ -557,20 +557,20 @@ def favorite_handoff_states(
     if tracking is not None and not tracking.empty and not favorite.empty:
         history = tracking.copy()
         history["_recorded_at"] = utc_series(history.get("recorded_at", ""), history.index)
+        identity_columns = ["sport", "game_id", "market_display"]
+        canonical_keys = history.reindex(columns=identity_columns).fillna("").astype(str)
+        history["_key"] = list(canonical_keys.itertuples(index=False, name=None))
+        by_market = dict(tuple(history.groupby("_key", sort=False)))
+        missing_history = history.iloc[0:0]
         keep = []
         for _, candidate in favorite.iterrows():
             kickoff = pd.to_datetime(candidate.get("kickoff_iso", ""), errors="coerce", utc=True)
-            scoped = history.copy()
-            for column in ("sport", "game_id", "market_display"):
-                scoped = scoped[
-                    scoped.get(column, pd.Series("", index=scoped.index)).astype(str)
-                    .eq(str(candidate.get(column, "")))
-                ]
+            key = tuple(str(candidate.get(column, "")) for column in identity_columns)
+            scoped = by_market.get(key, missing_history)
             if pd.notna(kickoff):
                 scoped = scoped[scoped["_recorded_at"].notna() & (scoped["_recorded_at"] <= kickoff)]
             scoped = scoped.sort_values("_recorded_at", kind="mergesort")
             latest_qualified = scoped.empty or str(scoped.iloc[-1].get("favorite_state", "")) == "qualified"
-            key = tuple(str(candidate.get(column, "")) for column in ("sport", "game_id", "market_display"))
             raw_row = raw_lookup.get(key)
             confirmed_side = None if latest_qualified else _confirm_favorite_with_final_raw_market(candidate, raw_row)
             if confirmed_side is not None and raw_row is not None:
