@@ -5617,25 +5617,7 @@ function normalizeFavoritePerformance(payload){
     if(b.winPercentage===null) return -1;
     return b.winPercentage-a.winPercentage||a.label.localeCompare(b.label);
   });
-  const displayedPayload=payload.ever_displayed||{};
-  const displayedWins=Math.max(0,Number.parseInt(displayedPayload.wins,10)||0);
-  const displayedLosses=Math.max(0,Number.parseInt(displayedPayload.losses,10)||0);
-  const displayedPushes=Math.max(0,Number.parseInt(displayedPayload.pushes,10)||0);
-  const displayedDecisions=displayedWins+displayedLosses;
-  const displayedSports=(Array.isArray(displayedPayload.sports)?displayedPayload.sports:[]).map(item=>{
-    const sport=normSportKey(item&&item.sport), label=String(item&&item.label||sportLabel(sport)).trim();
-    const sportWins=Math.max(0,Number.parseInt(item&&item.wins,10)||0), sportLosses=Math.max(0,Number.parseInt(item&&item.losses,10)||0), sportPushes=Math.max(0,Number.parseInt(item&&item.pushes,10)||0);
-    const sportDecisions=sportWins+sportLosses;
-    return {sport,label,wins:sportWins,losses:sportLosses,pushes:sportPushes,gradedDecisions:sportDecisions,winPercentage:sportDecisions?sportWins/sportDecisions*100:null};
-  }).filter(item=>item.sport&&item.label).sort((a,b)=>{
-    if(a.winPercentage===null) return b.winPercentage===null?a.label.localeCompare(b.label):1;
-    if(b.winPercentage===null) return -1;
-    return b.winPercentage-a.winPercentage||a.label.localeCompare(b.label);
-  });
-  return {
-    wins,losses,pushes,winPercentage:gradedDecisions?wins/gradedDecisions*100:0,trackingStartDate,sports,
-    everDisplayed:{wins:displayedWins,losses:displayedLosses,pushes:displayedPushes,winPercentage:displayedDecisions?displayedWins/displayedDecisions*100:0,sports:displayedSports},
-  };
+  return {wins,losses,pushes,winPercentage:gradedDecisions?wins/gradedDecisions*100:0,trackingStartDate,sports};
 }
 function favoritePerformanceDate(value){
   const parsed=new Date(value+'T12:00:00Z');
@@ -5652,24 +5634,15 @@ function favoritePerformanceText(){
       record:`${item.wins}-${item.losses}-${item.pushes}`,
       rate:item.winPercentage===null?'—':item.winPercentage.toFixed(1)+'%',
     })),
-    everDisplayed:{
-      record:`${favoritePerformance.everDisplayed.wins}-${favoritePerformance.everDisplayed.losses}-${favoritePerformance.everDisplayed.pushes}`,
-      rate:favoritePerformance.everDisplayed.winPercentage.toFixed(1)+'%',
-      sports:favoritePerformance.everDisplayed.sports.map(item=>({
-        ...item,
-        record:`${item.wins}-${item.losses}-${item.pushes}`,
-        rate:item.winPercentage===null?'—':item.winPercentage.toFixed(1)+'%',
-      })),
-    },
   };
 }
-function favoritePerformanceSportCards(text,title='Record by sport'){
+function favoritePerformanceSportCards(text){
   if(!text||!text.sports.length) return '';
-  return '<div class="favorite-guide-sports-title">'+escHtml(title)+'</div><div class="favorite-guide-sports">'+text.sports.map(item=>`<div class="favorite-guide-sport"><span class="favorite-guide-sport-name">${escHtml(item.label)}</span><span class="favorite-guide-sport-record">${escHtml(item.record)}</span><span class="favorite-guide-sport-rate">${escHtml(item.rate)}</span></div>`).join('')+'</div>';
+  return '<div class="favorite-guide-sports-title">Record by sport</div><div class="favorite-guide-sports">'+text.sports.map(item=>`<div class="favorite-guide-sport"><span class="favorite-guide-sport-name">${escHtml(item.label)}</span><span class="favorite-guide-sport-record">${escHtml(item.record)}</span><span class="favorite-guide-sport-rate">${escHtml(item.rate)}</span></div>`).join('')+'</div>';
 }
 function favoritePerformanceFooterContent(text){
   if(!text) return '';
-  return `<div class="favorite-guide-overall"><strong>Official final-state record</strong><span>${escHtml(text.record)} · ${escHtml(text.rate)} · ${escHtml(text.since)}</span></div>${favoritePerformanceSportCards(text,'Official record by sport')}<div class="favorite-guide-overall"><strong>Every displayed Favorite</strong><span>${escHtml(text.everDisplayed.record)} · ${escHtml(text.everDisplayed.rate)} · includes signals later removed</span></div>${favoritePerformanceSportCards(text.everDisplayed,'Every displayed signal by sport')}`;
+  return `<div class="favorite-guide-overall"><strong>Overall record</strong><span>${escHtml(text.record)} · ${escHtml(text.rate)} · ${escHtml(text.since)}</span></div>${favoritePerformanceSportCards(text)}`;
 }
 function favoritePerformanceFooter(){
   const text=favoritePerformanceText();

@@ -641,137 +641,6 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
     return records
 
 
-def _shadow_kickoff_map(path: Path, keys: set[tuple[str, str, str]]) -> dict[tuple[str, str, str], str]:
-    """Read only the shadow columns needed to recover missing handoffs."""
-    if not keys or not path.exists() or not path.stat().st_size:
-        return {}
-    starts: dict[tuple[str, str, str], str] = {}
-    try:
-        chunks = pd.read_csv(
-            path,
-            usecols=["sport", "game_id", "market_display", "kickoff_iso"],
-            dtype=str,
-            keep_default_na=False,
-            chunksize=100_000,
-        )
-        for chunk in chunks:
-            sports = chunk["sport"].astype(str).str.strip().str.lower()
-            games = chunk["game_id"].astype(str).str.strip()
-            markets = chunk["market_display"].astype(str).str.strip().str.upper()
-            matched = pd.MultiIndex.from_arrays([sports, games, markets]).isin(keys)
-            for row in chunk.loc[matched].itertuples(index=False):
-                key = (_text(row.sport).lower(), _text(row.game_id), _text(row.market_display).upper())
-                if _text(row.kickoff_iso):
-                    starts[key] = _text(row.kickoff_iso)
-    except (OSError, ValueError, pd.errors.EmptyDataError):
-        return starts
-    return starts
-
-
-def _tracking_fallback_records(history: pd.DataFrame, shadow_path: Path) -> list[dict]:
-    """Preserve displayed Favorites omitted from the final Live & Recent handoff.
-
-    The final explicit tracking state still controls official Favorite status;
-    prior displayed signals remain graded in the candidate audit.
-    """
-    required = {"recorded_at", "sport", "game_id", "game", "market_display", "favorite_state"}
-    if history.empty or not required.issubset(history.columns):
-        return []
-    qualified = history[history["favorite_state"].astype(str).eq("qualified")].copy()
-    if qualified.empty:
-        return []
-    qualified_keys = {
-        (_text(row.get("sport")).lower(), _text(row.get("game_id")), _text(row.get("market_display")).upper())
-        for _, row in qualified.iterrows()
-    }
-    kickoffs = _shadow_kickoff_map(shadow_path, qualified_keys)
-    records: list[dict] = []
-    for key in sorted(qualified_keys):
-        sport, event_id, market = key
-        kickoff_text = kickoffs.get(key, "")
-        kickoff = pd.to_datetime(kickoff_text, errors="coerce", utc=True)
-        if pd.isna(kickoff) or kickoff < SUPPORTED_SIDE_VALID_FROM:
-            continue
-        scoped = history[
-            history["sport"].astype(str).str.lower().eq(sport)
-            & history["game_id"].astype(str).eq(event_id)
-            & history["market_display"].astype(str).str.upper().eq(market)
-        ].copy()
-        scoped["_at"] = pd.to_datetime(scoped["recorded_at"], errors="coerce", utc=True)
-        scoped = scoped[scoped["_at"].notna() & scoped["_at"].le(kickoff)]
-        scoped = scoped.sort_values("_at", kind="mergesort").drop_duplicates(keep="last")
-        qualifying = scoped[scoped["favorite_state"].astype(str).eq("qualified")]
-        if qualifying.empty:
-            continue
-        first = qualifying.iloc[0]
-        last_qualified = qualifying.iloc[-1]
-        final = scoped.iloc[-1]
-        lifecycle = _tracking_lifecycle(history, first, kickoff)
-        side = _text(last_qualified.get("favorite_side")) or _text(first.get("favorite_side"))
-        if not side:
-            continue
-        official = lifecycle["final_state"] == "qualified"
-        decision_raw = _text(first.get("first_qualified_line")) or _text(first.get("current_line"))
-        decision_line, decision_price = _line_and_price(market, side, decision_raw)
-        close_raw = _text(final.get("final_pregame_line")) or _text(final.get("current_line"))
-        closing_line, closing_price = _line_and_price(market, side, close_raw)
-        open_raw = _text(first.get("open_line"))
-        open_line, open_price = _line_and_price(market, side, open_raw)
-        first_minutes = _minutes_before(kickoff_text, lifecycle["first_qualified"])
-        final_minutes = _minutes_before(kickoff_text, _text(final.get("recorded_at")))
-        source_payload = "|".join([sport, event_id, market, side, decision_raw, _text(first.get("snapshot_id"))])
-        records.append({
-            "ledger_id": hashlib.sha256(f"{sport}|{event_id}|{market}".encode("utf-8")).hexdigest()[:20],
-            "event_id": event_id, "game": _text(first.get("game")), "sport": sport,
-            "scheduled_start": kickoff_text, "market": market, "side": _side_at_decision_line(side, market, decision_line),
-            "open_line": open_line, "open_price": open_price,
-            "decision_line": decision_line, "decision_price": decision_price,
-            "decision_line_source": "first_qualified_capture",
-            "final_pregame_line": closing_line, "final_pregame_price": closing_price,
-            "market_read": _text(final.get("reaction")), "market_read_detail": _text(final.get("final_pregame_market_read")),
-            "market_path": _text(final.get("path")), "bets_pct": _text(final.get("bets_pct")),
-            "money_pct": _text(final.get("money_pct")), "bets_pct_band": _percent_band(final.get("bets_pct")),
-            "money_pct_band": _percent_band(final.get("money_pct")),
-            "favorite_cross_market_state": _text(final.get("cross_market_state")) or "unavailable",
-            "whipsaw_state": _text(final.get("whipsaw_state")) or "none",
-            "whipsaw_ever": lifecycle["whipsaw_ever"], "supported_side": side,
-            "favorite_qualified": "yes" if official else "no",
-            "favorite_rule_version": _text(last_qualified.get("favorite_rule_version")),
-            "favorite_originally_qualified": "yes", "favorite_late_invalidated": "no",
-            "favorite_pathway": _text(last_qualified.get("favorite_pathway")) or lifecycle["pathway"],
-            "candidate_decision": "accepted" if official else "fell_off_before_start",
-            "candidate_decision_reason": (
-                "Accepted: the latest explicit pre-start tracking state remained qualified."
-                if official else
-                "Removed before start: tracking proves this Favorite was displayed, but the latest explicit pre-start state was not qualified."
-            ),
-            "price_band": _price_band(closing_price) if market == "MONEYLINE" else "not_applicable",
-            "spread_band": _spread_band(closing_line, market),
-            "favorite_first_qualified_at": lifecycle["first_qualified"],
-            "favorite_final_qualified_at": lifecycle["last_qualified"] if official else "",
-            "favorite_first_fell_off_at": lifecycle["first_fell_off"],
-            "favorite_last_fell_off_at": lifecycle["last_fell_off"],
-            "favorite_fell_off_before_kickoff": "yes" if int(_number(lifecycle["falloffs"]) or 0) else "no",
-            "favorite_ever_fell_off": "yes" if int(_number(lifecycle["falloffs"]) or 0) else "no",
-            "favorite_final_state": lifecycle["final_state"], "favorite_t20_state": lifecycle["t20_state"],
-            "favorite_locked_decision": "not_recorded", "qualification_episode_count": lifecycle["episodes"],
-            "requalification_count": lifecycle["requalifications"], "falloff_count": lifecycle["falloffs"],
-            "qualifying_capture_count": lifecycle["qualifying_captures"],
-            "minutes_first_qualified_before_start": first_minutes, "minutes_final_state_before_start": final_minutes,
-            "first_qualified_timing_band": _timing_band(first_minutes), "final_state_timing_band": _timing_band(final_minutes),
-            "final_pregame_state_at_utc": _text(final.get("recorded_at")),
-            "final_pregame_frozen_at": _text(final.get("recorded_at")),
-            "classification_correction": "no", "classification_original_publication": "published",
-            "closing_line": closing_line, "closing_price": closing_price,
-            "clv_available": "no", "freeze_source": str(shadow_path),
-            "freeze_method": "tracking_fallback_after_missing_live_recent_handoff",
-            "source_snapshot_id": _text(first.get("snapshot_id")),
-            "source_hash": hashlib.sha256(source_payload.encode("utf-8")).hexdigest(),
-            "audit_status": "awaiting_final_score",
-        })
-    return records
-
-
 def _apply_retroactive_favorite_inclusions(frame: pd.DataFrame) -> pd.DataFrame:
     """Repair proved system omissions from retained pregame source evidence."""
     result = frame.copy()
@@ -874,9 +743,7 @@ def _fetch_ufc_results(ledger: pd.DataFrame, now=None) -> pd.DataFrame:
         & ~ledger.get("grade", pd.Series("", index=ledger.index)).astype(str).isin({"W", "L", "Push"})
         & ledger.get("event_id", pd.Series("", index=ledger.index)).astype(str).str.fullmatch(r"\d+")
         & starts.notna() & starts.le(current)
-        # Backfill the full retained tracking era.  A repaired final handoff can
-        # legitimately arrive more than three weeks after fight night.
-        & starts.ge(pd.Timestamp(FAVORITE_TRACKING_START_DATE, tz="UTC"))
+        & starts.ge(current - pd.Timedelta(days=21))
     ].copy()
     if pending.empty:
         return pd.DataFrame()
@@ -1191,15 +1058,8 @@ def update_performance_ledger(
         frame = _apply_retroactive_favorite_inclusions(_read_csv(Path(source)))
         source_frames.append(frame)
         candidates.extend(_frozen_records(frame, history, str(Path(source))))
-    candidates.extend(_tracking_fallback_records(history, data_dir / "red_fox_favorite_shadow.csv"))
     existing_ids = set(ledger.get("ledger_id", pd.Series(dtype=str)).astype(str))
-    new_records = []
-    seen_ids = set(existing_ids)
-    for record in candidates:
-        if record["ledger_id"] in seen_ids:
-            continue
-        new_records.append(record)
-        seen_ids.add(record["ledger_id"])
+    new_records = [record for record in candidates if record["ledger_id"] not in existing_ids]
     if new_records:
         ledger = pd.concat([ledger, pd.DataFrame(new_records)], ignore_index=True, sort=False)
     if not ledger.empty:
@@ -1388,7 +1248,6 @@ def update_performance_ledger(
         "favorites": summary(graded[graded["favorite_qualified"].eq("yes")]),
     }
     favorite_rows = graded[graded["favorite_qualified"].eq("yes")]
-    displayed_rows = graded[graded["favorite_originally_qualified"].eq("yes")]
     favorite_sport = favorite_rows.get("sport", pd.Series("", index=favorite_rows.index, dtype=str)).astype(str).str.strip().str.lower()
     sport_records = []
     for sport, label in FAVORITE_SPORTS:
@@ -1398,14 +1257,9 @@ def update_performance_ledger(
         -float(record["win_rate_excluding_pushes"] or 0),
         record["label"],
     ))
-    displayed_sport_records = []
-    displayed_sport = displayed_rows.get("sport", pd.Series("", index=displayed_rows.index, dtype=str)).astype(str).str.strip().str.lower()
-    for sport, label in FAVORITE_SPORTS:
-        displayed_sport_records.append({"sport": sport, "label": label, **summary(displayed_rows[displayed_sport.eq(sport)])})
     _atomic_json({
         **result["favorites"],
         "sports": sport_records,
-        "ever_displayed": {**summary(displayed_rows), "sports": displayed_sport_records},
         "tracking_start_date": FAVORITE_TRACKING_START_DATE,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }, data_dir / "favorite_performance.json")
