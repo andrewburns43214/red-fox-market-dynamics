@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh the MLB fixture context independently of the board
+
+[Timer]
+OnBootSec=90s
+OnUnitInactiveSec=1min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

@@ -12,6 +12,7 @@ import re
 
 import pandas as pd
 import requests
+from mlb_fixtures import match_fixture, read_context, score_payload
 from red_fox_favorite import (
     FAVORITE_COLUMNS,
     RULE_INVALIDATED_FAVORITE_REASONS,
@@ -20,6 +21,7 @@ from red_fox_favorite import (
     favorite_side_quote,
     cfb_spread_favorite,
     nba_public_favorite,
+    mlb_static_favorite,
 )
 from team_aliases import normalize_team_name
 from nhl_release_config import OFFICIAL_HANDOFF, official_nhl_favorite
@@ -202,7 +204,10 @@ def provider_game_keys(away_team: dict, home_team: dict, sport: str) -> set[str]
     }
 
 
-def fetch_scoreboard(sport: str, now: datetime) -> tuple[dict[str, list[dict[str, str]]], str]:
+def fetch_scoreboard(sport: str, now: datetime) -> tuple[dict, str]:
+    if sport == "mlb":
+        scores = read_context(DATA, now)
+        return (scores, "available") if scores is not None else ({}, "unavailable")
     base = SCOREBOARD_URLS.get(sport)
     if not base:
         return {}, "unsupported"
@@ -263,7 +268,7 @@ def fetch_scoreboard(sport: str, now: datetime) -> tuple[dict[str, list[dict[str
     return games, "available" if fetched else "unavailable"
 
 
-def scoreboard(sport: str, now: datetime) -> dict[str, list[dict[str, str]]]:
+def scoreboard(sport: str, now: datetime) -> dict:
     """Backward-compatible score map used by existing diagnostics."""
     return fetch_scoreboard(sport, now)[0]
 
@@ -271,6 +276,8 @@ def scoreboard(sport: str, now: datetime) -> dict[str, list[dict[str, str]]]:
 def match_live_score(scores, sport, matchup, kickoff):
     if pd.isna(kickoff):
         return None
+    if sport == "mlb":
+        return score_payload(match_fixture(scores, matchup, kickoff))
     key = game_key(matchup, sport)
     ordered = scores.get(key, [])
     if not ordered and sport == "ncaab":
@@ -471,7 +478,7 @@ def _market_movement_value(value: object, market: object) -> float | None:
 
 def _confirm_favorite_with_final_raw_market(candidate: pd.Series, raw: pd.Series | None) -> dict | None:
     """Return final side evidence when a retained Favorite did not move adversely."""
-    if (raw is None or official_nhl_favorite(candidate)
+    if (raw is None or official_nhl_favorite(candidate) or mlb_static_favorite(candidate)
             or str(candidate.get("favorite_late_invalidated", "")).lower() in {"1", "true", "yes"}):
         return None
     try:
@@ -982,9 +989,9 @@ def main(scores_only: bool = False) -> None:
     live = apply_classification_corrections(live)
     if scores_only:
         for sport, indices in live.groupby("sport").groups.items():
-            scores, provider_state = fetch_scoreboard(str(sport).lower(), now)
+            sport_key = str(sport).lower()
+            scores, provider_state = fetch_scoreboard(sport_key, now)
             for index in indices:
-                sport_key = str(sport).lower()
                 matchup = live.at[index, "game"]
                 kickoff = pd.to_datetime(live.at[index, "kickoff_iso"], errors="coerce", utc=True)
                 score = match_live_score(scores, sport_key, matchup, kickoff)
@@ -993,16 +1000,19 @@ def main(scores_only: bool = False) -> None:
                     for column, value in score.items():
                         live.at[index, column] = value
                     live.at[index, "score_match_state"] = "matched"
-                    live.at[index, "score_updated_at_utc"] = now.isoformat()
+                    live.at[index, "score_updated_at_utc"] = score.get("score_updated_at_utc") or now.isoformat()
                     if str(score.get("score_state", "")).lower() == "post" and previous_state != "post":
                         live.at[index, "score_completed_at_utc"] = now.isoformat()
                 else:
-                    if provider_state == "available":
+                    if provider_state == "available" or sport_key == "mlb":
                         live.at[index, "score_away"] = "-"
                         live.at[index, "score_home"] = "-"
                         live.at[index, "score_status"] = "Live score unavailable"
                         live.at[index, "score_state"] = "unknown"
-                        live.at[index, "score_match_state"] = "unmatched"
+                        live.at[index, "score_match_state"] = "unmatched" if provider_state == "available" else "provider_unavailable"
+                        if sport_key == "mlb":
+                            for column in ("score_provider", "score_provider_event_id", "score_completed_at_utc", "score_updated_at_utc", "event_time"):
+                                live.at[index, column] = ""
                     else:
                         # Preserve the last known score through a transient source
                         # failure. Coverage marks it unavailable/stale explicitly.

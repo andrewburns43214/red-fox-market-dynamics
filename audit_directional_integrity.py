@@ -11,7 +11,7 @@ import pandas as pd
 
 from anomaly_board import _market_read_semantics
 from cross_market_split import apply_cross_market_split
-from red_fox_favorite import cfb_spread_favorite, nba_public_favorite
+from red_fox_favorite import cfb_spread_favorite, nba_public_favorite, mlb_static_favorite
 
 
 def _text(value: object) -> str:
@@ -61,7 +61,7 @@ def audit(board: pd.DataFrame) -> dict[str, object]:
     )
     pathway_support = pd.Series(False, index=before.index)
     for index, row in before.loc[favorites & published_supported_identity.eq("")].iterrows():
-        if not (cfb_spread_favorite(row) or nba_public_favorite(row)):
+        if not (cfb_spread_favorite(row) or nba_public_favorite(row) or mlb_static_favorite(row)):
             continue
         try:
             sides = json.loads(_text(row.get("market_sides")) or "[]")

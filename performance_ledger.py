@@ -18,11 +18,12 @@ from uuid import uuid4
 
 import pandas as pd
 import requests
+from mlb_fixtures import SCORE_SOURCE as MLB_SCORE_SOURCE, cutover_at as mlb_cutover_at, timestamp as mlb_timestamp
 
 from anomaly_action_results import _grade_action
 from nhl_release_config import OFFICIAL_HANDOFF, OFFICIAL_VERSIONS, official_nhl_favorite
-from red_fox_favorite import (CFB_SPREAD_VERSIONS, NBA_PUBLIC_VERSION, NOV24_SPORTS, NOV24_VERSION,
-                              cfb_spread_favorite, nba_public_favorite, tracked_entry_quote)
+from red_fox_favorite import (CFB_SPREAD_VERSIONS, NBA_PUBLIC_VERSION, MLB_STATIC_VERSION, NOV24_SPORTS, NOV24_VERSION,
+                              cfb_spread_favorite, nba_public_favorite, mlb_static_favorite, tracked_entry_quote)
 
 
 SUPPORTED_SIDE_VALID_FROM = pd.Timestamp("2026-09-07T17:57:58Z")
@@ -51,6 +52,7 @@ FAVORITE_RULE_VERSIONS = frozenset({
     "red_fox_favorite_nhl_v1",
     NOV24_VERSION,
     *CFB_SPREAD_VERSIONS.values(),
+    MLB_STATIC_VERSION,
     NBA_PUBLIC_VERSION,
     *OFFICIAL_VERSIONS.values(),
 })
@@ -535,7 +537,8 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         if nhl_replacement and (row.get("freeze_method") != OFFICIAL_HANDOFF or not _truthy(row.get("red_fox_favorite"))):
             continue
         published_supported = _text(row.get("supported_side"))
-        extra = (cfb_spread_favorite(row) or nba_public_favorite(row) or nhl_replacement) and _truthy(row.get("red_fox_favorite"))
+        extra = (cfb_spread_favorite(row) or nba_public_favorite(row) or nhl_replacement
+                 or mlb_static_favorite(row)) and _truthy(row.get("red_fox_favorite"))
         supported = _text(row.get("favorite_side")) if extra else published_supported
         if not supported:
             continue
@@ -576,7 +579,7 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
                     or tracked_decision != proof.get("entry_line")
                     or lifecycle["entry_observed_at"] != proof.get("entry_source_at")):
                 continue
-        if nba_public_favorite(row) and favorite and (not decision_price or not lifecycle["entry_observed_at"]):
+        if (nba_public_favorite(row) or mlb_static_favorite(row)) and favorite and (not decision_price or not lifecycle["entry_observed_at"]):
             continue
         if not tracked_decision and favorite:
             decision_line, decision_price = line, price
@@ -784,12 +787,14 @@ def _scores_from_frozen(frozen: pd.DataFrame) -> pd.DataFrame:
         if " @ " not in game:
             continue
         away, home = game.split(" @ ", 1)
+        source = MLB_SCORE_SOURCE if (_text(row.get("sport")).lower() == "mlb" and _text(row.get("score_provider")) == "mlb"
+                                  and _text(row.get("score_match_state")) == "matched") else "live_recent.csv"
         records.append({
             "game_id": _text(row.get("game_id")), "team1": away,
             "team1_score": _text(row.get("score_away")), "team2": home,
             "team2_score": _text(row.get("score_home")),
             "score_provider": _text(row.get("score_provider")) or "retained_live_recent",
-            "score_source": "live_recent.csv",
+            "score_source": source,
             "score_provider_event_id": _text(row.get("score_provider_event_id")),
             "resolved_at_utc": _text(row.get("score_completed_at_utc")) or _text(row.get("score_updated_at_utc")),
         })
@@ -916,13 +921,20 @@ def _attach_clv(result: pd.DataFrame, index: object, row: pd.Series) -> None:
     result.at[index, "clv_available"] = "no"
 
 
-def _attach_results(ledger: pd.DataFrame, scores: pd.DataFrame) -> pd.DataFrame:
+def _attach_results(ledger: pd.DataFrame, scores: pd.DataFrame, *, mlb_cutover=None) -> pd.DataFrame:
     result = ledger.copy()
     by_event = _score_map(scores)
     graded_at = datetime.now(timezone.utc).isoformat()
     for index, row in result.iterrows():
         _attach_clv(result, index, row)
         score = by_event.get(_text(row.get("event_id")))
+        if mlb_cutover and _text(row.get("sport")).lower() == "mlb":
+            scheduled = mlb_timestamp(_text(row.get("scheduled_start")))
+            if _text(row.get("grade")) in {"W", "L", "Push"} or not scheduled or scheduled < mlb_cutover:
+                continue
+            if score is None or _text(score.get("score_source")) != MLB_SCORE_SOURCE or not _text(score.get("score_provider_event_id")).isdigit():
+                result.at[index, "audit_status"] = "awaiting_verified_mlb_fixture"
+                continue
         if score is None:
             if _text(row.get("grade")) in {"W", "L", "Push"} and _text(row.get("final_score")):
                 result.at[index, "score_source"] = _text(row.get("score_source")) or "retained_performance_ledger"
@@ -964,7 +976,9 @@ def _attach_results(ledger: pd.DataFrame, scores: pd.DataFrame) -> pd.DataFrame:
             net = win_profit if grade == "WIN" else (-1.0 if grade == "LOSS" else 0.0)
             result.at[index, "net_profit_units"] = f"{round(net, 6):g}"
             result.at[index, "roi"] = f"{round(net, 6):g}"
-        result.at[index, "score_provider"] = _text(score.get("score_provider")) or "espn_final_scores_history"
+        result.at[index, "score_provider"] = _text(score.get("score_provider")) or (
+            "mlb" if _text(score.get("score_source")) == MLB_SCORE_SOURCE else "espn_final_scores_history"
+        )
         result.at[index, "score_source"] = _text(score.get("score_source")) or "final_scores_history.csv"
         result.at[index, "score_provider_event_id"] = _text(score.get("score_provider_event_id"))
         result.at[index, "score_resolved_at"] = _text(score.get("resolved_at_utc"))
@@ -1320,7 +1334,16 @@ def update_performance_ledger(
         score_frames.extend(_scores_from_frozen(frame) for frame in source_frames)
         score_frames.append(_refresh_ufc_result_history(ledger, data_dir))
         scores = pd.concat([frame for frame in score_frames if not frame.empty], ignore_index=True, sort=False) if any(not frame.empty for frame in score_frames) else pd.DataFrame()
-        ledger = _attach_results(ledger, scores)
+        mlb_cutover = mlb_cutover_at(data_dir)
+        if mlb_cutover and not scores.empty:
+            # Legacy history can have an unverified score for a pending ID.
+            # Prefer a fixture-proven final for MLB only. Existing grade rows
+            # and the history CSV are left intact.
+            verified = scores.get("score_source", pd.Series("", index=scores.index)).eq(MLB_SCORE_SOURCE)
+            mlb_ids = set(ledger.loc[ledger["sport"].eq("mlb"), "event_id"])
+            superseded = ~verified & scores["game_id"].isin(mlb_ids & set(scores.loc[verified, "game_id"]))
+            scores = scores.loc[~superseded]
+        ledger = _attach_results(ledger, scores, mlb_cutover=mlb_cutover)
     # Outcome attachment may never mutate the frozen classification fields.
     pd.testing.assert_frame_equal(before_classification.reset_index(drop=True), ledger.reindex(columns=CLASSIFICATION_COLUMNS).reset_index(drop=True))
     _atomic_csv(ledger.reindex(columns=LEDGER_COLUMNS), ledger_path)
@@ -1366,6 +1389,8 @@ def update_performance_ledger(
            if ledger["favorite_rule_version"].isin(OFFICIAL_VERSIONS.values()).any() else {}),
         **({"nba_public_neutral_moneyline": _nba_public_performance(ledger, data_dir)}
            if (data_dir / "nba_public_neutral_activated_at").exists() or ledger["favorite_rule_version"].eq(NBA_PUBLIC_VERSION).any() else {}),
+        **({"mlb_static_moneyline": _version_performance(ledger, MLB_STATIC_VERSION, data_dir / "mlb_static_activated_at")}
+           if (data_dir / "mlb_static_activated_at").exists() or ledger["favorite_rule_version"].eq(MLB_STATIC_VERSION).any() else {}),
         "sports": sport_records,
         "logic_change_records": {
             sport: summary(favorite_rows[favorite_sport.eq(sport) & favorite_rows["favorite_rule_version"].eq(NOV24_VERSION)])
@@ -1387,9 +1412,12 @@ def update_performance_ledger(
 
 
 def _nba_public_performance(ledger: pd.DataFrame, data_dir: Path) -> dict:
-    rows = ledger.loc[ledger["favorite_rule_version"].eq(NBA_PUBLIC_VERSION) & ledger["favorite_qualified"].eq("yes")]
-    result = _cohort_row(rows, "favorite_rule_version", NBA_PUBLIC_VERSION, "accepted")
-    marker = data_dir / "nba_public_neutral_activated_at"
+    return _version_performance(ledger, NBA_PUBLIC_VERSION, data_dir / "nba_public_neutral_activated_at")
+
+
+def _version_performance(ledger: pd.DataFrame, version: str, marker: Path) -> dict:
+    rows = ledger.loc[ledger["favorite_rule_version"].eq(version) & ledger["favorite_qualified"].eq("yes")]
+    result = _cohort_row(rows, "favorite_rule_version", version, "accepted")
     return {**summary(rows), **{key: result[key] for key in ("stake_units", "net_profit_units", "roi")},
             "activated_at": marker.read_text(encoding="utf8").strip() if marker.exists() else "",
             "first_qualified_at": min((v for v in rows["favorite_first_qualified_at"] if v), default="")}
