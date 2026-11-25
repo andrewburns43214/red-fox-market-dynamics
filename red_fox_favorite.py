@@ -1962,13 +1962,10 @@ def _primary_moneyline_rejection_reason(
     return f"{label} Favorite withheld: current strict qualification gates were not satisfied."
 
 
-def _cfb_held_spread(side: dict, other: dict, history: pd.DataFrame, opened: float) -> bool:
+def _cfb_held_spread(side: dict, other: dict, history: pd.DataFrame, opened: float,
+                     opener: pd.Timestamp, observed: pd.Timestamp) -> bool:
     """Match the research hold: positive throughout a 30-minute lookback."""
     if history.empty:
-        return False
-    observed = pd.to_datetime(side.get("source_latest_at"), errors="coerce", utc=True)
-    opener = pd.to_datetime(side.get("open_observed_at"), errors="coerce", utc=True)
-    if pd.isna(observed) or pd.isna(opener):
         return False
     wanted = _side_identity(side["flagged_side"])
     opponent = _side_identity(other["flagged_side"])
@@ -2027,7 +2024,9 @@ def _cfb_spread_decision(row: pd.Series, game: pd.DataFrame, history: pd.DataFra
             continue
         if not 1 <= abs(current) <= (8 if public else 21):
             continue
-        open_at = pd.to_datetime(side.get("open_observed_at"), errors="coerce", utc=True)
+        # Published two-side histories start at the same paired capture. The
+        # market row retains its opener clock even when the side JSON omits it.
+        open_at = pd.to_datetime(side.get("open_observed_at") or row.get("open_observed_at"), errors="coerce", utc=True)
         source_at = pd.to_datetime(side.get("source_latest_at"), errors="coerce", utc=True)
         if not kickoff - pd.Timedelta(days=CONFIG.ncaaf_active_market_window_days) <= open_at <= source_at <= now:
             continue
@@ -2046,7 +2045,7 @@ def _cfb_spread_decision(row: pd.Series, game: pd.DataFrame, history: pd.DataFra
         cross = _corresponding_moneyline_state(side, game)
         if cross == "contradiction" or (public and cross != "confirmation"):
             continue
-        if high and not _cfb_held_spread(side, other, history, opened):
+        if high and not _cfb_held_spread(side, other, history, opened, open_at, source_at):
             continue
         candidates.append({
             "side": name, "pathway": CFB_PUBLIC_FOLLOW if public else CFB_HIGH_MONEY,

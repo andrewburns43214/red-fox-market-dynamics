@@ -1732,9 +1732,8 @@ def cfb_extra_capture(at, *, high=False, current=None, open_line=None, ml="TOWAR
     away = side(f"Away {-current:+g}", f"{-current:+g} (-116)", reaction="Watch",
                 open_line=f"{-open_line:+g} (-108)", bets=100-bets, money=100-money, direction="AGAINST",
                 source_latest_at=at)
-    for item in (home, away):
-        item["open_observed_at"] = "2026-11-23T18:00:00Z"
     sp = market(sport, "SPREAD", [away, home], game_id=game_id, supported_side=supported)
+    sp["open_observed_at"] = "2026-11-23T18:00:00Z"
     rows = [sp]
     if ml:
         mh = side("Home", "-110", open_line="+105", reaction="Watch", direction=ml,
