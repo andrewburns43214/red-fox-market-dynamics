@@ -1173,6 +1173,21 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .game-lane { display:flex; align-items:center; min-width:0; gap:6px; }
 .game-away { align-items:flex-end; padding-bottom:1px; }
 .game-lane-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); font-size:13px; font-weight:800; letter-spacing:-.02em; }
+.game-lane-name.is-favorite-side { display:inline-grid; grid-template-columns:minmax(0,max-content) 13.23px; column-gap:5px; align-items:center; min-width:0; overflow:visible; }
+.game-lane-team-text { overflow:hidden; text-overflow:ellipsis; }
+.game-lane-favorite-icon {
+  height:16px; margin-block:-8px;
+  /* Sample the original badge artwork and clip out its white backing. */
+  background:url("assets/red-fox-favorite.png") -17.24px -11.985px / 120.915px 40.266px no-repeat;
+  clip-path:polygon(
+    11.2% 0%,26.8% 6.6%,41.1% 17.3%,59.8% 17.3%,70.1% 8.5%,87.9% 0%,
+    92.4% 4.8%,93.3% 21%,87.9% 37.3%,94.6% 47.2%,89.3% 46.9%,100% 57.9%,
+    89.7% 55%,94.2% 59.4%,87.5% 59.8%,82.1% 63.1%,73.2% 79.3%,70.5% 81.2%,
+    72.3% 72.7%,55.8% 90.8%,55.8% 83.4%,50% 100%,45.5% 90%,29.5% 77.1%,
+    27.2% 73.1%,28.1% 80.8%,24.1% 77.9%,17.4% 63.1%,12.5% 59.8%,5.8% 59.4%,
+    9.8% 55.4%,0% 57.9%,10.7% 46.9%,5.8% 46.9%,12.1% 39.1%,12.1% 32.5%,7.1% 19.6%,7.1% 10%
+  );
+}
 .game-lane-mark { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; flex:0 0 auto; border-radius:50%; color:#fff; font:700 8px var(--mono); }
 .game-lane-mark.away { background:#e34840; }
 .game-lane-mark.home { background:#20282c; }
@@ -2724,6 +2739,13 @@ function gameLanes(r){
   const away=parts[0]||game||'—', home=parts[1]||'';
   const marker=/vs/i.test(separator)?'vs':'@';
   const favorite=isRedFoxFavorite(r);
+  const favoriteSide=favorite&&['SPREAD','MONEYLINE'].includes(String(r.market_display||'').toUpperCase())
+    ?marketSideIdentity({flagged_side:r.favorite_side},r):'';
+  const awayIdentity=away.trim().toLowerCase(), homeIdentity=home.trim().toLowerCase();
+  const teamName=(name,identity)=>{
+    if(!favoriteSide||identity!==favoriteSide||awayIdentity===homeIdentity) return '<span class="game-lane-name">'+escHtml(name)+'</span>';
+    return '<span class="game-lane-name is-favorite-side"><span class="game-lane-team-text">'+escHtml(name)+'</span><span class="game-lane-favorite-icon" role="img" aria-label="Red Fox Favorite" title="Red Fox Favorite"></span></span>';
+  };
   const mismatch=hasCrossMarketMismatch(r), split=hasCrossMarketSplit(r), crossMarket=mismatch||split, hasHeader=favorite||crossMarket;
   const header=hasHeader?'<div class="game-favorite-header'+(crossMarket?' has-cross-market':'')+'"><span class="game-sport">'+spChip(r.sport)+'</span>'+(favorite?favoriteBadge():'')+(mismatch?crossMarketMismatchBadge():split?crossMarketSplitBadge():'')+'</div>':'';
   const sport=hasHeader?'':'<span class="game-sport">'+spChip(r.sport)+'</span>';
@@ -2732,8 +2754,8 @@ function gameLanes(r){
   return '<div class="two-side-cell two-side-game'+(favorite?' is-favorite':'')+'">'
     +'<span class="game-name" style="display:none">'+escHtml(game)+'</span>'
     +header
-    +'<div class="two-side-row"><div class="game-lane game-away">'+sport+'<span class="game-lane-mark away">A</span><span class="game-lane-name">'+escHtml(away)+'</span></div></div>'
-    +'<div class="two-side-row"><div class="game-lane"><span class="game-lane-mark home">H</span><span class="game-lane-stack"><span class="game-lane-name">'+escHtml(home||'—')+'</span><span class="game-lane-time">'+escHtml(r.kickoff_time||'')+'</span></span></div></div>'
+    +'<div class="two-side-row"><div class="game-lane game-away">'+sport+'<span class="game-lane-mark away">A</span>'+teamName(away,awayIdentity)+'</div></div>'
+    +'<div class="two-side-row"><div class="game-lane"><span class="game-lane-mark home">H</span><span class="game-lane-stack">'+teamName(home||'—',homeIdentity)+'<span class="game-lane-time">'+escHtml(r.kickoff_time||'')+'</span></span></div></div>'
     +retainedNote
     +'</div>';
 }
@@ -3360,6 +3382,10 @@ function filtered(){
 window._boardRows=[];
 let _visibleBoardRows=0;
 let _boardHasRendered=false;
+let _renderedFavoriteSignature='';
+function boardFavoriteSignature(rows){
+  return rows.filter(isRedFoxFavorite).map(row=>JSON.stringify([boardGameKey(row),row.market_display,row.favorite_side])).sort().join('\n');
+}
 // Game-first board state is presentation-only.  It stores a selected existing
 // market per game; source rows, scores, reads, and data contracts are unchanged.
 const boardGameSelections=new Map();
@@ -3536,6 +3562,7 @@ function renderBoard(resetPage=true){
   }
   renderScheduleCoverage(scheduledGames);
   _boardHasRendered=true;
+  _renderedFavoriteSignature=boardFavoriteSignature(allDash);
 }
 
 function actionLens(r){
@@ -5457,7 +5484,7 @@ async function loadAll({forceRender=false}={}){
     // Detail views use small, game-scoped payloads instead.
     ensureEvents().then(renderHistory);
   }
-  if(_changed){
+  if(_changed||boardFavoriteSignature(allDash)!==_renderedFavoriteSignature){
     const updateNote=document.getElementById('board-update-note');
     if(forceRender || !_boardHasRendered){
       renderBoard();
