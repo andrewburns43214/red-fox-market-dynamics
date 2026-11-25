@@ -191,14 +191,6 @@ SHADOW_COLUMNS = [
 NOV24_SPORTS = frozenset({"ncaab", "nba", "nhl"})
 NBA_PUBLIC_PATH = "nba_short_public_neutral_ml"
 NBA_PUBLIC_VERSION = "red_fox_favorite_nba_public_neutral_v1"
-MLB_STATIC_VERSION = "red_fox_favorite_mlb_static_ml_v1"
-MLB_STATIC_PATH = "mlb_static_moneyline"
-MLB_STATIC_FLAG = "RED_FOX_MLB_STATIC_MONEYLINE"
-MLB_STATIC_RETRACE_FLAG = "RED_FOX_MLB_STATIC_RETRACE_LOG"
-
-
-def mlb_static_favorite(row) -> bool:
-    return row is not None and row.get("sport") == "mlb" and row.get("favorite_rule_version") == MLB_STATIC_VERSION
 NBA_PUBLIC_FLAG = "RED_FOX_NBA_PUBLIC_NEUTRAL"
 NBA_LEGACY_HOLD_FLAG = "RED_FOX_NBA_HOLD_LEGACY"
 NOV24_VERSION = "red_fox_favorite_20261124"
@@ -417,7 +409,6 @@ def update_favorite_tracking(
     cfb_enabled: frozenset[str] | None = None,
     nba_config: tuple[bool, bool] | None = None,
     nhl_hypothetical: bool = False,
-    mlb_enabled: bool | None = None,
 ) -> pd.DataFrame:
     """Persist every prospective snapshot and carry first qualification forward."""
     current = board.copy()
@@ -429,13 +420,6 @@ def update_favorite_tracking(
     current = _apply_cfb_spread_pathways(current, history, market_history, at, cfb_enabled)
     nba_config = nba_release_config() if nba_config is None else nba_config
     current = _apply_nba_release(current, history, at, *nba_config)
-    if mlb_enabled is None:
-        mlb_enabled = _truthy(os.getenv(MLB_STATIC_FLAG))
-    mlb_diagnostics = _truthy(os.getenv(MLB_STATIC_RETRACE_FLAG))
-    if (not current.empty and current.get("sport", pd.Series(dtype=str)).eq("mlb").any()
-            and (mlb_enabled or mlb_diagnostics or history.get("favorite_rule_version", pd.Series(dtype=str)).eq(MLB_STATIC_VERSION).any())):
-        from mlb_static_favorite import apply_static_moneyline
-        apply_static_moneyline(current, history, market_history, at, mlb_enabled, Path(data_dir), diagnostics=mlb_diagnostics)
     current = _apply_visibility_lock(current, history, Path(data_dir), at, nba_hold_legacy=nba_config[1],
                                      nhl_hypothetical=nhl_hypothetical)
     current = _apply_manual_favorite_inclusions(current, at)
@@ -911,24 +895,6 @@ def _apply_visibility_lock(
                 review_records.append(_review_record(row, at, "late_invalidated", "removal", stale_reason))
             continue
 
-        if active and mlb_static_favorite(source) and raw_favorite and not mlb_static_favorite(row):
-            # Preserve v5's own promotion timing when its first observation
-            # follows a Static Favorite on the same game.
-            material, reason = (True, "Awaiting a second consecutive qualifying scrape.") if minutes > review_minutes else _material_addition(row)
-            if material and _review_confirmed(reviews, key, "addition", now, row):
-                _set_review(result, index, "applied_addition", reason, at)
-                review_records.append(_review_record(row, at, "applied", "addition", reason))
-                continue
-            hard, adverse, removal = _material_removal(row, source)
-            if hard or (minutes <= lock_minutes and adverse):
-                _late_invalidate_favorite(result, index, removal, at)
-            else:
-                _restore_favorite(result, index, source)
-            _set_review(result, index, "pending_addition", reason, at)
-            if material:
-                review_records.append(_review_record(row, at, "pending", "addition", reason))
-            continue
-
         if (raw_favorite and active and source is not None and cfb_spread_favorite(source)
                 and (_side_identity(row.get("favorite_side")) != _side_identity(source.get("favorite_side"))
                      or (cfb_spread_favorite(row) and _favorite_review_identity(row) != _favorite_review_identity(source)))):
@@ -1009,7 +975,7 @@ def _apply_visibility_lock(
         # it is constrained to the same supported side and still goes through
         # the normal two-capture visibility review below.
         recovered, recovery_reason = (
-            (False, "") if (source is not None and cfb_spread_favorite(source)) or nba_public_favorite(source) or mlb_static_favorite(source)
+            (False, "") if (source is not None and cfb_spread_favorite(source)) or nba_public_favorite(source)
             or (nba_hold_legacy and identity[0] == "nba")
             else _confirmed_prior_favorite_recovery(row, source)
         )
@@ -1030,7 +996,7 @@ def _apply_visibility_lock(
                 else:
                     _clear_favorite(result, index, reason)
                     _set_review(result, index, "pending_addition", reason, at)
-                    if not (nba_public_favorite(row) or mlb_static_favorite(row)) or _fresh_pending_source(reviews, key, row):
+                    if not nba_public_favorite(row) or _nba_fresh_pending_source(reviews, key, row):
                         review_records.append(_review_record(row, at, "pending", "addition", reason))
             elif not raw_favorite and active:
                 hard, _, reason = _material_removal(row, source)
@@ -1273,7 +1239,7 @@ def _review_confirmed(history: pd.DataFrame, key: tuple[str, str, str], action: 
         return False
     pending_times = pd.to_datetime(scoped["recorded_at"], errors="coerce", utc=True)
     gaps = (now - pending_times).dt.total_seconds() / 60
-    if action == "addition" and (nba_public_favorite(candidate) or mlb_static_favorite(candidate)) and not _fresh_pending_source(scoped, key, candidate):
+    if action == "addition" and nba_public_favorite(candidate) and not _nba_fresh_pending_source(scoped, key, candidate):
         return False
     if key[0].lower() in {"ncaaf", "cfb"}:
         return bool(gaps.iloc[0] >= CONFIG.ncaaf_confirmation_min_gap_minutes)
@@ -1286,7 +1252,7 @@ def _review_confirmed(history: pd.DataFrame, key: tuple[str, str, str], action: 
     return bool(0 < gaps.iloc[-1] <= CONFIG.visibility_confirmation_gap_minutes)
 
 
-def _fresh_pending_source(reviews: pd.DataFrame, key: tuple[str, str, str], row: pd.Series) -> bool:
+def _nba_fresh_pending_source(reviews: pd.DataFrame, key: tuple[str, str, str], row: pd.Series) -> bool:
     scoped = _review_rows(reviews, key)
     if scoped.empty:
         return True

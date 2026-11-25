@@ -17,7 +17,7 @@ from cross_market_split import CROSS_MARKET_SPLIT_COLUMNS, apply_cross_market_sp
 from main import infer_market_type, normalize_side_key
 from red_fox_favorite import (
     FAVORITE_COLUMNS, REVIEW_BOARD_COLUMNS, apply_red_fox_favorites, cfb_spread_favorite, nba_public_favorite,
-    nba_release_config, mlb_static_favorite, update_favorite_tracking,
+    nba_release_config, update_favorite_tracking,
 )
 from favorite_nhl_goalies import read_goalies
 
@@ -198,7 +198,7 @@ def restore_retained_favorites(board, data_dir=DATA, now=None):
         source = lookup.get(key)
         if source is None or str(source.get("red_fox_favorite", "")).lower() != "true":
             continue
-        if cfb_spread_favorite(source) or nba_public_favorite(source) or mlb_static_favorite(source):
+        if cfb_spread_favorite(source) or nba_public_favorite(source):
             # The optional pathways must requalify through the normal lock.
             continue
         invalidated = str(source.get("favorite_late_invalidated", "")).lower() == "true"
