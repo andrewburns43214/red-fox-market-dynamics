@@ -716,10 +716,12 @@ def _refresh(coverage):
     # Tracking and the immutable kickoff handoff archive must receive the
     # precise source timestamp attached above, not just publication wall time.
     nba_config = nba_release_config()
+    legacy_board = None
     if nba_config[1]:
         try:
             from nba_legacy_shadow import record_legacy
-            record_legacy(board, DATA, newest_snapshot)
+            nba_raw = board.loc[board["sport"].eq("nba")] if "sport" in board else board.iloc[:0]
+            legacy_board = record_legacy(board, DATA, newest_snapshot)
         except Exception as exc:
             print(f"[nba-legacy-shadow] capture failed: {type(exc).__name__}: {exc}", flush=True)
     try:
@@ -801,6 +803,13 @@ def _refresh(coverage):
         ),
     )
     resolved_count = rebuild_action_results(DATA)
+    if legacy_board is not None:
+        try:
+            from nba_recovered_shadow import record_recoveries
+
+            record_recoveries(nba_raw, legacy_board, board, DATA, newest_snapshot, nba_config)
+        except Exception as exc:
+            print(f"[nba-recovered-shadow] capture failed: {type(exc).__name__}: {exc}", flush=True)
     freshness_summary = "no current source rows" if freshness is None else (
         f"source range {freshness[0].isoformat()} to {freshness[1].isoformat()} across {freshness[2]} markets"
     )

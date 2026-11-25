@@ -10,7 +10,7 @@ from performance_ledger import (_atomic_csv, _atomic_json, _attach_results, _coh
 from red_fox_favorite import NBA_PUBLIC_VERSION, _read_tracking, update_favorite_tracking
 
 
-def record_legacy(board: pd.DataFrame, data_dir: Path, at) -> None:
+def record_legacy(board: pd.DataFrame, data_dir: Path, at) -> pd.DataFrame | None:
     nba = board.loc[board["sport"].eq("nba")] if "sport" in board else board.iloc[0:0]
     where = data_dir / "nba_legacy_hypothetical"
     where.mkdir(parents=True, exist_ok=True)
@@ -24,7 +24,7 @@ def record_legacy(board: pd.DataFrame, data_dir: Path, at) -> None:
 
     # Feed the unmodified legacy decisions through the same confirmation and
     # closing rules. The release switches apply only to the official state.
-    update_favorite_tracking(nba, where, as_of=at, nba_config=(False, False))
+    legacy = update_favorite_tracking(nba, where, as_of=at, nba_config=(False, False))
     history = _read_tracking(where / "red_fox_favorite_tracking.csv")
     candidates = _read_csv(where / "red_fox_favorite_freeze_candidates.csv")
     ledger_path = where / "hypothetical_results.csv"
@@ -53,6 +53,7 @@ def record_legacy(board: pd.DataFrame, data_dir: Path, at) -> None:
     _atomic_json({**summary(ledger), "started_at": start.isoformat(), "last_observed_at": pd.Timestamp(at).isoformat(),
                   **{key: control.get(key) for key in ("stake_units", "net_profit_units", "roi")}},
                  where / "hypothetical_performance.json")
+    return legacy
 
 
 def _seed(where: Path, data_dir: Path, board: pd.DataFrame, start: pd.Timestamp) -> None:
