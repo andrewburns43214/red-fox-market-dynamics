@@ -131,15 +131,25 @@ else
   PIPELINE_STATUS=1
 fi
 
-# Coverage health is independent of ranking/scoring and never changes the board.
-if ! "$PY" coverage_monitor.py >> "$LOG" 2>&1; then
+# Keep measured source gaps visible without labeling an intact publish as a failed run.
+COVERAGE_DEGRADED=0
+if "$PY" coverage_monitor.py --runner >> "$LOG" 2>&1; then
+  :
+else
+  COVERAGE_EXIT=$?
   echo "--- $(date) COVERAGE ALERT: inspect publication_coverage.json ---" >> "$LOG"
-  PIPELINE_STATUS=1
+  if (( COVERAGE_EXIT == 2 )); then
+    COVERAGE_DEGRADED=1
+  else
+    PIPELINE_STATUS=1
+  fi
 fi
 
-if (( PIPELINE_STATUS == 0 )); then
-  echo "===== $(date) RUN END status=OK =====" >> "$LOG"
-else
+if (( PIPELINE_STATUS != 0 )); then
   echo "===== $(date) RUN END status=FAILED =====" >> "$LOG"
+elif (( COVERAGE_DEGRADED != 0 )); then
+  echo "===== $(date) RUN END status=DEGRADED =====" >> "$LOG"
+else
+  echo "===== $(date) RUN END status=OK =====" >> "$LOG"
 fi
 exit "$PIPELINE_STATUS"

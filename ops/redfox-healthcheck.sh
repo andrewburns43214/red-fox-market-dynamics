@@ -54,7 +54,7 @@ free_kb=$(df -Pk "$ROOT" | awk 'NR==2 {print $4}')
 recent_log=$(tail -n 2000 /var/log/redfox_update.log 2>/dev/null || true)
 recent_prop_log=$(tail -n 1000 /var/log/redfox-props.log 2>/dev/null || true)
 last_run_marker=$(grep 'RUN END' <<<"$recent_log" | tail -n 1 || true)
-if ! grep -q 'RUN END status=OK' <<<"$last_run_marker"; then
+if ! grep -Eq 'RUN END status=(OK|DEGRADED) ' <<<"$last_run_marker"; then
   issues+=("no completed full pipeline marker")
 fi
 if ! grep -q 'prop collection DONE' <<<"$recent_prop_log"; then

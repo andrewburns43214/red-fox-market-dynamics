@@ -36,7 +36,7 @@ def test_coverage_accounts_for_fresh_ncaab_reschedule_only(tmp_path):
     assert coverage.loc["revised", "state"] == "PUBLISHED"
     assert coverage.loc["stale", "state"] == "STARTED"
 from refresh_anomaly_board import filter_publication_eligible_markets, latest_synchronized_market_rows
-from coverage_monitor import check
+from coverage_monitor import check, runner_status
 
 NOW = pd.Timestamp("2026-09-05T18:00:00Z")
 KICK = "2026-09-06T02:00:00Z"
@@ -408,6 +408,23 @@ def test_monitor_can_certify_a_fresh_complete_consistent_run(tmp_path):
     assert healthy
     assert "RETAINED_SOURCE_MARKETS" in result["issues"]
     assert result["warnings"] == ["RETAINED_SOURCE_MARKETS"]
+    assert runner_status(result, healthy) == 0
+
+    coverage_path = tmp_path / "publication_coverage.json"
+    coverage = json.loads(coverage_path.read_text())
+    football = coverage["sports"]["ncaaf"]
+    football["eligible_in_window"] += 2
+    football["excluded_by_reason"].update(STALE_CAPTURE=1, CAPTURE_UNAVAILABLE=1)
+    coverage_path.write_text(json.dumps(coverage))
+    result, healthy = check(tmp_path, now=NOW.to_pydatetime())
+    assert not healthy
+    assert {"ncaaf:STALE_IN_WINDOW_MARKETS", "ncaaf:UNAVAILABLE_IN_WINDOW_MARKETS"} <= set(result["issues"])
+    assert runner_status(result, healthy) == 2
+
+    path.write_text("unexpected contents")
+    result, healthy = check(tmp_path, now=NOW.to_pydatetime())
+    assert "COVERAGE_EXPORT_VERSION_MISMATCH" in result["issues"]
+    assert runner_status(result, healthy) == 1
 
 
 def test_unchanged_publication_does_not_duplicate_historical_state_transitions(tmp_path):

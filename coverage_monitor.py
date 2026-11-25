@@ -44,6 +44,8 @@ def check(data_dir, now=None, max_age_minutes=25):
                 issues.append(f"{sport}:UNACCOUNTED_MARKET")
             if stats["excluded_by_reason"].get("STALE_CAPTURE", 0):
                 issues.append(f"{sport}:STALE_IN_WINDOW_MARKETS")
+            if stats["excluded_by_reason"].get("CAPTURE_UNAVAILABLE", 0):
+                issues.append(f"{sport}:UNAVAILABLE_IN_WINDOW_MARKETS")
         with sqlite3.connect((root / "publication_coverage.sqlite3").resolve().as_uri() + "?mode=ro", uri=True) as db:
             latest = db.execute("SELECT state,started_at FROM runs WHERE kind='PUBLICATION' ORDER BY started_at DESC LIMIT 1").fetchone()
             if latest and latest[0] == "PUBLICATION_FAILED":
@@ -71,14 +73,26 @@ def check(data_dir, now=None, max_age_minutes=25):
     return summary, not any(issue not in warning_codes for issue in issues)
 
 
+def runner_status(report, healthy):
+    if healthy:
+        return 0
+    warnings = set(report.get("warnings", []))
+    actionable = [issue for issue in report["issues"] if issue not in warnings]
+    gaps = {"STALE_IN_WINDOW_MARKETS", "UNAVAILABLE_IN_WINDOW_MARKETS"}
+    if actionable and all(issue.partition(":")[2] in gaps for issue in actionable):
+        return 2
+    return 1
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     parser.add_argument("--max-age-minutes", type=float, default=25)
+    parser.add_argument("--runner", action="store_true", help="Exit 2 for accounted source-coverage gaps after a valid publication")
     args = parser.parse_args()
     result, healthy = check(args.data_dir, max_age_minutes=args.max_age_minutes)
     print(json.dumps(result, indent=2))
-    raise SystemExit(0 if healthy else 1)
+    raise SystemExit(runner_status(result, healthy) if args.runner else int(not healthy))
 
 
 if __name__ == "__main__":
