@@ -16,6 +16,8 @@ import re
 
 import pandas as pd
 from nhl_release_config import official_nhl_favorite
+from ufc_bout_integrity import (PROOF as UFC_PROOF, read_market_proof as ufc_market_proof,
+                                retain_favorite_quotes as retain_ufc_quotes, row_proof as ufc_row_proof)
 
 
 @dataclass(frozen=True)
@@ -483,7 +485,13 @@ def update_favorite_tracking(
         prior = previous.get(key)
         favorite = _truthy(row.get("red_fox_favorite"))
         nhl_replacement = favorite and official_nhl_favorite(row)
+        ufc_verified = key[0] == 'ufc' and bool(ufc_row_proof(row))
         same_identity = prior is not None and _favorite_review_identity(row) == _favorite_review_identity(prior)
+        if (key[0] == "ufc" and prior is not None and ufc_row_proof(prior, "supporting_evidence")
+                and row.get("_ufc_integrity") not in {"verified", "withheld", "collision"}):
+            continue
+        if ufc_verified:
+            same_identity &= prior is not None and ufc_row_proof(prior, 'supporting_evidence').get('bout_id') == ufc_row_proof(row).get('bout_id')
         if favorite and same_identity:
             prior_first = str(prior.get("first_qualified_line", "")).strip()
             prior_at = str(prior.get("recorded_at", "")).strip()
@@ -511,8 +519,11 @@ def update_favorite_tracking(
                 )
                 if nhl_replacement:
                     record["entry_observed_at"] = evidence["entry_source_at"]
+                if ufc_verified:
+                    record["entry_observed_at"] = (str(prior.get('entry_observed_at') or '') if same_identity else '') or record['source_observed_at']
                 records.append(record)
-        elif prior is not None and str(prior.get("favorite_state", "")) == "qualified":
+        elif (prior is not None and str(prior.get("favorite_state", "")) == "qualified"
+              and row.get("_ufc_integrity") != "collision"):
             record = {column: str(prior.get(column, "")) for column in TRACKING_COLUMNS}
             sport = str(row.get("sport", "")).lower()
             rejection = str(row.get("favorite_reason", "")).strip() if sport in {"ufc", "nhl"} else ""
@@ -539,7 +550,7 @@ def update_favorite_tracking(
             continue
         # Kickoff removes a market from the live pregame board, but it must not
         # rewrite the official qualification history as a Favorite fall-off.
-        if key in started_frozen_keys:
+        if key in started_frozen_keys or (key[0] == 'ufc' and ufc_row_proof(prior, 'supporting_evidence')):
             continue
         record = {column: str(prior.get(column, "")) for column in TRACKING_COLUMNS}
         record.update(recorded_at=at, favorite_state="not_qualified",
@@ -556,6 +567,7 @@ def update_favorite_tracking(
         updated.to_csv(temporary, index=False)
         temporary.replace(path)
     _update_candidate_shadow(current, Path(data_dir), at)
+    retain_ufc_quotes(current, Path(data_dir))
     _update_freeze_candidates(current, Path(data_dir), at)
     return current.drop(columns=[
         "_visibility_restored", "_favorite_legacy_qualified", "_favorite_legacy_side",
@@ -563,6 +575,7 @@ def update_favorite_tracking(
         "_ncaaf_market_move_status", "_ncaaf_decision_reason", "_favorite_gate_reason",
         "_nba_release_mismatch",
         "_nhl_paused_cohort", "_nhl_paused_side", "_nhl_paused_pathway", "_nhl_paused_version",
+        "_ufc_integrity", "_ufc_market_proof",
     ], errors="ignore")
 
 
@@ -822,7 +835,7 @@ def _apply_visibility_lock(
         additions = []
         for _, row in archived.iterrows():
             key = tuple(str(row.get(column, "")) for column in keys)
-            if key in current_keys or official_nhl_favorite(row):
+            if key in current_keys or official_nhl_favorite(row) or (key[0] == 'ufc' and ufc_row_proof(row)):
                 continue
             identity = (key[0].lower(), key[1], key[2].upper())
             if (identity in VISIBILITY_INVALIDATED_FAVORITES
@@ -899,6 +912,34 @@ def _apply_visibility_lock(
         raw_favorite = _truthy(row.get("red_fox_favorite"))
         active = _official_active(history, key, now)
         source = _archived_row(archived, key)
+        ufc_verified = identity[0] == 'ufc' and row.get('_ufc_integrity') == 'verified'
+        if identity[0] == 'ufc' and row.get('_ufc_integrity') in {'verified','withheld'}:
+            proof = ufc_market_proof(row)
+            prior_proof = ufc_row_proof(source) if source is not None else {}
+            collision = (source is not None and bool(proof) and (
+                prior_proof.get('bout_id') != proof.get('bout_id')
+                or (raw_favorite and _favorite_review_identity(row) != _favorite_review_identity(source))
+            ))
+            if collision:
+                result.at[index, '_ufc_integrity'] = 'collision'
+            if collision or not ufc_verified:
+                reason = 'UFC Favorite withheld: verified bout identity changed.' if collision else (
+                    'UFC Favorite withheld: ' + ', '.join(proof['risks']) if proof.get('risks') else
+                    'UFC Favorite withheld: verified pre-bout timing unavailable.')
+                if not collision and active and proof.get('risks'):
+                    _late_invalidate_favorite(result,index,reason,at)
+                else:
+                    _clear_favorite(result,index,reason)
+                _clear_pending_review(reviews, review_records, row, key, at)
+                continue
+            # A verified delayed bout remains in the existing closing window
+            # when the book's estimate elapsed. An estimate cannot make it live.
+            minutes = max(0.0, minutes)
+            if raw_favorite:
+                evidence = json.loads(row.get('favorite_supporting_evidence') or '{}')
+                evidence[UFC_PROOF] = proof
+                result.at[index,'favorite_supporting_evidence'] = json.dumps(evidence,separators=(',',':'))
+                row = result.loc[index].copy()
         if official_nhl_favorite(source):
             _clear_favorite(result, index, "NHL Favorite requires current pathway evidence.")
             continue
@@ -1118,6 +1159,9 @@ def _apply_visibility_lock(
                     result.at[index, "favorite_supporting_evidence"] = json.dumps(evidence, separators=(",", ":"))
                     result.at[index, "favorite_reason"] = "Official Favorite locked at T-20 after same-path requalification."
                     _set_review(result, index, "requalified_at_lock", result.at[index, "favorite_reason"], at)
+                elif raw_favorite and ufc_verified:
+                    _restore_favorite(result,index,row)
+                    result.at[index,'_visibility_restored'] = 'false'
                 _clear_pending_review(reviews, review_records, row, key, at)
             elif raw_favorite:
                 material, reason = _material_addition(row)
@@ -1284,6 +1328,9 @@ def _review_confirmed(history: pd.DataFrame, key: tuple[str, str, str], action: 
         & scoped.get("favorite_side", pd.Series("", index=scoped.index)).map(_side_identity).eq(identity[0])
         & scoped.get("favorite_rule_version", pd.Series("", index=scoped.index)).eq(identity[1])
     )
+    ufc_proof = ufc_market_proof(candidate) if key[0].lower() == "ufc" and candidate is not None else {}
+    if ufc_proof:
+        matching &= scoped["reason"].str.endswith(f"[UFC bout {ufc_proof['bout_id']}]")
     interruptions = matching.reset_index(drop=True).index[~matching.to_numpy()]
     if len(interruptions):
         scoped = scoped.iloc[interruptions[-1] + 1:]
@@ -1296,11 +1343,17 @@ def _review_confirmed(history: pd.DataFrame, key: tuple[str, str, str], action: 
     if key[0].lower() in {"ncaaf", "cfb"}:
         return bool(gaps.iloc[0] >= CONFIG.ncaaf_confirmation_min_gap_minutes)
     if key[0].lower() in {"ufc", "nhl"}:
-        return bool(gaps.between(
+        valid_gap = gaps.between(
             CONFIG.primary_moneyline_confirmation_minutes,
             CONFIG.primary_moneyline_confirmation_max_gap_minutes,
             inclusive="both",
-        ).any())
+        )
+        if key[0].lower() == 'ufc' and candidate is not None and ufc_market_proof(candidate):
+            current_source = pd.to_datetime(_review_source_observed_at(candidate,candidate.get('favorite_side')),
+                                            errors='coerce',utc=True)
+            previous_sources = pd.to_datetime(scoped['source_observed_at'],errors='coerce',utc=True,format='mixed')
+            valid_gap &= previous_sources.lt(current_source)
+        return bool(valid_gap.any())
     return bool(0 < gaps.iloc[-1] <= CONFIG.visibility_confirmation_gap_minutes)
 
 
@@ -1331,6 +1384,9 @@ def _review_record(row: pd.Series, at: str, state: str, action: str, reason: str
                    *, identity_row: pd.Series | None = None) -> dict:
     candidate = row if identity_row is None else identity_row
     favorite_side = candidate.get("favorite_side", "")
+    proof = ufc_market_proof(candidate) if row.get("sport") == "ufc" else {}
+    if state == "pending" and proof:
+        reason = f"{reason} [UFC bout {proof['bout_id']}]"
     return {
         "recorded_at": at, "sport": row.get("sport", ""), "game_id": row.get("game_id", ""),
         "game": row.get("game", ""), "market_display": row.get("market_display", ""),
@@ -1981,6 +2037,8 @@ def _primary_moneyline_sport_gate(
     sport = str(row.get("sport", "")).lower()
     if sport not in {"ufc", "nhl"}:
         return True
+    if sport == 'ufc' and row.get('_ufc_integrity') == 'withheld':
+        return False
     if str(row.get("market_display", "")).upper() != "MONEYLINE":
         return False
     # Split-only resistance and moderate-follow signals remain useful board
@@ -2008,7 +2066,7 @@ def _primary_moneyline_sport_gate(
         return False
     hours = (kickoff - captured).total_seconds() / 3600.0
     active_window = CONFIG.ufc_active_window_hours if sport == "ufc" else CONFIG.nhl_active_window_hours
-    if hours < 0 or hours > active_window:
+    if (hours < 0 and not (sport == 'ufc' and row.get('_ufc_integrity') == 'verified')) or hours > active_window:
         return False
     recovered = _truthy(side.get("whipsaw_recovered")) or "Whipsaw Recovered" in context
     ever_whipsaw = recovered or str(side.get("path", "")) == "Whipsaw"
@@ -3118,9 +3176,14 @@ def _update_freeze_candidates(current: pd.DataFrame, data_dir: Path, at: str) ->
     else:
         updated = archived.copy()
         for _, row in current.iterrows():
+            if row.get("_ufc_integrity") == "collision":
+                continue
             mask = pd.Series(True, index=updated.index)
             for column in keys:
                 mask &= updated.get(column, pd.Series("", index=updated.index)).astype(str).eq(str(row.get(column, "")))
+            if (row.get("sport") == "ufc" and row.get("_ufc_integrity") not in {"verified", "withheld"}
+                    and mask.any() and ufc_row_proof(updated.loc[mask].iloc[-1])):
+                continue
             if _truthy(row.get("favorite_late_invalidated")) and mask.any():
                 for column in (
                     "favorite_originally_qualified", "favorite_late_invalidated",
@@ -3142,6 +3205,7 @@ def _update_freeze_candidates(current: pd.DataFrame, data_dir: Path, at: str) ->
                         updated.loc[mask, column] = value
     if updated.empty:
         return
+    updated = updated.drop(columns=["_ufc_integrity", "_ufc_market_proof"], errors="ignore")
     updated = updated.sort_values("candidate_recorded_at_utc", kind="mergesort").drop_duplicates(keys, keep="last")
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name("." + path.name + ".tmp")

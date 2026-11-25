@@ -1902,3 +1902,79 @@ def test_cfb_extra_handoff_requires_a_verified_closing_review(tmp_path):
     frozen = favorite_handoff_states(read("red_fox_favorite_freeze_candidates.csv"),
         pd.Timestamp("2026-11-25T01:05:00Z"), read("red_fox_favorite_tracking.csv"))
     assert frozen.empty
+
+@pytest.mark.parametrize("outcome,grade,units", [("winner", "W", "1.05"), ("push", "Push", "0"), ("void", "Void", "0")])
+def test_ufc_verified_bout_preserves_v1_entry_and_settles_once(tmp_path, outcome, grade, units):
+    import ufc_bout_integrity as ufc
+    from performance_ledger import update_performance_ledger
+
+    scheduled = "2026-12-05T23:00:00Z"
+    bout_id = "401000001"
+    pair = ["fighteralpha", "fighterbeta"]
+    athlete_ids = ["1001", "1002"]
+    pre = dict(id=bout_id, card_id="600001", card_at=scheduled, pair=pair, athlete_ids=athlete_ids,
+               phase="pre", risks=[])
+    game = "Fighter Alpha vs Fighter Beta"
+
+    def capture(at, quote, *, capture_at=None):
+        state = pd.Timestamp(at)
+        source = pd.Timestamp(capture_at or at)
+        quote_rows = pd.DataFrame([
+            dict(sport="ufc", game_id="9001", game=game, market_display="MONEYLINE", side=name,
+                 dk_start_iso=scheduled, timestamp=source)
+            for name in ("Fighter Alpha", "Fighter Beta")
+        ])
+        _, proofs = ufc.filter_markets(quote_rows, {bout_id: dict(pre, observed=state.isoformat())}, {}, state)
+        assert set(proofs) == {"9001"}
+        away = side("Fighter Alpha", quote, open_line="+130", price_move=4.0, source_latest_at=source.isoformat())
+        home = side("Fighter Beta", "-125", bets=65, money=70, reaction="Watch", direction="AGAINST",
+                    kpi=False, source_latest_at=source.isoformat())
+        row = market("ufc", "MONEYLINE", [home, away], game_id="9001", game=game, supported_side="Fighter Alpha")
+        row.update(kickoff_iso=scheduled, state_as_of_utc=source.isoformat())
+        annotated = ufc.annotate_board(pd.DataFrame([row]), proofs)
+        raw = apply_red_fox_favorites(annotated, as_of=at)
+        return update_favorite_tracking(raw, tmp_path / "data", as_of=at)
+
+    assert not is_favorite(capture("2026-12-05T22:40:00Z", "+105"))
+    # A reread of the initial quote has no confirmation value.
+    assert not is_favorite(capture("2026-12-05T22:55:00Z", "+105", capture_at="2026-12-05T22:40:00Z"))
+    # The card's original schedule elapsed while this bout stayed in pregame.
+    approved = capture("2026-12-05T23:01:00Z", "+105")
+    assert is_favorite(approved)
+    assert approved.iloc[0].favorite_rule_version == CONFIG.ufc_version
+    closed = capture("2026-12-05T23:20:00Z", "+100")
+    assert is_favorite(closed)
+
+    data = tmp_path / "data"
+    archive = pd.read_csv(data / "red_fox_favorite_freeze_candidates.csv", dtype=str, keep_default_na=False)
+    tracking = pd.read_csv(data / "red_fox_favorite_tracking.csv", dtype=str, keep_default_na=False)
+    complete = dict(pre, start="2026-12-05T23:31:00Z", phase="void" if outcome == "void" else "final",
+                    observed="2026-12-05T23:48:00Z", kind=outcome, winner="Fighter Alpha", loser="Fighter Beta", result=outcome)
+    when = pd.Timestamp("2026-12-05T23:48:00Z")
+    if outcome != "void":
+        missing_start = dict(complete, start="")
+        assert ufc.handoff_rows(archive, tracking, {bout_id: missing_start}, {}, when).empty
+        after_bell = dict(complete, start="2026-12-05T23:19:00Z")
+        assert ufc.handoff_rows(archive, tracking, {bout_id: after_bell}, {}, when).empty
+    if outcome != "void":
+        # Simulate the provider briefly reporting scheduled after the bell.
+        # The last valid pre-bout capture still hands off at its own close.
+        capture("2026-12-05T23:33:00Z", "+101")
+        archive = ufc.favorite_quotes(data, {bout_id: complete})
+        tracking = pd.read_csv(data / "red_fox_favorite_tracking.csv", dtype=str, keep_default_na=False)
+    frozen = ufc.handoff_rows(archive, tracking, {bout_id: complete}, {}, when)
+    assert frozen.freeze_method.tolist() == [ufc.HANDOFF]
+    assert frozen.favorite_side.tolist() == ["Fighter Alpha"]
+    frozen.to_csv(data / "live_recent.csv", index=False)
+    root = ufc.cache_dir(data)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "bouts.json").write_text(json.dumps({"bouts": {bout_id: complete}}), encoding="utf-8")
+    update_performance_ledger(data, [data / "live_recent.csv", data / "live_recent.csv"])
+    update_performance_ledger(data)
+    ledger = pd.read_csv(data / "performance_ledger.csv", dtype=str, keep_default_na=False)
+    assert len(ledger) == 1
+    assert ledger.iloc[0].favorite_qualified == "yes"
+    assert ledger.iloc[0].grade == grade
+    assert ledger.iloc[0].decision_price == "+105"
+    assert ledger.iloc[0].closing_price == "+100"
+    assert ledger.iloc[0].net_profit_units == units

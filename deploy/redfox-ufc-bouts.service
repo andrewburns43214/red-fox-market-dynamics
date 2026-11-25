@@ -1,0 +1,12 @@
+[Unit]
+Description=Collect UFC bout phase, results and official weigh-in evidence
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/red-fox-market-dynamics
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python collect_ufc_bouts.py
+TimeoutStartSec=48
+Nice=15
+IOSchedulingClass=idle
+UMask=0077

@@ -22,6 +22,7 @@ from mlb_fixtures import SCORE_SOURCE as MLB_SCORE_SOURCE, cutover_at as mlb_cut
 
 from anomaly_action_results import _grade_action
 from nhl_release_config import OFFICIAL_HANDOFF, OFFICIAL_VERSIONS, official_nhl_favorite
+import ufc_bout_integrity as ufc
 from red_fox_favorite import (CFB_SPREAD_VERSIONS, NBA_PUBLIC_VERSION, MLB_STATIC_VERSION, NOV24_SPORTS, NOV24_VERSION,
                               cfb_spread_favorite, nba_public_favorite, mlb_static_favorite, tracked_entry_quote)
 
@@ -423,6 +424,9 @@ def _tracking_lifecycle(history: pd.DataFrame, row: pd.Series, kickoff: pd.Times
     scoped = history.loc[mask].copy()
     if scoped.empty:
         return empty
+    if row.get("freeze_method") == ufc.HANDOFF:
+        bout_id = ufc.row_proof(row).get("bout_id")
+        scoped = scoped.loc[scoped.apply(lambda event: ufc.row_proof(event, "supporting_evidence").get("bout_id") == bout_id, axis=1)].copy()
     scoped["_at"] = pd.to_datetime(scoped.get("recorded_at", ""), errors="coerce", utc=True)
     scoped = scoped[scoped["_at"].notna()]
     if pd.notna(kickoff):
@@ -513,7 +517,7 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
     records: list[dict] = []
     if frozen.empty:
         return records
-    ordered = frozen.copy()
+    ordered = frozen.loc[~frozen.get("freeze_method", pd.Series("", index=frozen.index)).eq(ufc.CONTEXT)].copy()
     ordered["_frozen"] = _utc_series(ordered.get("frozen_at_utc", ""), ordered.index)
     ordered["_state_at"] = _utc_series(ordered.get("final_pregame_state_at_utc", ""), ordered.index)
     ordered["_kickoff"] = _utc_series(ordered.get("kickoff_iso", ""), ordered.index)
@@ -536,9 +540,13 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         nhl_replacement = official_nhl_favorite(row)
         if nhl_replacement and (row.get("freeze_method") != OFFICIAL_HANDOFF or not _truthy(row.get("red_fox_favorite"))):
             continue
+        ufc_proof = ufc.row_proof(row) if row.get("sport") == "ufc" else {}
+        ufc_verified = row.get("freeze_method") == ufc.HANDOFF
+        if ufc_verified != bool(ufc_proof):
+            continue
         published_supported = _text(row.get("supported_side"))
         extra = (cfb_spread_favorite(row) or nba_public_favorite(row) or nhl_replacement
-                 or mlb_static_favorite(row)) and _truthy(row.get("red_fox_favorite"))
+                 or mlb_static_favorite(row) or ufc_verified) and _truthy(row.get("red_fox_favorite"))
         supported = _text(row.get("favorite_side")) if extra else published_supported
         if not supported:
             continue
@@ -581,6 +589,11 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
                 continue
         if (nba_public_favorite(row) or mlb_static_favorite(row)) and favorite and (not decision_price or not lifecycle["entry_observed_at"]):
             continue
+        if ufc_verified:
+            entry = ufc.stamp(lifecycle["entry_observed_at"])
+            if (not favorite or not decision_price or pd.isna(entry) or entry >= kickoff
+                    or ufc_proof.get("bout_id") != row.get("score_provider_event_id")):
+                continue
         if not tracked_decision and favorite:
             decision_line, decision_price = line, price
         decision_source = "first_qualified_capture" if tracked_decision else ("final_pregame_fallback" if favorite else "")
@@ -692,7 +705,8 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
             "closing_price_observed_at": _closing_observed_at(row, "closing_price", price, side_record),
             "clv": _text(row.get("clv")), "clv_method": "retained_source" if _text(row.get("clv")) else "",
             "clv_available": "yes" if _text(row.get("clv")) else "no",
-            "score_provider": "", "score_source": "", "score_provider_event_id": "",
+            "score_provider": "espn_ufc_bout" if ufc_verified else "", "score_source": "",
+            "score_provider_event_id": ufc_proof.get("bout_id", ""),
             "score_resolved_at": "", "graded_at_utc": "", "grade_evidence_hash": "",
             "freeze_source": source_name,
             "freeze_method": _text(row.get("freeze_method")) or "audited_latest_state_at_or_before_start",
@@ -816,6 +830,7 @@ def _fetch_ufc_results(ledger: pd.DataFrame, now=None) -> pd.DataFrame:
     pending = ledger.loc[
         ledger.get("sport", pd.Series("", index=ledger.index)).astype(str).str.lower().eq("ufc")
         & ledger.get("market", pd.Series("", index=ledger.index)).astype(str).str.upper().eq("MONEYLINE")
+        & ~ledger.get("freeze_method", pd.Series("", index=ledger.index)).eq(ufc.HANDOFF)
         & ~ledger.get("grade", pd.Series("", index=ledger.index)).astype(str).isin({"W", "L", "Push"})
         & ledger.get("event_id", pd.Series("", index=ledger.index)).astype(str).str.fullmatch(r"\d+")
         & starts.notna() & starts.le(current)
@@ -924,6 +939,7 @@ def _attach_clv(result: pd.DataFrame, index: object, row: pd.Series) -> None:
 def _attach_results(ledger: pd.DataFrame, scores: pd.DataFrame, *, mlb_cutover=None) -> pd.DataFrame:
     result = ledger.copy()
     by_event = _score_map(scores)
+    verified_bouts = _score_map(scores.loc[scores.get("score_source", pd.Series("", index=scores.index)).eq(ufc.SCORE_SOURCE)])
     graded_at = datetime.now(timezone.utc).isoformat()
     for index, row in result.iterrows():
         _attach_clv(result, index, row)
@@ -934,6 +950,14 @@ def _attach_results(ledger: pd.DataFrame, scores: pd.DataFrame, *, mlb_cutover=N
                 continue
             if score is None or _text(score.get("score_source")) != MLB_SCORE_SOURCE or not _text(score.get("score_provider_event_id")).isdigit():
                 result.at[index, "audit_status"] = "awaiting_verified_mlb_fixture"
+                continue
+        verified_ufc = row.get("sport") == "ufc" and row.get("freeze_method") == ufc.HANDOFF
+        if verified_ufc:
+            if _text(row.get("grade")) in {"W", "L", "Push", "Void"}:
+                continue
+            score = verified_bouts.get(_text(row.get("event_id")))
+            if score is None or _text(score.get("score_provider_event_id")) != _text(row.get("score_provider_event_id")):
+                result.at[index, "audit_status"] = "awaiting_verified_ufc_bout_result"
                 continue
         if score is None:
             if _text(row.get("grade")) in {"W", "L", "Push"} and _text(row.get("final_score")):
@@ -950,7 +974,13 @@ def _attach_results(ledger: pd.DataFrame, scores: pd.DataFrame, *, mlb_cutover=N
             continue
         winner = _text(score.get("winner"))
         loser = _text(score.get("loser"))
-        if _text(row.get("sport")).lower() == "ufc" and winner and loser:
+        kind = _text(score.get("ufc_kind")) if verified_ufc else ""
+        if kind in {"push", "void"}:
+            grade = kind.upper()
+        elif verified_ufc and kind == "winner":
+            side = ufc.fighter_key(row.get("side"))
+            grade = "WIN" if side == ufc.fighter_key(winner) else "LOSS" if side == ufc.fighter_key(loser) else "UNRESOLVED"
+        elif _text(row.get("sport")).lower() == "ufc" and winner and loser:
             side = _identity(row.get("side"))
             grade = "WIN" if side == _identity(winner) else "LOSS" if side == _identity(loser) else "UNRESOLVED"
         else:
@@ -966,12 +996,15 @@ def _attach_results(ledger: pd.DataFrame, scores: pd.DataFrame, *, mlb_cutover=N
         team1, team2 = _text(score.get("team1")), _text(score.get("team2"))
         score1, score2 = _text(score.get("team1_score")), _text(score.get("team2_score"))
         result.at[index, "final_score"] = (
-            _text(score.get("result")) if winner and loser else f"{team1} {score1} - {team2} {score2}"
+            _text(score.get("result")) if verified_ufc or (winner and loser) else f"{team1} {score1} - {team2} {score2}"
         )
         result.at[index, "market_result"] = f"{_text(row.get('side'))}: {grade.title()}"
-        result.at[index, "grade"] = {"WIN": "W", "LOSS": "L", "PUSH": "Push"}[grade]
+        result.at[index, "grade"] = {"WIN": "W", "LOSS": "L", "PUSH": "Push", "VOID": "Void"}[grade]
         win_profit = _american_profit(row.get("decision_price"))
-        if win_profit is not None:
+        if grade == "VOID":
+            for column in ("stake_units", "net_profit_units", "roi"):
+                result.at[index, column] = "0"
+        elif win_profit is not None:
             result.at[index, "stake_units"] = "1"
             net = win_profit if grade == "WIN" else (-1.0 if grade == "LOSS" else 0.0)
             result.at[index, "net_profit_units"] = f"{round(net, 6):g}"
@@ -1144,16 +1177,17 @@ def update_performance_ledger(
         source_frames.append(frame)
         candidates.extend(_frozen_records(frame, history, str(Path(source))))
     existing_ids = set(ledger.get("ledger_id", pd.Series(dtype=str)).astype(str))
-    nhl_handoff_ids = {record["ledger_id"] for record in candidates if record["freeze_method"] == OFFICIAL_HANDOFF}
+    official_methods = {OFFICIAL_HANDOFF, ufc.HANDOFF}
+    official_handoff_ids = {record["ledger_id"] for record in candidates if record["freeze_method"] in official_methods}
     new_records = []
     seen_nhl_replacements = set()
     for record in candidates:
         identity = record["ledger_id"]
         if identity in existing_ids or identity in seen_nhl_replacements:
             continue
-        if record["freeze_method"] == OFFICIAL_HANDOFF:
+        if record["freeze_method"] in official_methods:
             seen_nhl_replacements.add(identity)
-        elif identity in nhl_handoff_ids:
+        elif identity in official_handoff_ids:
             continue
         new_records.append(record)
     if new_records:
@@ -1333,6 +1367,9 @@ def update_performance_ledger(
         score_frames = [_read_csv(data_dir / "final_scores_history.csv")]
         score_frames.extend(_scores_from_frozen(frame) for frame in source_frames)
         score_frames.append(_refresh_ufc_result_history(ledger, data_dir))
+        if not ledger.empty and ledger["freeze_method"].eq(ufc.HANDOFF).any():
+            bouts, _ = ufc.load_context(data_dir)
+            score_frames.append(ufc.result_rows(ledger, bouts))
         scores = pd.concat([frame for frame in score_frames if not frame.empty], ignore_index=True, sort=False) if any(not frame.empty for frame in score_frames) else pd.DataFrame()
         mlb_cutover = mlb_cutover_at(data_dir)
         if mlb_cutover and not scores.empty:

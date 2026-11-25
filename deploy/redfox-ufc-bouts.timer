@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh UFC bout evidence independently of the board
+
+[Timer]
+OnBootSec=20s
+OnUnitInactiveSec=45s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

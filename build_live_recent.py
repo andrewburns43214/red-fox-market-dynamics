@@ -25,6 +25,7 @@ from red_fox_favorite import (
 )
 from team_aliases import normalize_team_name
 from nhl_release_config import OFFICIAL_HANDOFF, official_nhl_favorite
+import ufc_bout_integrity as ufc
 
 
 DATA = Path("data")
@@ -359,7 +360,7 @@ def bootstrap_started_records(now: datetime) -> pd.DataFrame:
     return latest
 
 
-def update_market_candidates(rows: pd.DataFrame, path: Path = MARKET_CANDIDATES, as_of=None) -> pd.DataFrame:
+def update_market_candidates(rows: pd.DataFrame, path: Path = MARKET_CANDIDATES, as_of=None, *, ufc_proofs=None) -> pd.DataFrame:
     """Retain a compact, paired all-market handoff for Live & Recent."""
     existing = read_csv_or_empty(path)
     if rows is None or rows.empty:
@@ -373,7 +374,17 @@ def update_market_candidates(rows: pd.DataFrame, path: Path = MARKET_CANDIDATES,
     work["_kickoff"] = pd.to_datetime(work["dk_start_iso"], errors="coerce", utc=True)
     seen_values = work["timestamp"] if "timestamp" in work else pd.Series(now, index=work.index)
     work["_seen"] = pd.to_datetime(seen_values, errors="coerce", utc=True)
-    work = work[work["_kickoff"].notna() & work["_seen"].notna() & (work["_seen"] <= work["_kickoff"])].copy()
+    proofs = ufc_proofs or {}
+    verified = work["sport"].eq("ufc") & work["game_id"].astype(str).isin(
+        vendor for vendor, proof in proofs.items() if proof["phase"] == "pre"
+    )
+    work = work[work["_kickoff"].notna() & work["_seen"].notna() & ((work["_seen"] <= work["_kickoff"]) | verified)].copy()
+    if proofs:
+        for index in work.index[work["sport"].eq("ufc")]:
+            if not verified.loc[index]:
+                work = work.drop(index)
+                continue
+            work.at[index, "_ufc_market_proof"] = json.dumps(proofs[str(work.at[index, "game_id"])], separators=(",", ":"))
     if work.empty:
         return existing
     keys = ["sport", "game_id", "market_display"]
@@ -416,7 +427,9 @@ def update_market_candidates(rows: pd.DataFrame, path: Path = MARKET_CANDIDATES,
     updated["_kickoff"] = pd.to_datetime(updated.get("kickoff_iso", ""), errors="coerce", utc=True)
     # The handoff only bridges the pregame board into the short Live & Recent
     # window. Prune old candidates so this compact safety cache stays bounded.
-    updated = updated[updated["_kickoff"].isna() | (updated["_kickoff"] >= now - pd.Timedelta(hours=12))].copy()
+    cutoff = now - pd.Timedelta(hours=12)
+    verified = updated.get("_ufc_market_proof", pd.Series("", index=updated.index)).fillna("").ne("")
+    updated = updated[updated["_kickoff"].isna() | (updated["_kickoff"] >= cutoff) | (verified & (updated["_state"] >= cutoff))].copy()
     updated = updated.sort_values("_state", kind="mergesort").drop_duplicates(keys, keep="last")
     updated = updated.drop(columns=["_state", "_kickoff"], errors="ignore")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -670,7 +683,7 @@ def suppress_stale_retained_favorites(
     history["_recorded_at"] = utc_series(history["recorded_at"], history.index)
     for index in candidates:
         row = result.loc[index]
-        if official_nhl_favorite(row) and row.get("freeze_method") == OFFICIAL_HANDOFF:
+        if row.get("freeze_method") == ufc.HANDOFF or (official_nhl_favorite(row) and row.get("freeze_method") == OFFICIAL_HANDOFF):
             continue
         kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
         scoped = history
@@ -830,6 +843,10 @@ def expire_started_board_rows(now: datetime, grace_minutes: int = 5) -> int:
     kickoff = utc_series(board["kickoff_iso"], board.index)
     cutoff = pd.Timestamp(now) - pd.Timedelta(minutes=grace_minutes)
     keep = kickoff.isna() | (kickoff > cutoff)
+    if ufc.settings()[0] and "sport" in board:
+        bouts, notices = ufc.load_context(DATA)
+        for index, row in board.loc[board["sport"].eq("ufc")].iterrows():
+            keep.loc[index] = ufc.is_pregame(row, bouts, notices, pd.Timestamp(now))
     removed = int((~keep).sum())
     if not removed:
         return 0
@@ -923,24 +940,34 @@ def main(scores_only: bool = False) -> None:
     # The one-minute worker also reads the already-published pregame board so
     # a record is frozen at kickoff instead of waiting for the next snapshot run.
     previous = read_csv_or_empty(BOARD)
+    enabled, since = ufc.settings()
+    cutoff = since if enabled else pd.NaT
+    bouts, notices = ufc.load_context(DATA) if pd.notna(since) else ({}, {})
     rows = []
     if not existing.empty:
         rows.append(existing)
     if not previous.empty and "kickoff_iso" in previous:
-        started = final_pregame_states(previous, now)
+        started = final_pregame_states(ufc.unverified_rows(previous, cutoff), now)
         if not started.empty:
             rows.append(started)
     market_candidates = read_csv_or_empty(MARKET_CANDIDATES)
     candidates = read_csv_or_empty(FAVORITE_CANDIDATES)
     if not candidates.empty:
-        favorite_started = favorite_handoff_states(candidates, now, tracking, market_candidates)
+        favorite_started = favorite_handoff_states(ufc.unverified_rows(candidates, cutoff), now, tracking, market_candidates)
         if not favorite_started.empty:
             rows.append(favorite_started)
     if not market_candidates.empty:
-        market_started = final_pregame_states(market_candidates, now)
+        market_started = final_pregame_states(ufc.unverified_rows(market_candidates, cutoff), now)
         if not market_started.empty:
             market_started["freeze_method"] = "paired_raw_market_handoff_no_classification"
             rows.append(market_started)
+    if bouts:
+        recorded_quotes = ufc.favorite_quotes(DATA, bouts)
+        verified_candidates = pd.concat([candidates, recorded_quotes], ignore_index=True, sort=False)
+        for source, favorite in ((verified_candidates, True), (market_candidates, False)):
+            handoffs = ufc.handoff_rows(source, tracking, bouts, notices, pd.Timestamp(now), favorite=favorite)
+            if not handoffs.empty:
+                rows.append(handoffs)
     from nhl_official_release import read_official_games, reconcile_official_handoffs
 
     live = pd.concat(rows, ignore_index=True, sort=False) if rows else pd.DataFrame(columns=EMPTY_COLUMNS)
@@ -951,7 +978,7 @@ def main(scores_only: bool = False) -> None:
         official_games = {}
     live = reconcile_official_handoffs(live, candidates, official_games, now)
     if live.empty:
-        recovered = bootstrap_started_records(now)
+        recovered = ufc.unverified_rows(bootstrap_started_records(now), cutoff)
         if recovered.empty:
             empty = pd.DataFrame(columns=EMPTY_COLUMNS)
             empty.to_csv(OUT, index=False)
@@ -994,6 +1021,13 @@ def main(scores_only: bool = False) -> None:
             for index in indices:
                 matchup = live.at[index, "game"]
                 kickoff = pd.to_datetime(live.at[index, "kickoff_iso"], errors="coerce", utc=True)
+                row = live.loc[index]
+                if row.get("freeze_method") in {ufc.HANDOFF, ufc.CONTEXT}:
+                    bout = bouts.get(row.get("score_provider_event_id"))
+                    if bout and bout["phase"] in {"live", "final", "void"} and ufc.matchup(matchup) == tuple(bout["pair"]):
+                        for column, value in ufc.score_payload(bout).items():
+                            live.at[index, column] = value
+                    continue
                 score = match_live_score(scores, sport_key, matchup, kickoff)
                 if score:
                     previous_state = _text(live.at[index, "score_state"] if "score_state" in live else "").lower()

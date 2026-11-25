@@ -23,6 +23,7 @@ from red_fox_favorite import (
 )
 from favorite_nhl_goalies import read_goalies
 from nhl_release_config import official_nhl_favorite
+import ufc_bout_integrity as ufc_integrity
 
 
 DATA = Path(os.environ.get("REDFOX_DATA_DIR", "data"))
@@ -201,7 +202,7 @@ def restore_retained_favorites(board, data_dir=DATA, now=None):
         source = lookup.get(key)
         if source is None or str(source.get("red_fox_favorite", "")).lower() != "true":
             continue
-        if (cfb_spread_favorite(source) or nba_public_favorite(source)
+        if (cfb_spread_favorite(source) or nba_public_favorite(source) or ufc_integrity.row_proof(source)
                 or official_nhl_favorite(source) or mlb_static_favorite(source)):
             # The optional pathways must requalify through the normal lock.
             continue
@@ -619,7 +620,16 @@ def _refresh(coverage):
     if retained_source:
         print(f"[degraded] retained {len(retained_keys)} verified markets within {retained_minutes} minutes of their actual captures")
     print(f"[ok] kept {len(dashboard)}/{before_freshness} rows within the public source-freshness window")
-    update_market_candidates(dashboard, DATA / MARKET_CANDIDATES.name, as_of=newest_snapshot)
+    ufc_enabled, _ = ufc_integrity.settings()
+    ufc_proofs = {}
+    ufc_bouts = {}
+    if ufc_enabled and not dashboard.empty:
+        ufc_bouts, ufc_notices = ufc_integrity.load_context(DATA)
+        verified, ufc_proofs = ufc_integrity.filter_markets(dashboard, ufc_bouts, ufc_notices, pd.Timestamp.now(tz='UTC'))
+        coverage.stage(dashboard, verified, 'KICKOFF_GATE')
+        dashboard = verified
+        print(f'[ufc-integrity] verified {len(ufc_proofs)} captured bout identities',flush=True)
+    update_market_candidates(dashboard, DATA / MARKET_CANDIDATES.name, as_of=newest_snapshot, ufc_proofs=ufc_proofs)
     dashboard["canonical_key"] = dashboard["sport"] + "|" + dashboard["game_id"]
     dashboard["_sort_time"] = dashboard.get("dk_start_iso", "")
 
@@ -629,7 +639,8 @@ def _refresh(coverage):
     kickoff = pd.to_datetime(dashboard.get("dk_start_iso", ""), utc=True, errors="coerce")
     cutoff = coverage.now - pd.Timedelta(minutes=5)
     before_expiry = len(dashboard)
-    pregame = dashboard.loc[kickoff.notna() & (kickoff > cutoff)].copy()
+    verified_ufc = dashboard.sport.eq('ufc') & dashboard.game_id.astype(str).isin(ufc_proofs)
+    pregame = dashboard.loc[(kickoff.notna() & (kickoff > cutoff)) | verified_ufc].copy()
     coverage.stage(dashboard, pregame, "KICKOFF_GATE")
     dashboard = pregame
     print(f"[ok] kept {len(dashboard)}/{before_expiry} pregame markets after kickoff expiry")
@@ -647,6 +658,8 @@ def _refresh(coverage):
     history = load_market_history(snapshot_path, history_keys)
     history = limit_nfl_history_to_active_game_week(history)
     history = limit_ncaaf_history_to_active_game_week(history)
+    if ufc_proofs:
+        history = ufc_integrity.scoped_history(history, ufc_proofs, ufc_bouts)
     history["side_key"] = [
         normalize_side_key(sport, market, side)
         for sport, market, side in zip(history["sport"], history["market_display"], history["side"])
@@ -667,6 +680,18 @@ def _refresh(coverage):
     board = select_market_leaders(board)
     board = apply_cross_market_integrity(board, history, as_of=newest_snapshot)
     board = apply_cross_market_split(board)
+    if ufc_enabled and ufc_proofs:
+        ufc_bouts, ufc_notices = ufc_integrity.load_context(DATA)
+        _, confirmed = ufc_integrity.filter_markets(
+            dashboard.loc[dashboard["sport"].eq("ufc")], ufc_bouts, ufc_notices, pd.Timestamp.now(tz="UTC")
+        )
+        # If the bout identity changed during evaluation, these classified rows
+        # used a different history. Wait for the next rebuild to evaluate them.
+        ufc_proofs = {vendor: proof for vendor, proof in confirmed.items()
+                      if proof["bout_id"] == ufc_proofs.get(vendor, {}).get("bout_id")}
+        pregame_board = board.loc[~board["sport"].eq("ufc") | board["game_id"].astype(str).isin(ufc_proofs)]
+        coverage.stage(board, pregame_board, "KICKOFF_GATE")
+        board = ufc_integrity.annotate_board(pregame_board, ufc_proofs)
     nhl_goalies = read_goalies(DATA)
     classified = board
     board = apply_red_fox_favorites(board, as_of=newest_snapshot, nov24_goalies=nhl_goalies)
@@ -735,6 +760,18 @@ def _refresh(coverage):
         ]
         board.loc[retained_rows, "data_badge"] = "RETAINED"
         board = restore_retained_favorites(board, DATA, now=coverage.now)
+    if ufc_enabled and not board.empty and board["sport"].eq("ufc").any():
+        ufc_bouts, ufc_notices = ufc_integrity.load_context(DATA)
+        now = pd.Timestamp.now(tz="UTC")
+        valid = pd.Series(True, index=board.index)
+        for index, row in board.loc[board["sport"].eq("ufc")].iterrows():
+            valid.loc[index] = ufc_integrity.is_pregame(row, ufc_bouts, ufc_notices, now)
+        current_board = board.loc[valid]
+        coverage.stage(board, current_board, "KICKOFF_GATE")
+        board = current_board
+    if ufc_enabled and {"sport", "game_id"}.issubset(events.columns):
+        visible_bouts = board.loc[board["sport"].eq("ufc"), "game_id"].astype(str)
+        events = events.loc[~events["sport"].eq("ufc") | events["game_id"].astype(str).isin(visible_bouts)]
     board = compact_public_board_payload(board)
     detail_count = write_event_detail_files(board, events, details_dir=DATA / "anomaly_event_details")
     # Replace each public file only after its complete export is ready for Nginx.
