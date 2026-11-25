@@ -1992,7 +1992,7 @@ def _cfb_held_spread(side: dict, other: dict, history: pd.DataFrame, opened: flo
 
 
 def _cfb_spread_decision(row: pd.Series, game: pd.DataFrame, history: pd.DataFrame,
-                         now: pd.Timestamp, allowed: frozenset[str]) -> dict | None:
+                         now: pd.Timestamp, allowed: frozenset[str], prior_side: str = "") -> dict | None:
     if not allowed or str(row.get("market_display", "")).upper() != "SPREAD":
         return None
     kickoff = pd.to_datetime(row.get("kickoff_iso"), errors="coerce", utc=True)
@@ -2008,7 +2008,8 @@ def _cfb_spread_decision(row: pd.Series, game: pd.DataFrame, history: pd.DataFra
     candidates = []
     for side, other in (sides, sides[::-1]):
         name = str(side["flagged_side"])
-        if supported and supported != _side_identity(name):
+        identity = _side_identity(name)
+        if (supported and supported != identity) or (prior_side and prior_side != identity):
             continue
         bets = _number(side.get("bets_pct"))
         money = _number(side.get("money_pct"))
@@ -2073,11 +2074,19 @@ def _apply_cfb_spread_pathways(current: pd.DataFrame, tracking: pd.DataFrame,
     now = pd.to_datetime(at, utc=True)
     cfb = {"ncaaf", "cfb"}
     active = {}
+    first_confirmed_sides = {}
     if not tracking.empty:
         timestamps = pd.to_datetime(tracking["recorded_at"], errors="coerce", utc=True, format="mixed")
-        latest = tracking.loc[timestamps.le(now) & tracking["sport"].isin(cfb)].sort_values(
+        eligible = tracking.loc[timestamps.le(now) & tracking["sport"].isin(cfb)].sort_values(
             "recorded_at", kind="mergesort"
-        ).drop_duplicates(["sport", "game_id", "market_display"], keep="last")
+        )
+        # An additional pathway may return after a legitimate falloff, but
+        # an event that already published one side cannot add its opponent.
+        first = eligible.loc[eligible["favorite_state"].eq("qualified") &
+                             eligible["favorite_rule_version"].isin(CFB_SPREAD_VERSIONS.values())]
+        for _, state in first.drop_duplicates(["sport", "game_id"], keep="first").iterrows():
+            first_confirmed_sides[(state["sport"], state["game_id"])] = _side_identity(state["favorite_side"])
+        latest = eligible.drop_duplicates(["sport", "game_id", "market_display"], keep="last")
         for _, state in latest.loc[latest["favorite_state"].eq("qualified")].iterrows():
             active.setdefault((state["sport"], state["game_id"]), []).append(state)
     histories = {}
@@ -2099,7 +2108,8 @@ def _apply_cfb_spread_pathways(current: pd.DataFrame, tracking: pd.DataFrame,
         # Turning off an activation switch stops new promotions. Already active
         # selections still run their own rule through ordinary safety and lock.
         allowed = frozenset(state["favorite_pathway"] for state in prior) if prior else enabled
-        decision = _cfb_spread_decision(row, game, histories.get(key, pd.DataFrame()), now, allowed)
+        decision = _cfb_spread_decision(row, game, histories.get(key, pd.DataFrame()), now, allowed,
+                                        first_confirmed_sides.get(key, ""))
         if not decision:
             if prior:
                 current.at[index, "_ncaaf_decision_reason"] = "The active CFB spread pathway failed its current qualification gates."

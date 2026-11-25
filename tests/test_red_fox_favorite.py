@@ -1829,6 +1829,32 @@ def test_cfb_extra_closing_failure_is_not_restored_at_handoff(tmp_path):
         pd.Timestamp("2026-11-25T01:02:00Z"),data("red_fox_favorite_tracking.csv")).empty
 
 
+def test_cfb_extra_cannot_switch_to_opponent_after_falloff(tmp_path):
+    from red_fox_favorite import CFB_PUBLIC_FOLLOW
+
+    enabled = frozenset({CFB_PUBLIC_FOLLOW})
+    for at in ("2026-11-24T22:00:00Z", "2026-11-24T22:10:00Z"):
+        board = update_favorite_tracking(cfb_extra_capture(at), tmp_path, at, cfb_enabled=enabled)
+    assert is_favorite(board)
+
+    for at in ("2026-11-24T22:20:00Z", "2026-11-24T22:30:00Z"):
+        board = update_favorite_tracking(cfb_extra_capture(at, ml="LIMITED"), tmp_path, at, cfb_enabled=enabled)
+    assert not is_favorite(board)
+
+    for at in ("2026-11-24T22:40:00Z", "2026-11-24T22:50:00Z"):
+        opponent = cfb_extra_capture(at)
+        opponent["market_sides"] = opponent["market_sides"].str.replace(
+            r"\b(Home|Away)\b", lambda name: {"Home": "Away", "Away": "Home"}[name.group()], regex=True
+        )
+        board = update_favorite_tracking(opponent, tmp_path, at, cfb_enabled=enabled)
+        assert not is_favorite(board)
+        assert board.iloc[0].favorite_review_state != "pending_addition"
+
+    for at in ("2026-11-24T23:00:00Z", "2026-11-24T23:10:00Z"):
+        board = update_favorite_tracking(cfb_extra_capture(at), tmp_path, at, cfb_enabled=enabled)
+    assert is_favorite(board)
+
+
 @pytest.mark.parametrize("handicap,high", [(8,False),(-8,False),(21,True),(-21,True),(2.5,True)])
 def test_cfb_extra_threshold_edges_and_independent_switches(tmp_path, handicap, high):
     from red_fox_favorite import CFB_HIGH_MONEY, CFB_PUBLIC_FOLLOW
