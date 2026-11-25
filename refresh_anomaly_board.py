@@ -663,7 +663,9 @@ def _refresh(coverage):
     board = select_market_leaders(board)
     board = apply_cross_market_integrity(board, history, as_of=newest_snapshot)
     board = apply_cross_market_split(board)
-    board = apply_red_fox_favorites(board, as_of=newest_snapshot, nov24_goalies=read_goalies(DATA))
+    nhl_goalies = read_goalies(DATA)
+    classified = board
+    board = apply_red_fox_favorites(board, as_of=newest_snapshot, nov24_goalies=nhl_goalies)
     # Persist the source observation time used for each published market.  The
     # downstream freeze worker can then select/validate the final state by
     # source time rather than by the minute at which its timer happens to run.
@@ -691,6 +693,12 @@ def _refresh(coverage):
             record_legacy(board, DATA, newest_snapshot)
         except Exception as exc:
             print(f"[nba-legacy-shadow] capture failed: {type(exc).__name__}: {exc}", flush=True)
+    try:
+        from nhl_paper_release import capture as capture_nhl
+
+        capture_nhl(classified, board, history, nhl_goalies, DATA, newest_snapshot)
+    except Exception as exc:
+        print(f"[nhl-paper] capture failed: {type(exc).__name__}: {exc}", flush=True)
     board = update_favorite_tracking(board, DATA, as_of=newest_snapshot, market_history=history, nba_config=nba_config)
     if retained_source and not board.empty:
         retained_rows = [

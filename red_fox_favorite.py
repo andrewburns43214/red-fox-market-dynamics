@@ -194,6 +194,12 @@ NBA_PUBLIC_VERSION = "red_fox_favorite_nba_public_neutral_v1"
 NBA_PUBLIC_FLAG = "RED_FOX_NBA_PUBLIC_NEUTRAL"
 NBA_LEGACY_HOLD_FLAG = "RED_FOX_NBA_HOLD_LEGACY"
 NOV24_VERSION = "red_fox_favorite_20261124"
+NHL_ORDINARY_PAUSE = "RED_FOX_NHL_PAUSE_ORDINARY"
+NHL_HIGH_HANDLE_PAUSE = "RED_FOX_NHL_PAUSE_HIGH_HANDLE"
+NHL_PAUSED_COHORTS = {
+    NHL_ORDINARY_PAUSE: "nhl_ordinary_promotion_paused",
+    NHL_HIGH_HANDLE_PAUSE: "nhl_high_handle_promotion_paused",
+}
 CFB_PUBLIC_FOLLOW = "cfb_public_spread_follow"
 CFB_HIGH_MONEY = "cfb_low_ticket_high_money_spread"
 CFB_SPREAD_VERSIONS = {
@@ -402,6 +408,7 @@ def update_favorite_tracking(
     market_history: pd.DataFrame | None = None,
     cfb_enabled: frozenset[str] | None = None,
     nba_config: tuple[bool, bool] | None = None,
+    nhl_hypothetical: bool = False,
 ) -> pd.DataFrame:
     """Persist every prospective snapshot and carry first qualification forward."""
     current = board.copy()
@@ -413,7 +420,8 @@ def update_favorite_tracking(
     current = _apply_cfb_spread_pathways(current, history, market_history, at, cfb_enabled)
     nba_config = nba_release_config() if nba_config is None else nba_config
     current = _apply_nba_release(current, history, at, *nba_config)
-    current = _apply_visibility_lock(current, history, Path(data_dir), at, nba_hold_legacy=nba_config[1])
+    current = _apply_visibility_lock(current, history, Path(data_dir), at, nba_hold_legacy=nba_config[1],
+                                     nhl_hypothetical=nhl_hypothetical)
     current = _apply_manual_favorite_inclusions(current, at)
     _resolve_cfb_spread_conflicts(current, at)
     keys = ["sport", "game_id", "market_display"]
@@ -523,6 +531,7 @@ def update_favorite_tracking(
         "_favorite_legacy_reason", "_ncaaf_move_gate_passed",
         "_ncaaf_market_move_status", "_ncaaf_decision_reason", "_favorite_gate_reason",
         "_nba_release_mismatch",
+        "_nhl_paused_cohort", "_nhl_paused_side", "_nhl_paused_pathway", "_nhl_paused_version",
     ], errors="ignore")
 
 
@@ -597,6 +606,9 @@ def _update_candidate_shadow(current: pd.DataFrame, data_dir: Path, at: str) -> 
             candidate_specs.append((supported, "favorite_rules", ""))
         if shadow_side and _side_identity(shadow_side) != _side_identity(supported):
             candidate_specs.append((shadow_side, "nfl_freeze_75_79", row.get("favorite_shadow_freeze_reason", "")))
+        paused_cohort = row.get("_nhl_paused_cohort")
+        if paused_cohort in NHL_PAUSED_COHORTS.values() and row.get("_nhl_paused_side"):
+            candidate_specs.append((row["_nhl_paused_side"], paused_cohort, row.get("favorite_reason", "")))
         if not candidate_specs:
             continue
         kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
@@ -647,8 +659,8 @@ def _update_candidate_shadow(current: pd.DataFrame, data_dir: Path, at: str) -> 
             "candidate_reason": shadow_reason or row.get("favorite_reason", "") or (
                 "Accepted by current Favorite rules." if accepted else "Rejected by current Favorite rules."
             ),
-            "favorite_pathway": row.get("favorite_pathway", ""),
-            "favorite_rule_version": row.get(
+            "favorite_pathway": row["_nhl_paused_pathway"] if cohort == paused_cohort else row.get("favorite_pathway", ""),
+            "favorite_rule_version": row["_nhl_paused_version"] if cohort == paused_cohort else row.get(
                 "favorite_rule_version", _favorite_rule_version(row.get("sport", ""))
             ),
             "open_line": candidate.get("open_line", ""), "current_line": candidate.get("current_line", ""),
@@ -722,10 +734,17 @@ def _apply_visibility_lock(
     data_dir: Path,
     at: str,
     *, nba_hold_legacy: bool = False,
+    nhl_hypothetical: bool = False,
 ) -> pd.DataFrame:
     """Apply the two-stage T-40 review window and T-20 display lock with safety suppression."""
     if current is None or "kickoff_iso" not in current:
         return current
+    from nhl_release_config import enabled, switches
+
+    nhl_paused = set()
+    if not nhl_hypothetical and current["sport"].eq("nhl").any():
+        settings = switches()
+        nhl_paused = {flag for flag in NHL_PAUSED_COHORTS if enabled(flag, settings)}
     result = current.copy()
     for column in REVIEW_BOARD_COLUMNS:
         result[column] = ""
@@ -854,6 +873,20 @@ def _apply_visibility_lock(
             result.at[index, "favorite_reason"] = "Official Favorite retained after kickoff handoff."
             _set_review(result, index, "locked_at_start", result.at[index, "favorite_reason"], at)
             continue
+        if identity[0] == "nhl" and not active:
+            candidate = row if raw_favorite or source is None else source
+            version = candidate.get("favorite_rule_version")
+            pause_flag = NHL_HIGH_HANDLE_PAUSE if version == NOV24_VERSION else NHL_ORDINARY_PAUSE
+            if pause_flag in nhl_paused:
+                if raw_favorite:
+                    _set_review(result, index, "promotion_paused", "New NHL Favorite promotion paused.", at)
+                    result.at[index, "_nhl_paused_cohort"] = NHL_PAUSED_COHORTS[pause_flag]
+                    result.at[index, "_nhl_paused_side"] = row.get("favorite_side", "")
+                    result.at[index, "_nhl_paused_pathway"] = row.get("favorite_pathway", "")
+                    result.at[index, "_nhl_paused_version"] = version
+                _clear_favorite(result, index, "New NHL Favorite promotion paused.")
+                _clear_pending_review(reviews, review_records, row, key, at)
+                continue
         stale_reason = _freshness_failure(row, source, now)
         if stale_reason and (raw_favorite or active):
             _late_invalidate_favorite(result, index, stale_reason, at)
