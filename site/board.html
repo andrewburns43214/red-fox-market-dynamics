@@ -16,7 +16,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="/pwa.js" defer></script>
-<script src="/manual-favorites.js?v=2" defer></script>
+<script src="/manual-favorites.js?v=3" defer></script>
 <script>
 // Keep the server-side access cookie aligned with the signed-in Supabase session.
 (function () {
@@ -5506,6 +5506,7 @@ async function loadAll({forceRender=false}={}){
     const updateNote=document.getElementById('board-update-note');
     if(updateNote) updateNote.textContent='Up to date';
   }
+  if(manualFavoriteEnabled) syncManualFavoriteState();
 }
 
 async function refreshBoardNow(){

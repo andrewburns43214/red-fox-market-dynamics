@@ -137,6 +137,25 @@ def test_quote_lookup_requires_target_in_latest_capture_for_its_sport(tmp_path):
     assert manual.latest_quotes(tmp_path,manual.event_rows(tmp_path,EVENT),NOW)=={}
 
 
+def test_owner_preview_uses_saved_selection_before_the_board_is_republished(tmp_path, server, monkeypatch):
+    board=seed(tmp_path, favorite=False)
+    monkeypatch.setattr(server,"check_pregame",lambda *_:fixture())
+    offer=selection(tmp_path,"SPREAD","Home")
+    assert commit(server,tmp_path,"add",0,offer["token"])[0]==200
+    assert not any(manual.yes(row["red_fox_favorite"]) for row in manual.event_rows(tmp_path,EVENT))
+    patches=manual.owner_board_patches(tmp_path,NOW)
+    chosen=[patch for patch in patches if patch["favorite"]]
+    assert len(chosen)==1
+    assert (chosen[0]["side"],chosen[0]["price"],chosen[0]["origin"],chosen[0]["revision"])==("Home -3","-105","manual",1)
+    assert chosen[0]["match"]==["nfl","101","SPREAD","Away @ Home",START.isoformat(),
+                                (NOW-timedelta(minutes=1)).isoformat()]
+    assert len(patches)==3
+    assert not any(patch["favorite"] for patch in manual.owner_board_patches(tmp_path,START))
+    manual.project_board(board,tmp_path,NOW).to_csv(tmp_path/"anomaly_board.csv",index=False)
+    assert commit(server,tmp_path,"restore",1)[0]==200
+    assert not any(patch["favorite"] for patch in manual.owner_board_patches(tmp_path,NOW))
+
+
 @pytest.mark.parametrize("market,side,scores,grade",[
     ("SPREAD","Away",(28,31),"Push"),
     ("MONEYLINE","Home",(28,31),"W"),
@@ -257,7 +276,7 @@ def test_dashboard_buttons_are_only_inside_existing_popups():
     assert page.count("manualFavoriteButton(")==2
     assert "if(!state.frozenPregame) html+=manualFavoriteButton(r);" in page
     assert "if(!manualFavoriteEnabled||!row?.game_id) return '';" in script
-    assert "response?.ok&&(await response.json()).enabled===true" in script
+    assert "manualFavoriteEnabled=state?.enabled===true" in script
     assert "<fieldset data-manual-actions disabled>" in page
     assert "input.type='radio'" in script
     assert "Remove Favorite" in script and "Add Favorite" in script

@@ -250,8 +250,9 @@ def same_fixture(row, decision):
     return row.get("game") == decision["game"] and stamp(row.get("kickoff_iso")) == stamp(decision["board_start"])
 
 
-def project_board(board, data_dir, now, ufc_proofs=None):
-    active = {key: value for key, value in decisions(data_dir).items() if value["action"] != "restore"}
+def project_board(board, data_dir, now, ufc_proofs=None, *, saved=None):
+    active = {key: value for key, value in (decisions(data_dir) if saved is None else saved).items()
+              if value["action"] != "restore"}
     if not active or board.empty:
         return board
     result = board.copy()
@@ -285,6 +286,48 @@ def project_board(board, data_dir, now, ufc_proofs=None):
         for field, value in mark_selected({}, decision).items():
             result.at[index, field] = value
     return result
+
+
+def owner_board_patches(data_dir, now):
+    """Replay saved choices against the exact published rows an owner can reload."""
+    saved = decisions(data_dir)
+    if not saved:
+        return []
+    directory = Path(data_dir)
+    rows = [row for row in csv_rows(directory / "anomaly_board.csv")
+            if (decision := saved.get(scope(row))) and same_fixture(row, decision)]
+    if not rows:
+        return []
+    ufc_proofs = {}
+    if any(row["sport"] == "ufc" for row in rows):
+        bouts, notices = ufc.load_context(directory)
+        for candidate in csv_rows(directory / "live_recent_market_candidates.csv"):
+            if candidate.get("sport") != "ufc" or scope(candidate) not in saved:
+                continue
+            proof = ufc.read_market_proof(candidate)
+            bout = ufc.match_bout(candidate["game"], candidate["kickoff_iso"], bouts)
+            if (bout and ufc.allowed_pre(proof) and proof["bout_id"] == bout["id"]
+                    and proof["athlete_ids"] == bout["athlete_ids"]
+                    and ufc.is_pregame(candidate, bouts, notices, pd.Timestamp(now))
+                    and not ufc.risks_for(bout, notices, pd.Timestamp(now))):
+                ufc_proofs[candidate["game_id"]] = proof
+    projected = project_board(pd.DataFrame(rows), directory, now, ufc_proofs, saved=saved)
+    keys = ("sport", "game_id", "market_display", "game", "kickoff_iso", "state_as_of_utc")
+    patches = []
+    for before, after in zip(rows, projected.to_dict("records")):
+        decision = saved[scope(before)]
+        favorite = yes(after.get("red_fox_favorite")) and not (
+            decision["action"] == "restore" and after.get("favorite_origin") == "manual"
+        )
+        patches.append({
+            "match": [before.get(key, "") for key in keys],
+            "revision": decision["revision"],
+            "favorite": favorite,
+            "side": after.get("favorite_side", "") if favorite else "",
+            "origin": "manual" if favorite and after.get("favorite_origin") == "manual" else "",
+            "price": after.get("manual_entry_price", "") if favorite and after.get("favorite_origin") == "manual" else "",
+        })
+    return patches
 
 
 def ufc_handoff(decision, raw, bouts, notices, now):

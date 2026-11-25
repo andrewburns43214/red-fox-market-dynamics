@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 from access_verifier import access_token, bearer_token, verified_user
 from build_live_recent import fetch_scoreboard, exact_scores
 from manual_favorites import (csv_rows, decisions, event_rows, latest_quotes, now_utc,
-                              official_board_choice, save, same_fixture, scope, snapshot_revision, stamp)
+                              official_board_choice, owner_board_patches, save, same_fixture, scope, snapshot_revision, stamp)
 from mlb_fixtures import match_fixture, read_context
 import ufc_bout_integrity as ufc
 import pandas as pd
@@ -207,7 +207,15 @@ class Handler(BaseHTTPRequestHandler):
         if not self.owner():
             return
         if not path.query:
-            return self.reply(200, {"enabled": True})
+            result = {"enabled": True}
+            try:
+                patches = owner_board_patches(DATA, now_utc())
+                if patches:
+                    result["favorite_patches"] = patches
+            except (OSError, sqlite3.Error, ValueError, KeyError, TypeError):
+                # A transient read failure must not disable legitimate owner access.
+                pass
+            return self.reply(200, result)
         query = parse_qs(path.query)
         event = event_identity({key: values[0] for key, values in query.items() if len(values) == 1})
         if not event:

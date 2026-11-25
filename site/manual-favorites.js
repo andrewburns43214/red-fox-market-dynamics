@@ -1,8 +1,11 @@
 ﻿/* Only the server capability enables these controls. No account data is put on the board. */
 const manualFavoriteRoute='/api/owner/favorites';
 const manualFavoritePending=new Map();
+const manualFavoritePatches=new Map();
 let manualFavoriteEnabled=false;
 let manualFavoriteView=0;
+let manualFavoriteSession=0;
+let manualFavoriteStateRequest=null;
 
 async function manualFavoriteRequest(query='',init={}){
   const session=(await window.redfoxSupabase.auth.getSession()).data.session;
@@ -10,18 +13,36 @@ async function manualFavoriteRequest(query='',init={}){
   const headers={...init.headers,Authorization:'Bearer '+session.access_token};
   return fetch(manualFavoriteRoute+query,{...init,headers,cache:'no-store'});
 }
-document.addEventListener('DOMContentLoaded',async ()=>{
-  try {
-    const response=await manualFavoriteRequest();
-    manualFavoriteEnabled=Boolean(response?.ok&&(await response.json()).enabled===true);
-    if(manualFavoriteEnabled&&document.body.classList.contains('game-detail-open')) renderGameDetail();
-  } catch (_error) {}
-});
+function syncManualFavoriteState(){
+  if(manualFavoriteStateRequest) return manualFavoriteStateRequest;
+  const generation=manualFavoriteSession;
+  manualFavoriteStateRequest=(async ()=>{
+    try {
+      const response=await manualFavoriteRequest();
+      const state=response?.ok?await response.json():null;
+      if(generation!==manualFavoriteSession) return;
+      const previouslyEnabled=manualFavoriteEnabled;
+      manualFavoriteEnabled=state?.enabled===true;
+      manualFavoritePatches.clear();
+      for(const patch of state?.favorite_patches||[]){
+        manualFavoritePatches.set(JSON.stringify(patch.match),patch);
+      }
+      const previous=boardFavoriteSignature(allDash);
+      manualFavoriteProjection(allDash);
+      if(previous!==boardFavoriteSignature(allDash)) renderBoard(false);
+      if(!previouslyEnabled&&manualFavoriteEnabled&&document.body.classList.contains('game-detail-open')) renderGameDetail();
+    } catch (_error) {}
+  })().finally(()=>{manualFavoriteStateRequest=null;});
+  return manualFavoriteStateRequest;
+}
+document.addEventListener('DOMContentLoaded',syncManualFavoriteState);
 window.redfoxSupabase?.auth.onAuthStateChange((event)=>{
   if(event==='SIGNED_OUT'){
+    manualFavoriteSession++;
     manualFavoriteEnabled=false;
     document.getElementById('manual-favorite-dialog')?.close();
     manualFavoritePending.clear();
+    manualFavoritePatches.clear();
     document.querySelectorAll('[data-manual-favorite-control]').forEach(button=>button.remove());
   }
 });
@@ -38,12 +59,24 @@ function openFavoriteBadge(badge){
   openSignalGuide('Red Fox Favorite',row);
 }
 function manualFavoriteProjection(rows){
-  if(!manualFavoritePending.size) return rows;
+  if(!manualFavoritePending.size&&!manualFavoritePatches.size) return rows;
+  const acknowledged=new Set();
   for(const row of rows){
     const key=row.sport+'|'+row.game_id;
     const pending=manualFavoritePending.get(key);
+    const patch=manualFavoritePatches.get(JSON.stringify([row.sport,row.game_id,row.market_display,row.game,row.kickoff_iso,row.state_as_of_utc]));
+    let revision=Number(row.manual_revision)||0;
+    if(patch&&patch.revision>=revision&&(!pending||patch.revision>=pending.revision)){
+      row.red_fox_favorite=patch.favorite?'true':'false';
+      row.favorite_side=patch.side;
+      row.favorite_origin=patch.origin;
+      row.manual_entry_price=patch.price;
+      row.manual_revision=String(patch.revision);
+      revision=patch.revision;
+    }
     if(!pending) continue;
-    if(Date.parse(_boardFreshness?.board_published_at)>=Date.parse(pending.as_of)) continue;
+    if(revision>=pending.revision){acknowledged.add(key);continue;}
+    if(pending.action==='restore'&&Date.parse(_boardFreshness?.board_published_at)>=Date.parse(pending.as_of)) continue;
     if(Date.now()-Date.parse(pending.as_of)>15*60*1000) continue;
     const choice=pending.choice;
     const selected=choice?.market===row.market_display;
@@ -54,7 +87,7 @@ function manualFavoriteProjection(rows){
     row.manual_entry_price=selected?choice.price:'';
   }
   for(const [key,pending] of manualFavoritePending){
-    if(Date.parse(_boardFreshness?.board_published_at)>=Date.parse(pending.as_of)||Date.now()-Date.parse(pending.as_of)>15*60*1000){
+    if(acknowledged.has(key)||Date.now()-Date.parse(pending.as_of)>15*60*1000){
       manualFavoritePending.delete(key);
     }
   }
