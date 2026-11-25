@@ -1,0 +1,249 @@
+REVIEW MEMO — RED FOX SPORTSBOOK FAVORITE INTEGRITY
+
+Branch audit/sportsbook-favorite-integrity, based on production b26c038.
+This branch is for review and offline validation. Production policy choices
+and any historical classification corrections require separate approval.
+
+DEPENDENCIES AND AUTHORITIES
+
+1. main.py / open registry — DraftKings observed current line, prices,
+   tickets/handle and scheduled start; first observed line per sport, event,
+   market and side is the registry opener.
+2. refresh_anomaly_board._refresh — parses identities and timestamps, selects
+   each latest complete synchronized pair, applies completeness, freshness,
+   retention and publication windows; expands retained timelines. NFL/CFB
+   active-week history uses the seven-day rebase. Cold archive coverage and
+   hot input can differ.
+3. anomaly_board.build_anomaly_outputs — evaluates path, split, directional
+   reaction, held/reversal, evidence roles and Candidate action for each side.
+   Action ledger observations can label earlier action on Watch rows.
+4. anomaly_board.select_market_leaders / _confirmed_supported_side — one row
+   with two side payloads. A sole current Contrarian/Follow or eligible
+   counterpart Fade supplies the supported side. Descriptive rank and role
+   are distinct from that decision. cross_market_integrity verifies
+   synchronized DraftKings spread/ML contradictions; cross_market_split is
+   descriptive. Alternate bookmaker context is a separate input.
+5. red_fox_favorite.apply_red_fox_favorites — evaluate market, price, side,
+   pathway, risk, sport-specific rules and pricing-mismatch vetoes. Evaluate
+   eligible Nov 24 extension only after baseline failure. Route expressions
+   and apply priority. This output is a raw candidate pending visibility.
+6. red_fox_favorite.update_favorite_tracking / _apply_visibility_lock —
+   transient review (pending, applied, cleared, late invalidated), candidate
+   plus latest tracking and archived row, per-sport intervals and windows,
+   recovery, hard overrides. Append tracking and maintain last qualified
+   handoff evidence. The public retained-outage overlay runs after this.
+7. build_live_recent.main / favorite_handoff_states /
+   suppress_stale_retained_favorites — use board, qualified archive, explicit
+   tracking and raw paired handoff. Compare source time with kickoff. Dedup
+   within a market. Apply historical exclusions and audited corrections.
+8. performance_ledger._frozen_records / _attach_results —
+   decide official inclusion with version, Supported Side, source-time,
+   exclusions and handoff reconciliation. Attach final score/winner and
+   grade the captured entry expression. Distribution through
+   performance_favorites.csv and favorite_performance.json. The dashboard
+   consumes these durable results and a separate live display decision.
+
+Keys in the current graph
+  Raw capture: sport/event/market/side/source timestamp.
+  Board & score identity: sport/event/market.
+  Same-team routing relates multiple markets deliberately.
+  Patched pending resolution: sport/event/market + normalized Favorite side
+  and rule version + review action, using the uninterrupted matching suffix.
+  Entry evidence: side, market, rule version and quote timestamp when stored.
+  Outcomes: independently linked provider ID/teams and market settlement.
+  Treat provider identity, publication, selection, entry and settlement
+  as separate facts during reconciliation.
+
+REPRODUCTION MATRIX (base source at b26c038)
+
+1. Cross-side ordinary confirmation — software defect.
+   Source red_fox_favorite.py _review_confirmed, _review_record,
+   _apply_visibility_lock. Old condition checks market key and pending action
+   plus elapsed time. Intended same wager; actual candidate B can inherit
+   candidate A's pending review. CFB and NHL/UFC could also search further
+   back than an intervening different pending identity. Repro: set team A
+   pending, then identical market with team B as candidate inside the
+   applicable interval. The old evaluator can pass. New tests cover both
+   actions, all seven sports, aliasing due to changing spread numbers,
+   interruptions, changed markets, IDs and versions, and missing old version.
+   Affected: board promotion/removal, tracking, handoff, official cohort if
+   a different classification survives to kickoff. In copied logs, 551
+   adjacent pending/applied addition pairs showed zero changed sides.
+   All 1,589 pending rows lack version or timestamp metadata. The original
+   use of a non-adjacent pending row cannot be reconstructed reliably.
+   Patch: retain side/version/source time; match same contiguous review
+   episode. Old pending rows without a version will need to confirm again.
+   Existing per-sport elapsed limits remain the same.
+
+2. Board Follow versus Favorite Follow — contradictory live predicates;
+   resolution is a policy decision.
+   Source anomaly_board.py _evaluate_side / _confirmed_supported_side;
+   red_fox_favorite.py _pathway / _matches_confirmed_supported_side.
+   Board Follow starts at 70% tickets and 55% money. Nominal Favorite Follow
+   requires both splits in 46–60 and an exact Supported Side. With coherent
+   splits, the same market's Contrarian/Follow/eligible Fade cannot confer
+   that identity. Repro: Stage 2 code_probes.json, 55/55 Watch and 75/80
+   Follow at a two-point move. Former passes Favorite pathway helper only;
+   latter receives authoritative board support but fails the Favorite
+   pathway helper. No archived official row was tagged moderate Follow.
+   Signals, qualification and official record would be affected by selecting
+   either definition. Both cutoffs and the Tested T−60 public Follow cohort
+   remain as originally recorded. No counterfactual selections generated.
+
+3. CFB high handle — contradictory live predicates; policy decision.
+   Source anomaly_board.py _evaluate_side and red_fox_favorite.py _pathway,
+   _ncaaf_sharp_money_profile and _ncaaf_gate_for_market. Upstream
+   Contrarian requires money <=45, downstream high-handle branch requires
+   >=46 and Contrarian. Repro: CFB side 30 tickets/60 money, +5 to +3
+   and Clean, becomes Watch. A historical official example exists via
+   explicit continuity correction. Turning it into a broad Favorite path
+   would change policy. The earlier 11–3 is a proxy, never a replay of
+   current qualification.
+
+4. November 24 NCAAB ML — improperly inherited/redundant threshold,
+   policy choice about intended requirement.
+   Source red_fox_favorite.py _nov24_decision / _basketball_moneyline_alignment,
+   anomaly_board.py _evaluate_side. The NCAAB caller only tests direction
+   and positive movement at its level, but TOWARD already encodes >=2.5 raw
+   implied-probability points. Repro: -110 -> -115 is 1.107, LIMITED,
+   neutral confirmation; -110 -> -130 is 4.141, TOWARD, confirming.
+   Affects NBA/NCAAB alignment, the NCAAB Nov 24 comparison and historical
+   interpretation. The any-positive de-vig research proxy is more
+   permissive. The copied Nov 24 cohort has no settled grade. Preserve
+   deployed gates while the effective floor is explicitly adjudicated.
+
+5. L2 alternate venue identifiers — software defect; activation changes
+   the applicability of an existing veto.
+   Source refresh_anomaly_board._refresh assigns sport|DK ID,
+   l2_scraper.scrape_l2 uses canonical_match.build_canonical_key
+   (normalized teams, sport, UTC date), and
+   anomaly_board.build_anomaly_outputs filters by exact membership.
+   Repro in test_reference_mapping_requires_exact_event_and_refuses_ambiguity
+   (all seven sports). The shadow-only exact adapter maps an unambiguous
+   reference to DK ID on normalized teams and exact scheduled instant,
+   rejects same-matchup collisions, and has no classification consumer.
+   Affects cross-book context, Market Lag and therefore Favorite quality.
+   Actual historical timely coverage was 30 events and current L2 was
+   stale. Do not deploy a new reference match or live fallback until
+   feed freshness, schedule tolerances and lag-veto activation are approved.
+
+6. Display, tracking, handoff, ledger — competing authorities;
+   part software sequencing issue, part business policy.
+   Source refresh_anomaly_board._refresh calls retained restore after
+   update_favorite_tracking. build_live_recent.favorite_handoff_states can
+   confirm a paired quote despite an explicit falloff, then
+   suppress_stale_retained_favorites suppresses it. The ledger has its
+   own supported-side and freeze-source gates. Repro: existing Blues
+   fixture test_favorite_handoff_keeps_blues_when_final_paired_market_strengthens
+   gives true at -125, false after running actual suppression. The final
+   audited historical STL decision was separately corrected. A copied
+   current snapshot showed no joined difference once applying the proper
+   pre-kickoff tracking cutoff. Files copied across workers are not
+   transactional. The audit tool reconciles by key and time without
+   changing the result. Need approval on whether an explicitly fallen-off
+   row may be reinstated by a last quote, and whether an outage badge
+   is display-only. Keep both policies exactly as deployed on this branch.
+
+7. Entry versus close sources — software provenance defect.
+   Source performance_ledger._tracking_lifecycle, _frozen_records,
+   update_performance_ledger and _attach_clv; red_fox_favorite tracking
+   used the market leader quote and could carry price across a new side.
+   Repro: same game, opposite leader, subject quote -115 vs leader -105;
+   frozen side and version with two tracking entries. For close, supply
+   close number but only final-pregame price. Patch records the subject
+   quote and entry timestamp and separates close-number and close-price
+   sources/timestamps. A retained close with absent proof is
+   retained_close_unverified. Missing close value keeps the existing
+   pregame fallback and is labeled final_pregame_fallback. Existing
+   grading and CLV methods unchanged; historic timestamps stay blank where
+   unsupported. Impact: four historical entry fallbacks, three different
+   quotes in 46 comparable near-close comparisons. No evidence warrants
+   changing a grade solely from those three comparisons.
+
+8. Signed American units — discontinuity proven; unit and boundary policy.
+   Source red_fox_favorite._material_addition / _material_removal and
+   build_live_recent._market_movement_value. Repro: +105 -> -105
+   is 210 absolute American units, 2.439 raw implied points. The existing
+   15-unit addition gate passes. Same-order direction tests across
+   pick'em can keep their sign; magnitude thresholds need explicit
+   policy. Affects late addition/removal and study threshold comparisons.
+   Old archives cannot isolate all threshold-triggered decisions. Keep
+   the 15-unit boundary pending approval of raw versus no-vig units,
+   equivalent threshold, and treatment of missing paired prices.
+
+9. Generic falloffs — software auditability defect.
+   Source red_fox_favorite.update_favorite_tracking discarded most review
+   or cause text; _qualify_market returned only accept/no decision.
+   Repro: tracking actual loss-of-status fixture with recorded cause.
+   Patch persists review/qualification diagnostic, actual source time
+   when available, and the exact side/rule on review records. If multiple
+   checks fail, record the first evaluated gate; distinguish absent market
+   and unknown root causes. The old disappearance_reason column is
+   retained for compatibility. At historical cutoff 12 of 18 stayed-out
+   wagers retained only a generic qualification failure. The reason text
+   cannot be backfilled with a signal inferred from the outcome.
+
+10. Repeated unchanged observations — persistence is a legitimate business
+   rule; independence is an unsupported interpretation.
+   Source anomaly_board._build_history_points, _whipsaw_confirmation and
+   cross_market_integrity._conflict_streak. Repro: same state at three
+   timestamps, with one duplicated timestamp; three retained points, one
+   distinct state, zero movement. Archive unchanged adjacent shares:
+   NFL 91.1%, NBA 82.1%, NHL 82.4%. Affects any test interpreting captures
+   as independent updates, and data-quality gates with counts. Source
+   times are persisted on the branch. Require separate policy approval
+   before making distinct price changes a gate. Provider sequence and
+   actual ticket/handle counts are unavailable.
+
+ADDITIONAL INHERITED/REDUNDANT CONDITIONS TO TRACK
+
+  NBA 2.5-point explicit confirmation repeats upstream TOWARD under
+  normal data. A CFB intact partial Whipsaw can set base-quality true
+  before its specialized helper checks no-retrace, 80% retention and
+  duration; the specialized helper does not recheck every base-quality
+  input. Market Read's Hold/Pressure tags are descriptive, while the
+  actionable Freeze test has tighter thresholds. Some board snapshots
+  select prices from the retained path and latest splits from the admission
+  pair, so selected side source timestamps and provided admission time
+  should be compared for faithful replay. The old “short home” football
+  gate has no home-team condition. The only whole-strategy research record
+  is a mixed-version production series with event-level overrides. No
+  inference about independent impact of a particular threshold follows.
+
+RELEASE ORDER AND RISKS
+
+  1. Review the proposed identity and provenance migration first.
+     Test copied data with full legacy schemas before any approved rollout.
+     Risk: a still-pending old row without version restarts confirmation;
+     future candidates may wait one more capture after a side or version
+     switch. Entry now uses the correct side; past official rows are
+     preserved. Future attribution improves; no past timestamp is guessed.
+  2. Compare board, tracking, raw handoff and ledger from synchronized
+     copies. Keep the audit collector read-only. Decide which state owns
+     kickoff classification and which retained badge is display-only
+     before consolidating. Risk: parity changes can change what is graded.
+  3. Validate the reference identity adapter in shadow on a fresh feed,
+     with data rotation, different scheduled times, doubleheaders and
+     unambiguous book IDs. Vote on activation of the existing lag veto.
+  4. Resolve the Follow, CFB high-handle, NCAAB floor, and American-unit
+     measurement policies individually. None of the exploratory winning
+     cohorts is an authorization to change a qualification pathway.
+
+REPRODUCTION
+
+  Run from the isolated worktree using the project Python environment:
+    python -m pytest -q tests/test_sportsbook_favorite_integrity.py
+    python -m pytest -q tests/test_red_fox_favorite.py
+    python -m pytest -q tests/test_live_recent_pass.py
+
+  Historical inputs are the separately copied Red Fox files, vintage and
+  hashes in stage3/reconciliation. Example:
+    python tools/audit_sportsbook_integrity.py --original PATH_TO_STAGE1_DATA
+      --snapshot PATH_TO_STAGE3_DATA --stage-one PATH_TO_STAGE1_ROOT
+      --output PATH_TO_SEPARATE_REPORTS
+
+  original.json preserves the original ledger hash and results;
+  independently_verified.json gives grade coverage and close discrepancies;
+  unresolved.json contains legacy review and current snapshot state checks.
+  See stage2/code_probes.json and its executable generator for Follow,
+  CFB high handle and the inherited basketball threshold.

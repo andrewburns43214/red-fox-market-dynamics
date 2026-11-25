@@ -158,10 +158,12 @@ TRACKING_COLUMNS = [
     "final_pregame_line", "final_pregame_market_read", "final_pregame_rank", "board_rank", "reaction", "path",
     "whipsaw_state", "cross_market_state", "supporting_evidence", "snapshot_id",
     "disappearance_reason", "closing_line", "clv", "result",
+    "source_observed_at", "entry_observed_at", "transition_reason",
 ]
 REVIEW_COLUMNS = [
     "recorded_at", "sport", "game_id", "game", "market_display", "kickoff_iso",
     "review_state", "review_action", "favorite_side", "current_line", "reason",
+    "favorite_rule_version", "source_observed_at",
 ]
 REVIEW_BOARD_COLUMNS = ["favorite_review_state", "favorite_review_reason", "favorite_review_at"]
 SHADOW_COLUMNS = [
@@ -252,10 +254,15 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None, *, nov24_goalies: d
             rejection = _legacy_rejection_reason(row, supported, game_rows)
             result.at[index, "_favorite_legacy_reason"] = rejection
             result.at[index, "favorite_reason"] = rejection
-        decision = _qualify_market(row, game_rows, at=captured_at)
+        failures = {}
+        decision = _qualify_market(row, game_rows, at=captured_at, failures=failures)
         if not decision and nov24_goalies is not None and identity[0] in NOV24_SPORTS:
             decision = _nov24_decision(row, game_rows, captured_at, nov24_goalies)
         if not decision:
+            supported_identity = _side_identity(row.get("supported_side", ""))
+            side_failure = failures.get(supported_identity) or failures.get("")
+            if side_failure:
+                result.at[index, "_favorite_gate_reason"] = side_failure
             if legacy and str(row.get("sport", "")).lower() in {"ncaaf", "cfb"}:
                 side = next(
                     (item for item in _sides(row) if _side_identity(item.get("flagged_side")) == _side_identity(legacy["side"])),
@@ -300,6 +307,7 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None, *, nov24_goalies: d
         if current_mismatch or opener_mismatch:
             result.at[index, "favorite_cross_market_state"] = "mismatch"
             result.at[index, "favorite_reason"] = "Confirmed Cross-Market Mismatch withheld Favorite qualification."
+            result.at[index, "_favorite_gate_reason"] = result.at[index, "favorite_reason"]
             if opener_mismatch and not current_mismatch:
                 opener_blocked_games.add((str(row.get("sport", "")).lower(), str(row.get("game_id", ""))))
             continue
@@ -393,35 +401,43 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
         current_keys.add(key)
         prior = previous.get(key)
         favorite = _truthy(row.get("red_fox_favorite"))
-        if favorite and prior is not None:
+        same_identity = prior is not None and _favorite_review_identity(row) == _favorite_review_identity(prior)
+        if favorite and same_identity:
             prior_first = str(prior.get("first_qualified_line", "")).strip()
             prior_at = str(prior.get("recorded_at", "")).strip()
-            first_at = _first_qualification_time(history, key) or prior_at or at
+            first_at = str(prior.get("first_qualified_at", "")).strip() or prior_at or at
             current.at[index, "favorite_first_qualified_at"] = first_at
-            first_line = prior_first or str(row.get("current_line", ""))
+            first_line = prior_first or _favorite_entry_line(row)
         else:
-            first_line = str(row.get("current_line", "")) if favorite else ""
-        if favorite and str(row.get("favorite_rule_version")) == NOV24_VERSION:
-            if prior is None or not prior_first:
-                first_line = json.loads(str(row["favorite_supporting_evidence"]))["current_line"]
+            first_line = _favorite_entry_line(row) if favorite else ""
         same_snapshot = (
             favorite and prior is not None
             and str(prior.get("favorite_state", "")) == "qualified"
             and str(prior.get("snapshot_id", "")) == str(row.get("favorite_snapshot_id", ""))
         )
         if favorite:
-            if not same_snapshot:
-                records.append(_tracking_record(current.loc[index], at, first_line))
+            if not same_snapshot or not same_identity:
+                record = _tracking_record(current.loc[index], at, first_line)
+                record["entry_observed_at"] = (
+                    str(prior.get("entry_observed_at", "")) if same_identity else record["source_observed_at"]
+                )
+                records.append(record)
         elif prior is not None and str(prior.get("favorite_state", "")) == "qualified":
             record = {column: str(prior.get(column, "")) for column in TRACKING_COLUMNS}
             sport = str(row.get("sport", "")).lower()
             rejection = str(row.get("favorite_reason", "")).strip() if sport in {"ufc", "nhl"} else ""
             if not any(token in rejection.lower() for token in ("withheld", "failed", "removal", "unavailable")):
                 rejection = ""
+            review_reason = str(row.get("favorite_review_reason", "")).strip()
+            gate_reason = str(row.get("_favorite_gate_reason", "")).strip()
+            if gate_reason and gate_reason.lower() != "nan":
+                review_reason = " | ".join(dict.fromkeys(filter(None, (review_reason, gate_reason))))
             record.update(
                 recorded_at=at,
                 favorite_state="not_qualified",
                 disappearance_reason=rejection or "current qualification gates no longer satisfied",
+                source_observed_at=_review_source_observed_at(row, prior.get("favorite_side", "")),
+                transition_reason=review_reason or str(row.get("favorite_reason", "")).strip(),
             )
             records.append(record)
 
@@ -436,7 +452,9 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
         if key in started_frozen_keys:
             continue
         record = {column: str(prior.get(column, "")) for column in TRACKING_COLUMNS}
-        record.update(recorded_at=at, favorite_state="not_qualified", disappearance_reason="no longer published or eligible")
+        record.update(recorded_at=at, favorite_state="not_qualified",
+                      disappearance_reason="no longer published or eligible",
+                      source_observed_at="", transition_reason="Market absent from the evaluated board.")
         records.append(record)
 
     if records:
@@ -452,7 +470,7 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
     return current.drop(columns=[
         "_visibility_restored", "_favorite_legacy_qualified", "_favorite_legacy_side",
         "_favorite_legacy_reason", "_ncaaf_move_gate_passed",
-        "_ncaaf_market_move_status", "_ncaaf_decision_reason",
+        "_ncaaf_market_move_status", "_ncaaf_decision_reason", "_favorite_gate_reason",
     ], errors="ignore")
 
 
@@ -724,7 +742,7 @@ def _apply_visibility_lock(
             lock_minutes = _visibility_lock_minutes(identity[0])
             if minutes > review_minutes:
                 reason = "Favorite market temporarily absent; awaiting a second consecutive nonqualifying scrape."
-                if _review_confirmed(reviews, key, "removal", now):
+                if _review_confirmed(reviews, key, "removal", now, row):
                     review_records.append(_review_record(row, at, "applied", "removal", _latest_review_reason(reviews, key) or reason))
                     continue
                 held = row.copy()
@@ -853,7 +871,7 @@ def _apply_visibility_lock(
             # source-availability flicker from changing an established slate.
             if raw_favorite and not active:
                 reason = "Awaiting a second consecutive qualifying scrape."
-                if _review_confirmed(reviews, key, "addition", now):
+                if _review_confirmed(reviews, key, "addition", now, row):
                     review_records.append(_review_record(row, at, "applied", "addition", reason))
                 else:
                     _clear_favorite(result, index, reason)
@@ -861,13 +879,13 @@ def _apply_visibility_lock(
                     review_records.append(_review_record(row, at, "pending", "addition", reason))
             elif not raw_favorite and active:
                 hard, _, reason = _material_removal(row, source)
-                confirmed = _review_confirmed(reviews, key, "removal", now)
+                confirmed = _review_confirmed(reviews, key, "removal", now, source)
                 if hard or confirmed:
                     if confirmed:
                         reason = _latest_review_reason(reviews, key) or reason
                     _clear_favorite(result, index, reason)
                     _set_review(result, index, "applied_removal", reason, at)
-                    review_records.append(_review_record(row, at, "applied", "removal", reason))
+                    review_records.append(_review_record(row, at, "applied", "removal", reason, identity_row=source))
                 else:
                     reason = (
                         str(row.get("favorite_reason", "")).strip()
@@ -877,7 +895,7 @@ def _apply_visibility_lock(
                     _restore_favorite(result, index, source)
                     result.at[index, "favorite_reason"] = "Favorite held through a single nonqualifying capture."
                     _set_review(result, index, "pending_removal", reason, at)
-                    review_records.append(_review_record(row, at, "pending", "removal", reason))
+                    review_records.append(_review_record(row, at, "pending", "removal", reason, identity_row=source))
             elif not raw_favorite and not active:
                 _clear_pending_review(reviews, review_records, row, key, at)
             else:
@@ -920,7 +938,7 @@ def _apply_visibility_lock(
                 _clear_pending_review(reviews, review_records, row, key, at)
             elif raw_favorite:
                 material, reason = _material_addition(row)
-                if material and _review_confirmed(reviews, key, "addition", now):
+                if material and _review_confirmed(reviews, key, "addition", now, row):
                     _restore_favorite(result, index, row)
                     result.at[index, "_visibility_restored"] = "false"
                     _set_review(result, index, "applied_addition", reason, at)
@@ -938,7 +956,7 @@ def _apply_visibility_lock(
             continue
         if raw_favorite:
             material, reason = _material_addition(row)
-            if material and _review_confirmed(reviews, key, "addition", now):
+            if material and _review_confirmed(reviews, key, "addition", now, row):
                 _set_review(result, index, "applied_addition", reason, at)
                 review_records.append(_review_record(row, at, "applied", "addition", reason))
             else:
@@ -948,19 +966,19 @@ def _apply_visibility_lock(
                     review_records.append(_review_record(row, at, "pending", "addition", reason))
         else:
             hard, material, reason = _material_removal(row, source)
-            confirmed = _review_confirmed(reviews, key, "removal", now)
+            confirmed = _review_confirmed(reviews, key, "removal", now, source)
             if confirmed:
                 reason = _latest_review_reason(reviews, key) or reason
             if hard or confirmed:
                 _clear_favorite(result, index, reason)
                 _set_review(result, index, "applied_removal", reason, at)
-                review_records.append(_review_record(row, at, "applied", "removal", reason))
+                review_records.append(_review_record(row, at, "applied", "removal", reason, identity_row=source))
             else:
                 _restore_favorite(result, index, source)
                 result.at[index, "favorite_reason"] = "Favorite held through non-material closing-window change."
                 if material:
                     _set_review(result, index, "pending_removal", reason, at)
-                    review_records.append(_review_record(row, at, "pending", "removal", reason))
+                    review_records.append(_review_record(row, at, "pending", "removal", reason, identity_row=source))
     if "_nov24_added_support" in result or result["favorite_rule_version"].eq(NOV24_VERSION).any():
         picked = result["red_fox_favorite"].map(_truthy)
         added = result["favorite_rule_version"].eq(NOV24_VERSION)
@@ -1022,52 +1040,54 @@ def _review_rows(history: pd.DataFrame, key: tuple[str, str, str]) -> pd.DataFra
     return history.loc[mask].sort_values("recorded_at", kind="mergesort")
 
 
-def _review_confirmed(history: pd.DataFrame, key: tuple[str, str, str], action: str, now: pd.Timestamp) -> bool:
+def _favorite_review_identity(row: pd.Series | None) -> tuple[str, str]:
+    if row is None:
+        return "", ""
+    return _side_identity(row.get("favorite_side", "")), str(row.get("favorite_rule_version", "")).strip()
+
+
+def _favorite_entry_line(row: pd.Series) -> str:
+    identity, _ = _favorite_review_identity(row)
+    for side in _sides(row):
+        if identity and _side_identity(side.get("flagged_side")) == identity and side.get("current_line"):
+            return str(side["current_line"])
+    return str(row.get("current_line", ""))
+
+
+def _review_source_observed_at(row: pd.Series, side_name: object) -> str:
+    identity = _side_identity(side_name)
+    side = next((item for item in _sides(row) if _side_identity(item.get("flagged_side")) == identity), {})
+    return str(side.get("source_latest_at") or row.get("state_as_of_utc") or "").strip()
+
+
+def _review_confirmed(history: pd.DataFrame, key: tuple[str, str, str], action: str, now: pd.Timestamp,
+                      candidate: pd.Series | None) -> bool:
     scoped = _review_rows(history, key)
+    identity = _favorite_review_identity(candidate)
+    if scoped.empty or not all(identity):
+        return False
+    # Only the uninterrupted suffix for this exact decision can confirm it.
+    matching = (
+        scoped["review_state"].eq("pending") & scoped["review_action"].eq(action)
+        & scoped.get("favorite_side", pd.Series("", index=scoped.index)).map(_side_identity).eq(identity[0])
+        & scoped.get("favorite_rule_version", pd.Series("", index=scoped.index)).eq(identity[1])
+    )
+    interruptions = matching.reset_index(drop=True).index[~matching.to_numpy()]
+    if len(interruptions):
+        scoped = scoped.iloc[interruptions[-1] + 1:]
     if scoped.empty:
         return False
+    pending_times = pd.to_datetime(scoped["recorded_at"], errors="coerce", utc=True)
+    gaps = (now - pending_times).dt.total_seconds() / 60
     if key[0].lower() in {"ncaaf", "cfb"}:
-        terminals = scoped[scoped.get("review_state", pd.Series("", index=scoped.index)).astype(str) != "pending"]
-        if not terminals.empty:
-            terminal_at = pd.to_datetime(terminals.iloc[-1].get("recorded_at", ""), errors="coerce", utc=True)
-            if pd.notna(terminal_at):
-                scoped = scoped.loc[pd.to_datetime(scoped["recorded_at"], errors="coerce", utc=True) > terminal_at]
-        pending = scoped.loc[
-            scoped.get("review_state", pd.Series("", index=scoped.index)).astype(str).eq("pending")
-            & scoped.get("review_action", pd.Series("", index=scoped.index)).astype(str).eq(action)
-        ]
-        if pending.empty:
-            return False
-        first_at = pd.to_datetime(pending.iloc[0].get("recorded_at", ""), errors="coerce", utc=True)
-        gap = (now - first_at).total_seconds() / 60 if pd.notna(first_at) else -1
-        return bool(gap >= CONFIG.ncaaf_confirmation_min_gap_minutes)
+        return bool(gaps.iloc[0] >= CONFIG.ncaaf_confirmation_min_gap_minutes)
     if key[0].lower() in {"ufc", "nhl"}:
-        terminals = scoped[scoped.get("review_state", pd.Series("", index=scoped.index)).astype(str) != "pending"]
-        if not terminals.empty:
-            terminal_at = pd.to_datetime(terminals.iloc[-1].get("recorded_at", ""), errors="coerce", utc=True)
-            if pd.notna(terminal_at):
-                scoped = scoped.loc[pd.to_datetime(scoped["recorded_at"], errors="coerce", utc=True) > terminal_at]
-        pending = scoped.loc[
-            scoped.get("review_state", pd.Series("", index=scoped.index)).astype(str).eq("pending")
-            & scoped.get("review_action", pd.Series("", index=scoped.index)).astype(str).eq(action)
-        ]
-        if pending.empty:
-            return False
-        pending_times = pd.to_datetime(pending["recorded_at"], errors="coerce", utc=True)
-        gaps = (now - pending_times).dt.total_seconds() / 60
         return bool(gaps.between(
             CONFIG.primary_moneyline_confirmation_minutes,
             CONFIG.primary_moneyline_confirmation_max_gap_minutes,
             inclusive="both",
         ).any())
-    prior = scoped.iloc[-1]
-    prior_at = pd.to_datetime(prior.get("recorded_at", ""), errors="coerce", utc=True)
-    return bool(
-        prior.get("review_state") == "pending"
-        and prior.get("review_action") == action
-        and pd.notna(prior_at)
-        and 0 < (now - prior_at).total_seconds() / 60 <= CONFIG.visibility_confirmation_gap_minutes
-    )
+    return bool(0 < gaps.iloc[-1] <= CONFIG.visibility_confirmation_gap_minutes)
 
 
 def _review_already_recorded(history: pd.DataFrame, key: tuple[str, str, str], state: str) -> bool:
@@ -1080,13 +1100,18 @@ def _latest_review_reason(history: pd.DataFrame, key: tuple[str, str, str]) -> s
     return str(scoped.iloc[-1].get("reason", "")) if not scoped.empty else ""
 
 
-def _review_record(row: pd.Series, at: str, state: str, action: str, reason: str) -> dict:
+def _review_record(row: pd.Series, at: str, state: str, action: str, reason: str,
+                   *, identity_row: pd.Series | None = None) -> dict:
+    candidate = row if identity_row is None else identity_row
+    favorite_side = candidate.get("favorite_side", "")
     return {
         "recorded_at": at, "sport": row.get("sport", ""), "game_id": row.get("game_id", ""),
         "game": row.get("game", ""), "market_display": row.get("market_display", ""),
         "kickoff_iso": row.get("kickoff_iso", ""), "review_state": state,
-        "review_action": action, "favorite_side": row.get("favorite_side", ""),
+        "review_action": action, "favorite_side": favorite_side,
         "current_line": row.get("current_line", ""), "reason": reason,
+        "favorite_rule_version": candidate.get("favorite_rule_version", ""),
+        "source_observed_at": _review_source_observed_at(row, favorite_side),
     }
 
 
@@ -1441,21 +1466,31 @@ def _qualify_market(
     *,
     enforce_ncaaf_policy: bool = True,
     at: str | None = None,
+    failures: dict[str, str] | None = None,
 ) -> dict | None:
     sport = str(row.get("sport", "")).lower()
     market = str(row.get("market_display", "")).upper()
+    if failures is None:
+        failures = {}
     if market == "TOTAL":
+        failures[""] = "Market type TOTAL is ineligible."
         return None
     if market == "SPREAD" and sport not in CONFIG.spread_sports:
+        failures[""] = "Sport does not have an official spread pathway."
         return None
     if market == "MONEYLINE" and sport not in CONFIG.primary_moneyline_sports | CONFIG.secondary_moneyline_sports:
+        failures[""] = "Sport does not have an official moneyline pathway."
         return None
     sides = _sides(row)
     if len(sides) != 2:
+        failures[""] = "Market lacks an exact two-sided evidence pair."
         return None
+    if not str(row.get("supported_side") or "").strip():
+        failures[""] = "Market lacks a confirmed Supported Side."
 
     candidates = []
     for side in sides:
+        identity = _side_identity(side.get("flagged_side", ""))
         other = next((item for item in sides if item is not side), None)
         if other is None:
             continue
@@ -1463,16 +1498,20 @@ def _qualify_market(
         if sport in {"ncaaf", "cfb"} and _intact_ncaaf_partial_whipsaw(side):
             base_quality = True
         if not base_quality:
+            failures[identity] = _quality_failure(side)
             continue
         value = _line_value(side.get("current_line"), market)
         if value is None or not _number_is_eligible(sport, market, value, side, game_rows):
+            failures[identity] = "The recorded line, price, or paired-market price eligibility gate failed."
             continue
         pathway = _pathway(side, other, sport, market)
         if not pathway:
+            failures[identity] = "No Favorite pathway matched the current split, reaction and movement evidence."
             continue
         if sport in {"ufc", "nhl"} and not _primary_moneyline_sport_gate(
             row, side, pathway, at,
         ):
+            failures[identity] = _primary_moneyline_rejection_reason(row, game_rows, at)
             continue
         # Favorite is a narrower designation layered over the published
         # Market Read.  Never publish a Favorite when that same side is not
@@ -1481,11 +1520,13 @@ def _qualify_market(
         # opposite row).  Do not infer support here from movement/context --
         # ``supported_side`` is resolved upstream by the Market Read engine.
         if not _matches_confirmed_supported_side(row, side):
+            failures[identity] = "Candidate did not match the exact confirmed Supported Side."
             continue
         cross_state = "not_applicable"
         if market == "SPREAD":
             cross_state = _corresponding_moneyline_state(side, game_rows)
             if cross_state == "contradiction":
+                failures[identity] = "Matching moneyline movement contradicted the spread candidate."
                 continue
         basketball_gate = {}
         if sport in {"nba", "ncaab", "cbb"}:
@@ -1493,13 +1534,16 @@ def _qualify_market(
                 row, side, game_rows,
             )
             if not basketball_gate["passed"]:
+                failures[identity] = basketball_gate["reason"]
                 continue
         ncaaf_gate = {}
         if enforce_ncaaf_policy and sport in {"ncaaf", "cfb"}:
             ncaaf_gate, cross_state = _ncaaf_gate_for_market(row, side, game_rows)
             if not ncaaf_gate["passed"]:
+                failures[identity] = ncaaf_gate["reason"]
                 continue
             if pathway == "low_ticket_high_money_contrarian" and cross_state != "confirmation":
+                failures[identity] = "CFB high-handle pathway lacked confirming moneyline movement."
                 continue
         candidates.append((side, pathway, cross_state, ncaaf_gate, basketball_gate))
     if not candidates:
@@ -2027,21 +2071,26 @@ def _is_favorite_resistance(side: dict, pressure: dict, sport: str, market: str)
 
 
 def _base_quality(side: dict) -> bool:
+    return not _quality_failure(side)
+
+
+def _quality_failure(side: dict) -> str:
     if str(side.get("data_badge", "")) != "Clean":
-        return False
+        return "Market data was not Clean."
     if (_number(side.get("observation_count")) or 0) < CONFIG.minimum_observations:
-        return False
+        return f"Market had fewer than {CONFIG.minimum_observations} observations."
     context = _parts(side.get("context_chips"))
-    if {"Market Lag", "Feed Risk", "Split Risk", "Split Cap"} & context:
-        return False
+    risks = sorted({"Market Lag", "Feed Risk", "Split Risk", "Split Cap"} & context)
+    if risks:
+        return f"Blocking market context: {', '.join(risks)}."
     if _truthy(side.get("active_worsening_reversal")):
-        return False
+        return "Market showed an active worsening reversal."
     if str(side.get("path", "")) == "Whipsaw" and not _truthy(side.get("whipsaw_recovered")):
         if not _intact_partial_whipsaw(side):
-            return False
+            return "Unrecovered Whipsaw failed the intact-move exception."
     elif _truthy(side.get("return_toward_open")):
-        return False
-    return True
+        return "Movement retraced toward the opener."
+    return ""
 
 
 def _intact_partial_whipsaw(side: dict) -> bool:
@@ -2605,4 +2654,6 @@ def _tracking_record(row: pd.Series, at: str, first_line: str) -> dict:
         "supporting_evidence": row.get("favorite_supporting_evidence", ""),
         "snapshot_id": row.get("favorite_snapshot_id", ""), "disappearance_reason": "",
         "closing_line": "", "clv": "", "result": "",
+        "source_observed_at": _review_source_observed_at(row, row.get("favorite_side", "")),
+        "transition_reason": str(row.get("favorite_review_reason") or row.get("favorite_reason") or ""),
     }

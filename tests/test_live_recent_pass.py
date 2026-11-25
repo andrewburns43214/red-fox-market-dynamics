@@ -309,6 +309,9 @@ def test_favorite_handoff_keeps_blues_when_final_paired_market_strengthens():
     assert frozen.iloc[0].current_line == "STL Blues @ -125"
     assert frozen.iloc[0].freeze_method == "favorite_confirmed_by_final_paired_market"
     assert json.loads(frozen.iloc[0].favorite_supporting_evidence)["final_raw_confirmation"] is True
+    reconciled = live.suppress_stale_retained_favorites(frozen, tracking)
+    assert reconciled.iloc[0].red_fox_favorite == "false"
+    assert reconciled.iloc[0].favorite_state == "not_qualified"
 
 
 def test_favorite_handoff_keeps_a_final_requalification_after_an_earlier_falloff():

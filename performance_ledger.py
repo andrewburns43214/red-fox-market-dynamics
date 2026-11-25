@@ -82,6 +82,7 @@ RETROACTIVE_FAVORITE_INCLUSIONS = {
 LEDGER_COLUMNS = [
     "ledger_id", "event_id", "game", "sport", "scheduled_start", "market", "side",
     "open_line", "open_price", "decision_line", "decision_price", "decision_line_source",
+    "decision_quote_observed_at",
     "final_pregame_line", "final_pregame_price",
     "line_move_from_open", "market_read", "market_read_detail", "market_path",
     "bets_pct", "money_pct", "bets_pct_band", "money_pct_band",
@@ -104,7 +105,9 @@ LEDGER_COLUMNS = [
     "classification_correction", "classification_corrected_at_utc",
     "classification_correction_reason", "classification_original_publication",
     "final_score", "market_result", "grade", "stake_units", "net_profit_units", "roi",
-    "closing_line", "closing_price", "clv", "clv_method", "clv_available",
+    "closing_line", "closing_price", "closing_line_source", "closing_price_source",
+    "closing_line_observed_at", "closing_price_observed_at",
+    "clv", "clv_method", "clv_available",
     "score_provider", "score_source", "score_provider_event_id", "score_resolved_at",
     "graded_at_utc", "grade_evidence_hash",
     "freeze_source", "freeze_method", "source_snapshot_id", "source_hash", "audit_status",
@@ -114,7 +117,9 @@ CLASSIFICATION_COLUMNS = LEDGER_COLUMNS[:LEDGER_COLUMNS.index("final_score")] + 
 ]
 RESULT_COLUMNS = [
     "final_score", "market_result", "grade", "stake_units", "net_profit_units", "roi",
-    "closing_line", "closing_price", "clv", "clv_method", "clv_available",
+    "closing_line", "closing_price", "closing_line_source", "closing_price_source",
+    "closing_line_observed_at", "closing_price_observed_at",
+    "clv", "clv_method", "clv_available",
     "score_provider", "score_source", "score_provider_event_id", "score_resolved_at",
     "graded_at_utc", "grade_evidence_hash", "audit_status",
 ]
@@ -397,7 +402,7 @@ def _tracking_lifecycle(history: pd.DataFrame, row: pd.Series, kickoff: pd.Times
         "first_qualified": "", "last_qualified": "", "first_fell_off": "",
         "last_fell_off": "", "episodes": "0", "requalifications": "0",
         "falloffs": "0", "qualifying_captures": "0", "whipsaw_ever": "no",
-        "pathway": "", "first_qualified_line": "",
+        "pathway": "", "first_qualified_line": "", "entry_observed_at": "",
         "history_available": "no", "final_state": "unknown", "t20_state": "unknown",
     }
     if history.empty:
@@ -430,7 +435,18 @@ def _tracking_lifecycle(history: pd.DataFrame, row: pd.Series, kickoff: pd.Times
         & ~scoped.get("whipsaw_state", pd.Series("", index=scoped.index)).astype(str).str.lower().eq("none")
     ) | scoped.get("path", pd.Series("", index=scoped.index)).astype(str).str.contains("whipsaw", case=False, na=False)
     pathways = scoped.loc[qualified, "favorite_pathway"] if "favorite_pathway" in scoped else pd.Series(dtype=str)
-    first_lines = scoped.loc[qualified, "first_qualified_line"] if "first_qualified_line" in scoped else pd.Series(dtype=str)
+    entry_rows = scoped.loc[qualified]
+    if {"entry_observed_at", "favorite_side", "favorite_rule_version"}.issubset(entry_rows.columns):
+        # Preserve historical entry inference for rows predating provenance.
+        side = _identity(_text(row.get("favorite_side")) or _text(row.get("supported_side")) or _text(row.get("side")))
+        version = _text(row.get("favorite_rule_version"))
+        if side and version and entry_rows["entry_observed_at"].map(_text).ne("").any():
+            entry_rows = entry_rows.loc[
+                entry_rows["favorite_side"].map(_identity).eq(side)
+                & entry_rows["favorite_rule_version"].eq(version)
+            ]
+    first_lines = entry_rows.get("first_qualified_line", pd.Series(dtype=str))
+    entries = entry_rows.get("entry_observed_at", pd.Series(dtype=str))
     t20 = scoped[scoped["_at"] <= kickoff - pd.Timedelta(minutes=20)] if pd.notna(kickoff) else pd.DataFrame()
     return {
         "first_qualified": _text(scoped.loc[qualified, "recorded_at"].iloc[0]) if qualified.any() else "",
@@ -444,6 +460,7 @@ def _tracking_lifecycle(history: pd.DataFrame, row: pd.Series, kickoff: pd.Times
         "whipsaw_ever": "yes" if whipsaw.any() else "no",
         "pathway": _text(pathways.iloc[-1]) if not pathways.empty else "",
         "first_qualified_line": _text(first_lines.iloc[0]) if not first_lines.empty else "",
+        "entry_observed_at": _text(entries.iloc[0]) if not entries.empty else "",
         "history_available": "yes",
         "final_state": _text(states.iloc[-1]) or "unknown",
         "t20_state": _text(t20.iloc[-1].get("favorite_state")) if not t20.empty else "not_observed",
@@ -571,6 +588,10 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
             "market": market, "side": recorded_side, "open_line": open_line, "open_price": open_price,
             "decision_line": decision_line, "decision_price": decision_price,
             "decision_line_source": decision_source,
+            "decision_quote_observed_at": (
+                lifecycle["entry_observed_at"] if tracked_decision else
+                _text(side_record.get("source_latest_at")) if favorite else ""
+            ),
             "final_pregame_line": line,
             "final_pregame_price": price,
             "line_move_from_open": line_move,
@@ -630,6 +651,10 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
             "stake_units": "", "net_profit_units": "", "roi": "",
             "closing_line": _text(row.get("closing_line")) or line,
             "closing_price": _text(row.get("closing_price")) or price,
+            "closing_line_source": _closing_source(row, "closing_line", line),
+            "closing_price_source": _closing_source(row, "closing_price", price),
+            "closing_line_observed_at": _closing_observed_at(row, "closing_line", line, side_record),
+            "closing_price_observed_at": _closing_observed_at(row, "closing_price", price, side_record),
             "clv": _text(row.get("clv")), "clv_method": "retained_source" if _text(row.get("clv")) else "",
             "clv_available": "yes" if _text(row.get("clv")) else "no",
             "score_provider": "", "score_source": "", "score_provider_event_id": "",
@@ -641,6 +666,18 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
             "audit_status": "awaiting_final_score",
         })
     return records
+
+
+def _closing_source(row: pd.Series, field: str, fallback: str) -> str:
+    if _text(row.get(field)):
+        return _text(row.get(f"{field}_source")) or "retained_close_unverified"
+    return "final_pregame_fallback" if _text(fallback) else "unavailable"
+
+
+def _closing_observed_at(row: pd.Series, field: str, fallback: str, side: dict) -> str:
+    if _text(row.get(field)):
+        return _text(row.get(f"{field}_observed_at"))
+    return _text(side.get("source_latest_at")) if _text(fallback) else ""
 
 
 def _apply_retroactive_favorite_inclusions(frame: pd.DataFrame) -> pd.DataFrame:
@@ -1206,14 +1243,17 @@ def update_performance_ledger(
                     ledger.at[index, "decision_line"] = decision_line
                     ledger.at[index, "decision_price"] = decision_price
                     ledger.at[index, "decision_line_source"] = "first_qualified_capture"
+                    ledger.at[index, "decision_quote_observed_at"] = lifecycle["entry_observed_at"]
                 elif _truthy(row.get("favorite_qualified")):
                     ledger.at[index, "decision_line"] = row.get("final_pregame_line", "")
                     ledger.at[index, "decision_price"] = row.get("final_pregame_price", "")
                     ledger.at[index, "decision_line_source"] = "legacy_final_pregame_fallback"
-            if not _text(row.get("closing_line")):
-                ledger.at[index, "closing_line"] = row.get("final_pregame_line", "")
-            if not _text(row.get("closing_price")):
-                ledger.at[index, "closing_price"] = row.get("final_pregame_price", "")
+            for field in ("closing_line", "closing_price"):
+                fallback = row.get(field.replace("closing_", "final_pregame_"), "")
+                if not _text(row.get(f"{field}_source")):
+                    ledger.at[index, f"{field}_source"] = _closing_source(row, field, fallback)
+                if not _text(row.get(field)):
+                    ledger.at[index, field] = fallback
             if not _text(row.get("price_band")):
                 ledger.at[index, "price_band"] = _price_band(row.get("final_pregame_price")) if _text(row.get("market")).upper() == "MONEYLINE" else "not_applicable"
             if not _text(row.get("spread_band")):
@@ -1270,7 +1310,9 @@ def update_performance_ledger(
             ["scheduled_start", "event_id"], ascending=False, kind="mergesort",
         )[[
             "sport", "game", "scheduled_start", "market", "side", "open_line", "open_price",
-            "decision_line", "decision_price", "closing_line", "closing_price", "final_score", "grade",
+            "decision_line", "decision_price", "decision_line_source", "decision_quote_observed_at",
+            "closing_line", "closing_price", "closing_line_source", "closing_price_source",
+            "closing_line_observed_at", "closing_price_observed_at", "final_score", "grade",
             "bets_pct", "money_pct",
         ]].fillna("").to_dict("records"),
         "tracking_start_date": FAVORITE_TRACKING_START_DATE,

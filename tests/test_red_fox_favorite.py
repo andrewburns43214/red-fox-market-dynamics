@@ -1290,10 +1290,12 @@ def test_tracking_records_when_a_current_market_loses_favorite_status(tmp_path: 
     lost = qualified.copy()
     lost["red_fox_favorite"] = "false"
     lost["favorite_state"] = "not_qualified"
+    lost["_favorite_gate_reason"] = "Candidate did not match the exact confirmed Supported Side."
     update_favorite_tracking(lost, tmp_path, as_of="2026-09-06T20:01:00Z")
     ledger = pd.read_csv(tmp_path / "red_fox_favorite_tracking.csv", dtype=str)
     assert ledger.favorite_state.tolist() == ["qualified", "not_qualified"]
     assert ledger.iloc[-1].disappearance_reason == "current qualification gates no longer satisfied"
+    assert "exact confirmed Supported Side" in ledger.iloc[-1].transition_reason
 
 
 @pytest.mark.parametrize("sport", ["ufc", "nhl"])
