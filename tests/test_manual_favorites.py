@@ -126,6 +126,17 @@ def test_save_refuses_changed_stale_or_replaced_quote(tmp_path, server, monkeypa
     assert manual.decisions(tmp_path)[EVENT]["quote"]["price"]=="-120"
 
 
+def test_quote_lookup_requires_target_in_latest_capture_for_its_sport(tmp_path):
+    seed(tmp_path, favorite=False)
+    path=tmp_path/"snapshots.csv"
+    raw=pd.read_csv(path,dtype=str)
+    later=raw.assign(timestamp=NOW.isoformat(),sport="nba")
+    pd.concat([raw,later]).to_csv(path,index=False)
+    assert len(manual.latest_quotes(tmp_path,manual.event_rows(tmp_path,EVENT),NOW))==6
+    pd.concat([raw,later.assign(sport="nfl",game_id="999")]).to_csv(path,index=False)
+    assert manual.latest_quotes(tmp_path,manual.event_rows(tmp_path,EVENT),NOW)=={}
+
+
 @pytest.mark.parametrize("market,side,scores,grade",[
     ("SPREAD","Away",(28,31),"Push"),
     ("MONEYLINE","Home",(28,31),"W"),
@@ -247,6 +258,9 @@ def test_dashboard_buttons_are_only_inside_existing_popups():
     assert "if(!state.frozenPregame) html+=manualFavoriteButton(r);" in page
     assert "if(!manualFavoriteEnabled||!row?.game_id) return '';" in script
     assert "response?.ok&&(await response.json()).enabled===true" in script
+    assert "<fieldset data-manual-actions disabled>" in page
+    assert "input.type='radio'" in script
+    assert "Remove Favorite" in script and "Add Favorite" in script
 
 
 def test_concurrent_owner_edits_have_one_winner(tmp_path,server,monkeypatch):

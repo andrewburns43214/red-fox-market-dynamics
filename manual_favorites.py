@@ -88,25 +88,38 @@ def csv_rows(path):
         return
 
 
+def latest_event_capture(path, event_rows, now):
+    sport, event_id = scope(event_rows[0])
+    game = event_rows[0]["game"]
+    start = stamp(event_rows[0].get("kickoff_iso"))
+    columns = ["timestamp", "sport", "game_id", "game", "side", "current_line",
+               "dk_start_iso", "bets_pct", "money_pct"]
+    latest, raw = None, []
+    try:
+        # Parse the CSV in bounded batches and allocate row objects only for the
+        # requested game in a recent capture. Keep CSV quoting and record order.
+        with pd.read_csv(path, usecols=columns, dtype=str, keep_default_na=False, chunksize=32768) as captures:
+            for chunk in captures:
+                sport_rows = chunk.loc[chunk["sport"].eq(sport)]
+                for captured_at, batch in sport_rows.groupby("timestamp", sort=False):
+                    captured = stamp(captured_at)
+                    if not captured or not timedelta(0) <= now - captured <= MAX_QUOTE_AGE or (latest and captured < latest):
+                        continue
+                    if captured != latest:
+                        latest, raw = captured, []
+                    matches = batch.loc[batch["game_id"].eq(event_id) & batch["game"].eq(game)]
+                    raw.extend(row for row in matches.to_dict("records") if stamp(row["dk_start_iso"]) == start)
+    except (FileNotFoundError, pd.errors.EmptyDataError):
+        return None, []
+    return latest, raw
+
+
 def latest_quotes(data_dir, event_rows, now):
     """Read the newest capture for this sport. A missing/incomplete pair is unavailable."""
     offer = {}
     if not event_rows:
         return offer
-    event = scope(event_rows[0])
-    latest = None
-    raw = []
-    start = stamp(event_rows[0].get("kickoff_iso"))
-    for row in csv_rows(Path(data_dir) / "snapshots.csv"):
-        if row.get("sport") != event[0]:
-            continue
-        captured = stamp(row.get("timestamp"))
-        if not captured or not timedelta(0) <= now - captured <= MAX_QUOTE_AGE:
-            continue
-        if latest is None or captured > latest:
-            latest, raw = captured, []
-        if captured == latest and scope(row) == event and row.get("game") == event_rows[0]["game"] and stamp(row.get("dk_start_iso")) == start:
-            raw.append(row)
+    latest, raw = latest_event_capture(Path(data_dir) / "snapshots.csv", event_rows, now)
     for board in event_rows:
         market = board["market_display"]
         if board.get("data_badge", "").lower() != "clean" or yes(board.get("cross_market_mismatch")) or yes(board.get("cross_market_opener_mismatch_verified")):

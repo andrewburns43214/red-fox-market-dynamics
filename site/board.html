@@ -16,7 +16,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="/pwa.js" defer></script>
-<script src="/manual-favorites.js?v=1" defer></script>
+<script src="/manual-favorites.js?v=2" defer></script>
 <script>
 // Keep the server-side access cookie aligned with the signed-in Supabase session.
 (function () {
@@ -5960,8 +5960,14 @@ setInterval(refreshLiveRecentScores, 60000);
   <button type="button" class="signal-guide-close" onclick="this.closest('dialog').close()" aria-label="Close Manual Controls">&times;</button>
   <h2 id="manual-favorite-title">Manual Controls</h2>
   <form>
-    <label>Action <select name="action_choice" required></select></label>
-    <label hidden>Selection <select name="quote"></select></label>
+    <fieldset data-manual-actions disabled>
+      <legend>Action</legend>
+      <div class="manual-favorite-options"></div>
+    </fieldset>
+    <fieldset data-manual-quotes hidden>
+      <legend>Market and side</legend>
+      <div class="manual-favorite-options"></div>
+    </fieldset>
     <label>Reason (optional) <textarea name="reason" maxlength="500" rows="2"></textarea></label>
     <p role="status" aria-live="polite"></p>
     <button type="submit" class="manual-favorite-button" disabled>Save</button>
@@ -5973,8 +5979,13 @@ setInterval(refreshLiveRecentScores, 60000);
   .manual-favorite-dialog>.signal-guide-close{float:right}
   .manual-favorite-dialog h2{font-size:18px;margin:0 40px 14px 0}
   .manual-favorite-dialog label{display:grid;gap:4px;margin-bottom:12px}
-  .manual-favorite-dialog label[hidden]{display:none}
-  .manual-favorite-dialog select,.manual-favorite-dialog textarea{width:100%;font:inherit}
+  .manual-favorite-dialog textarea{width:100%;font:inherit}
+  .manual-favorite-dialog fieldset{min-width:0;padding:0;border:0;margin:0 0 12px}
+  .manual-favorite-dialog legend{font-weight:600;margin-bottom:6px}
+  .manual-favorite-dialog .manual-favorite-options{display:grid;gap:6px}
+  .manual-favorite-dialog .manual-favorite-options label{display:flex;align-items:center;gap:8px;margin:0;padding:8px;border:1px solid var(--border);border-radius:7px;cursor:pointer}
+  .manual-favorite-dialog .manual-favorite-options label:has(input:disabled){opacity:.55;cursor:default}
+  .manual-favorite-dialog input[type=radio]{accent-color:var(--accent);flex:0 0 auto}
   .manual-favorite-button{font:600 13px var(--sans);color:var(--text);background:var(--bg2);padding:6px 12px;margin:0 0 8px;border:1px solid var(--border);border-radius:7px;cursor:pointer}
   .manual-favorite-button:disabled{opacity:.55;cursor:default}
 </style>

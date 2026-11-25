@@ -2,6 +2,7 @@
 const manualFavoriteRoute='/api/owner/favorites';
 const manualFavoritePending=new Map();
 let manualFavoriteEnabled=false;
+let manualFavoriteView=0;
 
 async function manualFavoriteRequest(query='',init={}){
   const session=(await window.redfoxSupabase.auth.getSession()).data.session;
@@ -62,85 +63,129 @@ function manualFavoriteProjection(rows){
 
 async function openManualFavorite(trigger){
   if(!manualFavoriteEnabled) return;
+  const view=++manualFavoriteView;
   const sport=trigger.dataset.sport, event=trigger.dataset.event;
   const dialog=document.getElementById('manual-favorite-dialog');
   const form=dialog.querySelector('form');
   const message=dialog.querySelector('[role=status]');
   const title=dialog.querySelector('h2');
   const save=form.querySelector('button[type=submit]');
-  const action=form.elements.action_choice, selectedQuote=form.elements.quote;
-  const quoteLabel=selectedQuote.closest('label');
+  const actions=form.querySelector('[data-manual-actions]');
+  const quotes=form.querySelector('[data-manual-quotes]');
   const query='?'+new URLSearchParams({sport,event});
   let model;
+  let saving=false;
+  const current=()=>dialog.open&&view===manualFavoriteView;
+  const selected=name=>form.querySelector('input[name="'+name+'"]:checked')?.value||'';
+  const clear=group=>group.querySelector('.manual-favorite-options').replaceChildren();
+  function addOption(group,name,value,label,disabled=false){
+    const option=document.createElement('label');
+    const input=document.createElement('input');
+    input.type='radio';
+    input.name=name;
+    input.value=value;
+    input.disabled=disabled;
+    option.append(input,document.createTextNode(label));
+    group.querySelector('.manual-favorite-options').append(option);
+  }
   function setQuoteState(){
-    quoteLabel.hidden=!['add','change'].includes(action.value);
-    selectedQuote.required=!quoteLabel.hidden;
-    save.disabled=!action.value||(!quoteLabel.hidden&&!selectedQuote.value);
+    const action=selected('action_choice');
+    quotes.hidden=!['add','change'].includes(action);
+    save.disabled=saving||!action||(!quotes.hidden&&!selected('quote'));
   }
   async function update(){
     save.disabled=true;
+    actions.disabled=true;
+    quotes.disabled=true;
     const response=await manualFavoriteRequest(query);
+    if(!current()) return false;
     if(!response?.ok) throw new Error('Favorite controls are unavailable.');
-    model=await response.json();
+    const context=await response.json();
+    if(!current()) return false;
+    if(!context.game) throw new Error('This game is no longer available on the pregame board.');
+    model=context;
     title.textContent=model.game||'Manual Controls';
-    action.replaceChildren(new Option('Choose action',''));
+    clear(actions);
+    clear(quotes);
     if(model.choice){
-      if(model.quotes.length) action.add(new Option('Change Favorite','change'));
-      action.add(new Option('Remove Favorite','remove'));
-    } else if(model.quotes.length) action.add(new Option('Add Favorite','add'));
-    if(model.override) action.add(new Option('Restore automatic qualification','restore'));
-    selectedQuote.replaceChildren(new Option('Choose market and side',''));
+      addOption(actions,'action_choice','change','Change Favorite',!model.quotes.length);
+      addOption(actions,'action_choice','remove','Remove Favorite');
+    } else {
+      addOption(actions,'action_choice','add','Add Favorite',!model.quotes.length);
+    }
+    if(model.override) addOption(actions,'action_choice','restore','Restore automatic qualification');
     for(const quote of model.quotes){
       const market=quote.market==='TOTAL'?'Total':quote.market==='SPREAD'?'Spread':'Moneyline';
-      selectedQuote.add(new Option(market+' · '+quote.label+' ('+quote.price+')',quote.token));
+      addOption(quotes,'quote',quote.token,market+' · '+quote.label+' ('+quote.price+')');
     }
+    actions.disabled=false;
+    quotes.disabled=false;
     setQuoteState();
-    if(action.options.length===1) message.textContent='No fresh eligible prices or actions are available.';
+    message.textContent=model.quotes.length?'':'Adding or changing a Favorite requires a fresh sportsbook quote.';
+    return true;
   }
   title.textContent='Manual Controls';
   message.textContent='Checking current quotes…';
   form.reset();
-  action.replaceChildren();
-  selectedQuote.replaceChildren();
-  quoteLabel.hidden=true;
+  clear(actions);
+  clear(quotes);
+  if(allDash.some(row=>row.sport===sport&&String(row.game_id)===event&&isRedFoxFavorite(row))){
+    addOption(actions,'action_choice','change','Change Favorite');
+    addOption(actions,'action_choice','remove','Remove Favorite');
+  } else {
+    addOption(actions,'action_choice','add','Add Favorite');
+  }
+  actions.disabled=true;
+  quotes.hidden=true;
+  save.disabled=true;
   form.onchange=setQuoteState;
   form.onsubmit=async eventSubmit=>{
     eventSubmit.preventDefault();
     if(save.disabled) return;
-    save.disabled=true;
+    const action=selected('action_choice'), quote=selected('quote');
+    saving=true;
+    actions.disabled=true;
+    quotes.disabled=true;
+    setQuoteState();
     message.textContent='Verifying and saving…';
     try{
       const response=await manualFavoriteRequest('',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({sport,event,revision:model.revision,action:action.value,quote:selectedQuote.value,reason:form.elements.reason.value}),
+        body:JSON.stringify({sport,event,revision:model.revision,action,quote,reason:form.elements.reason.value}),
       });
       if(!response) throw new Error('Sign in again to save a Favorite.');
       const result=await response.json();
       if(!response.ok){
-        if(result.refresh) await update();
-        message.textContent=result.error||'The decision could not be saved.';
+        if(current()&&(!result.refresh||await update())) message.textContent=result.error||'The decision could not be saved.';
         return;
       }
       manualFavoritePending.set(sport+'|'+event,result);
       manualFavoriteProjection(allDash);
       renderBoard(false);
       await loadAll({forceRender:true});
+      if(!current()) return;
       const eventRows=allDash.filter(r=>r.sport===sport&&String(r.game_id)===event);
       const row=eventRows.find(r=>result.choice?r.market_display===result.choice.market:isRedFoxFavorite(r))||eventRows[0];
       if(document.getElementById('signal-guide-overlay').classList.contains('open')){
         openSignalGuide('Red Fox Favorite',row);
       }
-      message.textContent=result.action==='restore'?'Automatic qualification restored. The next board refresh will show its current decision.':'Saved.';
-      action.replaceChildren();
-      selectedQuote.replaceChildren();
-      setQuoteState();
+      clear(actions);
+      clear(quotes);
+      const confirmation=result.action==='restore'?'Automatic qualification restored. The next board refresh will show its current decision.':'Saved.';
+      message.textContent=confirmation;
+      if(await update()) message.textContent=confirmation;
     } catch (error){
-      message.textContent=error.message||'The decision could not be saved.';
+      if(current()) message.textContent=error.message||'The decision could not be saved.';
     } finally {
-      setQuoteState();
+      if(current()){
+        saving=false;
+        actions.disabled=false;
+        quotes.disabled=false;
+        setQuoteState();
+      }
     }
   };
   dialog.showModal();
-  try{message.textContent=''; await update();}
-  catch(error){message.textContent=error.message;}
+  try{await update();}
+  catch(error){if(current()) message.textContent=error.message;}
 }
