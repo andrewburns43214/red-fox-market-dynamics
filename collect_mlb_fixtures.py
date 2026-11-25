@@ -107,9 +107,11 @@ def write_context(directory, payload):
 
 def collect(data_dir, now):
     current_day = now.astimezone(NEW_YORK).date()
-    raw = fetch('v1/schedule', sportId=1, startDate=current_day - timedelta(days=15),
-                endDate=current_day + timedelta(days=1), hydrate='team,linescore,probablePitcher', fields=SCHEDULE_FIELDS)
     directory = data_dir / CONTEXT_DIR
+    pitchers_enabled = not (directory / 'disable_pitchers').exists()
+    raw = fetch('v1/schedule', sportId=1, startDate=current_day - timedelta(days=15),
+                endDate=current_day + timedelta(days=1),
+                hydrate='team,linescore,probablePitcher' if pitchers_enabled else 'team,linescore', fields=SCHEDULE_FIELDS)
     directory.mkdir(parents=True, exist_ok=True)
     try:
         previous = json.loads((directory / 'latest.json').read_text(encoding='utf-8'))['games']
@@ -122,6 +124,9 @@ def collect(data_dir, now):
             game = league_fixture(row)
             if game is None:
                 continue
+            if not pitchers_enabled:
+                for leg in ('away', 'home'):
+                    game[leg].update(pitcher_id=None, pitcher_name=None, pitcher_status='missing')
             pk = game['game_pk']
             if pk in games and games[pk] != game:
                 conflicts.add(pk)
@@ -135,23 +140,24 @@ def collect(data_dir, now):
         game['first_pitch'] = old.get('first_pitch')
         for leg in ('away', 'home'):
             prior = old.get(leg, {})
-            if prior.get('team_id') == game[leg]['team_id'] and prior.get('pitcher_status') == 'confirmed':
+            if pitchers_enabled and prior.get('team_id') == game[leg]['team_id'] and prior.get('pitcher_status') == 'confirmed':
                 game[leg].update({k: prior[k] for k in ('pitcher_status', 'pitcher_id', 'pitcher_name', 'confirmed_at')})
     needed = sorted((game for game in games.values() if game['state'] in {'in', 'post'}
                      and now - timestamp(game['scheduled_start']) <= timedelta(hours=9)
-                     and (not game['first_pitch'] or any(game[leg]['pitcher_status'] != 'confirmed' for leg in ('away','home')))),
+                     and ((not game['first_pitch'] and (pitchers_enabled or game['doubleheader'] or game['time_tbd']))
+                          or (pitchers_enabled and any(game[leg]['pitcher_status'] != 'confirmed' for leg in ('away','home'))))),
                     key=lambda game: timestamp(game['scheduled_start']), reverse=True)
     with ThreadPoolExecutor(max_workers=4) as pool:
         for game, proof in zip(needed[:16], pool.map(first_pitches, needed[:16])):
             if 'home' in proof:
                 game['first_pitch'] = proof['home']['pitch']
             for leg, result in proof.items():
-                if result['pitcher_id']:
+                if pitchers_enabled and result['pitcher_id']:
                     game[leg].update(pitcher_status='confirmed', pitcher_id=result['pitcher_id'],
                                      pitcher_name=result['pitcher_name'], confirmed_at=result['pitch'])
     observed_at = datetime.now(timezone.utc).isoformat()
     changes = []
-    for pk, game in games.items():
+    for pk, game in (games.items() if pitchers_enabled else ()):
         # Retrospective finals provide score evidence, not pregame pitcher records.
         if not (current_day - timedelta(days=1) <= datetime.fromisoformat(game['official_date']).date() <= current_day + timedelta(days=1)):
             continue
@@ -167,7 +173,7 @@ def collect(data_dir, now):
         with (directory / 'pitcher_changes.jsonl').open('a', encoding='utf-8') as stream:
             for change in changes:
                 stream.write(json.dumps(change, ensure_ascii=False) + '\n')
-    write_context(directory, dict(observed_at=observed_at, source='MLB Stats API', games=games))
+    write_context(directory, dict(observed_at=observed_at, source='MLB Stats API', pitchers_enabled=pitchers_enabled, games=games))
     print(f'[mlb-context] cached {len(games)} fixtures, wrote {len(changes)} pitcher observations')
 
 

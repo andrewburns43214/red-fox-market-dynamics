@@ -21,6 +21,7 @@ from red_fox_favorite import (
     favorite_side_quote,
     cfb_spread_favorite,
     nba_public_favorite,
+    mlb_static_favorite,
 )
 from team_aliases import normalize_team_name
 
@@ -476,7 +477,7 @@ def _market_movement_value(value: object, market: object) -> float | None:
 
 def _confirm_favorite_with_final_raw_market(candidate: pd.Series, raw: pd.Series | None) -> dict | None:
     """Return final side evidence when a retained Favorite did not move adversely."""
-    if raw is None or str(candidate.get("favorite_late_invalidated", "")).lower() in {"1", "true", "yes"}:
+    if raw is None or mlb_static_favorite(candidate) or str(candidate.get("favorite_late_invalidated", "")).lower() in {"1", "true", "yes"}:
         return None
     try:
         sides = [item for item in json.loads(str(raw.get("market_sides", "")) or "[]") if isinstance(item, dict)]

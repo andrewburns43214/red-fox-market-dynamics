@@ -21,8 +21,8 @@ import requests
 from mlb_fixtures import SCORE_SOURCE as MLB_SCORE_SOURCE, cutover_at as mlb_cutover_at, timestamp as mlb_timestamp
 
 from anomaly_action_results import _grade_action
-from red_fox_favorite import (CFB_SPREAD_VERSIONS, NBA_PUBLIC_VERSION, NOV24_SPORTS, NOV24_VERSION,
-                              cfb_spread_favorite, nba_public_favorite, tracked_entry_quote)
+from red_fox_favorite import (CFB_SPREAD_VERSIONS, NBA_PUBLIC_VERSION, MLB_STATIC_VERSION, NOV24_SPORTS, NOV24_VERSION,
+                              cfb_spread_favorite, nba_public_favorite, mlb_static_favorite, tracked_entry_quote)
 
 
 SUPPORTED_SIDE_VALID_FROM = pd.Timestamp("2026-09-07T17:57:58Z")
@@ -51,6 +51,7 @@ FAVORITE_RULE_VERSIONS = frozenset({
     "red_fox_favorite_nhl_v1",
     NOV24_VERSION,
     *CFB_SPREAD_VERSIONS.values(),
+    MLB_STATIC_VERSION,
     NBA_PUBLIC_VERSION,
 })
 FAVORITE_KPI_EXCLUSIONS = {
@@ -531,7 +532,7 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         if pd.isna(kickoff) or kickoff < SUPPORTED_SIDE_VALID_FROM:
             continue
         published_supported = _text(row.get("supported_side"))
-        extra = (cfb_spread_favorite(row) or nba_public_favorite(row)) and _truthy(row.get("red_fox_favorite"))
+        extra = (cfb_spread_favorite(row) or nba_public_favorite(row) or mlb_static_favorite(row)) and _truthy(row.get("red_fox_favorite"))
         supported = _text(row.get("favorite_side")) if extra else published_supported
         if not supported:
             continue
@@ -563,7 +564,7 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         pathway = _text(row.get("favorite_pathway")) or lifecycle["pathway"] or _candidate_pathway(side_record, market_sides)
         tracked_decision = lifecycle["first_qualified_line"]
         decision_line, decision_price = _line_and_price(market, supported, tracked_decision)
-        if nba_public_favorite(row) and favorite and (not decision_price or not lifecycle["entry_observed_at"]):
+        if (nba_public_favorite(row) or mlb_static_favorite(row)) and favorite and (not decision_price or not lifecycle["entry_observed_at"]):
             continue
         if not tracked_decision and favorite:
             decision_line, decision_price = line, price
@@ -1354,8 +1355,10 @@ def update_performance_ledger(
     _atomic_json({
         **result["favorites"],
         **({"cfb_spread_pathways": new_path_records} if new_path_records else {}),
-        **({"nba_public_neutral_moneyline": _nba_public_performance(ledger, data_dir)}
+        **({"nba_public_neutral_moneyline": _version_performance(ledger, NBA_PUBLIC_VERSION, data_dir / "nba_public_neutral_activated_at")}
            if (data_dir / "nba_public_neutral_activated_at").exists() or ledger["favorite_rule_version"].eq(NBA_PUBLIC_VERSION).any() else {}),
+        **({"mlb_static_moneyline": _version_performance(ledger, MLB_STATIC_VERSION, data_dir / "mlb_static_activated_at")}
+           if (data_dir / "mlb_static_activated_at").exists() or ledger["favorite_rule_version"].eq(MLB_STATIC_VERSION).any() else {}),
         "sports": sport_records,
         "logic_change_records": {
             sport: summary(favorite_rows[favorite_sport.eq(sport) & favorite_rows["favorite_rule_version"].eq(NOV24_VERSION)])
@@ -1376,10 +1379,9 @@ def update_performance_ledger(
     return result
 
 
-def _nba_public_performance(ledger: pd.DataFrame, data_dir: Path) -> dict:
-    rows = ledger.loc[ledger["favorite_rule_version"].eq(NBA_PUBLIC_VERSION) & ledger["favorite_qualified"].eq("yes")]
-    result = _cohort_row(rows, "favorite_rule_version", NBA_PUBLIC_VERSION, "accepted")
-    marker = data_dir / "nba_public_neutral_activated_at"
+def _version_performance(ledger: pd.DataFrame, version: str, marker: Path) -> dict:
+    rows = ledger.loc[ledger["favorite_rule_version"].eq(version) & ledger["favorite_qualified"].eq("yes")]
+    result = _cohort_row(rows, "favorite_rule_version", version, "accepted")
     return {**summary(rows), **{key: result[key] for key in ("stake_units", "net_profit_units", "roi")},
             "activated_at": marker.read_text(encoding="utf8").strip() if marker.exists() else "",
             "first_qualified_at": min((v for v in rows["favorite_first_qualified_at"] if v), default="")}

@@ -116,6 +116,10 @@ def test_pitcher_observations_record_changes_without_inventing_confirmation(tmp_
     away = [change for change in changes if change['leg']=='away']
     assert len(away)==2 and away[1]['previous']['pitcher_id']==1 and away[1]['current']['pitcher_id']==2
     assert read_context(tmp_path, now + timedelta(minutes=20)) is None
+    (tmp_path/CONTEXT_DIR/'disable_pitchers').touch()
+    collector.collect(tmp_path, now)
+    assert read_context(tmp_path)['123']['away']['pitcher_status'] == 'missing'
+    assert len((tmp_path/CONTEXT_DIR/'pitcher_changes.jsonl').read_text().splitlines()) == len(changes)
 
 
 def test_first_pitch_evidence_confirms_only_the_pitching_half_and_matching_fixture(monkeypatch):
