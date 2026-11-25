@@ -1719,3 +1719,147 @@ def test_live_recent_legacy_rows_receive_the_favorite_schema_without_backfill():
                    "favorite_final_market_read", "favorite_snapshot_id"):
         assert column in output
         assert output.iloc[0][column] == ""
+
+def cfb_extra_capture(at, *, high=False, current=None, open_line=None, ml="TOWARD",
+                      money=None, ticket=None, sport="ncaaf", supported="", context="", game_id="extra"):
+    current = current if current is not None else (14.5 if high else -4.5)
+    open_line = open_line if open_line is not None else current + 2
+    bets = ticket if ticket is not None else (28 if high else 72)
+    money = money if money is not None else (44 if high else 58)
+    home = side(f"Home {current:+g}", f"{current:+g} (-104)", bets=bets, money=money,
+                reaction="Watch" if high else "Follow", open_line=f"{open_line:+g} (-112)",
+                context=context, line_move=abs(open_line-current), source_latest_at=at)
+    away = side(f"Away {-current:+g}", f"{-current:+g} (-116)", reaction="Watch",
+                open_line=f"{-open_line:+g} (-108)", bets=100-bets, money=100-money, direction="AGAINST",
+                source_latest_at=at)
+    for item in (home, away):
+        item["open_observed_at"] = "2026-11-23T18:00:00Z"
+    sp = market(sport, "SPREAD", [away, home], game_id=game_id, supported_side=supported)
+    rows = [sp]
+    if ml:
+        mh = side("Home", "-110", open_line="+105", reaction="Watch", direction=ml,
+                  source_latest_at=at, price_move=2.5)
+        ma = side("Away", "-110", open_line="-115", reaction="Watch", direction="LIMITED",
+                  source_latest_at=at)
+        rows.append(market(sport, "MONEYLINE", [ma, mh], game_id=game_id, supported_side=""))
+    for row in rows:
+        row.update(kickoff_iso="2026-11-25T01:00:00Z", state_as_of_utc=at)
+    return apply_red_fox_favorites(pd.DataFrame(rows), as_of=at)
+
+
+def cfb_extra_history(at, *, break_hold=False, quote=14.5):
+    observed = pd.Timestamp(at)
+    rows = []
+    for minutes, value in ((40, quote + .5), (30, quote + 2 if break_hold else quote + .5), (10, quote), (0, quote)):
+        for name, handicap in (("Home", value), ("Away", -value)):
+            rows.append(dict(sport="ncaaf", game_id="extra", market_display="SPREAD",
+                             timestamp=observed-pd.Timedelta(minutes=minutes),
+                             side=f"{name} {handicap:+g}", current_line=f"{handicap:+g} (-104)"))
+    return pd.DataFrame(rows)
+
+
+@pytest.mark.parametrize("high", [False, True])
+def test_cfb_extra_pathway_confirmation_lock_handoff_and_grade(tmp_path, high):
+    from build_live_recent import favorite_handoff_states
+    from performance_ledger import _attach_results, _frozen_records
+    from red_fox_favorite import CFB_HIGH_MONEY, CFB_PUBLIC_FOLLOW, CFB_SPREAD_VERSIONS, favorite_side_quote
+
+    path = CFB_HIGH_MONEY if high else CFB_PUBLIC_FOLLOW
+    first = "2026-11-24T22:30:00Z"
+    confirmed = "2026-11-24T22:40:00Z"
+    lock = "2026-11-25T00:45:00Z"
+    def run(at, enabled):
+        return update_favorite_tracking(cfb_extra_capture(at, high=high, ml=None if high else "TOWARD"),
+            tmp_path, as_of=at, market_history=cfb_extra_history(at), cfb_enabled=enabled)
+    assert not is_favorite(run(first, frozenset()))
+    assert run(first, frozenset({path})).iloc[0].favorite_review_state == "pending_addition"
+    board = run(confirmed, frozenset({path}))
+    assert is_favorite(board)
+    assert board.iloc[0].favorite_pathway == path
+    assert board.iloc[0].favorite_rule_version == CFB_SPREAD_VERSIONS[path]
+    assert board.iloc[0].supported_side == ""
+    assert favorite_side_quote(board.iloc[0]) == ("+14.5 (-104)" if high else "-4.5 (-104)")
+    # Turning off new promotions still allows this official row to requalify.
+    assert is_favorite(run(lock, frozenset()))
+    data = lambda f: pd.read_csv(tmp_path / f, dtype=str, keep_default_na=False)
+    frozen = favorite_handoff_states(data("red_fox_favorite_freeze_candidates.csv"),
+                                    pd.Timestamp("2026-11-25T01:05:00Z"), data("red_fox_favorite_tracking.csv"))
+    ledger = pd.DataFrame(_frozen_records(frozen, data("red_fox_favorite_tracking.csv"), "replay"))
+    assert ledger.iloc[0].favorite_qualified == "yes"
+    assert ledger.iloc[0].supported_side == ""
+    assert float(ledger.iloc[0].decision_line) == (14.5 if high else -4.5)
+    assert float(ledger.iloc[0].decision_price) == -104
+    scores = pd.DataFrame([dict(game_id="extra", team1="Home", team2="Away", team1_score="28", team2_score="21")])
+    assert _attach_results(ledger, scores).iloc[0].grade == "W"
+
+
+@pytest.mark.parametrize("high,case", [
+    (False, {"ml":"LIMITED"}), (False, {"ml":"AGAINST"}), (False, {"ticket":69}),
+    (False, {"money":54}), (False, {"current":-8.5}), (False, {"open_line":-3.5}),
+    (True, {"ml":"AGAINST"}), (True, {"ticket":36}), (True, {"money":42}),
+    (True, {"current":21.5}), (True, {"context":"Split Cap"}), (True, {"supported":"Away"}),
+    (True, {"break_hold":True}), (True, {"sport":"nfl"}),
+])
+def test_cfb_extra_pathways_reject_disqualifying_cases(tmp_path, high, case):
+    from red_fox_favorite import CFB_HIGH_MONEY, CFB_PUBLIC_FOLLOW
+    path=CFB_HIGH_MONEY if high else CFB_PUBLIC_FOLLOW
+    broken=case.get("break_hold",False)
+    kwargs={k:v for k,v in case.items() if k!="break_hold"}
+    for at in ("2026-11-24T22:00:00Z", "2026-11-24T22:12:00Z"):
+        board=cfb_extra_capture(at, high=high, **kwargs)
+        result=update_favorite_tracking(board,tmp_path,as_of=at,market_history=cfb_extra_history(at,break_hold=broken),
+                                        cfb_enabled=frozenset({path}))
+        assert not result["favorite_pathway"].eq(path).any()
+        assert result.iloc[0].favorite_review_state != "pending_addition"
+
+
+def test_cfb_extra_closing_failure_is_not_restored_at_handoff(tmp_path):
+    from build_live_recent import favorite_handoff_states
+    from red_fox_favorite import CFB_PUBLIC_FOLLOW
+
+    enabled=frozenset({CFB_PUBLIC_FOLLOW})
+    for at in ("2026-11-24T22:00:00Z", "2026-11-24T22:10:00Z"):
+        state=update_favorite_tracking(cfb_extra_capture(at),tmp_path,as_of=at,cfb_enabled=enabled)
+    assert is_favorite(state)
+    at="2026-11-25T00:42:00Z"
+    state=update_favorite_tracking(cfb_extra_capture(at,ml="LIMITED"),tmp_path,as_of=at,cfb_enabled=enabled)
+    assert not is_favorite(state)
+    assert state.iloc[0].favorite_late_invalidated == "true"
+    data=lambda f:pd.read_csv(tmp_path/f,dtype=str,keep_default_na=False)
+    assert favorite_handoff_states(data("red_fox_favorite_freeze_candidates.csv"),
+        pd.Timestamp("2026-11-25T01:02:00Z"),data("red_fox_favorite_tracking.csv")).empty
+
+
+@pytest.mark.parametrize("handicap,high", [(8,False),(-8,False),(21,True),(-21,True),(2.5,True)])
+def test_cfb_extra_threshold_edges_and_independent_switches(tmp_path, handicap, high):
+    from red_fox_favorite import CFB_HIGH_MONEY, CFB_PUBLIC_FOLLOW
+    pathway = CFB_HIGH_MONEY if high else CFB_PUBLIC_FOLLOW
+    other = CFB_PUBLIC_FOLLOW if high else CFB_HIGH_MONEY
+    for at in ("2026-11-24T22:00:00Z","2026-11-24T22:10:00Z"):
+        board = cfb_extra_capture(at, high=high, current=handicap, open_line=handicap+2,
+                                  ticket=35 if high else 70, money=50 if high else 55,
+                                  ml="LIMITED" if high else "TOWARD")
+        history=cfb_extra_history(at,quote=handicap)
+        assert not is_favorite(update_favorite_tracking(board,tmp_path/"other",at,market_history=history,
+                                                       cfb_enabled=frozenset({other})))
+        actual=update_favorite_tracking(board,tmp_path/"actual",at,market_history=history,cfb_enabled=frozenset({pathway}))
+    assert actual.iloc[0].favorite_pathway == pathway
+    assert audit_directional_integrity(actual)["favorites_without_supported_side"] == 0
+
+
+def test_cfb_extra_does_not_displace_active_legacy_moneyline(tmp_path):
+    from red_fox_favorite import CFB_PUBLIC_FOLLOW
+    first="2026-11-24T22:00:00Z"
+    second="2026-11-24T22:12:00Z"
+    for at in (first,second):
+        board=cfb_extra_capture(at)
+        board.loc[1,["red_fox_favorite","favorite_side","favorite_pathway","favorite_state"]] = [
+            "true","Home","low_support_contrarian","qualified"]
+        result=update_favorite_tracking(board,tmp_path,at,cfb_enabled=frozenset({CFB_PUBLIC_FOLLOW}))
+    assert not is_favorite(result)
+    assert is_favorite(result,1)
+    later="2026-11-24T22:23:00Z"
+    current=update_favorite_tracking(cfb_extra_capture(later),tmp_path,later,
+                                      cfb_enabled=frozenset({CFB_PUBLIC_FOLLOW}))
+    assert current.iloc[0].favorite_review_state != "pending_addition"
+    assert is_favorite(current,1)

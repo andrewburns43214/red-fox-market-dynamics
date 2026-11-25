@@ -11,6 +11,7 @@ import pandas as pd
 
 from anomaly_board import _market_read_semantics
 from cross_market_split import apply_cross_market_split
+from red_fox_favorite import cfb_spread_favorite
 
 
 def _text(value: object) -> str:
@@ -58,7 +59,21 @@ def audit(board: pd.DataFrame) -> dict[str, object]:
         index=before.index,
         dtype=str,
     )
-    favorites_without_supported = favorites & published_supported_identity.eq("")
+    pathway_support = pd.Series(False, index=before.index)
+    for index, row in before.loc[favorites & published_supported_identity.eq("")].iterrows():
+        if not cfb_spread_favorite(row):
+            continue
+        try:
+            sides = json.loads(_text(row.get("market_sides")) or "[]")
+            evidence = json.loads(_text(row.get("favorite_supporting_evidence")) or "{}")
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(sides, list) or not isinstance(evidence, dict):
+            continue
+        identity = favorite_identity.at[index]
+        exact = sum(_identity(side.get("flagged_side"), "SPREAD") == identity for side in sides if isinstance(side, dict))
+        pathway_support.at[index] = bool(identity and exact == 1 and evidence.get("current_line"))
+    favorites_without_supported = favorites & published_supported_identity.eq("") & ~pathway_support
     favorites_on_different_side = favorites & published_supported_identity.ne("") & favorite_identity.ne(published_supported_identity)
 
     anomalies: list[dict[str, str]] = []

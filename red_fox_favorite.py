@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 
@@ -189,6 +190,25 @@ SHADOW_COLUMNS = [
 
 NOV24_SPORTS = frozenset({"ncaab", "nba", "nhl"})
 NOV24_VERSION = "red_fox_favorite_20261124"
+CFB_PUBLIC_FOLLOW = "cfb_public_spread_follow"
+CFB_HIGH_MONEY = "cfb_low_ticket_high_money_spread"
+CFB_SPREAD_VERSIONS = {
+    CFB_PUBLIC_FOLLOW: "red_fox_favorite_cfb_public_follow_v1",
+    CFB_HIGH_MONEY: "red_fox_favorite_cfb_high_money_v1",
+}
+CFB_SPREAD_FLAGS = {
+    CFB_PUBLIC_FOLLOW: "RED_FOX_CFB_PUBLIC_FOLLOW",
+    CFB_HIGH_MONEY: "RED_FOX_CFB_HIGH_MONEY",
+}
+
+
+def cfb_spread_favorite(row: pd.Series) -> bool:
+    return (
+        str(row.get("sport", "")).lower() in {"ncaaf", "cfb"}
+        and str(row.get("market_display", "")).upper() == "SPREAD"
+        and CFB_SPREAD_VERSIONS.get(row.get("favorite_pathway")) == row.get("favorite_rule_version")
+        and row.get("favorite_pathway") in CFB_SPREAD_VERSIONS
+    )
 
 
 def apply_red_fox_favorites(board: pd.DataFrame, as_of=None, *, nov24_goalies: dict | None = None) -> pd.DataFrame:
@@ -364,14 +384,22 @@ def apply_red_fox_favorites(board: pd.DataFrame, as_of=None, *, nov24_goalies: d
     return result
 
 
-def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) -> pd.DataFrame:
+def update_favorite_tracking(
+    board: pd.DataFrame, data_dir: Path, as_of=None, *,
+    market_history: pd.DataFrame | None = None,
+    cfb_enabled: frozenset[str] | None = None,
+) -> pd.DataFrame:
     """Persist every prospective snapshot and carry first qualification forward."""
     current = board.copy()
     at = _timestamp(as_of)
     path = Path(data_dir) / "red_fox_favorite_tracking.csv"
     history = _read_tracking(path)
+    if cfb_enabled is None:
+        cfb_enabled = frozenset(path for path, flag in CFB_SPREAD_FLAGS.items() if _truthy(os.getenv(flag)))
+    current = _apply_cfb_spread_pathways(current, history, market_history, at, cfb_enabled)
     current = _apply_visibility_lock(current, history, Path(data_dir), at)
     current = _apply_manual_favorite_inclusions(current, at)
+    _resolve_cfb_spread_conflicts(current, at)
     keys = ["sport", "game_id", "market_display"]
     started_frozen_keys: set[tuple[str, str, str]] = set()
     archive_path = Path(data_dir) / "red_fox_favorite_freeze_candidates.csv"
@@ -761,10 +789,19 @@ def _apply_visibility_lock(
                 additions.append(held)
                 review_records.append(_review_record(row, at, "pending", "removal", reason))
             elif minutes <= review_minutes:
-                if identity[0] in {"ufc", "nhl"} and minutes <= lock_minutes:
+                if (identity[0] in {"ufc", "nhl"} or cfb_spread_favorite(row)) and minutes <= lock_minutes:
                     reason = f"Mandatory T−{lock_minutes:g} {identity[0].upper()} requalification failed: market unavailable."
                     if not _review_already_recorded(reviews, key, "late_invalidated"):
                         review_records.append(_review_record(row, at, "late_invalidated", "removal", reason))
+                    if cfb_spread_favorite(row):
+                        invalidated = row.copy()
+                        invalidated["red_fox_favorite"] = "false"
+                        invalidated["favorite_state"] = "late_invalidated"
+                        invalidated["favorite_late_invalidated"] = "true"
+                        invalidated["favorite_late_invalidated_at"] = at
+                        invalidated["favorite_late_invalidated_reason"] = reason
+                        invalidated["favorite_reason"] = reason
+                        additions.append(invalidated)
                     continue
                 held = row.copy()
                 held["favorite_reason"] = "Favorite retained through the closing review window."
@@ -805,6 +842,26 @@ def _apply_visibility_lock(
             _set_review(result, index, "late_invalidated", stale_reason, at)
             if not _review_already_recorded(reviews, key, "late_invalidated"):
                 review_records.append(_review_record(row, at, "late_invalidated", "removal", stale_reason))
+            continue
+
+        if (raw_favorite and active and source is not None and cfb_spread_favorite(source)
+                and (_side_identity(row.get("favorite_side")) != _side_identity(source.get("favorite_side"))
+                     or (cfb_spread_favorite(row) and _favorite_review_identity(row) != _favorite_review_identity(source)))):
+            _clear_favorite(result, index, "Awaiting qualification of a different CFB pathway or side.")
+            row = result.loc[index].copy()
+            raw_favorite = False
+
+        # A legacy qualification of the same side keeps its own version,
+        # including when it supersedes an experimental spread inside review.
+        if (raw_favorite and active and source is not None and cfb_spread_favorite(source)
+                and not cfb_spread_favorite(row) and 0 <= minutes <= review_minutes):
+            hard, adverse, reason = _material_removal(row, source)
+            if hard or (minutes <= lock_minutes and adverse):
+                _late_invalidate_favorite(result, index, reason, at)
+                _set_review(result, index, "late_invalidated", reason, at)
+                review_records.append(_review_record(row, at, "late_invalidated", "removal", reason, identity_row=source))
+            else:
+                _clear_pending_review(reviews, review_records, row, key, at)
             continue
 
         if key in translation_roles:
@@ -866,7 +923,10 @@ def _apply_visibility_lock(
         # back to the archived Favorite line.  This is not a new qualification:
         # it is constrained to the same supported side and still goes through
         # the normal two-capture visibility review below.
-        recovered, recovery_reason = _confirmed_prior_favorite_recovery(row, source)
+        recovered, recovery_reason = (
+            (False, "") if source is not None and cfb_spread_favorite(source)
+            else _confirmed_prior_favorite_recovery(row, source)
+        )
         if recovered and not raw_favorite and not active:
             _restore_favorite(result, index, source)
             result.at[index, "favorite_reason"] = recovery_reason
@@ -927,7 +987,9 @@ def _apply_visibility_lock(
                 _late_invalidate_favorite(result, index, reason, at)
                 _set_review(result, index, "late_invalidated", reason, at)
                 if not _review_already_recorded(reviews, key, "late_invalidated"):
-                    review_records.append(_review_record(row, at, "late_invalidated", "removal", reason))
+                    review_records.append(_review_record(row, at, "late_invalidated", "removal", reason, identity_row=source)
+                                          if source is not None and cfb_spread_favorite(source)
+                                          else _review_record(row, at, "late_invalidated", "removal", reason))
                 continue
             if active:
                 _restore_favorite(result, index, source)
@@ -1877,6 +1939,181 @@ def _primary_moneyline_rejection_reason(
     if recovered and int(_number(side.get("material_direction_changes")) or 0) > CONFIG.primary_moneyline_whipsaw_max_direction_changes:
         return f"{label} Favorite withheld: recovered whipsaw exceeded two material direction changes."
     return f"{label} Favorite withheld: current strict qualification gates were not satisfied."
+
+
+def _cfb_held_spread(side: dict, other: dict, history: pd.DataFrame, opened: float) -> bool:
+    """Match the research hold: positive throughout a 30-minute lookback."""
+    if history.empty:
+        return False
+    observed = pd.to_datetime(side.get("source_latest_at"), errors="coerce", utc=True)
+    opener = pd.to_datetime(side.get("open_observed_at"), errors="coerce", utc=True)
+    if pd.isna(observed) or pd.isna(opener):
+        return False
+    wanted = _side_identity(side["flagged_side"])
+    opponent = _side_identity(other["flagged_side"])
+    times = pd.to_datetime(history["timestamp"], errors="coerce", utc=True, format="mixed")
+    eligible = history.loc[times.between(max(opener, observed - pd.Timedelta(hours=1)), observed)]
+    pairs = {}
+    conflicts = set()
+    for ts, name, quote in zip(times.loc[eligible.index], eligible["side"], eligible["current_line"]):
+        identity = _side_identity(name)
+        if identity not in {wanted, opponent}:
+            continue
+        pair = pairs.setdefault(ts, {})
+        value = _line_value(quote, "SPREAD")
+        if identity in pair and pair[identity] != value:
+            conflicts.add(ts)
+        pair[identity] = value
+    captures = sorted((ts, pair[wanted]) for ts, pair in pairs.items()
+                      if ts not in conflicts and pair.keys() == {wanted, opponent}
+                      and all(value is not None for value in pair.values())
+                      and abs(pair[wanted] + pair[opponent]) < .001)
+    anchor = max((ts for ts, _ in captures if ts <= observed - pd.Timedelta(minutes=30)), default=None)
+    return (anchor is not None and captures[-1] == (observed, _line_value(side["current_line"], "SPREAD"))
+            and all(opened > value for ts, value in captures if ts >= anchor))
+
+
+def _cfb_spread_decision(row: pd.Series, game: pd.DataFrame, history: pd.DataFrame,
+                         now: pd.Timestamp, allowed: frozenset[str]) -> dict | None:
+    if not allowed or str(row.get("market_display", "")).upper() != "SPREAD":
+        return None
+    kickoff = pd.to_datetime(row.get("kickoff_iso"), errors="coerce", utc=True)
+    if pd.isna(kickoff) or kickoff <= now:
+        return None
+    if any(game.get(key, pd.Series(dtype=str)).map(_truthy).any()
+           for key in ("cross_market_mismatch", "cross_market_opener_mismatch_verified")):
+        return None
+    sides = _sides(row)
+    if len(sides) != 2 or len({_side_identity(side.get("flagged_side")) for side in sides} - {""}) != 2:
+        return None
+    supported = _side_identity(row.get("supported_side"))
+    candidates = []
+    for side, other in (sides, sides[::-1]):
+        name = str(side["flagged_side"])
+        if supported and supported != _side_identity(name):
+            continue
+        bets = _number(side.get("bets_pct"))
+        money = _number(side.get("money_pct"))
+        if bets is None or money is None:
+            continue
+        public = CFB_PUBLIC_FOLLOW in allowed and bets >= 70 and money >= 55
+        high = CFB_HIGH_MONEY in allowed and bets <= 35 and money - bets >= 15
+        if not (public or high):
+            continue
+        current = _line_value(side.get("current_line"), "SPREAD")
+        opened = _line_value(side.get("open_line"), "SPREAD")
+        if current is None or opened is None or opened - current < 1.5:
+            continue
+        if not 1 <= abs(current) <= (8 if public else 21):
+            continue
+        open_at = pd.to_datetime(side.get("open_observed_at"), errors="coerce", utc=True)
+        source_at = pd.to_datetime(side.get("source_latest_at"), errors="coerce", utc=True)
+        if not kickoff - pd.Timedelta(days=CONFIG.ncaaf_active_market_window_days) <= open_at <= source_at <= now:
+            continue
+        quality = _quality_failure(side)
+        intact = _intact_ncaaf_partial_whipsaw(side)
+        if quality and not (quality.startswith("Unrecovered Whipsaw") and intact):
+            continue
+        if str(side.get("path", "")) == "Whipsaw" and not (
+            _truthy(side.get("whipsaw_recovered")) or "Whipsaw Recovered" in _parts(side.get("context_chips")) or intact
+        ):
+            continue
+        selected = row.copy()
+        selected["favorite_side"] = name
+        if _freshness_failure(selected, None, now):
+            continue
+        cross = _corresponding_moneyline_state(side, game)
+        if cross == "contradiction" or (public and cross != "confirmation"):
+            continue
+        if high and not _cfb_held_spread(side, other, history, opened):
+            continue
+        candidates.append({
+            "side": name, "pathway": CFB_PUBLIC_FOLLOW if public else CFB_HIGH_MONEY,
+            "cross": cross, "whipsaw": "partial_retrace_intact" if intact else
+                "recovered" if _truthy(side.get("whipsaw_recovered")) else "none",
+            "evidence": {
+                "bets_pct": bets, "money_pct": money, "open_line": side["open_line"],
+                "current_line": side["current_line"], "open_observed_at": str(open_at),
+                "source_latest_at": str(side.get("source_latest_at", "")),
+                "favorable_spread_move": opened - current, "cross_market": cross,
+                "held_favorable_for_30_minutes": high,
+            },
+        })
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _apply_cfb_spread_pathways(current: pd.DataFrame, tracking: pd.DataFrame,
+                               market_history: pd.DataFrame | None, at: str,
+                               enabled: frozenset[str]) -> pd.DataFrame:
+    if current.empty or not {"sport", "game_id", "market_display"}.issubset(current):
+        return current
+    versions = tracking.get("favorite_rule_version", pd.Series(dtype=str))
+    if not enabled and not versions.isin(CFB_SPREAD_VERSIONS.values()).any():
+        return current
+    now = pd.to_datetime(at, utc=True)
+    cfb = {"ncaaf", "cfb"}
+    active = {}
+    if not tracking.empty:
+        timestamps = pd.to_datetime(tracking["recorded_at"], errors="coerce", utc=True, format="mixed")
+        latest = tracking.loc[timestamps.le(now) & tracking["sport"].isin(cfb)].sort_values(
+            "recorded_at", kind="mergesort"
+        ).drop_duplicates(["sport", "game_id", "market_display"], keep="last")
+        for _, state in latest.loc[latest["favorite_state"].eq("qualified")].iterrows():
+            active.setdefault((state["sport"], state["game_id"]), []).append(state)
+    histories = {}
+    if (market_history is not None and not market_history.empty and
+            (CFB_HIGH_MONEY in enabled or versions.eq(CFB_SPREAD_VERSIONS[CFB_HIGH_MONEY]).any())):
+        mask = market_history["sport"].isin(cfb) & market_history["market_display"].eq("SPREAD")
+        histories = dict(tuple(market_history.loc[mask].groupby(["sport", "game_id"], sort=False)))
+    for key, game in current.loc[current["sport"].isin(cfb)].groupby(["sport", "game_id"], sort=False):
+        prior = active.get(key, [])
+        if any(not cfb_spread_favorite(state) for state in prior) or game["red_fox_favorite"].map(_truthy).any():
+            continue
+        spreads = game.loc[game["market_display"].eq("SPREAD")]
+        if len(spreads) != 1:
+            continue
+        index = spreads.index[0]
+        row = spreads.iloc[0]
+        if (*key, "SPREAD") in VISIBILITY_INVALIDATED_FAVORITES or _manual_favorite_exclusion(row):
+            continue
+        # Turning off an activation switch stops new promotions. Already active
+        # selections still run their own rule through ordinary safety and lock.
+        allowed = frozenset(state["favorite_pathway"] for state in prior) if prior else enabled
+        decision = _cfb_spread_decision(row, game, histories.get(key, pd.DataFrame()), now, allowed)
+        if not decision:
+            if prior:
+                current.at[index, "_ncaaf_decision_reason"] = "The active CFB spread pathway failed its current qualification gates."
+            continue
+        path = decision["pathway"]
+        description = "CFB Public-Backed Spread Follow" if path == CFB_PUBLIC_FOLLOW else "CFB Low-Ticket / High-Money Spread"
+        values = {
+            "red_fox_favorite": "true", "favorite_side": decision["side"], "favorite_pathway": path,
+            "favorite_rule_version": CFB_SPREAD_VERSIONS[path], "favorite_first_qualified_at": at,
+            "favorite_final_qualified_at": at, "favorite_state": "qualified",
+            "favorite_final_market_read": " | ".join(filter(None, (str(row.get("reaction", "")), str(row.get("path", ""))))),
+            "favorite_final_market_rank": str(row.get("board_rank", "")),
+            "favorite_supporting_evidence": json.dumps(decision["evidence"], separators=(",", ":")),
+            "favorite_whipsaw_state": decision["whipsaw"], "favorite_cross_market_state": decision["cross"],
+            "favorite_snapshot_id": _snapshot_id(row, at), "favorite_reason": description + " qualified.",
+            "favorite_originally_qualified": "true",
+        }
+        for column, value in values.items():
+            current.at[index, column] = value
+    return current
+
+
+def _resolve_cfb_spread_conflicts(current: pd.DataFrame, at: str) -> None:
+    experiment_versions = current.get("favorite_rule_version", pd.Series(dtype=str)).isin(CFB_SPREAD_VERSIONS.values())
+    if not experiment_versions.any():
+        return
+    favorite = current["red_fox_favorite"].map(_truthy)
+    legacy_games = set(zip(current.loc[favorite & ~experiment_versions, "sport"],
+                          current.loc[favorite & ~experiment_versions, "game_id"]))
+    for index, row in current.loc[favorite & experiment_versions].iterrows():
+        if (row["sport"], row["game_id"]) in legacy_games:
+            reason = "Existing CFB Favorite took precedence over the additional spread pathway."
+            _late_invalidate_favorite(current, index, reason, at)
+            _set_review(current, index, "late_invalidated", reason, at)
 
 
 def _ncaaf_favorite_gate(row: pd.Series, side: dict, cross_state: str) -> dict:

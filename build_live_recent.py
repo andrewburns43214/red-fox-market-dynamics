@@ -18,6 +18,7 @@ from red_fox_favorite import (
     RULE_INVALIDATED_FAVORITES,
     VISIBILITY_INVALIDATED_FAVORITES,
     favorite_side_quote,
+    cfb_spread_favorite,
 )
 from team_aliases import normalize_team_name
 
@@ -567,15 +568,25 @@ def favorite_handoff_states(
             scoped = scoped.sort_values("_recorded_at", kind="mergesort")
             latest_qualified = scoped.empty or str(scoped.iloc[-1].get("favorite_state", "")) == "qualified"
             raw_row = raw_lookup.get(key)
-            confirmed_side = None if latest_qualified else _confirm_favorite_with_final_raw_market(candidate, raw_row)
+            confirmed_side = (None if latest_qualified or cfb_spread_favorite(candidate)
+                              else _confirm_favorite_with_final_raw_market(candidate, raw_row))
             if confirmed_side is not None and raw_row is not None:
                 favorite.loc[candidate.name] = _merge_final_raw_confirmation(candidate, raw_row, confirmed_side)
                 raw_confirmed.add(key)
             # A threshold or classification falloff cannot erase an already
             # qualified Favorite when the final paired market still confirms
             # the same side. Explicit invalidations and adverse moves remain.
+            if cfb_spread_favorite(candidate):
+                latest_qualified = (
+                    latest_qualified and not scoped.empty
+                    and scoped.iloc[-1].get("favorite_rule_version") == candidate.get("favorite_rule_version")
+                    and _favorite_side_identity(scoped.iloc[-1].get("favorite_side"))
+                    == _favorite_side_identity(candidate.get("favorite_side"))
+                )
             keep.append(latest_qualified or confirmed_side is not None)
         favorite = favorite.loc[pd.Series(keep, index=favorite.index)]
+    elif not favorite.empty:
+        favorite = favorite.loc[~favorite.apply(cfb_spread_favorite, axis=1)]
     frozen = final_pregame_states(favorite, now)
     if not frozen.empty:
         frozen["freeze_method"] = "favorite_tracking_last_qualified_at_or_before_start"

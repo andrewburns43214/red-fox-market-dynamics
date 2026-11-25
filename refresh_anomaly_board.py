@@ -15,7 +15,9 @@ from build_live_recent import MARKET_CANDIDATES, main as build_live_recent, upda
 from cross_market_integrity import CROSS_MARKET_COLUMNS, apply_cross_market_integrity
 from cross_market_split import CROSS_MARKET_SPLIT_COLUMNS, apply_cross_market_split
 from main import infer_market_type, normalize_side_key
-from red_fox_favorite import FAVORITE_COLUMNS, REVIEW_BOARD_COLUMNS, apply_red_fox_favorites, update_favorite_tracking
+from red_fox_favorite import (
+    FAVORITE_COLUMNS, REVIEW_BOARD_COLUMNS, apply_red_fox_favorites, cfb_spread_favorite, update_favorite_tracking,
+)
 from favorite_nhl_goalies import read_goalies
 
 
@@ -194,6 +196,9 @@ def restore_retained_favorites(board, data_dir=DATA, now=None):
         key = tuple(str(row.get(column, "")) for column in keys)
         source = lookup.get(key)
         if source is None or str(source.get("red_fox_favorite", "")).lower() != "true":
+            continue
+        if cfb_spread_favorite(source):
+            # The optional pathways must requalify through the normal lock.
             continue
         invalidated = str(source.get("favorite_late_invalidated", "")).lower() == "true"
         invalidation_reason = str(source.get("favorite_late_invalidated_reason", ""))
@@ -678,7 +683,7 @@ def _refresh(coverage):
         board["state_as_of_utc"] = ""
     # Tracking and the immutable kickoff handoff archive must receive the
     # precise source timestamp attached above, not just publication wall time.
-    board = update_favorite_tracking(board, DATA, as_of=newest_snapshot)
+    board = update_favorite_tracking(board, DATA, as_of=newest_snapshot, market_history=history)
     if retained_source and not board.empty:
         retained_rows = [
             (row.sport, row.game_id, row.market_display) in retained_keys

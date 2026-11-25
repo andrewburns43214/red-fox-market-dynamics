@@ -20,7 +20,7 @@ import pandas as pd
 import requests
 
 from anomaly_action_results import _grade_action
-from red_fox_favorite import NOV24_SPORTS, NOV24_VERSION, tracked_entry_quote
+from red_fox_favorite import CFB_SPREAD_VERSIONS, NOV24_SPORTS, NOV24_VERSION, cfb_spread_favorite, tracked_entry_quote
 
 
 SUPPORTED_SIDE_VALID_FROM = pd.Timestamp("2026-09-07T17:57:58Z")
@@ -48,6 +48,7 @@ FAVORITE_RULE_VERSIONS = frozenset({
     "red_fox_favorite_ufc_v1",
     "red_fox_favorite_nhl_v1",
     NOV24_VERSION,
+    *CFB_SPREAD_VERSIONS.values(),
 })
 FAVORITE_KPI_EXCLUSIONS = {
     ("34877187", "SPREAD"): (
@@ -526,7 +527,9 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
         if pd.isna(kickoff) or kickoff < SUPPORTED_SIDE_VALID_FROM:
             continue
-        supported = _text(row.get("supported_side"))
+        published_supported = _text(row.get("supported_side"))
+        extra_spread = cfb_spread_favorite(row) and _truthy(row.get("red_fox_favorite"))
+        supported = _text(row.get("favorite_side")) if extra_spread else published_supported
         if not supported:
             continue
         side_record = _side_record(row, supported)
@@ -621,7 +624,7 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
             "return_toward_open": "yes" if _truthy(side_record.get("return_toward_open")) else "no",
             "active_worsening_reversal": "yes" if _truthy(side_record.get("active_worsening_reversal")) else "no",
             "whipsaw_state": whipsaw_state, "whipsaw_ever": whipsaw_ever,
-            "supported_side": supported, "favorite_qualified": "yes" if favorite else "no",
+            "supported_side": published_supported, "favorite_qualified": "yes" if favorite else "no",
             "favorite_rule_version": _text(row.get("favorite_rule_version")),
             "favorite_originally_qualified": "yes" if originally_qualified or favorite else "no",
             "favorite_late_invalidated": "yes" if late_invalidated else "no",
@@ -1310,8 +1313,22 @@ def update_performance_ledger(
         -float(record["win_rate_excluding_pushes"] or 0),
         record["label"],
     ))
+    new_path_records = {}
+    for pathway, version in CFB_SPREAD_VERSIONS.items():
+        selected = favorite_rows.loc[
+            favorite_rows["favorite_pathway"].eq(pathway) & favorite_rows["favorite_rule_version"].eq(version)
+        ]
+        if not selected.empty:
+            net = pd.to_numeric(selected["net_profit_units"], errors="coerce")
+            units = pd.to_numeric(selected["stake_units"], errors="coerce")
+            stakes = float(units.loc[net.notna()].sum())
+            new_path_records[pathway] = {
+                **summary(selected), "net_units": round(float(net.sum()), 6),
+                "priced_stakes": stakes, "roi": round(float(net.sum()) / stakes, 6) if stakes else None,
+            }
     _atomic_json({
         **result["favorites"],
+        **({"cfb_spread_pathways": new_path_records} if new_path_records else {}),
         "sports": sport_records,
         "logic_change_records": {
             sport: summary(favorite_rows[favorite_sport.eq(sport) & favorite_rows["favorite_rule_version"].eq(NOV24_VERSION)])
