@@ -845,8 +845,11 @@ def expire_started_board_rows(now: datetime, grace_minutes: int = 5) -> int:
     keep = kickoff.isna() | (kickoff > cutoff)
     if ufc.settings()[0] and "sport" in board:
         bouts, notices = ufc.load_context(DATA)
+        # The provider can publish while this worker is running. Measure
+        # freshness after the read, not against the worker's earlier start.
+        observed_at = pd.Timestamp.now(tz="UTC")
         for index, row in board.loc[board["sport"].eq("ufc")].iterrows():
-            keep.loc[index] = ufc.is_pregame(row, bouts, notices, pd.Timestamp(now))
+            keep.loc[index] = ufc.is_pregame(row, bouts, notices, observed_at)
     removed = int((~keep).sum())
     if not removed:
         return 0

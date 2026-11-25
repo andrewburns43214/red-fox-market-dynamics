@@ -87,3 +87,25 @@ def test_official_weigh_in_evidence_marks_exact_pair_and_weight_miss():
     assert evidence["one"]["risks"] == ["Weight Miss"]
     assert evidence["two"]["weigh_in"] == "confirmed"
     assert evidence["two"]["risks"] == []
+
+def test_board_expiry_keeps_ufc_phase_observed_after_worker_start(tmp_path, monkeypatch):
+    import pandas as pd
+    import build_live_recent as live
+    import ufc_bout_integrity as ufc
+
+    now = pd.Timestamp.now(tz="UTC")
+    scheduled = (now - pd.Timedelta(minutes=10)).isoformat()
+    board_path = tmp_path / "anomaly_board.csv"
+    pd.DataFrame([dict(sport="ufc", game="Fighter Alpha vs Fighter Beta", kickoff_iso=scheduled)]).to_csv(
+        board_path, index=False
+    )
+    bout = dict(id="1", phase="pre", observed=now.isoformat(), card_at=scheduled,
+                pair=["fighteralpha", "fighterbeta"])
+    monkeypatch.setattr(live, "BOARD", board_path)
+    monkeypatch.setattr(live, "DATA", tmp_path)
+    monkeypatch.setattr(ufc, "settings", lambda: (True, now))
+    monkeypatch.setattr(ufc, "load_context", lambda _: ({"1": bout}, {}))
+    worker_start = now - pd.Timedelta(seconds=30)
+    assert live.expire_started_board_rows(worker_start) == 0
+    bout["phase"] = "live"
+    assert live.expire_started_board_rows(worker_start) == 1
