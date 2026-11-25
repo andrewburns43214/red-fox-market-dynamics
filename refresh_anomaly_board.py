@@ -20,6 +20,7 @@ from red_fox_favorite import (
     nba_release_config, update_favorite_tracking,
 )
 from favorite_nhl_goalies import read_goalies
+from nhl_release_config import official_nhl_favorite
 
 
 DATA = Path(os.environ.get("REDFOX_DATA_DIR", "data"))
@@ -198,7 +199,7 @@ def restore_retained_favorites(board, data_dir=DATA, now=None):
         source = lookup.get(key)
         if source is None or str(source.get("red_fox_favorite", "")).lower() != "true":
             continue
-        if cfb_spread_favorite(source) or nba_public_favorite(source):
+        if cfb_spread_favorite(source) or nba_public_favorite(source) or official_nhl_favorite(source):
             # The optional pathways must requalify through the normal lock.
             continue
         invalidated = str(source.get("favorite_late_invalidated", "")).lower() == "true"
@@ -699,7 +700,16 @@ def _refresh(coverage):
         capture_nhl(classified, board, history, nhl_goalies, DATA, newest_snapshot)
     except Exception as exc:
         print(f"[nhl-paper] capture failed: {type(exc).__name__}: {exc}", flush=True)
-    board = update_favorite_tracking(board, DATA, as_of=newest_snapshot, market_history=history, nba_config=nba_config)
+    nhl_selections = {}
+    if not retained_source:
+        try:
+            from nhl_official_release import capture_official
+
+            nhl_selections = capture_official(classified, history, nhl_goalies, DATA)
+        except Exception as exc:
+            print(f"[nhl-official] capture failed: {type(exc).__name__}: {exc}", flush=True)
+    board = update_favorite_tracking(board, DATA, as_of=newest_snapshot, market_history=history,
+                                     nba_config=nba_config, nhl_selections=nhl_selections)
     if retained_source and not board.empty:
         retained_rows = [
             (row.sport, row.game_id, row.market_display) in retained_keys

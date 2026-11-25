@@ -131,3 +131,114 @@ def test_paper_combines_once_at_original_price_with_own_t30_and_no_official_writ
     assert result["totals"]["combined"]["net_units"]==pytest.approx(100/120)
     assert all(entry["goalie_status"]=="unavailable" for entry in result["entries"])
     assert marker.read_text(encoding="utf-8")=="published\n"
+
+
+@pytest.mark.parametrize("active, winner, closing_pass", [
+    ({PUBLIC, CROSSOVER}, CROSSOVER, True),
+    ({PUBLIC}, PUBLIC, True),
+    ({CROSSOVER}, CROSSOVER, True),
+    ({PUBLIC}, PUBLIC, False),
+])
+def test_official_nhl_board_kickoff_and_single_settlement(tmp_path, monkeypatch, active, winner, closing_pass):
+    import nhl_official_release as release
+    from build_live_recent import favorite_handoff_states, final_pregame_states
+    from nhl_release_config import OFFICIAL_FLAGS, OFFICIAL_HANDOFF, OFFICIAL_VERSIONS
+    from performance_ledger import _frozen_records, update_performance_ledger
+
+    kickoff = pd.Timestamp(START)
+    cutoff = int(kickoff.timestamp())
+    since = kickoff - pd.Timedelta(minutes=70)
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setattr(release, "official_start", lambda: since.isoformat())
+    monkeypatch.setattr(release, "switches", lambda: {OFFICIAL_FLAGS[lane]: True for lane in active})
+    monkeypatch.setattr(release, "index_schedule", lambda *args: {
+        "2026020001": {"away": "away", "home": "home", "start": cutoff, "state": "FUT"},
+    })
+    monkeypatch.setenv(NHL_ORDINARY_PAUSE, "1")
+    monkeypatch.setenv(NHL_HIGH_HANDLE_PAUSE, "1")
+    history = pd.DataFrame([
+        dict(sport="nhl", game_id="x", market_display="MONEYLINE", timestamp=AT, dk_start_iso=START,
+             side=name, open_line=opener, current_line=current)
+        for name, opener, current in (("Away", "+110", "-120"), ("Home", "-130", "+102"))
+    ])
+    candidate_path = data / "red_fox_favorite_freeze_candidates.csv"
+    for minutes, selected_price in ((80, "-120"), (65, "-120"), (49, "-120"), (25, "-125"), (6, "-125")):
+        clock = kickoff - pd.Timedelta(minutes=minutes)
+        source = clock.isoformat()
+        bets = 75 if not closing_pass and minutes <= 25 else 80
+        chosen = side("Away", f"Away @ {selected_price}", bets, 55, source)
+        rival = side("Home", "Home @ +105", 100-bets, 45, source)
+        # The displayed market leader can be the opposite team. The official
+        # quote, category and grade must all use the selected side.
+        market = row([rival, chosen])
+        market["flagged_side"] = "Home"
+        classified = pd.DataFrame([market])
+        selections = release.capture_official(classified, history, {}, data, observed=clock)
+        raw = apply_red_fox_favorites(classified, as_of=clock)
+        published = update_favorite_tracking(raw, data, as_of=clock, nhl_selections=selections)
+        picked = published.iloc[0]
+        if minutes in (80, 65) or (not closing_pass and minutes <= 25):
+            assert picked.red_fox_favorite == "false"
+        else:
+            assert picked.red_fox_favorite == "true"
+            assert picked.favorite_side == "Away"
+            assert picked.favorite_pathway == winner
+            assert picked.supported_side == ""
+    archive = pd.read_csv(candidate_path, dtype=str, keep_default_na=False)
+    tracking = pd.read_csv(data / "red_fox_favorite_tracking.csv", dtype=str, keep_default_na=False)
+    games = release.read_official_games(data)
+    assert not favorite_handoff_states(archive, kickoff, tracking, published).shape[0]
+    fallback = final_pregame_states(archive, kickoff)
+    assert not _frozen_records(fallback, tracking, "generic fallback")
+    started = release.reconcile_official_handoffs(fallback, archive, games, kickoff)
+    assert len(started) == 1
+    if not closing_pass:
+        assert started.iloc[0].red_fox_favorite == "false"
+        assert not _frozen_records(started, tracking, "failed closing")
+        return
+    assert started.iloc[0].freeze_method == OFFICIAL_HANDOFF
+    assert started.iloc[0].red_fox_favorite == "true"
+    assert started.iloc[0].favorite_rule_version == OFFICIAL_VERSIONS[winner]
+    scores = data / "final_scores_history.csv"
+    pd.DataFrame([dict(game_id="x", sport="nhl", team1="Away", team2="Home", team1_score=4, team2_score=2,
+                       score_provider="espn_scoreboard", score_source="ESPN", score_provider_event_id="espn-x")]).to_csv(scores,index=False)
+    started.to_csv(data / "live_recent.csv", index=False)
+    alternate = data / "duplicate_handoff.csv"
+    started.to_csv(alternate, index=False)
+    first = update_performance_ledger(data, [data / "live_recent.csv", alternate])
+    second = update_performance_ledger(data)
+    official = pd.read_csv(data / "performance_favorites.csv", dtype=str, keep_default_na=False)
+    assert len(official) == 1 and official.ledger_id.is_unique
+    graded = official.iloc[0]
+    assert graded.side == "Away" and graded.grade == "W"
+    assert graded.decision_price == "-120" and graded.closing_price == "-125"
+    assert float(graded.net_profit_units) == pytest.approx(100/120, abs=1e-6)
+    assert first["new_rows"] == 1 and second["new_rows"] == 0
+    report = json.loads((data / "favorite_performance.json").read_text())
+    assert report["wins"] == 1
+    assert next(s for s in report["sports"] if s["sport"] == "nhl")["wins"] == 1
+    assert report["nhl_replacement_pathways"][winner]["wins"] == 1
+
+
+def test_official_overlap_vetoes_opposing_simultaneous_confirmations():
+    from nhl_release_policy import first_confirmed_lane
+
+    states = {
+        PUBLIC: {"pathway": PUBLIC, "entry": {"at": 1000, "side": "away"}},
+        CROSSOVER: {"pathway": CROSSOVER, "entry": {"at": 1000, "side": "home"}},
+    }
+    assert first_confirmed_lane(states) == ""
+    states[CROSSOVER]["entry"]["at"] += 1
+    assert first_confirmed_lane(states) == PUBLIC
+
+
+def test_official_release_occupancy_uses_provider_event_despite_vendor_id_change():
+    from nhl_official_release import _occupied_games
+
+    kickoff = pd.Timestamp(START)
+    market = row([side("Away", "-120", 80, 55), side("Home", "+105", 20, 45)])
+    market.update(red_fox_favorite="true", game_id="old-vendor-id", market_display="SPREAD",
+                  favorite_rule_version=CONFIG.nhl_version)
+    schedule = {"2026020001": {"away": "away", "home": "home", "start": kickoff.timestamp()}}
+    assert _occupied_games(pd.DataFrame([market]), schedule) == {"2026020001"}

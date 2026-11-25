@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 
 import pandas as pd
+from nhl_release_config import official_nhl_favorite
 
 
 @dataclass(frozen=True)
@@ -409,6 +410,7 @@ def update_favorite_tracking(
     cfb_enabled: frozenset[str] | None = None,
     nba_config: tuple[bool, bool] | None = None,
     nhl_hypothetical: bool = False,
+    nhl_selections: dict | None = None,
 ) -> pd.DataFrame:
     """Persist every prospective snapshot and carry first qualification forward."""
     current = board.copy()
@@ -423,6 +425,10 @@ def update_favorite_tracking(
     current = _apply_visibility_lock(current, history, Path(data_dir), at, nba_hold_legacy=nba_config[1],
                                      nhl_hypothetical=nhl_hypothetical)
     current = _apply_manual_favorite_inclusions(current, at)
+    if nhl_selections:
+        from nhl_official_release import publish_official
+
+        current = publish_official(current, nhl_selections, at)
     _resolve_cfb_spread_conflicts(current, at)
     keys = ["sport", "game_id", "market_display"]
     started_frozen_keys: set[tuple[str, str, str]] = set()
@@ -458,6 +464,7 @@ def update_favorite_tracking(
         current_keys.add(key)
         prior = previous.get(key)
         favorite = _truthy(row.get("red_fox_favorite"))
+        nhl_replacement = favorite and official_nhl_favorite(row)
         same_identity = prior is not None and _favorite_review_identity(row) == _favorite_review_identity(prior)
         if favorite and same_identity:
             prior_first = str(prior.get("first_qualified_line", "")).strip()
@@ -469,6 +476,10 @@ def update_favorite_tracking(
             first_line = verified or prior_first or favorite_side_quote(row)
         else:
             first_line = favorite_side_quote(row) if favorite else ""
+        if nhl_replacement:
+            evidence = json.loads(row["favorite_supporting_evidence"])
+            first_line = evidence["entry_line"]
+            current.at[index, "favorite_first_qualified_at"] = evidence["entry_source_at"]
         same_snapshot = (
             favorite and prior is not None
             and str(prior.get("favorite_state", "")) == "qualified"
@@ -480,6 +491,8 @@ def update_favorite_tracking(
                 record["entry_observed_at"] = (
                     entry_time or str(prior.get("entry_observed_at", "")) if same_identity else record["source_observed_at"]
                 )
+                if nhl_replacement:
+                    record["entry_observed_at"] = evidence["entry_source_at"]
                 records.append(record)
         elif prior is not None and str(prior.get("favorite_state", "")) == "qualified":
             record = {column: str(prior.get(column, "")) for column in TRACKING_COLUMNS}
@@ -791,7 +804,7 @@ def _apply_visibility_lock(
         additions = []
         for _, row in archived.iterrows():
             key = tuple(str(row.get(column, "")) for column in keys)
-            if key in current_keys:
+            if key in current_keys or official_nhl_favorite(row):
                 continue
             identity = (key[0].lower(), key[1], key[2].upper())
             if (identity in VISIBILITY_INVALIDATED_FAVORITES
@@ -868,6 +881,9 @@ def _apply_visibility_lock(
         raw_favorite = _truthy(row.get("red_fox_favorite"))
         active = _official_active(history, key, now)
         source = _archived_row(archived, key)
+        if official_nhl_favorite(source):
+            _clear_favorite(result, index, "NHL Favorite requires current pathway evidence.")
+            continue
         if minutes < 0 and active:
             _restore_favorite(result, index, source)
             result.at[index, "favorite_reason"] = "Official Favorite retained after kickoff handoff."

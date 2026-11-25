@@ -22,6 +22,7 @@ from red_fox_favorite import (
     nba_public_favorite,
 )
 from team_aliases import normalize_team_name
+from nhl_release_config import OFFICIAL_HANDOFF, official_nhl_favorite
 
 
 DATA = Path("data")
@@ -470,7 +471,8 @@ def _market_movement_value(value: object, market: object) -> float | None:
 
 def _confirm_favorite_with_final_raw_market(candidate: pd.Series, raw: pd.Series | None) -> dict | None:
     """Return final side evidence when a retained Favorite did not move adversely."""
-    if raw is None or str(candidate.get("favorite_late_invalidated", "")).lower() in {"1", "true", "yes"}:
+    if (raw is None or official_nhl_favorite(candidate)
+            or str(candidate.get("favorite_late_invalidated", "")).lower() in {"1", "true", "yes"}):
         return None
     try:
         sides = [item for item in json.loads(str(raw.get("market_sides", "")) or "[]") if isinstance(item, dict)]
@@ -562,6 +564,8 @@ def favorite_handoff_states(
     if candidates.empty:
         return pd.DataFrame()
     candidates = apply_favorite_exclusions(candidates)
+    if "favorite_rule_version" in candidates:
+        candidates = candidates.loc[~candidates.apply(official_nhl_favorite, axis=1)]
     favorite = candidates[
         candidates.get("red_fox_favorite", pd.Series("false", index=candidates.index))
         .astype(str).str.lower().isin({"1", "true", "yes"})
@@ -659,6 +663,8 @@ def suppress_stale_retained_favorites(
     history["_recorded_at"] = utc_series(history["recorded_at"], history.index)
     for index in candidates:
         row = result.loc[index]
+        if official_nhl_favorite(row) and row.get("freeze_method") == OFFICIAL_HANDOFF:
+            continue
         kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
         scoped = history
         for column in ("sport", "game_id", "market_display"):
@@ -928,15 +934,24 @@ def main(scores_only: bool = False) -> None:
         if not market_started.empty:
             market_started["freeze_method"] = "paired_raw_market_handoff_no_classification"
             rows.append(market_started)
-    if not rows:
+    from nhl_official_release import read_official_games, reconcile_official_handoffs
+
+    live = pd.concat(rows, ignore_index=True, sort=False) if rows else pd.DataFrame(columns=EMPTY_COLUMNS)
+    try:
+        official_games = read_official_games(DATA)
+    except (OSError, ValueError) as exc:
+        print(f"[nhl-official] handoff state unavailable: {type(exc).__name__}: {exc}", flush=True)
+        official_games = {}
+    live = reconcile_official_handoffs(live, candidates, official_games, now)
+    if live.empty:
         recovered = bootstrap_started_records(now)
         if recovered.empty:
             empty = pd.DataFrame(columns=EMPTY_COLUMNS)
             empty.to_csv(OUT, index=False)
             write_score_coverage(empty, now)
             return
-        rows.append(recovered)
-    live = apply_favorite_exclusions(ensure_output_columns(pd.concat(rows, ignore_index=True, sort=False)))
+        live = recovered
+    live = apply_favorite_exclusions(ensure_output_columns(live))
     live = suppress_stale_retained_favorites(live, tracking)
     # Compare in one timezone-free representation; CSVs can contain a mix of
     # offset-aware and legacy naive kickoff values.

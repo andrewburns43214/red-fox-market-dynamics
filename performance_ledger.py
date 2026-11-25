@@ -20,6 +20,7 @@ import pandas as pd
 import requests
 
 from anomaly_action_results import _grade_action
+from nhl_release_config import OFFICIAL_HANDOFF, OFFICIAL_VERSIONS, official_nhl_favorite
 from red_fox_favorite import (CFB_SPREAD_VERSIONS, NBA_PUBLIC_VERSION, NOV24_SPORTS, NOV24_VERSION,
                               cfb_spread_favorite, nba_public_favorite, tracked_entry_quote)
 
@@ -51,6 +52,7 @@ FAVORITE_RULE_VERSIONS = frozenset({
     NOV24_VERSION,
     *CFB_SPREAD_VERSIONS.values(),
     NBA_PUBLIC_VERSION,
+    *OFFICIAL_VERSIONS.values(),
 })
 FAVORITE_KPI_EXCLUSIONS = {
     ("34877187", "SPREAD"): (
@@ -529,8 +531,11 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
         if pd.isna(kickoff) or kickoff < SUPPORTED_SIDE_VALID_FROM:
             continue
+        nhl_replacement = official_nhl_favorite(row)
+        if nhl_replacement and (row.get("freeze_method") != OFFICIAL_HANDOFF or not _truthy(row.get("red_fox_favorite"))):
+            continue
         published_supported = _text(row.get("supported_side"))
-        extra = (cfb_spread_favorite(row) or nba_public_favorite(row)) and _truthy(row.get("red_fox_favorite"))
+        extra = (cfb_spread_favorite(row) or nba_public_favorite(row) or nhl_replacement) and _truthy(row.get("red_fox_favorite"))
         supported = _text(row.get("favorite_side")) if extra else published_supported
         if not supported:
             continue
@@ -562,6 +567,15 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         pathway = _text(row.get("favorite_pathway")) or lifecycle["pathway"] or _candidate_pathway(side_record, market_sides)
         tracked_decision = lifecycle["first_qualified_line"]
         decision_line, decision_price = _line_and_price(market, supported, tracked_decision)
+        if nhl_replacement:
+            try:
+                proof = json.loads(row.get("favorite_supporting_evidence") or "{}")
+            except (TypeError, ValueError):
+                continue
+            if (not favorite or not decision_price or not lifecycle["entry_observed_at"]
+                    or tracked_decision != proof.get("entry_line")
+                    or lifecycle["entry_observed_at"] != proof.get("entry_source_at")):
+                continue
         if nba_public_favorite(row) and favorite and (not decision_price or not lifecycle["entry_observed_at"]):
             continue
         if not tracked_decision and favorite:
@@ -1116,7 +1130,18 @@ def update_performance_ledger(
         source_frames.append(frame)
         candidates.extend(_frozen_records(frame, history, str(Path(source))))
     existing_ids = set(ledger.get("ledger_id", pd.Series(dtype=str)).astype(str))
-    new_records = [record for record in candidates if record["ledger_id"] not in existing_ids]
+    nhl_handoff_ids = {record["ledger_id"] for record in candidates if record["freeze_method"] == OFFICIAL_HANDOFF}
+    new_records = []
+    seen_nhl_replacements = set()
+    for record in candidates:
+        identity = record["ledger_id"]
+        if identity in existing_ids or identity in seen_nhl_replacements:
+            continue
+        if record["freeze_method"] == OFFICIAL_HANDOFF:
+            seen_nhl_replacements.add(identity)
+        elif identity in nhl_handoff_ids:
+            continue
+        new_records.append(record)
     if new_records:
         ledger = pd.concat([ledger, pd.DataFrame(new_records)], ignore_index=True, sort=False)
     if not ledger.empty:
@@ -1330,9 +1355,15 @@ def update_performance_ledger(
                 **summary(selected), "net_units": round(float(net.sum()), 6),
                 "priced_stakes": stakes, "roi": round(float(net.sum()) / stakes, 6) if stakes else None,
             }
+    nhl_path_records = {
+        pathway: summary(favorite_rows.loc[favorite_rows["favorite_rule_version"].eq(version)])
+        for pathway, version in OFFICIAL_VERSIONS.items()
+    }
     _atomic_json({
         **result["favorites"],
         **({"cfb_spread_pathways": new_path_records} if new_path_records else {}),
+        **({"nhl_replacement_pathways": nhl_path_records}
+           if ledger["favorite_rule_version"].isin(OFFICIAL_VERSIONS.values()).any() else {}),
         **({"nba_public_neutral_moneyline": _nba_public_performance(ledger, data_dir)}
            if (data_dir / "nba_public_neutral_activated_at").exists() or ledger["favorite_rule_version"].eq(NBA_PUBLIC_VERSION).any() else {}),
         "sports": sport_records,

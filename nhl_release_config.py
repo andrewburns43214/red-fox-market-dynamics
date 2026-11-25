@@ -4,6 +4,13 @@ import os
 from pathlib import Path
 
 OVERRIDE = Path("/etc/redfox-nhl-release.json")
+OFFICIAL_START = Path("/etc/redfox-nhl-official-since")
+OFFICIAL_FLAGS = {
+    "public_backed_moneyline": "RED_FOX_NHL_OFFICIAL_PUBLIC",
+    "genuine_crossover": "RED_FOX_NHL_OFFICIAL_CROSSOVER",
+}
+OFFICIAL_VERSIONS = {pathway: f"red_fox_favorite_nhl_{pathway}_v1" for pathway in OFFICIAL_FLAGS}
+OFFICIAL_HANDOFF = "nhl_replacement_verified_handoff"
 
 
 def switches():
@@ -25,3 +32,17 @@ def enabled(flag, settings=None):
     if value is not None:
         return value.lower() in ("1", "true", "yes", "on")
     return (switches() if settings is None else settings).get(flag, False)
+
+
+def official_start():
+    try:
+        return OFFICIAL_START.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def official_nhl_favorite(row):
+    if row is None or row.get("sport") != "nhl" or row.get("market_display") != "MONEYLINE":
+        return False
+    version = OFFICIAL_VERSIONS.get(row.get("favorite_pathway"))
+    return bool(version and row.get("favorite_rule_version") == version)

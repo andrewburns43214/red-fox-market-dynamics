@@ -11,7 +11,7 @@ import pandas as pd
 import requests
 
 from team_aliases import normalize_team_name
-from nhl_release_config import enabled
+from nhl_release_config import OFFICIAL_FLAGS, enabled
 
 CACHE = "favorite_nhl_goalies.json"
 EVIDENCE_LOG = "favorite_nhl_goalie_observations.jsonl"
@@ -188,7 +188,8 @@ def refresh(data_dir: Path) -> dict:
     dates = [(now + pd.DateOffset(days=offset)).strftime("%Y%m%d") for offset in (0, 1)]
     prior = read_goalies(data_dir)
     telemetry = enabled(TELEMETRY_FLAG)
-    league_needed = telemetry or enabled("RED_FOX_NHL_PAPER_PUBLIC") or enabled("RED_FOX_NHL_PAPER_CROSSOVER")
+    league_needed = (telemetry or any(enabled(flag) for flag in OFFICIAL_FLAGS.values())
+                     or enabled("RED_FOX_NHL_PAPER_PUBLIC") or enabled("RED_FOX_NHL_PAPER_CROSSOVER"))
     league = {}
     updated = {}
     with ThreadPoolExecutor(max_workers=5 if league_needed else 2) as pool:

@@ -87,7 +87,8 @@ def unique_pairs(row, away, home):
     return dict(zip(names,sides))
 
 
-def record_paper(board, history, cache, schedule, saved, active, observed):
+def record_paper(board, history, cache, schedule, saved, active, observed, *,
+                 official_since=None, blocked_games=frozenset()):
     second=int(observed.timestamp())
     if not board.empty:
         current=board[board.sport.eq("nhl")&board.market_display.eq("MONEYLINE")]
@@ -105,11 +106,14 @@ def record_paper(board, history, cache, schedule, saved, active, observed):
             if len(matches)!=1:
                 continue
             key,g=matches[0]
+            if key in blocked_games:
+                continue
             sides=unique_pairs(row,away,home)
             if not sides:
                 continue
             at=stamp(sides[away]["source_latest_at"])
-            if not pd.Timedelta(0)<=observed-at<=pd.Timedelta(minutes=12):
+            if (not pd.Timedelta(0)<=observed-at<=pd.Timedelta(minutes=12)
+                    or (official_since is not None and at < official_since)):
                 continue
             clock=int(at.timestamp())
             rows=history[(history.sport=="nhl")&(history.game_id==str(row["game_id"]))&
@@ -131,19 +135,29 @@ def record_paper(board, history, cache, schedule, saved, active, observed):
                 continue
             if not game.get("open"):
                 game["open"]=paired_opener(rows,away,home)
-            for lane in sorted(active):
+            lanes = active
+            if official_since is not None:
+                bound = game["lanes"].get(game.get("selected_lane"), {})
+                if bound.get("entry"):
+                    lanes = active | {bound["pathway"]}
+            for lane in sorted(lanes):
                 for selected in (away,home):
                     side=sides[selected]
                     price=_line_value(side.get("current_line"),"MONEYLINE")
                     if price is None or abs(price)<100:
                         continue
                     lane_key=f"{lane}|{selected}"
+                    if lane not in active and lane_key != game.get("selected_lane"):
+                        continue
                     state=game["lanes"].setdefault(lane_key,{"pathway":lane,"team":selected})
                     status=goalie_evidence(cache,row["game"],kickoff,observed,previous_pair=state.get("known_goalies"))
                     if status.get("status")=="both_confirmed":
                         state["known_goalies"]=status["confirmed_pair"]
                     quote=dict(at=clock,price=price,side=selected,goalie_status=status["status"],
                                bets=side.get("bets_pct"),money=side.get("money_pct"))
+                    if official_since is not None:
+                        quote.update(source_at=at.isoformat(), line=str(side["current_line"]),
+                                     team_name=side["flagged_side"])
                     if status["status"]=="verified_change" and state.get("entry") and not state.get("removed"):
                         state["removed"]="Verified confirmed goalie pair changed"
                         game["events"].append(dict(lane=lane,stage="removed",quote=quote,reason=state["removed"],
@@ -159,8 +173,9 @@ def record_paper(board, history, cache, schedule, saved, active, observed):
         if not game.get("finalized") and second>=game["cutoff"]:
             for state in game["lanes"].values():
                 if state.get("entry") and not state.get("removed"):
-                    reason=(handoff_issue(state,game["cutoff"]) if state["pathway"] in active
-                            else "Paper pathway disabled before handoff")
+                    continuing = official_since is not None and state is game["lanes"].get(game.get("selected_lane"))
+                    reason=(handoff_issue(state,game["cutoff"]) if state["pathway"] in active or continuing
+                            else "Pathway disabled before handoff")
                     if reason:
                         state["removed"]=reason
                     else:
