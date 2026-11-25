@@ -19,6 +19,7 @@ from uuid import uuid4
 import pandas as pd
 import requests
 from mlb_fixtures import SCORE_SOURCE as MLB_SCORE_SOURCE, cutover_at as mlb_cutover_at, timestamp as mlb_timestamp
+from manual_favorites import HANDOFF as MANUAL_HANDOFF, VERSION as MANUAL_VERSION
 
 from anomaly_action_results import _grade_action
 from nhl_release_config import OFFICIAL_HANDOFF, OFFICIAL_VERSIONS, official_nhl_favorite
@@ -55,6 +56,7 @@ FAVORITE_RULE_VERSIONS = frozenset({
     *CFB_SPREAD_VERSIONS.values(),
     MLB_STATIC_VERSION,
     NBA_PUBLIC_VERSION,
+    MANUAL_VERSION,
     *OFFICIAL_VERSIONS.values(),
 })
 FAVORITE_KPI_EXCLUSIONS = {
@@ -97,7 +99,8 @@ LEDGER_COLUMNS = [
     "movement_magnitude", "movement_magnitude_band", "favorite_cross_market_state",
     "observation_count", "line_direction_changes", "return_toward_open",
     "active_worsening_reversal", "whipsaw_state", "whipsaw_ever",
-    "supported_side", "favorite_qualified", "favorite_rule_version",
+    "supported_side", "favorite_qualified", "favorite_rule_version", "favorite_origin",
+    "manual_revision", "manual_provider_event_id",
     "favorite_originally_qualified", "favorite_late_invalidated",
     "favorite_late_invalidated_at", "favorite_late_invalidated_reason",
     "favorite_pathway", "candidate_decision", "candidate_decision_reason",
@@ -532,7 +535,11 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         & ordered["_kickoff"].notna()
         & (ordered["_state_at"] <= ordered["_kickoff"])
     ].copy()
-    ordered = ordered.sort_values(["_state_at", "_frozen"], kind="mergesort").drop_duplicates(key_columns, keep="last")
+    order = ["_state_at", "_frozen"]
+    if "favorite_origin" in ordered:
+        ordered["_manual_handoff"] = ordered["favorite_origin"].eq("manual") & ordered["freeze_method"].isin({MANUAL_HANDOFF, ufc.HANDOFF})
+        order.insert(0, "_manual_handoff")
+    ordered = ordered.sort_values(order, kind="mergesort").drop_duplicates(key_columns, keep="last")
     for _, row in ordered.iterrows():
         kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
         if pd.isna(kickoff) or kickoff < SUPPORTED_SIDE_VALID_FROM:
@@ -544,9 +551,15 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         ufc_verified = row.get("freeze_method") == ufc.HANDOFF
         if ufc_verified != bool(ufc_proof):
             continue
+        manual = (
+            row.get("favorite_origin") == "manual" and row.get("favorite_rule_version") == MANUAL_VERSION
+            and row.get("freeze_method") in {MANUAL_HANDOFF, ufc.HANDOFF}
+        )
+        if row.get("favorite_origin") == "manual" and not manual:
+            continue
         published_supported = _text(row.get("supported_side"))
         extra = (cfb_spread_favorite(row) or nba_public_favorite(row) or nhl_replacement
-                 or mlb_static_favorite(row) or ufc_verified) and _truthy(row.get("red_fox_favorite"))
+                 or mlb_static_favorite(row) or ufc_verified or manual) and _truthy(row.get("red_fox_favorite"))
         supported = _text(row.get("favorite_side")) if extra else published_supported
         if not supported:
             continue
@@ -578,6 +591,16 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         pathway = _text(row.get("favorite_pathway")) or lifecycle["pathway"] or _candidate_pathway(side_record, market_sides)
         tracked_decision = lifecycle["first_qualified_line"]
         decision_line, decision_price = _line_and_price(market, supported, tracked_decision)
+        if manual:
+            quote_at = pd.to_datetime(row.get("manual_quote_at"), errors="coerce", utc=True)
+            if (not favorite or not _text(row.get("manual_provider_event_id"))
+                    or pd.isna(quote_at) or quote_at > row["_state_at"] or row["_state_at"] >= kickoff
+                    or _american_profit(row.get("manual_entry_price")) is None):
+                continue
+            first_qualified = _text(row.get("favorite_first_qualified_at"))
+            decision_line, decision_price = _text(row.get("manual_entry_line")), _text(row.get("manual_entry_price"))
+            if market in {"SPREAD", "TOTAL"} and _number(decision_line) is None:
+                continue
         if nhl_replacement:
             try:
                 proof = json.loads(row.get("favorite_supporting_evidence") or "{}")
@@ -589,14 +612,15 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
                 continue
         if (nba_public_favorite(row) or mlb_static_favorite(row)) and favorite and (not decision_price or not lifecycle["entry_observed_at"]):
             continue
-        if ufc_verified:
+        if ufc_verified and not manual:
             entry = ufc.stamp(lifecycle["entry_observed_at"])
             if (not favorite or not decision_price or pd.isna(entry) or entry >= kickoff
                     or ufc_proof.get("bout_id") != row.get("score_provider_event_id")):
                 continue
-        if not tracked_decision and favorite:
+        if not tracked_decision and favorite and not manual:
             decision_line, decision_price = line, price
-        decision_source = "first_qualified_capture" if tracked_decision else ("final_pregame_fallback" if favorite else "")
+        decision_source = ("owner_selected_quote" if manual else
+                           "first_qualified_capture" if tracked_decision else ("final_pregame_fallback" if favorite else ""))
         recorded_side = _side_at_decision_line(supported, market, decision_line)
         movement_start = _number(open_price if market == "MONEYLINE" else open_line)
         movement_end = _number(price if market == "MONEYLINE" else line)
@@ -637,7 +661,7 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
             "decision_line": decision_line, "decision_price": decision_price,
             "decision_line_source": decision_source,
             "decision_quote_observed_at": (
-                lifecycle["entry_observed_at"] if tracked_decision else
+                _text(row.get("manual_quote_at")) if manual else lifecycle["entry_observed_at"] if tracked_decision else
                 _text(side_record.get("source_latest_at")) if favorite else ""
             ),
             "final_pregame_line": line,
@@ -659,6 +683,8 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
             "active_worsening_reversal": "yes" if _truthy(side_record.get("active_worsening_reversal")) else "no",
             "whipsaw_state": whipsaw_state, "whipsaw_ever": whipsaw_ever,
             "supported_side": published_supported, "favorite_qualified": "yes" if favorite else "no",
+            "favorite_origin": "manual" if manual else "", "manual_revision": _text(row.get("manual_revision")) if manual else "",
+            "manual_provider_event_id": _text(row.get("manual_provider_event_id")) if manual else "",
             "favorite_rule_version": _text(row.get("favorite_rule_version")),
             "favorite_originally_qualified": "yes" if originally_qualified or favorite else "no",
             "favorite_late_invalidated": "yes" if late_invalidated else "no",
@@ -697,12 +723,12 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
             "classification_original_publication": _text(row.get("classification_original_publication")) or "published",
             "final_score": "", "market_result": "", "grade": "",
             "stake_units": "", "net_profit_units": "", "roi": "",
-            "closing_line": _text(row.get("closing_line")) or line,
-            "closing_price": _text(row.get("closing_price")) or price,
-            "closing_line_source": _closing_source(row, "closing_line", line),
-            "closing_price_source": _closing_source(row, "closing_price", price),
-            "closing_line_observed_at": _closing_observed_at(row, "closing_line", line, side_record),
-            "closing_price_observed_at": _closing_observed_at(row, "closing_price", price, side_record),
+            "closing_line": "" if manual else _text(row.get("closing_line")) or line,
+            "closing_price": "" if manual else _text(row.get("closing_price")) or price,
+            "closing_line_source": "unavailable" if manual else _closing_source(row, "closing_line", line),
+            "closing_price_source": "unavailable" if manual else _closing_source(row, "closing_price", price),
+            "closing_line_observed_at": "" if manual else _closing_observed_at(row, "closing_line", line, side_record),
+            "closing_price_observed_at": "" if manual else _closing_observed_at(row, "closing_price", price, side_record),
             "clv": _text(row.get("clv")), "clv_method": "retained_source" if _text(row.get("clv")) else "",
             "clv_available": "no",
             "score_provider": "espn_ufc_bout" if ufc_verified else "", "score_source": "",
@@ -795,6 +821,8 @@ def _scores_from_frozen(frozen: pd.DataFrame) -> pd.DataFrame:
     if frozen.empty or "score_state" not in frozen:
         return pd.DataFrame()
     final = frozen[frozen["score_state"].astype(str).str.lower().eq("post")].copy()
+    if "favorite_origin" in final:
+        final = final.assign(_manual_score=final["favorite_origin"].eq("manual")).sort_values("_manual_score", kind="stable")
     records = []
     for _, row in final.drop_duplicates("game_id", keep="last").iterrows():
         game = _text(row.get("game"))
@@ -810,6 +838,7 @@ def _scores_from_frozen(frozen: pd.DataFrame) -> pd.DataFrame:
             "score_provider": _text(row.get("score_provider")) or "retained_live_recent",
             "score_source": source,
             "score_provider_event_id": _text(row.get("score_provider_event_id")),
+            "manual_score_status": _text(row.get("score_status_code")) if row.get("favorite_origin") == "manual" else "",
             "resolved_at_utc": _text(row.get("score_completed_at_utc")) or _text(row.get("score_updated_at_utc")),
         })
     return pd.DataFrame(records)
@@ -946,11 +975,18 @@ def _attach_clv(result: pd.DataFrame, index: object, row: pd.Series) -> None:
 def _attach_results(ledger: pd.DataFrame, scores: pd.DataFrame, *, mlb_cutover=None) -> pd.DataFrame:
     result = ledger.copy()
     by_event = _score_map(scores)
+    by_fixture = {(str(row.get("game_id", "")), _text(row.get("score_provider_event_id"))): row
+                  for _, row in scores.iterrows() if _text(row.get("score_provider_event_id"))}
     verified_bouts = _score_map(scores.loc[scores.get("score_source", pd.Series("", index=scores.index)).eq(ufc.SCORE_SOURCE)])
     graded_at = datetime.now(timezone.utc).isoformat()
     for index, row in result.iterrows():
         _attach_clv(result, index, row)
         score = by_event.get(_text(row.get("event_id")))
+        manual = row.get("favorite_origin") == "manual"
+        if manual:
+            if _text(row.get("grade")) in {"W", "L", "Push", "Void"}:
+                continue
+            score = by_fixture.get((_text(row.get("event_id")), _text(row.get("manual_provider_event_id"))))
         if mlb_cutover and _text(row.get("sport")).lower() == "mlb":
             scheduled = mlb_timestamp(_text(row.get("scheduled_start")))
             if _text(row.get("grade")) in {"W", "L", "Push"} or not scheduled or scheduled < mlb_cutover:
@@ -984,6 +1020,8 @@ def _attach_results(ledger: pd.DataFrame, scores: pd.DataFrame, *, mlb_cutover=N
         kind = _text(score.get("ufc_kind")) if verified_ufc else ""
         if kind in {"push", "void"}:
             grade = kind.upper()
+        elif manual and _text(score.get("manual_score_status")) in {"STATUS_CANCELED", "STATUS_CANCELLED"}:
+            grade = "VOID"
         elif verified_ufc and kind == "winner":
             side = ufc.fighter_key(row.get("side"))
             grade = "WIN" if side == ufc.fighter_key(winner) else "LOSS" if side == ufc.fighter_key(loser) else "UNRESOLVED"
@@ -1185,14 +1223,25 @@ def update_performance_ledger(
         source_frames.append(frame)
         candidates.extend(_frozen_records(frame, history, str(Path(source))))
     existing_ids = set(ledger.get("ledger_id", pd.Series(dtype=str)).astype(str))
-    official_methods = {OFFICIAL_HANDOFF, ufc.HANDOFF}
+    official_methods = {OFFICIAL_HANDOFF, ufc.HANDOFF, MANUAL_HANDOFF}
     official_handoff_ids = {record["ledger_id"] for record in candidates if record["freeze_method"] in official_methods}
+    def event_key(record):
+        return record["sport"], record["event_id"]
+    official_events = {event_key(r) for r in ledger.loc[ledger["favorite_qualified"].eq("yes")].to_dict("records")}
+    manual_events = {event_key(r) for r in candidates if r["favorite_origin"] == "manual"} | {
+        event_key(r) for r in ledger.loc[ledger["favorite_origin"].eq("manual")].to_dict("records")
+    }
     new_records = []
     seen_nhl_replacements = set()
     for record in candidates:
         identity = record["ledger_id"]
         if identity in existing_ids or identity in seen_nhl_replacements:
             continue
+        event = event_key(record)
+        if event in manual_events and record["favorite_qualified"] == "yes":
+            if record["favorite_origin"] != "manual" or event in official_events:
+                continue
+            official_events.add(event)
         if record["freeze_method"] in official_methods:
             seen_nhl_replacements.add(identity)
         elif identity in official_handoff_ids:
@@ -1451,7 +1500,7 @@ def update_performance_ledger(
             "decision_line", "decision_price", "decision_line_source", "decision_quote_observed_at",
             "closing_line", "closing_price", "closing_line_source", "closing_price_source",
             "closing_line_observed_at", "closing_price_observed_at", "final_score", "grade",
-            "bets_pct", "money_pct",
+            "bets_pct", "money_pct", "favorite_origin",
         ]].fillna("").to_dict("records"),
         "tracking_start_date": FAVORITE_TRACKING_START_DATE,
         "updated_at": datetime.now(timezone.utc).isoformat(),

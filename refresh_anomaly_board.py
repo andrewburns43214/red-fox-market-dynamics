@@ -773,6 +773,9 @@ def _refresh(coverage):
         visible_bouts = board.loc[board["sport"].eq("ufc"), "game_id"].astype(str)
         events = events.loc[~events["sport"].eq("ufc") | events["game_id"].astype(str).isin(visible_bouts)]
     board = compact_public_board_payload(board)
+    from manual_favorites import project_board
+
+    board = project_board(board, DATA, datetime.now(timezone.utc), ufc_proofs)
     detail_count = write_event_detail_files(board, events, details_dir=DATA / "anomaly_event_details")
     # Replace each public file only after its complete export is ready for Nginx.
     for frame, name in ((board, "anomaly_board.csv"), (events, "anomaly_events.csv")):

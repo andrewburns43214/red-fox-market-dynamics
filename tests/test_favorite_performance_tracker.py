@@ -86,7 +86,7 @@ def test_tracker_uses_one_shared_payload_for_desktop_mobile_and_guide():
 
 def test_every_favorite_logo_routes_to_the_same_information_modal():
     assert "favorite=game.hasFavorite?favoriteBadge(favoriteContext):'';" in BOARD
-    assert "onclick=\"event.stopPropagation();hideFavoriteTooltip();openSignalGuide('Red Fox Favorite')\"" in BOARD
+    assert "onclick=\"event.stopPropagation();hideFavoriteTooltip();openFavoriteBadge(this)\"" in BOARD
     assert 'class="favorite-performance-logo-button"' in BOARD
     assert "onclick=\"event.stopPropagation();openSignalGuide('Red Fox Favorite')\"" in BOARD
     assert "overlay.classList.toggle('favorite-guide-open',requested==='Red Fox Favorite');" in BOARD

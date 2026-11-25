@@ -209,7 +209,7 @@ def test_red_fox_favorite_guide_section_and_tooltip_are_isolated_copy_additions(
     assert "Matches Red Fox’s preferred wager criteria based on market support, movement, price/number, and data quality." in BOARD
     assert 'aria-describedby="favorite-badge-tooltip"' in BOARD
     assert 'onmouseenter="showFavoriteTooltip(this)"' in BOARD
-    assert "onclick=\"event.stopPropagation();hideFavoriteTooltip();openSignalGuide('Red Fox Favorite')\"" in BOARD
+    assert "onclick=\"event.stopPropagation();hideFavoriteTooltip();openFavoriteBadge(this)\"" in BOARD
 
 
 def test_favorite_badge_hover_and_exact_guide_navigation_share_authoritative_copy():
@@ -217,7 +217,7 @@ def test_favorite_badge_hover_and_exact_guide_navigation_share_authoritative_cop
     assert "if(requested==='Red Fox Favorite')" in BOARD
     assert "title.textContent='Red Fox Favorite';" in BOARD
     assert "body.innerHTML=redFoxFavoriteGuideSection(false);" in BOARD
-    assert "hideFavoriteTooltip();openSignalGuide('Red Fox Favorite');" in BOARD
+    assert "hideFavoriteTooltip();openFavoriteBadge(anchor);" in BOARD
     assert ".red-fox-favorite-badge{display:block;flex:0 0 auto;width:108px;height:32px" in BOARD
     assert ".red-fox-favorite-badge{width:108px;height:36px;max-width:calc(100% - 42px)}" in BOARD
 
@@ -234,7 +234,7 @@ def test_market_read_tooltips_reuse_favorite_visuals_without_changing_chip_actio
     assert "document.addEventListener('mouseover'" in BOARD
     assert "document.addEventListener('focusin'" in BOARD
     assert "onclick=\"event.stopPropagation();openSignalGuide(${clickArg})\"" in BOARD
-    assert "function openSignalGuide(selected){\n  hideSignalTooltip();" in BOARD
+    assert "function openSignalGuide(selected,favoriteRow){\n  hideSignalTooltip();" in BOARD
 
 
 def test_cross_market_integrity_badge_tooltip_and_guide_are_market_level():
@@ -258,7 +258,7 @@ def test_cross_market_integrity_badge_tooltip_and_guide_are_market_level():
     assert ".cross-market-badge{display:inline-flex" in BOARD
     assert ".cross-market-mismatch-badge{border-color:#aeb7bb" in BOARD
     assert "const mismatch=hasCrossMarketMismatch(r), split=hasCrossMarketSplit(r), crossMarket=mismatch||split, hasHeader=favorite||crossMarket;" in BOARD
-    assert "favorite?favoriteBadge():''" in BOARD
+    assert "favorite?favoriteBadge('',r):''" in BOARD
     assert "mismatch?crossMarketMismatchBadge():split?crossMarketSplitBadge():''" in BOARD
     assert "market_sides.cross_market_mismatch" not in BOARD
 

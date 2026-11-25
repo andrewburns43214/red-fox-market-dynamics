@@ -16,6 +16,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="/pwa.js" defer></script>
+<script src="/manual-favorites.js?v=1" defer></script>
 <script>
 // Keep the server-side access cookie aligned with the signed-in Supabase session.
 (function () {
@@ -2597,7 +2598,7 @@ function marketIntegrityGuideSection(includeHeading=true,selected=''){
   return '<div class="signal-guide-section market-integrity-guide">'+(includeHeading?'<h3>Market Integrity</h3>':'')+
     labels.map(label=>signalGuideItem(label,entries[label])).join('')+distinction+'</div>';
 }
-function openSignalGuide(selected){
+function openSignalGuide(selected,favoriteRow){
   hideSignalTooltip();
   const overlay=document.getElementById('signal-guide-overlay');
   const title=document.getElementById('signal-guide-title');
@@ -2607,6 +2608,13 @@ function openSignalGuide(selected){
   if(requested==='Red Fox Favorite'){
     title.textContent='Red Fox Favorite';
     body.innerHTML=redFoxFavoriteGuideSection(false);
+    if(favoriteRow){
+      const origin=favoriteRow.favorite_origin==='manual'?'Manual':'Automatic';
+      const price=favoriteRow.manual_entry_price?' ('+favoriteRow.manual_entry_price+')':'';
+      const choice=isRedFoxFavorite(favoriteRow)?'<p class="signal-guide-section-note">'+
+        escHtml(origin+' qualification · '+favoriteRow.favorite_side+price)+'</p>':'';
+      body.insertAdjacentHTML('afterbegin',choice+manualFavoriteButton(favoriteRow));
+    }
   } else if(requested==='Cross-Market Split'){
     title.textContent='Market Integrity — Cross-Market Split';
     body.innerHTML=marketIntegrityGuideSection(false,'Cross-Market Split');
@@ -2747,7 +2755,7 @@ function gameLanes(r){
     return '<span class="game-lane-name is-favorite-side"><span class="game-lane-team-text">'+escHtml(name)+'</span><span class="game-lane-favorite-icon" role="img" aria-label="Red Fox Favorite" title="Red Fox Favorite"></span></span>';
   };
   const mismatch=hasCrossMarketMismatch(r), split=hasCrossMarketSplit(r), crossMarket=mismatch||split, hasHeader=favorite||crossMarket;
-  const header=hasHeader?'<div class="game-favorite-header'+(crossMarket?' has-cross-market':'')+'"><span class="game-sport">'+spChip(r.sport)+'</span>'+(favorite?favoriteBadge():'')+(mismatch?crossMarketMismatchBadge():split?crossMarketSplitBadge():'')+'</div>':'';
+  const header=hasHeader?'<div class="game-favorite-header'+(crossMarket?' has-cross-market':'')+'"><span class="game-sport">'+spChip(r.sport)+'</span>'+(favorite?favoriteBadge('',r):'')+(mismatch?crossMarketMismatchBadge():split?crossMarketSplitBadge():'')+'</div>':'';
   const sport=hasHeader?'':'<span class="game-sport">'+spChip(r.sport)+'</span>';
   const retained=String(r.data_badge||'').trim().toUpperCase()==='RETAINED';
   const retainedNote=retained?'<span class="retained-market-note">RETAINED · Last verified '+escHtml(et(r.state_as_of_utc||r.source_latest_at))+' ET</span>':'';
@@ -3280,7 +3288,7 @@ function hideFavoriteTooltip(){
   favoriteTooltipAnchor=null;
 }
 function favoriteBadgeKeydown(event,anchor){
-  if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();hideFavoriteTooltip();openSignalGuide('Red Fox Favorite');}
+  if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();hideFavoriteTooltip();openFavoriteBadge(anchor);}
   if(event.key==='Escape'){event.preventDefault();hideFavoriteTooltip();anchor.blur();}
 }
 let integrityTooltipAnchor=null;
@@ -3318,11 +3326,12 @@ document.addEventListener('click',event=>{
 });
 window.addEventListener('resize',()=>{hideFavoriteTooltip();hideSignalTooltip();hideIntegrityTooltip();hideSplitTooltip();});
 window.addEventListener('scroll',()=>{hideFavoriteTooltip();hideSignalTooltip();hideIntegrityTooltip();hideSplitTooltip();},true);
-function favoriteBadge(context=''){
+function favoriteBadge(context='',row){
   const detail=String(context||'').trim();
   const alt=detail?`Red Fox Favorite — ${escHtml(detail)}`:'Red Fox Favorite';
   const title=detail?`Red Fox Favorite pregame market: ${escHtml(detail)}`:'Open Red Fox Favorite information and records';
-  return `<img class="red-fox-favorite-badge" src="assets/red-fox-favorite.png" alt="${alt}" title="${title}" role="button" tabindex="0" aria-describedby="favorite-badge-tooltip" onmouseenter="showFavoriteTooltip(this)" onmouseleave="if(document.activeElement!==this)hideFavoriteTooltip()" onfocus="showFavoriteTooltip(this)" onblur="hideFavoriteTooltip()" onclick="event.stopPropagation();hideFavoriteTooltip();openSignalGuide('Red Fox Favorite')" onkeydown="favoriteBadgeKeydown(event,this)">`;
+  const identity=row?` data-favorite-event="${escHtml(row.game_id)}" data-favorite-sport="${escHtml(row.sport)}" data-favorite-market="${escHtml(row.market_display)}"`:'';
+  return `<img class="red-fox-favorite-badge" src="assets/red-fox-favorite.png" alt="${alt}" title="${title}" role="button" tabindex="0"${identity} aria-describedby="favorite-badge-tooltip" onmouseenter="showFavoriteTooltip(this)" onmouseleave="if(document.activeElement!==this)hideFavoriteTooltip()" onfocus="showFavoriteTooltip(this)" onblur="hideFavoriteTooltip()" onclick="event.stopPropagation();hideFavoriteTooltip();openFavoriteBadge(this)" onkeydown="favoriteBadgeKeydown(event,this)">`;
 }
 function crossMarketSplitBadge(){ return '<button class="cross-market-badge cross-market-split-badge" type="button" aria-describedby="cross-market-split-tooltip" onmouseenter="showSplitTooltip(this)" onmouseleave="if(document.activeElement!==this)hideSplitTooltip()" onfocus="showSplitTooltip(this)" onblur="hideSplitTooltip()" onclick="event.stopPropagation();hideSplitTooltip();openSignalGuide(\'Cross-Market Split\')" onkeydown="splitBadgeKeydown(event,this)"><span class="cross-market-icon" aria-hidden="true">↔</span>Cross-Market Split</button>'; }
 function crossMarketMismatchBadge(){ return '<button class="cross-market-badge cross-market-mismatch-badge" type="button" aria-describedby="integrity-badge-tooltip" onmouseenter="showIntegrityTooltip(this)" onmouseleave="if(document.activeElement!==this)hideIntegrityTooltip()" onfocus="showIntegrityTooltip(this)" onblur="hideIntegrityTooltip()" onclick="event.stopPropagation();hideIntegrityTooltip();openSignalGuide(\'Cross-Market Mismatch\')" onkeydown="integrityBadgeKeydown(event,this)"><span class="cross-market-icon" aria-hidden="true">↔</span>Cross-Market Mismatch</button>'; }
@@ -5329,6 +5338,7 @@ function renderGameDetail(){
   let html='<div class="game-detail-content" style="padding:16px 20px">';
   const frozenStatus=state.frozenPregame?'<div class="detail-frozen-status">Frozen pregame market'+(frozenSnapshotLabel(state.frozenAt)?' · Last snapshot '+escHtml(frozenSnapshotLabel(state.frozenAt)):'')+'</div>':'';
   html+='<div class="detail-game-header">'+spChip(r.sport)+'<div class="detail-game-identity"><div class="detail-game-heading">'+escHtml(r.game||'--')+'</div><div class="detail-game-meta">'+escHtml(r.kickoff_time||'--')+'</div>'+frozenStatus+marketSwitcher+'</div>'+propScoreHtml(r)+'</div>';
+  if(!state.frozenPregame) html+=manualFavoriteButton(r);
   html+='<section style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px">'+sideToggle;
   html+='<div class="detail-current-read"><div><div class="detail-current-line">'+escHtml(selected.current_line||'--')+'</div>'+(currentMovement?'<div class="detail-current-movement">'+currentMovement+'</div>':'')+'<div class="detail-current-splits"><span>'+escHtml(detailPct(selected.bets_pct,'Bets'))+'</span><span>'+escHtml(detailPct(selected.money_pct,'Money'))+'</span></div></div><div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">'+signals.map(anomalyBadge).join('')+'</div></div>';
   if(state.historyLoading) html+='<div class="detail-history-loading" role="status">Loading market trajectory and observation history…</div>';
@@ -5447,7 +5457,7 @@ async function loadAll({forceRender=false}={}){
   publicationCoverage=coverage;
   propProjections=Array.isArray(props?.projections)?props.projections.map(item=>({...item,_feed_status:props?.collection_status||''})):[];
   updateFreshness(freshJson);
-  const dashRaw=(dash&&dash.length)?dash:[];
+  const dashRaw=manualFavoriteProjection((dash&&dash.length)?dash:[]);
   allResults=results||MOCK_RESULTS;
   allKPI=kpi||[];
   allDash=dashRaw.filter(r=>{
@@ -5946,5 +5956,27 @@ setInterval(refreshLiveRecentScores, 60000);
   document.addEventListener('DOMContentLoaded',()=>{syncSidebar();syncApprovedBoardControls();},{once:true});
 })();
 </script>
+<dialog id="manual-favorite-dialog" class="manual-favorite-dialog" aria-labelledby="manual-favorite-title">
+  <button type="button" class="signal-guide-close" onclick="this.closest('dialog').close()" aria-label="Close Manual Controls">&times;</button>
+  <h2 id="manual-favorite-title">Manual Controls</h2>
+  <form>
+    <label>Action <select name="action_choice" required></select></label>
+    <label hidden>Selection <select name="quote"></select></label>
+    <label>Reason (optional) <textarea name="reason" maxlength="500" rows="2"></textarea></label>
+    <p role="status" aria-live="polite"></p>
+    <button type="submit" class="manual-favorite-button" disabled>Save</button>
+  </form>
+</dialog>
+<style>
+  .manual-favorite-dialog{max-width:min(420px,calc(100% - 24px));width:100%;max-height:85vh;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:18px;font:inherit}
+  .manual-favorite-dialog::backdrop{background:#1118}
+  .manual-favorite-dialog>.signal-guide-close{float:right}
+  .manual-favorite-dialog h2{font-size:18px;margin:0 40px 14px 0}
+  .manual-favorite-dialog label{display:grid;gap:4px;margin-bottom:12px}
+  .manual-favorite-dialog label[hidden]{display:none}
+  .manual-favorite-dialog select,.manual-favorite-dialog textarea{width:100%;font:inherit}
+  .manual-favorite-button{font:600 13px var(--sans);color:var(--text);background:var(--bg2);padding:6px 12px;margin:0 0 8px;border:1px solid var(--border);border-radius:7px;cursor:pointer}
+  .manual-favorite-button:disabled{opacity:.55;cursor:default}
+</style>
 </body>
 </html>

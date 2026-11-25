@@ -117,8 +117,8 @@ def has_admin_access(token: str) -> bool:
         return False
 
 
-def has_explicit_complimentary_access(token: str) -> bool:
-    """Allow only a verified session for an explicitly granted account."""
+def verified_user(token: str) -> dict:
+    """Return the account from the authenticated Supabase user endpoint."""
     request = Request(
         f"{SUPABASE_URL}/auth/v1/user",
         method="GET",
@@ -131,10 +131,15 @@ def has_explicit_complimentary_access(token: str) -> bool:
     try:
         with urlopen(request, timeout=4) as response:
             user = json.loads(response.read())
-        email = user.get("email")
-        return response.status == 200 and isinstance(email, str) and email.lower() in COMPLIMENTARY_EMAILS
+            return user if response.status == 200 and isinstance(user, dict) else {}
     except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError):
-        return False
+        return {}
+
+
+def has_explicit_complimentary_access(token: str) -> bool:
+    """Allow only a verified session for an explicitly granted account."""
+    email = verified_user(token).get("email")
+    return isinstance(email, str) and email.lower() in COMPLIMENTARY_EMAILS
 
 
 class AccessHandler(BaseHTTPRequestHandler):

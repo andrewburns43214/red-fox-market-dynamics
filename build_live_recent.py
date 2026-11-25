@@ -26,6 +26,7 @@ from red_fox_favorite import (
 )
 from team_aliases import normalize_team_name
 from nhl_release_config import OFFICIAL_HANDOFF, official_nhl_favorite
+from manual_favorites import HANDOFF as MANUAL_HANDOFF
 import ufc_bout_integrity as ufc
 
 
@@ -206,7 +207,7 @@ def provider_game_keys(away_team: dict, home_team: dict, sport: str) -> set[str]
     }
 
 
-def fetch_scoreboard(sport: str, now: datetime) -> tuple[dict, str]:
+def fetch_scoreboard(sport: str, now: datetime, *, dates=None, timeout=12) -> tuple[dict, str]:
     if sport == "mlb":
         scores = read_context(DATA, now)
         return (scores, "available") if scores is not None else ({}, "unavailable")
@@ -217,9 +218,9 @@ def fetch_scoreboard(sport: str, now: datetime) -> tuple[dict, str]:
     games: dict[str, list[dict[str, str]]] = {}
     fetched = False
     seen_events: set[str] = set()
-    for day in (now - timedelta(days=1), now):
+    for day in (dates if dates is not None else (now - timedelta(days=1), now)):
         try:
-            response = requests.get(f"{base}?dates={day:%Y%m%d}{extra}", timeout=12)
+            response = requests.get(f"{base}?dates={day:%Y%m%d}{extra}", timeout=timeout)
             response.raise_for_status()
             events = response.json().get("events", [])
             fetched = True
@@ -248,6 +249,7 @@ def fetch_scoreboard(sport: str, now: datetime) -> tuple[dict, str]:
                 "score_home": str(home.get("score", "-")),
                 "score_status": detail,
                 "score_state": str(status_type.get("state", "in")),
+                "score_status_code": str(status_type.get("name", "")),
                 "event_time": str(event.get("date", "")),
                 "score_provider": "espn",
                 "score_provider_event_id": event_id,
@@ -292,6 +294,12 @@ def match_live_score(scores, sport, matchup, kickoff):
             return neutral[0] if len(neutral) == 1 else None
     candidates = ordered or scores.get(signature_game_key(matchup, sport), [])
     return min(candidates, key=lambda item: abs(pd.to_datetime(item["event_time"], errors="coerce", utc=True) - kickoff)) if candidates else None
+
+
+def exact_scores(scores, row):
+    sport = row["sport"]
+    key = game_key(row["game"], sport)
+    return scores.get(key) or scores.get("neutral:" + key) or scores.get(signature_game_key(row["game"], sport), [])
 
 
 def read_csv_or_empty(path: Path) -> pd.DataFrame:
@@ -684,7 +692,7 @@ def suppress_stale_retained_favorites(
     history["_recorded_at"] = utc_series(history["recorded_at"], history.index)
     for index in candidates:
         row = result.loc[index]
-        if row.get("freeze_method") == ufc.HANDOFF or (official_nhl_favorite(row) and row.get("freeze_method") == OFFICIAL_HANDOFF):
+        if row.get("freeze_method") in {ufc.HANDOFF, MANUAL_HANDOFF} or (official_nhl_favorite(row) and row.get("freeze_method") == OFFICIAL_HANDOFF):
             continue
         kickoff = pd.to_datetime(row.get("kickoff_iso", ""), errors="coerce", utc=True)
         scoped = history
@@ -981,6 +989,9 @@ def main(scores_only: bool = False) -> None:
         print(f"[nhl-official] handoff state unavailable: {type(exc).__name__}: {exc}", flush=True)
         official_games = {}
     live = reconcile_official_handoffs(live, candidates, official_games, now)
+    from manual_favorites import freeze_overrides, manual_score
+
+    live = freeze_overrides(live, market_candidates, DATA, bouts, notices, now)
     if live.empty:
         recovered = ufc.unverified_rows(bootstrap_started_records(now), cutoff)
         if recovered.empty:
@@ -1032,10 +1043,13 @@ def main(scores_only: bool = False) -> None:
                         for column, value in ufc.score_payload(bout).items():
                             live.at[index, column] = value
                     continue
-                score = match_live_score(scores, sport_key, matchup, kickoff)
+                is_manual = row.get("favorite_origin") == "manual"
+                score = manual_score(row, scores, DATA, now) if is_manual else match_live_score(scores, sport_key, matchup, kickoff)
                 if score:
                     previous_state = _text(live.at[index, "score_state"] if "score_state" in live else "").lower()
                     for column, value in score.items():
+                        if column == "score_status_code" and not is_manual:
+                            continue
                         live.at[index, column] = value
                     live.at[index, "score_match_state"] = "matched"
                     live.at[index, "score_updated_at_utc"] = score.get("score_updated_at_utc") or now.isoformat()
