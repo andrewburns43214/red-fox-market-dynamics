@@ -20,7 +20,7 @@ import pandas as pd
 import requests
 
 from anomaly_action_results import _grade_action
-from red_fox_favorite import NOV24_SPORTS, NOV24_VERSION
+from red_fox_favorite import NOV24_SPORTS, NOV24_VERSION, tracked_entry_quote
 
 
 SUPPORTED_SIDE_VALID_FROM = pd.Timestamp("2026-09-07T17:57:58Z")
@@ -397,7 +397,8 @@ def _candidate_reason(row: pd.Series, side: dict, pathway: str, favorite: bool) 
     return "Rejected by a final Favorite gate; inspect the retained evidence fields."
 
 
-def _tracking_lifecycle(history: pd.DataFrame, row: pd.Series, kickoff: pd.Timestamp) -> dict[str, str]:
+def _tracking_lifecycle(history: pd.DataFrame, row: pd.Series, kickoff: pd.Timestamp,
+                        *, recover_entry: bool = False) -> dict[str, str]:
     empty = {
         "first_qualified": "", "last_qualified": "", "first_fell_off": "",
         "last_fell_off": "", "episodes": "0", "requalifications": "0",
@@ -447,6 +448,16 @@ def _tracking_lifecycle(history: pd.DataFrame, row: pd.Series, kickoff: pd.Times
             ]
     first_lines = entry_rows.get("first_qualified_line", pd.Series(dtype=str))
     entries = entry_rows.get("entry_observed_at", pd.Series(dtype=str))
+    first_line = _text(first_lines.iloc[0]) if not first_lines.empty else ""
+    entry_observed_at = _text(entries.iloc[0]) if not entries.empty else ""
+    if recover_entry and not entry_rows.empty:
+        first = entry_rows.iloc[0]
+        favorite_side = _text(row.get("favorite_side"))
+        if (favorite_side and _identity(first.get("favorite_side")) == _identity(favorite_side)
+                and _text(first.get("favorite_rule_version")) == _text(row.get("favorite_rule_version"))):
+            verified, observed = tracked_entry_quote(first)
+            if verified:
+                first_line, entry_observed_at = verified, observed or entry_observed_at
     t20 = scoped[scoped["_at"] <= kickoff - pd.Timedelta(minutes=20)] if pd.notna(kickoff) else pd.DataFrame()
     return {
         "first_qualified": _text(scoped.loc[qualified, "recorded_at"].iloc[0]) if qualified.any() else "",
@@ -459,8 +470,8 @@ def _tracking_lifecycle(history: pd.DataFrame, row: pd.Series, kickoff: pd.Times
         "qualifying_captures": str(int(qualified.sum())),
         "whipsaw_ever": "yes" if whipsaw.any() else "no",
         "pathway": _text(pathways.iloc[-1]) if not pathways.empty else "",
-        "first_qualified_line": _text(first_lines.iloc[0]) if not first_lines.empty else "",
-        "entry_observed_at": _text(entries.iloc[0]) if not entries.empty else "",
+        "first_qualified_line": first_line,
+        "entry_observed_at": entry_observed_at,
         "history_available": "yes",
         "final_state": _text(states.iloc[-1]) or "unknown",
         "t20_state": _text(t20.iloc[-1].get("favorite_state")) if not t20.empty else "not_observed",
@@ -525,7 +536,7 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
         market = _text(row.get("market_display")).upper()
         line, price = _line_and_price(market, supported, side_record.get("current_line"))
         open_line, open_price = _line_and_price(market, supported, side_record.get("open_line"))
-        lifecycle = _tracking_lifecycle(history, row, kickoff)
+        lifecycle = _tracking_lifecycle(history, row, kickoff, recover_entry=True)
         first_qualified = lifecycle["first_qualified"] or _text(row.get("favorite_first_qualified_at"))
         fell_off = (
             "yes" if int(_number(lifecycle["falloffs"]) or 0) > 0 else "no"

@@ -17,6 +17,7 @@ from red_fox_favorite import (
     RULE_INVALIDATED_FAVORITE_REASONS,
     RULE_INVALIDATED_FAVORITES,
     VISIBILITY_INVALIDATED_FAVORITES,
+    favorite_side_quote,
 )
 from team_aliases import normalize_team_name
 
@@ -481,14 +482,8 @@ def _confirm_favorite_with_final_raw_market(candidate: pd.Series, raw: pd.Series
     if side is None:
         return None
     market = candidate.get("market_display", "")
-    previous = _market_movement_value(candidate.get("current_line", ""), market)
+    previous = _market_movement_value(favorite_side_quote(candidate), market)
     current = _market_movement_value(side.get("current_line", ""), market)
-    if previous is None:
-        try:
-            evidence = json.loads(str(candidate.get("favorite_supporting_evidence", "")) or "{}")
-        except (TypeError, ValueError, json.JSONDecodeError):
-            evidence = {}
-        previous = _market_movement_value(evidence.get("current_line", ""), market)
     # In side-relative sportsbook notation, an increasing number is adverse:
     # -105 -> -125 and +3.5 -> +2.5 strengthen; the reverse weakens.
     if previous is None or current is None or current > previous:

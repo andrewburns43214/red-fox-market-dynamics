@@ -7,8 +7,8 @@ from anomaly_board import _build_history_points
 from performance_ledger import _closing_observed_at, _closing_source, _tracking_lifecycle
 from canonical_match import build_canonical_key_from_dk
 from red_fox_favorite import (
-    _american_implied_probability, _favorite_entry_line, _material_addition,
-    _review_confirmed, _review_record,
+    _american_implied_probability, _material_addition, _material_removal,
+    _review_confirmed, _review_record, favorite_side_quote,
 )
 from tools.audit_sportsbook_integrity import build_reference_event_map, inspect_review_history
 
@@ -54,7 +54,7 @@ def test_review_and_entry_use_subject_side_even_if_the_board_leader_differs():
             {"flagged_side": "South Team", "current_line": "South Team @ -105"},
         ]),
     })
-    assert _favorite_entry_line(row) == "North Team @ -115"
+    assert favorite_side_quote(row) == "North Team @ -115"
     review = _review_record(row, NOW.isoformat(), "pending", "addition", "Reason")
     assert review["favorite_side"] == "North Team"
     assert review["source_observed_at"] == "2026-11-24T20:59:00Z"
@@ -133,3 +133,44 @@ def test_unchanged_observations_are_timestamped_persistence():
     points = _build_history_points(history, "MONEYLINE")
     assert len(points) == 3
     assert len({(p["value"], p["bets_pct"], p["money_pct"]) for p in points}) == 1
+
+
+@pytest.mark.parametrize("sport,market,old,new,opponent,destructive", [
+    ("nfl", "SPREAD", "+6.5", "+6.5", "-6.5", False),
+    ("nfl", "SPREAD", "-3.5", "+6.5", "+3.5", True),
+    ("nfl", "SPREAD", "+6.5", "-3.5", "-6.5", False),
+    ("nba", "SPREAD", "+6.5", "+6.5", "-6.5", False),
+    ("ncaab", "SPREAD", "+6.5", "+6.5", "-6.5", False),
+    ("ncaaf", "SPREAD", "+6.5", "+6.5", "-6.5", False),
+    ("mlb", "MONEYLINE", "+110", "-105", "-120", False),
+    ("mlb", "MONEYLINE", "-105", "+110", "-115", True),
+])
+def test_closing_comparison_uses_team_even_when_selected_quote_crosses_zero(sport,market,old,new,opponent,destructive):
+    source = pd.Series({
+        "sport":sport,"game_id":"123","market_display":market,
+        "favorite_side":"Colts "+old if market=="SPREAD" else "Colts",
+        "flagged_side":"Giants "+opponent if market=="SPREAD" else "Giants","current_line":opponent,
+        "market_sides":json.dumps([
+            {"flagged_side":"Giants "+opponent if market=="SPREAD" else "Giants","current_line":opponent},
+            {"flagged_side":"Colts "+old if market=="SPREAD" else "Colts","current_line":old},
+        ]),
+    })
+    row = source.copy()
+    row["supported_side"] = "Colts "+new if market=="SPREAD" else "Colts"
+    row["market_sides"] = json.dumps([{"flagged_side":row["supported_side"],"current_line":new}])
+    assert _material_removal(row,source)[:2] == (False,destructive)
+
+
+def test_future_freeze_recovers_legacy_entry_from_first_capture_only():
+    base={"sport":"nfl","game_id":"123","market_display":"SPREAD","favorite_state":"qualified",
+          "favorite_side":"Colts +6.5","favorite_rule_version":"v2","first_qualified_line":"-6.5 (-115)",
+          "first_qualified_at":"2026-11-24T20:00:00Z","source_observed_at":"2026-11-24T19:59:00Z"}
+    history=pd.DataFrame([
+        dict(base,recorded_at=base["first_qualified_at"],supporting_evidence='{"current_line":"+6.5 (-104)"}'),
+        dict(base,recorded_at="2026-11-24T20:10:00Z",supporting_evidence='{"current_line":"+5.5 (-105)"}'),
+    ])
+    row=pd.Series(dict(base,favorite_side="Colts -3.5"))
+    verified=_tracking_lifecycle(history,row,NOW,recover_entry=True)
+    assert verified["first_qualified_line"]=="+6.5 (-104)"
+    assert verified["entry_observed_at"]==base["source_observed_at"]
+    assert _tracking_lifecycle(history,row,NOW)["first_qualified_line"]=="-6.5 (-115)"

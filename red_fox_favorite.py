@@ -387,12 +387,17 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
         for _, frozen in archive.loc[official & kickoff.notna() & kickoff.le(now)].iterrows():
             started_frozen_keys.add(tuple(str(frozen.get(column, "")) for column in keys))
     previous = {}
+    first_entries = {}
     if not history.empty:
         ordered = history.sort_values("recorded_at", kind="mergesort")
-        previous = {
-            tuple(str(row.get(column, "")) for column in keys): row
-            for _, row in ordered.iterrows()
-        }
+        for _, prior in ordered.iterrows():
+            key = tuple(str(prior.get(column, "")) for column in keys)
+            previous[key] = prior
+            if (key[2] == "SPREAD" and prior.get("favorite_state") == "qualified"
+                    and prior.get("recorded_at") == prior.get("first_qualified_at")):
+                identity = _favorite_review_identity(prior)
+                if all(identity):
+                    first_entries.setdefault((*key, *identity), prior)
 
     records = []
     current_keys = set()
@@ -407,9 +412,11 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
             prior_at = str(prior.get("recorded_at", "")).strip()
             first_at = str(prior.get("first_qualified_at", "")).strip() or prior_at or at
             current.at[index, "favorite_first_qualified_at"] = first_at
-            first_line = prior_first or _favorite_entry_line(row)
+            first_capture = first_entries.get((*key, *_favorite_review_identity(row)))
+            verified, entry_time = tracked_entry_quote(first_capture) if first_capture is not None else ("", "")
+            first_line = verified or prior_first or favorite_side_quote(row)
         else:
-            first_line = _favorite_entry_line(row) if favorite else ""
+            first_line = favorite_side_quote(row) if favorite else ""
         same_snapshot = (
             favorite and prior is not None
             and str(prior.get("favorite_state", "")) == "qualified"
@@ -419,7 +426,7 @@ def update_favorite_tracking(board: pd.DataFrame, data_dir: Path, as_of=None) ->
             if not same_snapshot or not same_identity:
                 record = _tracking_record(current.loc[index], at, first_line)
                 record["entry_observed_at"] = (
-                    str(prior.get("entry_observed_at", "")) if same_identity else record["source_observed_at"]
+                    entry_time or str(prior.get("entry_observed_at", "")) if same_identity else record["source_observed_at"]
                 )
                 records.append(record)
         elif prior is not None and str(prior.get("favorite_state", "")) == "qualified":
@@ -837,6 +844,7 @@ def _apply_visibility_lock(
                 gap = (now - previous).total_seconds() / 60 if pd.notna(previous) else -1
                 last_reason = str(last.get("reason", ""))
                 if (last.get("review_state") == "pending" and last.get("review_action") == "addition"
+                        and last.get("favorite_rule_version") == NOV24_VERSION
                         and last_reason.startswith("11/24 confirmation:")):
                     previous_signature, previous_stamps = json.loads(last_reason.split(":", 1)[1])
                     minimum = 15 if identity[0] == "nhl" else 10
@@ -1046,12 +1054,41 @@ def _favorite_review_identity(row: pd.Series | None) -> tuple[str, str]:
     return _side_identity(row.get("favorite_side", "")), str(row.get("favorite_rule_version", "")).strip()
 
 
-def _favorite_entry_line(row: pd.Series) -> str:
+def favorite_side_quote(row: pd.Series) -> str:
+    """Read the quote for the identified team within this event-market row."""
     identity, _ = _favorite_review_identity(row)
-    for side in _sides(row):
-        if identity and _side_identity(side.get("flagged_side")) == identity and side.get("current_line"):
-            return str(side["current_line"])
+    sides = _sides(row)
+    matches = [side for side in sides if identity and _side_identity(side.get("flagged_side")) == identity]
+    if len(matches) == 1:
+        return str(matches[0].get("current_line") or "")
+    if sides:
+        return ""
+    if row.get("market_display") == "SPREAD" or row.get("sport") in {"ufc", "nhl"}:
+        try:
+            evidence = json.loads(str(row.get("favorite_supporting_evidence") or "{}"))
+        except (TypeError, ValueError):
+            evidence = {}
+        if isinstance(evidence, dict) and evidence.get("current_line"):
+            return str(evidence["current_line"])
+    leader = _side_identity(row.get("flagged_side", ""))
+    if leader and leader != identity:
+        return ""
     return str(row.get("current_line", ""))
+
+
+def tracked_entry_quote(row: dict | pd.Series) -> tuple[str, str]:
+    """Recover a legacy spread entry from its own first qualification evidence."""
+    recorded = str(row.get("recorded_at", ""))
+    if (row.get("market_display") != "SPREAD" or str(row.get("favorite_state", "")) != "qualified"
+            or not row.get("favorite_side") or not recorded or recorded != row.get("first_qualified_at")):
+        return "", ""
+    try:
+        evidence = json.loads(str(row.get("supporting_evidence") or "{}"))
+    except (TypeError, ValueError):
+        return "", ""
+    if not isinstance(evidence, dict) or not evidence.get("current_line"):
+        return "", ""
+    return str(evidence["current_line"]), str(row.get("source_observed_at", ""))
 
 
 def _review_source_observed_at(row: pd.Series, side_name: object) -> str:
@@ -1186,13 +1223,7 @@ def _material_removal(row: pd.Series, source: pd.Series | None) -> tuple[bool, b
             return True, True, f"Hard removal: blocking {sport.upper()} risk state {', '.join(risks)}."
         if str(side.get("data_badge", "")) != "Clean":
             return True, True, f"Hard removal: {sport.upper()} market data is no longer Clean."
-    previous_line = source.get("current_line", "")
-    if market == "MONEYLINE" and sport in {"ufc", "nhl"}:
-        try:
-            frozen_evidence = json.loads(str(source.get("favorite_supporting_evidence", "{}")))
-        except (TypeError, ValueError, json.JSONDecodeError):
-            frozen_evidence = {}
-        previous_line = frozen_evidence.get("current_line", previous_line)
+    previous_line = favorite_side_quote(source)
     previous = _line_value(previous_line, market)
     current = _line_value(side.get("current_line", ""), market)
     if market == "MONEYLINE" and sport in {"ufc", "nhl"}:
@@ -1260,7 +1291,7 @@ def _confirmed_prior_favorite_recovery(row: pd.Series, source: pd.Series | None)
     ):
         return False, ""
     market = str(row.get("market_display", "")).upper()
-    archived = _line_value(source.get("current_line", ""), market)
+    archived = _line_value(favorite_side_quote(source), market)
     current = _line_value(side.get("current_line", ""), market)
     if archived is None or current is None or current > archived:
         return False, ""
