@@ -1,0 +1,7 @@
+# MLB fixture and pitcher context cutover
+
+Install the MLB service and timer alongside the release, then run the service once as a smoke test. Confirm it writes `data/mlb_fixture_context/latest.json` with a current UTC `observed_at`, even during the offseason when the fixture map is empty. The board, maintenance runner, and performance ledger read the cache locally. The timer collects probable pitcher information and logs changes independently in `pitcher_changes.jsonl`. A confirmed starter requires official first-inning pitch and starter evidence. The log records when Red Fox observed it.
+
+For the approved integrity cutover, write the UTC activation timestamp to `data/mlb_fixture_context/active_from` under the existing production deployment locks. Keep it with the deployment backup. New MLB grades from that boundary require fixture-proven scores, and previously recorded MLB grades remain frozen. The cutover has no qualification or routing settings. An unavailable or stale source leaves new MLB finals unresolved. An official postponed or suspended game stays unresolved, and a rescheduled fixture needs proof for its updated fixture date and start.
+
+Verify the current revision, prior MLB grades, fixture cache and scheduler before release sign-off. To stop context collection independently, stop the timer and service. For a full code rollback, use the saved production revision and preserve the score history, ledger and context evidence. Avoid restoring the old matchup-only MLB settlement path without reviewing any ungraded MLB fixtures.

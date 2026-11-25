@@ -1,0 +1,11 @@
+[Unit]
+Description=Collect official MLB fixtures and starting-pitcher observations
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/red-fox-market-dynamics
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python collect_mlb_fixtures.py
+TimeoutStartSec=35
+Nice=15
+IOSchedulingClass=idle

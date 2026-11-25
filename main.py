@@ -702,6 +702,9 @@ def update_snapshots_with_espn_finals(lookback_days=None, now=None):
 
     # only try to fill rows missing finals (blank-safe)
     need = df[(df["final_score_for"] == "") | (df["final_score_against"] == "")]
+    # MLB finals must have fixture-level proof. The matchup-keyed ESPN map
+    # collapses consecutive games in a series and cannot resolve doubleheaders.
+    need = need.loc[~need["sport"].str.lower().eq("mlb")]
     if lookback_days is not None:
         current = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
         current = current.tz_localize("UTC") if current.tzinfo is None else current.tz_convert("UTC")
@@ -6535,6 +6538,7 @@ def update_final_scores_history():
     import hashlib
     import os
     from uuid import uuid4
+    from mlb_fixtures import SCORE_SOURCE, cutover_at, match_fixture, read_context, timestamp, NEW_YORK
 
     data_dir = Path("data")
     snap_path = data_dir / "snapshots.csv"
@@ -6545,10 +6549,38 @@ def update_final_scores_history():
 
     s = pd.read_csv(snap_path, dtype=str)
 
+    rows = []
+    recorded_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    cutover = cutover_at(data_dir)
+    if cutover and {"sport", "game_id", "game", "dk_start_iso"}.issubset(s):
+        fixtures = read_context(data_dir)
+        mlb = s.loc[s["sport"].str.lower().eq("mlb"), ["game_id", "game", "dk_start_iso"]].drop_duplicates()
+        for game_id, references in mlb.groupby("game_id"):
+            matchups = references["game"].dropna().unique()
+            start_times = {when for start in references["dk_start_iso"].dropna() if (when := timestamp(start))}
+            if len(matchups) != 1 or not start_times or min(start_times) < cutover:
+                continue
+            if len({start.astimezone(NEW_YORK).date() for start in start_times}) != 1:
+                continue
+            # Every observed start for this DraftKings ID must identify the
+            # same MLB game. Multiple schedules alone cannot reassign a bet.
+            matches = [match_fixture(fixtures, matchups[0], start) for start in sorted(start_times)]
+            if any(match is None for match in matches) or len({match['game_pk'] for match in matches}) != 1:
+                continue
+            match = matches[0]
+            if match['state'] != 'post':
+                continue
+            away, home = matchups[0].split(' @ ', 1)
+            rows.append(dict(game_id=game_id, team1=away, team2=home, team1_score=match['away']['score'],
+                             team2_score=match['home']['score'], resolved_at_utc=recorded_at,
+                             score_source=SCORE_SOURCE, score_provider_event_id=match['game_pk']))
+    if "sport" in s:
+        s = s.loc[~s["sport"].str.lower().eq("mlb")]
+
     required = ["game_id","side","final_score_for","final_score_against"]
     for col in required:
         if col not in s.columns:
-            return
+            s[col] = None
 
     s = s[
         s["final_score_for"].notna() &
@@ -6562,11 +6594,11 @@ def update_final_scores_history():
         return " +" in str(x) or " -" in str(x)
 
     s = s[
-        ~s["side"].apply(is_total) &
-        ~s["side"].apply(is_spread)
+        ~s["side"].apply(is_total).astype(bool) &
+        ~s["side"].apply(is_spread).astype(bool)
     ]
 
-    if s.empty:
+    if s.empty and not rows:
         return
 
     s["team_norm"] = s["side"].apply(lambda x: _normalize_team_name(x))
@@ -6591,8 +6623,6 @@ def update_final_scores_history():
                     _normalize_team_name(_parts[1].strip()),
                 )
 
-    rows = []
-    recorded_at = datetime.datetime.now(__import__('datetime').timezone.utc).isoformat()
     for game_id, g in games.groupby("game_id"):
         if len(g) < 2:
             continue

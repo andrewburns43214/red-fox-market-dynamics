@@ -10,9 +10,10 @@ import main
 def test_scheduled_finals_lookup_skips_future_and_old_unresolved_games(tmp_path, monkeypatch):
     path = tmp_path / "snapshots.csv"
     pd.DataFrame([
-        {"timestamp": "2026-08-20T16:00:00Z", "sport": "mlb", "game_id": "old", "game": "Old Away @ Old Home", "side": "Old Away", "dk_start_iso": "2026-08-20T20:00:00Z"},
-        {"timestamp": "2026-09-20T16:00:00Z", "sport": "mlb", "game_id": "recent", "game": "Recent Away @ Recent Home", "side": "Recent Away", "dk_start_iso": "2026-09-20T20:00:00Z"},
-        {"timestamp": "2026-09-21T16:00:00Z", "sport": "mlb", "game_id": "future", "game": "Future Away @ Future Home", "side": "Future Away", "dk_start_iso": "2026-09-22T20:00:00Z"},
+        {"timestamp": "2026-08-20T16:00:00Z", "sport": "nfl", "game_id": "old", "game": "Old Away @ Old Home", "side": "Old Away", "dk_start_iso": "2026-08-20T20:00:00Z"},
+        {"timestamp": "2026-09-20T16:00:00Z", "sport": "nfl", "game_id": "recent", "game": "Recent Away @ Recent Home", "side": "Recent Away", "dk_start_iso": "2026-09-20T20:00:00Z"},
+        {"timestamp": "2026-09-21T16:00:00Z", "sport": "nfl", "game_id": "future", "game": "Future Away @ Future Home", "side": "Future Away", "dk_start_iso": "2026-09-22T20:00:00Z"},
+        {"timestamp": "2026-09-20T16:00:00Z", "sport": "mlb", "game_id": "series", "game": "NY Mets @ MIA Marlins", "side": "NY Mets", "dk_start_iso": "2026-09-20T20:00:00Z"},
     ]).to_csv(path, index=False)
     monkeypatch.setattr(main, "SNAPSHOT_CSV", str(path))
     calls = []
@@ -21,7 +22,7 @@ def test_scheduled_finals_lookup_skips_future_and_old_unresolved_games(tmp_path,
 
     main.update_snapshots_with_espn_finals(lookback_days=14, now="2026-09-21T16:00:00Z")
 
-    assert calls == [("mlb", ["Recent Away @ Recent Home"], ["20260920"])]
+    assert calls == [("nfl", ["Recent Away @ Recent Home"], ["20260920"])]
 
 
 def test_scheduled_maintenance_gives_live_board_priority():
