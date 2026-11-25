@@ -19,6 +19,7 @@ from red_fox_favorite import (
     VISIBILITY_INVALIDATED_FAVORITES,
     favorite_side_quote,
     cfb_spread_favorite,
+    nba_public_favorite,
 )
 from team_aliases import normalize_team_name
 
@@ -476,6 +477,18 @@ def _confirm_favorite_with_final_raw_market(candidate: pd.Series, raw: pd.Series
     except (TypeError, ValueError, json.JSONDecodeError):
         return None
     favorite_identity = _favorite_side_identity(candidate.get("favorite_side", ""))
+    if nba_public_favorite(candidate):
+        from red_fox_favorite import _freshness_failure, _truthy
+
+        kickoff = pd.to_datetime(candidate.get("kickoff_iso"), utc=True, errors="coerce")
+        state_at = pd.to_datetime(raw.get("state_as_of_utc"), utc=True, errors="coerce")
+        support = _favorite_side_identity(raw.get("supported_side", ""))
+        matching = [item for item in sides if _favorite_side_identity(item.get("flagged_side")) == favorite_identity]
+        if (pd.isna(kickoff) or pd.isna(state_at) or state_at > kickoff or len(matching) != 1
+                or support not in {"", favorite_identity}
+                or any(_truthy(raw.get(field)) for field in ("cross_market_mismatch", "cross_market_opener_mismatch_verified"))
+                or _freshness_failure(raw, candidate, kickoff)):
+            return None
     side = next(
         (item for item in sides if _favorite_side_identity(item.get("flagged_side", "")) == favorite_identity),
         None,
@@ -501,9 +514,10 @@ def _merge_final_raw_confirmation(candidate: pd.Series, raw: pd.Series, side: di
     merged["current_line"] = side.get("current_line", merged.get("current_line", ""))
     merged["bets_pct"] = side.get("bets_pct", merged.get("bets_pct", ""))
     merged["money_pct"] = side.get("money_pct", merged.get("money_pct", ""))
-    merged["supported_side"] = merged.get("favorite_side", "")
-    merged["read_anchor_side"] = merged.get("favorite_side", "")
-    merged["directional_lean_side"] = merged.get("favorite_side", "")
+    if not nba_public_favorite(candidate):
+        merged["supported_side"] = merged.get("favorite_side", "")
+        merged["read_anchor_side"] = merged.get("favorite_side", "")
+        merged["directional_lean_side"] = merged.get("favorite_side", "")
     merged["red_fox_favorite"] = "true"
     merged["favorite_state"] = "qualified"
     merged["favorite_reason"] = "Previously qualified Favorite confirmed by the final paired market without an adverse move."

@@ -16,7 +16,8 @@ from cross_market_integrity import CROSS_MARKET_COLUMNS, apply_cross_market_inte
 from cross_market_split import CROSS_MARKET_SPLIT_COLUMNS, apply_cross_market_split
 from main import infer_market_type, normalize_side_key
 from red_fox_favorite import (
-    FAVORITE_COLUMNS, REVIEW_BOARD_COLUMNS, apply_red_fox_favorites, cfb_spread_favorite, update_favorite_tracking,
+    FAVORITE_COLUMNS, REVIEW_BOARD_COLUMNS, apply_red_fox_favorites, cfb_spread_favorite, nba_public_favorite,
+    nba_release_config, update_favorite_tracking,
 )
 from favorite_nhl_goalies import read_goalies
 
@@ -197,7 +198,7 @@ def restore_retained_favorites(board, data_dir=DATA, now=None):
         source = lookup.get(key)
         if source is None or str(source.get("red_fox_favorite", "")).lower() != "true":
             continue
-        if cfb_spread_favorite(source):
+        if cfb_spread_favorite(source) or nba_public_favorite(source):
             # The optional pathways must requalify through the normal lock.
             continue
         invalidated = str(source.get("favorite_late_invalidated", "")).lower() == "true"
@@ -683,7 +684,14 @@ def _refresh(coverage):
         board["state_as_of_utc"] = ""
     # Tracking and the immutable kickoff handoff archive must receive the
     # precise source timestamp attached above, not just publication wall time.
-    board = update_favorite_tracking(board, DATA, as_of=newest_snapshot, market_history=history)
+    nba_config = nba_release_config()
+    if nba_config[1]:
+        try:
+            from nba_legacy_shadow import record_legacy
+            record_legacy(board, DATA, newest_snapshot)
+        except Exception as exc:
+            print(f"[nba-legacy-shadow] capture failed: {type(exc).__name__}: {exc}", flush=True)
+    board = update_favorite_tracking(board, DATA, as_of=newest_snapshot, market_history=history, nba_config=nba_config)
     if retained_source and not board.empty:
         retained_rows = [
             (row.sport, row.game_id, row.market_display) in retained_keys

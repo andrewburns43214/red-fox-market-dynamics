@@ -189,6 +189,10 @@ SHADOW_COLUMNS = [
 
 
 NOV24_SPORTS = frozenset({"ncaab", "nba", "nhl"})
+NBA_PUBLIC_PATH = "nba_short_public_neutral_ml"
+NBA_PUBLIC_VERSION = "red_fox_favorite_nba_public_neutral_v1"
+NBA_PUBLIC_FLAG = "RED_FOX_NBA_PUBLIC_NEUTRAL"
+NBA_LEGACY_HOLD_FLAG = "RED_FOX_NBA_HOLD_LEGACY"
 NOV24_VERSION = "red_fox_favorite_20261124"
 CFB_PUBLIC_FOLLOW = "cfb_public_spread_follow"
 CFB_HIGH_MONEY = "cfb_low_ticket_high_money_spread"
@@ -209,6 +213,15 @@ def cfb_spread_favorite(row: pd.Series) -> bool:
         and CFB_SPREAD_VERSIONS.get(row.get("favorite_pathway")) == row.get("favorite_rule_version")
         and row.get("favorite_pathway") in CFB_SPREAD_VERSIONS
     )
+
+
+def nba_public_favorite(row: pd.Series | None) -> bool:
+    return (row is not None and row.get("sport") == "nba" and row.get("market_display") == "MONEYLINE"
+            and row.get("favorite_rule_version") == NBA_PUBLIC_VERSION and row.get("favorite_pathway") == NBA_PUBLIC_PATH)
+
+
+def nba_release_config() -> tuple[bool, bool]:
+    return _truthy(os.getenv(NBA_PUBLIC_FLAG)), _truthy(os.getenv(NBA_LEGACY_HOLD_FLAG))
 
 
 def apply_red_fox_favorites(board: pd.DataFrame, as_of=None, *, nov24_goalies: dict | None = None) -> pd.DataFrame:
@@ -388,6 +401,7 @@ def update_favorite_tracking(
     board: pd.DataFrame, data_dir: Path, as_of=None, *,
     market_history: pd.DataFrame | None = None,
     cfb_enabled: frozenset[str] | None = None,
+    nba_config: tuple[bool, bool] | None = None,
 ) -> pd.DataFrame:
     """Persist every prospective snapshot and carry first qualification forward."""
     current = board.copy()
@@ -397,7 +411,9 @@ def update_favorite_tracking(
     if cfb_enabled is None:
         cfb_enabled = frozenset(path for path, flag in CFB_SPREAD_FLAGS.items() if _truthy(os.getenv(flag)))
     current = _apply_cfb_spread_pathways(current, history, market_history, at, cfb_enabled)
-    current = _apply_visibility_lock(current, history, Path(data_dir), at)
+    nba_config = nba_release_config() if nba_config is None else nba_config
+    current = _apply_nba_release(current, history, at, *nba_config)
+    current = _apply_visibility_lock(current, history, Path(data_dir), at, nba_hold_legacy=nba_config[1])
     current = _apply_manual_favorite_inclusions(current, at)
     _resolve_cfb_spread_conflicts(current, at)
     keys = ["sport", "game_id", "market_display"]
@@ -506,6 +522,7 @@ def update_favorite_tracking(
         "_visibility_restored", "_favorite_legacy_qualified", "_favorite_legacy_side",
         "_favorite_legacy_reason", "_ncaaf_move_gate_passed",
         "_ncaaf_market_move_status", "_ncaaf_decision_reason", "_favorite_gate_reason",
+        "_nba_release_mismatch",
     ], errors="ignore")
 
 
@@ -704,6 +721,7 @@ def _apply_visibility_lock(
     history: pd.DataFrame,
     data_dir: Path,
     at: str,
+    *, nba_hold_legacy: bool = False,
 ) -> pd.DataFrame:
     """Apply the two-stage T-40 review window and T-20 display lock with safety suppression."""
     if current is None or "kickoff_iso" not in current:
@@ -924,7 +942,8 @@ def _apply_visibility_lock(
         # it is constrained to the same supported side and still goes through
         # the normal two-capture visibility review below.
         recovered, recovery_reason = (
-            (False, "") if source is not None and cfb_spread_favorite(source)
+            (False, "") if (source is not None and cfb_spread_favorite(source)) or nba_public_favorite(source)
+            or (nba_hold_legacy and identity[0] == "nba")
             else _confirmed_prior_favorite_recovery(row, source)
         )
         if recovered and not raw_favorite and not active:
@@ -944,7 +963,8 @@ def _apply_visibility_lock(
                 else:
                     _clear_favorite(result, index, reason)
                     _set_review(result, index, "pending_addition", reason, at)
-                    review_records.append(_review_record(row, at, "pending", "addition", reason))
+                    if not nba_public_favorite(row) or _nba_fresh_pending_source(reviews, key, row):
+                        review_records.append(_review_record(row, at, "pending", "addition", reason))
             elif not raw_favorite and active:
                 hard, _, reason = _material_removal(row, source)
                 confirmed = _review_confirmed(reviews, key, "removal", now, source)
@@ -1186,6 +1206,8 @@ def _review_confirmed(history: pd.DataFrame, key: tuple[str, str, str], action: 
         return False
     pending_times = pd.to_datetime(scoped["recorded_at"], errors="coerce", utc=True)
     gaps = (now - pending_times).dt.total_seconds() / 60
+    if action == "addition" and nba_public_favorite(candidate) and not _nba_fresh_pending_source(scoped, key, candidate):
+        return False
     if key[0].lower() in {"ncaaf", "cfb"}:
         return bool(gaps.iloc[0] >= CONFIG.ncaaf_confirmation_min_gap_minutes)
     if key[0].lower() in {"ufc", "nhl"}:
@@ -1195,6 +1217,19 @@ def _review_confirmed(history: pd.DataFrame, key: tuple[str, str, str], action: 
             inclusive="both",
         ).any())
     return bool(0 < gaps.iloc[-1] <= CONFIG.visibility_confirmation_gap_minutes)
+
+
+def _nba_fresh_pending_source(reviews: pd.DataFrame, key: tuple[str, str, str], row: pd.Series) -> bool:
+    scoped = _review_rows(reviews, key)
+    if scoped.empty:
+        return True
+    last = scoped.iloc[-1]
+    if (last.get("review_state") != "pending" or last.get("review_action") != "addition"
+            or _favorite_review_identity(last) != _favorite_review_identity(row)):
+        return True
+    previous = pd.to_datetime(last.get("source_observed_at"), errors="coerce", utc=True)
+    observed = pd.to_datetime(_review_source_observed_at(row, row.get("favorite_side")), errors="coerce", utc=True)
+    return bool(pd.notna(observed) and (pd.isna(previous) or previous < observed))
 
 
 def _review_already_recorded(history: pd.DataFrame, key: tuple[str, str, str], state: str) -> bool:
@@ -1277,6 +1312,8 @@ def _closing_review_quote(source: pd.Series | None) -> str:
 def _material_removal(row: pd.Series, source: pd.Series | None) -> tuple[bool, bool, str]:
     if source is None:
         return False, False, "No prior frozen Favorite evidence was available."
+    if nba_public_favorite(source) and _truthy(row.get("_nba_release_mismatch")):
+        return True, True, "Hard removal: a confirmed cross-market contradiction appeared."
     if _truthy(row.get("return_toward_open")) and _truthy(row.get("active_worsening_reversal")):
         return (
             True,
@@ -2061,6 +2098,108 @@ def _cfb_spread_decision(row: pd.Series, game: pd.DataFrame, history: pd.DataFra
             },
         })
     return candidates[0] if len(candidates) == 1 else None
+
+
+def _nba_public_selection(game: pd.DataFrame, now: pd.Timestamp) -> tuple | None:
+    # The verified replay vetoes a raw legacy Favorite before any hold switch
+    # is applied. A hypothetical legacy promotion is not needed for this veto.
+    if game["red_fox_favorite"].eq("true").any() or game["market_display"].eq("SPREAD").sum() != 1:
+        return None
+    if _nba_cross_mismatch(game):
+        return None
+    for index, row in game.loc[game["market_display"].eq("MONEYLINE")].iterrows():
+        support = _side_identity(row.get("supported_side"))
+        for side in _sides(row):
+            name = side["flagged_side"]
+            if support and support != _side_identity(name):
+                continue
+            price = _line_value(side.get("current_line"), "MONEYLINE")
+            if price is None or not -165 <= price <= -100 or not _base_quality(side):
+                continue
+            bets, money = _number(side.get("bets_pct")), _number(side.get("money_pct"))
+            if bets is None or money is None or bets < 70 or money < 55:
+                continue
+            spread = _matching_market_side(game, "SPREAD", name)
+            if not spread or not _base_quality(spread):
+                continue
+            number = _line_value(spread.get("current_line"), "SPREAD")
+            if number is None or not -4 <= number <= 0:
+                continue
+            opened = _line_value(side.get("open_line"), "MONEYLINE")
+            if opened is None or opened == 0:
+                continue
+            movement = _american_implied_probability(price) - _american_implied_probability(opened)
+            if not -2.5 < movement < 2.5:
+                continue
+            observed = pd.to_datetime(side.get("source_latest_at"), errors="coerce", utc=True)
+            if pd.isna(observed) or observed > now:
+                continue
+            evidence = {key: side.get(key, "") for key in ("current_line", "open_line", "bets_pct", "money_pct", "reaction", "path")}
+            evidence.update(spread=number, spread_source_observed_at=spread.get("source_latest_at", ""),
+                            ml_source_observed_at=side["source_latest_at"], raw_implied_movement=movement)
+            return index, name, evidence
+    return None
+
+
+def _nba_cross_mismatch(game: pd.DataFrame) -> bool:
+    return any(game.get(field, pd.Series(dtype=str)).map(_truthy).any()
+               for field in ("cross_market_mismatch", "cross_market_opener_mismatch_verified"))
+
+
+def _apply_nba_release(current: pd.DataFrame, tracking: pd.DataFrame, at: str,
+                       pilot_enabled: bool, hold_legacy: bool) -> pd.DataFrame:
+    versions = tracking.get("favorite_rule_version", pd.Series(dtype=str))
+    if current.empty or not (pilot_enabled or hold_legacy or versions.eq(NBA_PUBLIC_VERSION).any()):
+        return current
+    nba = current.loc[current["sport"].eq("nba")]
+    if nba.empty:
+        return current
+    now = pd.Timestamp(at)
+    latest = {}
+    occupied = {}
+    if not tracking.empty:
+        history = tracking.loc[tracking["sport"].eq("nba") & tracking["game_id"].isin(nba["game_id"])].copy()
+        stamps = pd.to_datetime(history["recorded_at"], errors="coerce", utc=True, format="mixed")
+        history = history.loc[stamps.le(now)].sort_values("recorded_at", kind="mergesort")
+        for _, state in history.loc[history["favorite_state"].eq("qualified")].drop_duplicates("game_id").iterrows():
+            occupied[state["game_id"]] = state
+        for _, state in history.drop_duplicates(["game_id", "market_display"], keep="last").iterrows():
+            if state["favorite_state"] == "qualified":
+                latest.setdefault(state["game_id"], []).append(state)
+    for event, game in nba.groupby("game_id", sort=False):
+        active = latest.get(event, [])
+        first = occupied.get(event)
+        first_pilot = nba_public_favorite(first)
+        active_pilot = any(nba_public_favorite(state) for state in active)
+        if hold_legacy or first_pilot:
+            legacy_sides = {_side_identity(state["favorite_side"]) for state in active if not nba_public_favorite(state)}
+            for index, row in game.loc[game["red_fox_favorite"].eq("true")].iterrows():
+                if _side_identity(row.get("favorite_side")) not in legacy_sides:
+                    _clear_favorite(current, index, "New legacy NBA Favorite promotion withheld.")
+        if active_pilot and _nba_cross_mismatch(game):
+            current.loc[game.index, "_nba_release_mismatch"] = "true"
+        if not (pilot_enabled or active_pilot) or (first is not None and not first_pilot):
+            continue
+        pick = _nba_public_selection(game, now)
+        if not pick:
+            continue
+        index, name, evidence = pick
+        row = game.loc[index]
+        if first_pilot and _side_identity(first.get("favorite_side")) != _side_identity(name):
+            continue
+        kickoff = pd.to_datetime(row.get("kickoff_iso"), errors="coerce", utc=True)
+        if pd.isna(kickoff) or kickoff <= now or (not active_pilot and not 40 < (kickoff - now).total_seconds() / 60 <= 180):
+            continue
+        values = dict(red_fox_favorite="true", favorite_side=name, favorite_pathway=NBA_PUBLIC_PATH,
+                      favorite_rule_version=NBA_PUBLIC_VERSION, favorite_first_qualified_at=at,
+                      favorite_final_qualified_at=at, favorite_state="qualified",
+                      favorite_originally_qualified="true", favorite_snapshot_id=_snapshot_id(row, at),
+                      favorite_supporting_evidence=json.dumps(evidence, separators=(",", ":")),
+                      favorite_final_market_read=str(row.get("reaction", "")), favorite_final_market_rank=str(row.get("board_rank", "")),
+                      favorite_reason="NBA Short Public Neutral Moneyline qualified.")
+        for column, value in values.items():
+            current.at[index, column] = value
+    return current
 
 
 def _apply_cfb_spread_pathways(current: pd.DataFrame, tracking: pd.DataFrame,
