@@ -4,11 +4,10 @@ from datetime import datetime, timedelta, timezone
 import argparse
 import json
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
 import requests
 
-from mlb_fixtures import CONTEXT_DIR, NEW_YORK, team_key, timestamp
+from mlb_fixtures import CONTEXT_DIR, CONTEXT_MAX_AGE, NEW_YORK, last_source_failure, team_key, timestamp, write_json
 
 
 BASE = 'https://statsapi.mlb.com/api'
@@ -142,19 +141,9 @@ def first_pitches(game):
                 evidence[leg] = (pitch, ordered[0] if ordered and pitcher.get('id') else None)
         return {leg: dict(pitch=pitch, pitcher_id=pid, pitcher_name=people.get(f'ID{pid}', {}).get('fullName'))
                 for leg, (pitch, pid) in evidence.items()}
-    except (requests.RequestException, ValueError, KeyError, TypeError) as error:
+    except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError) as error:
         print(f'[mlb-context] fixture {game["game_pk"]}: {type(error).__name__}')
         return {}
-
-
-def write_context(directory, payload):
-    with NamedTemporaryFile('w', encoding='utf-8', dir=directory, delete=False) as stream:
-        json.dump(payload, stream, ensure_ascii=False)
-        temporary = Path(stream.name)
-    try:
-        temporary.replace(directory / 'latest.json')
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def collect(data_dir, now):
@@ -162,59 +151,93 @@ def collect(data_dir, now):
     directory = data_dir / CONTEXT_DIR
     pitchers_enabled = not (directory / 'disable_pitchers').exists()
     start, end = current_day - timedelta(days=15), current_day + timedelta(days=1)
-    raw = schedule_window(start, end)
     directory.mkdir(parents=True, exist_ok=True)
     try:
-        previous = json.loads((directory / 'latest.json').read_text(encoding='utf-8'))['games']
-    except (OSError, ValueError, KeyError):
-        previous = {}
+        raw = schedule_window(start, end)
+        records = [row for day in raw['dates'] for row in day['games'] if row.get('gameType') in GAME_TYPES]
+    except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError) as error:
+        # Settlement may still use fresh, previously verified evidence. New
+        # Static entries must see the latest collection failure immediately.
+        write_json(directory / 'source_failure.json', dict(
+            at=datetime.now(timezone.utc).isoformat(),
+            reason=type(error).__name__,
+            http_status=error.response.status_code if isinstance(error, requests.HTTPError) and error.response is not None else None,
+        ))
+        raise
+    try:
+        prior_sample = json.loads((directory / 'latest.json').read_text(encoding='utf-8'))
+        previous = prior_sample['games']
+        failure_at = timestamp(last_source_failure(directory).get('at'))
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        prior_sample, previous, failure_at = {}, {}, None
     games = {}
     conflicts = set()
-    for day in raw['dates']:
-        for row in day['games']:
+    invalid = 0
+    for row in records:
+        try:
             game = league_fixture(row)
-            if game is None:
-                continue
-            pk = game['game_pk']
-            if pk in games and games[pk] != game:
-                conflicts.add(pk)
-            games[pk] = game
+        except (ValueError, KeyError, TypeError, AttributeError):
+            game = None
+        if game is None:
+            invalid += 1
+            continue
+        pk = game['game_pk']
+        if pk in games and games[pk] != game:
+            conflicts.add(pk)
+        games[pk] = game
     for pk in conflicts:
         del games[pk]
-    pitchers = None
-    if pitchers_enabled and games:
-        recent = {pk for pk, game in games.items() if game['official_date'] >= (current_day - timedelta(days=1)).isoformat()}
-        if recent:
-            pitchers = probable_pitchers(current_day - timedelta(days=1), end)
-        for pk in recent.intersection(pitchers or {}):
-            for leg, (team_id, pitcher_id, pitcher_name) in pitchers[pk].items():
-                if team_id == games[pk][leg]['team_id']:
-                    games[pk][leg].update(pitcher_id=pitcher_id, pitcher_name=pitcher_name, pitcher_status='probable')
     for pk, game in games.items():
         old = previous.get(pk, {})
-        if old.get('official_date') != game['official_date'] or game['state'] not in {'in', 'post'}:
+        if (old.get('official_date') != game['official_date'] or old.get('scheduled_start') != game['scheduled_start']
+                or game['state'] not in {'in', 'post'}
+                or any(old.get(leg, {}).get('team_id') != game[leg]['team_id'] for leg in ('away', 'home'))):
             continue
         game['first_pitch'] = old.get('first_pitch')
         for leg in ('away', 'home'):
             prior = old.get(leg, {})
             if pitchers_enabled and prior.get('team_id') == game[leg]['team_id'] and prior.get('pitcher_status') == 'confirmed':
                 game[leg].update({k: prior[k] for k in ('pitcher_status', 'pitcher_id', 'pitcher_name', 'confirmed_at')})
-    needed = sorted((game for game in games.values() if game['state'] in {'in', 'post'}
-                     and now - timestamp(game['scheduled_start']) <= timedelta(hours=9)
-                     and ((not game['first_pitch'] and (pitchers_enabled or game['doubleheader'] or game['time_tbd']))
-                          or (pitchers_enabled and any(game[leg]['pitcher_status'] != 'confirmed' for leg in ('away','home'))))),
-                    key=lambda game: timestamp(game['scheduled_start']), reverse=True)
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        for game, proof in zip(needed[:16], pool.map(first_pitches, needed[:16])):
-            if 'home' in proof:
-                game['first_pitch'] = proof['home']['pitch']
-            for leg, result in proof.items():
-                if pitchers_enabled and result['pitcher_id']:
-                    game[leg].update(pitcher_status='confirmed', pitcher_id=result['pitcher_id'],
-                                     pitcher_name=result['pitcher_name'], confirmed_at=result['pitch'])
-    observed_at = datetime.now(timezone.utc).isoformat()
+    recent_started = sorted((game for game in games.values() if game['state'] in {'in', 'post'}
+                             and now - timestamp(game['scheduled_start']) <= timedelta(hours=9)),
+                            key=lambda game: timestamp(game['scheduled_start']), reverse=True)
+    essential = [game for game in recent_started if not game['first_pitch'] and (game['doubleheader'] or game['time_tbd'])]
+    collect_first_pitches(essential[:8], pitchers_enabled)
+
+    observed = datetime.now(timezone.utc)
+    observed_at = observed.isoformat()
+    prior_at = timestamp(prior_sample.get('observed_at'))
+    recent_population = any(game['official_date'] >= current_day.isoformat() and game['state'] in {'pre', 'in', 'post'}
+                            for game in games.values())
+    continuing = (prior_at and timedelta(0) < observed - prior_at <= CONTEXT_MAX_AGE
+                  and (failure_at is None or failure_at < prior_at))
+    populated_streak = (min(2, prior_sample.get('populated_streak', 0) + 1) if continuing else 1)
+    if not recent_population or conflicts or invalid:
+        populated_streak = 0
+    schedule_status = 'invalid_fixture_details' if conflicts or invalid else ('fixtures_available' if games else 'no_games_scheduled')
+    payload = dict(observed_at=observed_at, source='MLB Stats API', schedule_status=schedule_status,
+                   populated_streak=populated_streak, pitchers_enabled=pitchers_enabled, games=games)
+    path = directory / 'latest.json'
+    # Publish essential identity/final scores before trying the optional feed.
+    write_json(path, payload)
+    print(f'[mlb-context] cached {len(games)} fixtures, populated streak {populated_streak}', flush=True)
+    if not pitchers_enabled or not games:
+        return
+
+    pitcher_start = current_day - timedelta(days=1)
+    recent = {pk for pk, game in games.items() if pitcher_start.isoformat() <= game['official_date'] <= end.isoformat()}
+    pitchers = probable_pitchers(pitcher_start, end) if recent else None
+    for pk in recent.intersection(pitchers or {}):
+        for leg, (team_id, pitcher_id, pitcher_name) in pitchers[pk].items():
+            side = games[pk][leg]
+            if team_id == side['team_id'] and side['pitcher_status'] != 'confirmed':
+                side.update(pitcher_id=pitcher_id, pitcher_name=pitcher_name, pitcher_status='probable')
+    optional = [game for game in recent_started if game not in essential
+                and any(game[leg]['pitcher_status'] != 'confirmed' for leg in ('away', 'home'))]
+    collect_first_pitches(optional[:8], True)
     changes = []
-    for pk, game in (games.items() if pitchers_enabled else ()):
+    for pk in recent:
+        game = games[pk]
         # Retrospective finals provide score evidence, not pregame pitcher records.
         if not (current_day - timedelta(days=1) <= datetime.fromisoformat(game['official_date']).date() <= current_day + timedelta(days=1)):
             continue
@@ -232,10 +255,21 @@ def collect(data_dir, now):
         with (directory / 'pitcher_changes.jsonl').open('a', encoding='utf-8') as stream:
             for change in changes:
                 stream.write(json.dumps(change, ensure_ascii=False) + '\n')
-    schedule_status = 'fixtures_available' if games else 'no_games_scheduled'
-    write_context(directory, dict(observed_at=observed_at, source='MLB Stats API', schedule_status=schedule_status,
-                                  pitchers_enabled=pitchers_enabled, games=games))
-    print(f'[mlb-context] cached {len(games)} fixtures, wrote {len(changes)} pitcher observations')
+    write_json(path, payload)
+    print(f'[mlb-context] wrote {len(changes)} pitcher observations')
+
+
+def collect_first_pitches(games, pitchers_enabled):
+    if not games:
+        return
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for game, proof in zip(games, pool.map(first_pitches, games)):
+            if 'home' in proof:
+                game['first_pitch'] = proof['home']['pitch']
+            for leg, result in proof.items():
+                if pitchers_enabled and result['pitcher_id']:
+                    game[leg].update(pitcher_status='confirmed', pitcher_id=result['pitcher_id'],
+                                     pitcher_name=result['pitcher_name'], confirmed_at=result['pitch'])
 
 
 if __name__ == '__main__':

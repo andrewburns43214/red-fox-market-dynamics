@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from zoneinfo import ZoneInfo
 
 from team_aliases import normalize_team_name
@@ -10,6 +11,19 @@ from team_aliases import normalize_team_name
 CONTEXT_DIR = 'mlb_fixture_context'
 SCORE_SOURCE = 'mlb_statsapi_fixture'
 NEW_YORK = ZoneInfo('America/New_York')
+CONTEXT_MAX_AGE = timedelta(minutes=15)
+
+
+def write_json(path, payload):
+    temporary = None
+    try:
+        with NamedTemporaryFile('w', encoding='utf-8', dir=path.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            json.dump(payload, stream, ensure_ascii=False)
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def timestamp(value):
@@ -27,17 +41,30 @@ def team_key(name):
     return key
 
 
-def read_context(data_dir, now=None):
+def fixture_sample(data_dir, now):
     path = Path(data_dir) / CONTEXT_DIR / 'latest.json'
     try:
         context = json.loads(path.read_text(encoding='utf-8'))
         captured = timestamp(context.get('observed_at'))
-        now = now or datetime.now(timezone.utc)
-        if captured and timedelta(0) <= now - captured <= timedelta(minutes=15) and isinstance(context.get('games'), dict):
-            return {pk: dict(game, observed_at=captured.isoformat()) for pk, game in context['games'].items()}
+        if captured and timedelta(0) <= now - captured <= CONTEXT_MAX_AGE and isinstance(context.get('games'), dict):
+            return context
     except (OSError, ValueError, AttributeError, TypeError):
         pass
     return None
+
+
+def read_context(data_dir, now=None):
+    context = fixture_sample(data_dir, now or datetime.now(timezone.utc))
+    if context is None:
+        return None
+    return {pk: dict(game, observed_at=timestamp(context['observed_at']).isoformat()) for pk, game in context['games'].items()}
+
+
+def last_source_failure(directory):
+    try:
+        return json.loads((directory / 'source_failure.json').read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        return {}
 
 
 def cutover_at(data_dir):

@@ -93,7 +93,7 @@ def _captures(history, now):
     return games
 
 
-def apply_static_moneyline(board, tracking, history, at, enabled, data_dir, *, diagnostics=False):
+def apply_static_moneyline(board, tracking, history, at, enabled, data_dir, *, diagnostics=False, promotion_games=None):
     now = pd.Timestamp(at)
     mlb = board.loc[board["sport"].eq("mlb")]
     if mlb.empty:
@@ -160,7 +160,7 @@ def apply_static_moneyline(board, tracking, history, at, enabled, data_dir, *, d
                                        side=team, entry_price=price, open_price=opener, no_vig_movement=movement,
                                        stable_since=earliest.isoformat(), reason=quality))
             continue
-        if not (enabled or active):
+        if not active and (not enabled or (promotion_games is not None and str(event) not in promotion_games)):
             continue
         values = dict(red_fox_favorite="true", favorite_side=team, favorite_state="qualified",
                       favorite_rule_version=rf.MLB_STATIC_VERSION, favorite_pathway=rf.MLB_STATIC_PATH,

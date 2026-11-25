@@ -79,6 +79,7 @@ def test_optional_pitcher_access_failure_does_not_block_fixture_cache(tmp_path, 
     def fetch(_, **params):
         requests_seen.append(params['hydrate'])
         if params['hydrate'] == 'probablePitcher':
+            assert read_context(tmp_path)['123']['state'] == 'pre'
             raise http_error(406)
         return {'dates': [{'games': [raw]}]}
 
@@ -89,6 +90,41 @@ def test_optional_pitcher_access_failure_does_not_block_fixture_cache(tmp_path, 
     assert game['away']['pitcher_status'] == 'missing'
     assert not (tmp_path / CONTEXT_DIR / 'pitcher_changes.jsonl').exists()
     assert requests_seen == ['team,linescore', 'probablePitcher']
+
+
+def test_collection_streak_resets_after_failure_and_pitcher_feed_retries(tmp_path, monkeypatch):
+    now = datetime.now(timezone.utc)
+    today = now.astimezone(collector.NEW_YORK).date().isoformat()
+    raw = fixture(123, (now + timedelta(minutes=5)).isoformat(), detail='Scheduled')
+    raw['officialDate'] = today
+    raw['status']['abstractGameState'] = 'Preview'
+    raw['teams']['away']['probablePitcher'] = {'id': 8, 'fullName': 'Starter'}
+    cache = tmp_path / CONTEXT_DIR / 'latest.json'
+    pitcher_failed, fixture_failed = True, False
+
+    def fetch(_, **params):
+        if params.get('hydrate') == 'probablePitcher' and pitcher_failed:
+            raise http_error(406)
+        if params.get('hydrate') != 'probablePitcher' and fixture_failed:
+            raise http_error(503)
+        return {'dates': [{'games': [raw]}]}
+
+    monkeypatch.setattr(collector, 'fetch', fetch)
+    collector.collect(tmp_path, now)
+    assert json.loads(cache.read_text())['populated_streak'] == 1
+    assert read_context(tmp_path)['123']['away']['pitcher_status'] == 'missing'
+    pitcher_failed = False
+    collector.collect(tmp_path, now)
+    assert json.loads(cache.read_text())['populated_streak'] == 2
+    assert read_context(tmp_path)['123']['away']['pitcher_name'] == 'Starter'
+    fixture_failed = True
+    prior = cache.read_bytes()
+    with pytest.raises(requests.HTTPError, match='503'):
+        collector.collect(tmp_path, now)
+    assert cache.read_bytes() == prior
+    fixture_failed = False
+    collector.collect(tmp_path, now)
+    assert json.loads(cache.read_text())['populated_streak'] == 1
 
 
 def test_series_matching_cannot_borrow_previous_or_next_result():

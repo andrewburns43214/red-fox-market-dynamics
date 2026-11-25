@@ -420,6 +420,7 @@ def update_favorite_tracking(
     nhl_hypothetical: bool = False,
     nhl_selections: dict | None = None,
     mlb_enabled: bool | None = None,
+    mlb_promotion_games: frozenset[str] | None = None,
 ) -> pd.DataFrame:
     """Persist every prospective snapshot and carry first qualification forward."""
     current = board.copy()
@@ -437,7 +438,8 @@ def update_favorite_tracking(
     if (not current.empty and current.get("sport", pd.Series(dtype=str)).eq("mlb").any()
             and (mlb_enabled or mlb_diagnostics or history.get("favorite_rule_version", pd.Series(dtype=str)).eq(MLB_STATIC_VERSION).any())):
         from mlb_static_favorite import apply_static_moneyline
-        apply_static_moneyline(current, history, market_history, at, mlb_enabled, Path(data_dir), diagnostics=mlb_diagnostics)
+        apply_static_moneyline(current, history, market_history, at, mlb_enabled, Path(data_dir),
+                               diagnostics=mlb_diagnostics, promotion_games=mlb_promotion_games)
     current = _apply_visibility_lock(current, history, Path(data_dir), at, nba_hold_legacy=nba_config[1],
                                      nhl_hypothetical=nhl_hypothetical)
     current = _apply_manual_favorite_inclusions(current, at)

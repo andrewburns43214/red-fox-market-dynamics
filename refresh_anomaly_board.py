@@ -1,5 +1,6 @@
 """Build the public anomaly board without rerunning the legacy report pipeline."""
 
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -15,9 +16,10 @@ from build_live_recent import MARKET_CANDIDATES, main as build_live_recent, upda
 from cross_market_integrity import CROSS_MARKET_COLUMNS, apply_cross_market_integrity
 from cross_market_split import CROSS_MARKET_SPLIT_COLUMNS, apply_cross_market_split
 from main import infer_market_type, normalize_side_key
+from mlb_fixtures import CONTEXT_DIR as MLB_CONTEXT_DIR
 from red_fox_favorite import (
     FAVORITE_COLUMNS, REVIEW_BOARD_COLUMNS, apply_red_fox_favorites, cfb_spread_favorite, nba_public_favorite,
-    nba_release_config, mlb_static_favorite, update_favorite_tracking,
+    nba_release_config, MLB_STATIC_FLAG, mlb_static_favorite, update_favorite_tracking,
 )
 from favorite_nhl_goalies import read_goalies
 from nhl_release_config import official_nhl_favorite
@@ -709,8 +711,23 @@ def _refresh(coverage):
             nhl_selections = capture_official(classified, history, nhl_goalies, DATA)
         except Exception as exc:
             print(f"[nhl-official] capture failed: {type(exc).__name__}: {exc}", flush=True)
+    mlb_mode = os.environ.get(MLB_STATIC_FLAG, '').strip().lower()
+    mlb_promotion_games = None
+    mlb_context = DATA / MLB_CONTEXT_DIR
+    if mlb_mode == 'auto' or (mlb_context / 'static_readiness.json').exists() or (mlb_context / 'disable_static').exists():
+        from mlb_static_readiness import ready_games
+
+        try:
+            mlb_promotion_games = ready_games(board=board, history=history, data_dir=DATA,
+                                             now=datetime.now(timezone.utc), retained_keys=retained_keys,
+                                             auto=mlb_mode == 'auto')
+        except Exception as error:
+            print(f'[mlb-static] new promotions held: {type(error).__name__}: {error}', flush=True)
+            mlb_promotion_games = frozenset()
     board = update_favorite_tracking(board, DATA, as_of=newest_snapshot, market_history=history,
-                                     nba_config=nba_config, nhl_selections=nhl_selections)
+                                     nba_config=nba_config, nhl_selections=nhl_selections,
+                                     mlb_enabled=bool(mlb_promotion_games) if mlb_promotion_games is not None else None,
+                                     mlb_promotion_games=mlb_promotion_games)
     if retained_source and not board.empty:
         retained_rows = [
             (row.sport, row.game_id, row.market_display) in retained_keys
