@@ -19,6 +19,21 @@ def _ts(hour, minute):
 
 
 class TestAnomalyBoard(unittest.TestCase):
+    def test_even_money_aliases_show_no_moneyline_movement(self):
+        common = {
+            "sport": "nfl", "game_id": "even", "game": "Away @ Home", "market_display": "MONEYLINE",
+            "side": "Away", "side_key": "away", "_sort_time": _ts(21, 0), "bets_pct": 35, "money_pct": 30,
+        }
+        history = pd.DataFrame([
+            dict(common, timestamp=_ts(19, 0), current_line="Away @ -100"),
+            dict(common, timestamp=_ts(19, 10), current_line="Away @ +100"),
+        ])
+        board, timeline = build_anomaly_outputs(history.tail(1), history, as_of=_ts(19, 10))
+        assert board.iloc[0]["line_move_abs"] == 0
+        assert board.iloc[0]["price_move_pct"] == 0
+        assert board.iloc[0]["path"] == "Held"
+        assert timeline["price_odds"].tolist() == [-100, 100]
+
     def test_evidence_roles_follow_pressure_response_not_freeze_classification(self):
         cases = [
             ("freeze-adverse", "SPREAD", "Freeze", "AGAINST", "Held", True),

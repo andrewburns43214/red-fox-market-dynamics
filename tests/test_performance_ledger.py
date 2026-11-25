@@ -516,7 +516,7 @@ def test_all_missing_source_times_remain_explicitly_utc_aware():
     assert str(parsed.dtype) == "datetime64[ns, UTC]"
 
 
-def test_roi_and_clv_use_first_qualified_price_against_final_pregame_close(tmp_path):
+def test_roi_uses_first_qualified_price_but_fallback_is_not_verified_clv(tmp_path):
     row = frozen_row(
         market_sides=json.dumps([
             {"flagged_side": "NY Mets", "open_line": "+130", "current_line": "+100", "reaction": "Contrarian"},
@@ -541,8 +541,9 @@ def test_roi_and_clv_use_first_qualified_price_against_final_pregame_close(tmp_p
     assert audit["decision_line_source"] == "first_qualified_capture"
     assert audit["net_profit_units"] == "1.2"
     assert audit["roi"] == "1.2"
-    assert audit["clv_method"] == "implied_probability_points"
-    assert float(audit["clv"]) == pytest.approx(4.5455)
+    assert audit["closing_price_source"] == "final_pregame_fallback"
+    assert audit["clv_available"] == "no"
+    assert audit["clv"] == ""
 
 
 def test_spread_is_recorded_and_graded_at_first_confirmed_favorite_line(tmp_path):
@@ -576,7 +577,8 @@ def test_spread_is_recorded_and_graded_at_first_confirmed_favorite_line(tmp_path
     assert record["final_pregame_line"] == "+3"
     assert record["closing_line"] == "+3"
     assert record["grade"] == "W"
-    assert record["clv"] == "0.5"
+    assert record["clv_available"] == "no"
+    assert record["clv"] == ""
 
     legacy = pd.read_csv(tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False)
     legacy.at[0, "side"] = "Team A +3"

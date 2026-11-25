@@ -704,7 +704,7 @@ def _frozen_records(frozen: pd.DataFrame, history: pd.DataFrame, source_name: st
             "closing_line_observed_at": _closing_observed_at(row, "closing_line", line, side_record),
             "closing_price_observed_at": _closing_observed_at(row, "closing_price", price, side_record),
             "clv": _text(row.get("clv")), "clv_method": "retained_source" if _text(row.get("clv")) else "",
-            "clv_available": "yes" if _text(row.get("clv")) else "no",
+            "clv_available": "no",
             "score_provider": "espn_ufc_bout" if ufc_verified else "", "score_source": "",
             "score_provider_event_id": ufc_proof.get("bout_id", ""),
             "score_resolved_at": "", "graded_at_utc": "", "grade_evidence_hash": "",
@@ -912,11 +912,19 @@ def _implied_probability(price: object) -> float | None:
 
 
 def _attach_clv(result: pd.DataFrame, index: object, row: pd.Series) -> None:
-    if _text(row.get("clv")):
-        result.at[index, "clv_available"] = "yes"
-        result.at[index, "clv_method"] = _text(row.get("clv_method")) or "retained_source"
-        return
+    result.at[index, "clv_available"] = "no"
     market = _text(row.get("market")).upper()
+    if market not in {"MONEYLINE", "SPREAD"}:
+        return
+    field = "closing_price" if market == "MONEYLINE" else "closing_line"
+    if _text(row.get(f"{field}_source")) != "verified_closing_capture":
+        return
+    entry, close, start = (
+        pd.to_datetime(row.get(column), errors="coerce", utc=True)
+        for column in ("decision_quote_observed_at", f"{field}_observed_at", "scheduled_start")
+    )
+    if not (pd.notna(entry) and pd.notna(close) and pd.notna(start) and entry < close <= start):
+        return
     if market == "MONEYLINE":
         decision = _implied_probability(row.get("decision_price"))
         closing = _implied_probability(row.get("closing_price"))
@@ -925,7 +933,7 @@ def _attach_clv(result: pd.DataFrame, index: object, row: pd.Series) -> None:
             result.at[index, "clv_method"] = "implied_probability_points"
             result.at[index, "clv_available"] = "yes"
             return
-    elif market == "SPREAD":
+    else:
         decision = _number(row.get("decision_line"))
         closing = _number(row.get("closing_line"))
         if decision is not None and closing is not None:
@@ -933,7 +941,6 @@ def _attach_clv(result: pd.DataFrame, index: object, row: pd.Series) -> None:
             result.at[index, "clv_method"] = "side_line_points"
             result.at[index, "clv_available"] = "yes"
             return
-    result.at[index, "clv_available"] = "no"
 
 
 def _attach_results(ledger: pd.DataFrame, scores: pd.DataFrame, *, mlb_cutover=None) -> pd.DataFrame:
@@ -1050,7 +1057,8 @@ def _cohort_row(rows: pd.DataFrame, dimension: str, segment: str, decision: str)
     valid_roi = stake.notna() & profit.notna()
     total_stake = float(stake[valid_roi].sum())
     total_profit = float(profit[valid_roi].sum())
-    clv = pd.to_numeric(rows.get("clv", pd.Series(dtype=str)), errors="coerce")
+    verified = rows.get("clv_available", pd.Series("no", index=rows.index)).eq("yes")
+    clv = pd.to_numeric(rows.get("clv", pd.Series("", index=rows.index)).loc[verified], errors="coerce")
     clv_count = int(clv.notna().sum())
     whipsaw = rows.get("whipsaw_ever", pd.Series("no", index=rows.index)).astype(str).eq("yes")
     fell_off = rows.get("favorite_ever_fell_off", pd.Series("unknown", index=rows.index)).astype(str).eq("yes")
@@ -1381,6 +1389,9 @@ def update_performance_ledger(
             superseded = ~verified & scores["game_id"].isin(mlb_ids & set(scores.loc[verified, "game_id"]))
             scores = scores.loc[~superseded]
         ledger = _attach_results(ledger, scores, mlb_cutover=mlb_cutover)
+    else:
+        for index, row in ledger.iterrows():
+            _attach_clv(ledger, index, row)
     # Outcome attachment may never mutate the frozen classification fields.
     pd.testing.assert_frame_equal(before_classification.reset_index(drop=True), ledger.reindex(columns=CLASSIFICATION_COLUMNS).reset_index(drop=True))
     _atomic_csv(ledger.reindex(columns=LEDGER_COLUMNS), ledger_path)

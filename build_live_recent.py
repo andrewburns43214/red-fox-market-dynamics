@@ -12,6 +12,7 @@ import re
 
 import pandas as pd
 import requests
+from anomaly_board import quote_change
 from mlb_fixtures import match_fixture, read_context, score_payload
 from red_fox_favorite import (
     FAVORITE_COLUMNS,
@@ -517,12 +518,12 @@ def _confirm_favorite_with_final_raw_market(candidate: pd.Series, raw: pd.Series
     )
     if side is None:
         return None
-    market = candidate.get("market_display", "")
+    market = str(candidate.get("market_display", "")).upper()
     previous = _market_movement_value(favorite_side_quote(candidate), market)
     current = _market_movement_value(side.get("current_line", ""), market)
     # In side-relative sportsbook notation, an increasing number is adverse:
     # -105 -> -125 and +3.5 -> +2.5 strengthen; the reverse weakens.
-    if previous is None or current is None or current > previous:
+    if previous is None or current is None or quote_change(previous, current, market) > 0:
         return None
     return side
 

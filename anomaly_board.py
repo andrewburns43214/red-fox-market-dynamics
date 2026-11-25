@@ -712,7 +712,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         # A half-point around a 25-plus-point college spread is common noise;
         # require a full point before it can qualify through line movement.
         line_move_threshold = max(line_move_threshold, 1.0)
-    line_move_abs = abs(current_value - open_value)
+    line_move_abs = abs(quote_change(open_value, current_value, market))
     price_move_pct = _price_move_abs(points)
     move_abs = _movement_abs(points, market)
 
@@ -956,7 +956,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         whipsaw=whipsaw,
         extreme_public=extreme_public,
         move_abs=_movement_severity(market, line_move_abs, price_move_pct),
-        max_excursion=_movement_severity(market, _line_max_excursion(points), _price_max_excursion(points)),
+        max_excursion=_movement_severity(market, _line_max_excursion(points, market), _price_max_excursion(points)),
         stale_dk=stale_dk,
         low_bets_high_money=low_bets_high_money,
         very_low_support=very_low_support and split_alert_eligible,
@@ -1186,11 +1186,22 @@ def _movement_abs(points, market):
     return abs(_motion_value(points[-1], market) - _motion_value(points[0], market))
 
 
-def _line_max_excursion(points):
+def quote_change(previous: float | None, current: float | None, market: str) -> float:
+    """Signed line change, using a continuous American-cent scale at even money."""
+    if previous is None or current is None:
+        return 0
+    if market == "MONEYLINE" and previous * current < 0:
+        # Both -100 and +100 price the same 50% probability. Remove the
+        # 200-cent notation gap while preserving exact same-sign tick distances.
+        return current - previous - (200 if current > 0 else -200)
+    return current - previous
+
+
+def _line_max_excursion(points, market):
     if not points:
         return 0.0
     open_value = points[0]["value"]
-    return max(abs(point["value"] - open_value) for point in points)
+    return max(abs(quote_change(open_value, point["value"], market)) for point in points)
 
 
 def _price_move_abs(points):
@@ -1544,7 +1555,7 @@ def _first_anomaly_seen(points, reaction, path_label, stale_dk, market, latest_r
             if last_dir and cur_dir != last_dir:
                 path_changes += 1
             last_dir = cur_dir
-        line_move_abs = abs(point["value"] - open_value)
+        line_move_abs = abs(quote_change(open_value, point["value"], market))
         price_move_abs = abs(point.get("implied_pct", open_price) - open_price) if open_price is not None and point.get("implied_pct") is not None else 0.0
         move_abs = abs(_motion_value(point, market) - _motion_value(points[0], market))
         meaningful_move = move_abs >= move_threshold if market == "MONEYLINE" else (

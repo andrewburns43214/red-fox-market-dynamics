@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 
 import pandas as pd
+from anomaly_board import quote_change
 from nhl_release_config import official_nhl_favorite
 from ufc_bout_integrity import (PROOF as UFC_PROOF, read_market_proof as ufc_market_proof,
                                 retain_favorite_quotes as retain_ufc_quotes, row_proof as ufc_row_proof)
@@ -857,18 +858,16 @@ def _apply_visibility_lock(
             review_minutes = _visibility_review_minutes(identity[0])
             lock_minutes = _visibility_lock_minutes(identity[0])
             if minutes > review_minutes:
-                reason = "Favorite market temporarily absent; awaiting a second consecutive nonqualifying scrape."
-                if _review_confirmed(reviews, key, "removal", now, row):
-                    review_records.append(_review_record(row, at, "applied", "removal", _latest_review_reason(reviews, key) or reason))
-                    continue
+                reason = "Favorite market absent; waiting for fresh selected-side evidence or an existing freshness veto."
                 held = row.copy()
-                held["favorite_reason"] = "Favorite held through a single missing-market capture."
+                held["favorite_reason"] = reason
                 held["favorite_review_state"] = "pending_removal"
                 held["favorite_review_reason"] = reason
                 held["favorite_review_at"] = at
                 held["_visibility_restored"] = "true"
                 additions.append(held)
-                review_records.append(_review_record(row, at, "pending", "removal", reason))
+                if not _review_already_recorded(reviews, key, "missing_market"):
+                    review_records.append(_review_record(row, at, "missing_market", "removal", reason))
             elif minutes <= review_minutes:
                 if (identity[0] in {"ufc", "nhl"} or cfb_spread_favorite(row)) and minutes <= lock_minutes:
                     reason = f"Mandatory T−{lock_minutes:g} {identity[0].upper()} requalification failed: market unavailable."
@@ -1093,7 +1092,7 @@ def _apply_visibility_lock(
                         review_records.append(_review_record(row, at, "pending", "addition", reason))
             elif not raw_favorite and active:
                 hard, _, reason = _material_removal(row, source)
-                confirmed = _review_confirmed(reviews, key, "removal", now, source)
+                confirmed = _review_confirmed(reviews, key, "removal", now, source, observed_row=row)
                 if hard or confirmed:
                     if confirmed:
                         reason = _latest_review_reason(reviews, key) or reason
@@ -1193,7 +1192,7 @@ def _apply_visibility_lock(
                     review_records.append(_review_record(row, at, "pending", "addition", reason))
         else:
             hard, material, reason = _material_removal(row, source)
-            confirmed = _review_confirmed(reviews, key, "removal", now, source)
+            confirmed = _review_confirmed(reviews, key, "removal", now, source, observed_row=row)
             if confirmed:
                 reason = _latest_review_reason(reviews, key) or reason
             if hard or confirmed:
@@ -1313,11 +1312,11 @@ def tracked_entry_quote(row: dict | pd.Series) -> tuple[str, str]:
 def _review_source_observed_at(row: pd.Series, side_name: object) -> str:
     identity = _side_identity(side_name)
     side = next((item for item in _sides(row) if _side_identity(item.get("flagged_side")) == identity), {})
-    return str(side.get("source_latest_at") or row.get("state_as_of_utc") or "").strip()
+    return str(side.get("source_latest_at") or "").strip()
 
 
 def _review_confirmed(history: pd.DataFrame, key: tuple[str, str, str], action: str, now: pd.Timestamp,
-                      candidate: pd.Series | None) -> bool:
+                      candidate: pd.Series | None, *, observed_row: pd.Series | None = None) -> bool:
     scoped = _review_rows(history, key)
     identity = _favorite_review_identity(candidate)
     if scoped.empty or not all(identity):
@@ -1336,10 +1335,19 @@ def _review_confirmed(history: pd.DataFrame, key: tuple[str, str, str], action: 
         scoped = scoped.iloc[interruptions[-1] + 1:]
     if scoped.empty:
         return False
-    pending_times = pd.to_datetime(scoped["recorded_at"], errors="coerce", utc=True)
-    gaps = (now - pending_times).dt.total_seconds() / 60
-    if action == "addition" and (nba_public_favorite(candidate) or mlb_static_favorite(candidate)) and not _fresh_pending_source(scoped, key, candidate):
+    observed_row = candidate if observed_row is None else observed_row
+    current_source = pd.to_datetime(
+        _review_source_observed_at(observed_row, candidate.get("favorite_side")), errors="coerce", utc=True,
+    )
+    sources = pd.to_datetime(scoped.get("source_observed_at", pd.Series("", index=scoped.index)),
+                             errors="coerce", utc=True, format="mixed")
+    if pd.isna(current_source) or current_source > now or not sources.notna().any() or current_source <= sources.max():
         return False
+    # Retries of a capture neither confirm it nor restart its existing time window.
+    previous_max = sources.ffill().cummax().shift()
+    distinct = sources.notna() & (previous_max.isna() | sources.gt(previous_max))
+    pending_times = pd.to_datetime(scoped.loc[distinct, "recorded_at"], errors="coerce", utc=True, format="mixed")
+    gaps = (now - pending_times).dt.total_seconds() / 60
     if key[0].lower() in {"ncaaf", "cfb"}:
         return bool(gaps.iloc[0] >= CONFIG.ncaaf_confirmation_min_gap_minutes)
     if key[0].lower() in {"ufc", "nhl"}:
@@ -1348,11 +1356,6 @@ def _review_confirmed(history: pd.DataFrame, key: tuple[str, str, str], action: 
             CONFIG.primary_moneyline_confirmation_max_gap_minutes,
             inclusive="both",
         )
-        if key[0].lower() == 'ufc' and candidate is not None and ufc_market_proof(candidate):
-            current_source = pd.to_datetime(_review_source_observed_at(candidate,candidate.get('favorite_side')),
-                                            errors='coerce',utc=True)
-            previous_sources = pd.to_datetime(scoped['source_observed_at'],errors='coerce',utc=True,format='mixed')
-            valid_gap &= previous_sources.lt(current_source)
         return bool(valid_gap.any())
     return bool(0 < gaps.iloc[-1] <= CONFIG.visibility_confirmation_gap_minutes)
 
@@ -1400,7 +1403,7 @@ def _review_record(row: pd.Series, at: str, state: str, action: str, reason: str
 
 def _clear_pending_review(history: pd.DataFrame, records: list[dict], row: pd.Series, key: tuple[str, str, str], at: str) -> None:
     scoped = _review_rows(history, key)
-    if not scoped.empty and str(scoped.iloc[-1].get("review_state", "")) == "pending":
+    if not scoped.empty and scoped.iloc[-1].get("review_state") in {"pending", "missing_market"}:
         records.append(_review_record(row, at, "cleared", str(scoped.iloc[-1].get("review_action", "")), "Pending review condition cleared."))
 
 
@@ -1423,7 +1426,7 @@ def _material_addition(row: pd.Series) -> tuple[bool, str]:
     sport = str(row.get("sport", "")).lower()
     opened = _line_value(evidence.get("open_line"), market)
     current = _line_value(evidence.get("current_line"), market)
-    move = abs(current - opened) if opened is not None and current is not None else 0
+    move = abs(quote_change(opened, current, market))
     if market == "MONEYLINE":
         material = move >= 15
         threshold = "15-cent Moneyline move"
@@ -1507,7 +1510,7 @@ def _material_removal(row: pd.Series, source: pd.Series | None) -> tuple[bool, b
             f"Material closing removal: implied probability moved {against:g} points against "
             f"the Favorite (threshold {threshold:g}).",
         )
-    against = (current - previous) if previous is not None and current is not None else 0
+    against = quote_change(previous, current, market)
     threshold = 15 if market == "MONEYLINE" else (
         1.5 if sport in {"nba", "ncaab", "cbb"}
         else CONFIG.ncaaf_adverse_move_threshold if sport in {"ncaaf", "cfb"}
@@ -1554,7 +1557,7 @@ def _confirmed_prior_favorite_recovery(row: pd.Series, source: pd.Series | None)
     market = str(row.get("market_display", "")).upper()
     archived = _line_value(favorite_side_quote(source), market)
     current = _line_value(side.get("current_line", ""), market)
-    if archived is None or current is None or current > archived:
+    if archived is None or current is None or quote_change(archived, current, market) > 0:
         return False, ""
     return True, "Previously confirmed Favorite restored after the qualifying market move fully returned and held."
 

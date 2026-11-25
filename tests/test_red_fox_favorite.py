@@ -61,6 +61,18 @@ def is_favorite(frame, index=0):
     return frame.iloc[index].red_fox_favorite == "true"
 
 
+def track_fresh_capture(frame, data_dir, *, as_of, **options):
+    """Provide selected quote timestamps for synthetic source collections."""
+    frame = frame.copy()
+    for index, row in frame.iterrows():
+        sides = json.loads(row["market_sides"])
+        for record in sides:
+            if not record.get("source_latest_at"):
+                record["source_latest_at"] = as_of
+        frame.at[index, "market_sides"] = json.dumps(sides)
+    return update_favorite_tracking(frame, data_dir, as_of=as_of, **options)
+
+
 @pytest.mark.parametrize("sport", ["nba", "ncaab"])
 def test_nov24_one_point_exception_requires_two_fresh_confirmations(sport, tmp_path):
     def capture(at, ml_direction="TOWARD"):
@@ -283,7 +295,7 @@ def test_ncaaf_requires_two_qualifying_observations_ten_minutes_apart(tmp_path):
     states = []
     for captured in ("2026-09-06T20:00:00Z", "2026-09-06T20:05:00Z", "2026-09-06T20:10:00Z"):
         raw = apply_red_fox_favorites(pd.DataFrame([spread]), as_of=captured)
-        published = update_favorite_tracking(raw, tmp_path, as_of=captured)
+        published = track_fresh_capture(raw, tmp_path, as_of=captured)
         states.append(published.iloc[0].red_fox_favorite)
     assert states == ["false", "false", "true"]
     shadow = pd.read_csv(tmp_path / "red_fox_favorite_shadow.csv", dtype=str, keep_default_na=False)
@@ -301,7 +313,7 @@ def test_ncaaf_active_favorite_must_requalify_at_t20(tmp_path):
     spread = market("ncaaf", "SPREAD", pair_for(ncaaf_candidate()), supported_side="Away +4")
     spread["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:00:00Z", "2026-09-06T19:10:00Z"):
-        published = update_favorite_tracking(
+        published = track_fresh_capture(
             apply_red_fox_favorites(pd.DataFrame([spread]), as_of=captured), tmp_path, as_of=captured,
         )
     assert published.iloc[0].red_fox_favorite == "true"
@@ -311,7 +323,7 @@ def test_ncaaf_active_favorite_must_requalify_at_t20(tmp_path):
     adverse["market_sides"] = json.dumps(pair_for(candidate))
     adverse["supported_side"] = "Away +4"
     raw = apply_red_fox_favorites(pd.DataFrame([adverse]), as_of="2026-09-06T20:40:00Z")
-    locked = update_favorite_tracking(raw, tmp_path, as_of="2026-09-06T20:40:00Z")
+    locked = track_fresh_capture(raw, tmp_path, as_of="2026-09-06T20:40:00Z")
     assert locked.iloc[0].red_fox_favorite == "false"
     assert locked.iloc[0].favorite_late_invalidated == "true"
     assert "T−20 requalification failed" in locked.iloc[0].favorite_reason
@@ -947,7 +959,7 @@ def test_basketball_uses_normal_two_capture_protection_against_one_cycle_falloff
 
     for captured in ("2026-09-06T18:00:00Z", "2026-09-06T18:15:00Z"):
         board = apply_red_fox_favorites(pd.DataFrame([qualifying_spread, confirming_ml]), as_of=captured)
-        published = update_favorite_tracking(board, tmp_path, as_of=captured)
+        published = track_fresh_capture(board, tmp_path, as_of=captured)
     assert published.loc[published.market_display.eq("SPREAD"), "red_fox_favorite"].iloc[0] == "true"
 
     weak_spread = dict(qualifying_spread)
@@ -960,7 +972,7 @@ def test_basketball_uses_normal_two_capture_protection_against_one_cycle_falloff
     board = apply_red_fox_favorites(
         pd.DataFrame([weak_spread, confirming_ml]), as_of="2026-09-06T18:30:00Z",
     )
-    published = update_favorite_tracking(board, tmp_path, as_of="2026-09-06T18:30:00Z")
+    published = track_fresh_capture(board, tmp_path, as_of="2026-09-06T18:30:00Z")
 
     assert published.loc[published.market_display.eq("SPREAD"), "red_fox_favorite"].iloc[0] == "true"
     assert "single nonqualifying capture" in published.loc[
@@ -1065,7 +1077,7 @@ def test_confirmed_market_translation_is_atomic_inside_closing_review_window(tmp
 
     for captured in ("2026-09-06T19:20:00Z", "2026-09-06T19:30:00Z"):
         initial = apply_red_fox_favorites(pd.DataFrame([spread, confirming_only_ml]), as_of=captured)
-        published = update_favorite_tracking(initial, tmp_path, as_of=captured)
+        published = track_fresh_capture(initial, tmp_path, as_of=captured)
     assert published.loc[published.market_display.eq("SPREAD"), "red_fox_favorite"].iloc[0] == "true"
 
     qualifying_ml = dict(confirming_only_ml)
@@ -1082,7 +1094,7 @@ def test_confirmed_market_translation_is_atomic_inside_closing_review_window(tmp
     translated = apply_red_fox_favorites(
         pd.DataFrame([spread, qualifying_ml]), as_of="2026-09-06T20:30:00Z",
     )
-    published = update_favorite_tracking(translated, tmp_path, as_of="2026-09-06T20:30:00Z")
+    published = track_fresh_capture(translated, tmp_path, as_of="2026-09-06T20:30:00Z")
 
     assert published.loc[published.market_display.eq("MONEYLINE"), "red_fox_favorite"].iloc[0] == "true"
     assert published.loc[published.market_display.eq("SPREAD"), "red_fox_favorite"].iloc[0] == "false"
@@ -1274,10 +1286,10 @@ def test_tracking_retains_full_favorite_handoff_candidate_after_board_disappeara
     source["kickoff_iso"] = "2026-09-13T00:35:00Z"
     source["state_as_of_utc"] = "2026-09-12T23:11:03Z"
     qualified = result([source])
-    update_favorite_tracking(qualified, tmp_path, as_of="2026-09-12T23:01:50Z")
+    track_fresh_capture(qualified, tmp_path, as_of="2026-09-12T23:01:50Z")
     qualified = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-12T23:11:50Z")
-    update_favorite_tracking(qualified, tmp_path, as_of="2026-09-12T23:11:50Z")
-    update_favorite_tracking(pd.DataFrame(columns=qualified.columns), tmp_path, as_of="2026-09-12T23:21:43Z")
+    track_fresh_capture(qualified, tmp_path, as_of="2026-09-12T23:11:50Z")
+    track_fresh_capture(pd.DataFrame(columns=qualified.columns), tmp_path, as_of="2026-09-12T23:21:43Z")
     candidates = pd.read_csv(tmp_path / "red_fox_favorite_freeze_candidates.csv", dtype=str, keep_default_na=False)
     assert len(candidates) == 1
     assert candidates.iloc[0].favorite_side == "Florida Atlantic +4"
@@ -1308,7 +1320,7 @@ def test_ufc_and_nhl_require_two_qualifying_observations_fifteen_minutes_apart(
     states = []
     for captured in ("2026-09-06T20:00:00Z", "2026-09-06T20:10:00Z", "2026-09-06T20:15:00Z"):
         raw = apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured)
-        published = update_favorite_tracking(raw, tmp_path, as_of=captured)
+        published = track_fresh_capture(raw, tmp_path, as_of=captured)
         states.append(published.iloc[0].red_fox_favorite)
     assert states == ["false", "false", "true"]
     assert published.iloc[0].favorite_rule_version == (
@@ -1321,13 +1333,13 @@ def test_ufc_kickoff_handoff_does_not_create_a_false_falloff(tmp_path: Path):
     source = active_primary_moneyline("ufc", candidate, game_id="ufc-started", supported_side="Candidate")
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:00:00Z", "2026-09-06T19:15:00Z"):
-        published = update_favorite_tracking(
+        published = track_fresh_capture(
             apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured),
             tmp_path, as_of=captured,
         )
     assert published.iloc[0].red_fox_favorite == "true"
 
-    after_start = update_favorite_tracking(
+    after_start = track_fresh_capture(
         apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T21:01:00Z"),
         tmp_path, as_of="2026-09-06T21:01:00Z",
     )
@@ -1335,7 +1347,7 @@ def test_ufc_kickoff_handoff_does_not_create_a_false_falloff(tmp_path: Path):
     assert after_start.iloc[0].favorite_review_state == "locked_at_start"
 
     empty = after_start.iloc[0:0].copy()
-    update_favorite_tracking(empty, tmp_path, as_of="2026-09-06T21:06:00Z")
+    track_fresh_capture(empty, tmp_path, as_of="2026-09-06T21:06:00Z")
     tracking = pd.read_csv(tmp_path / "red_fox_favorite_tracking.csv", dtype=str, keep_default_na=False)
     assert tracking.iloc[-1].favorite_state == "qualified"
     assert not tracking.favorite_state.eq("not_qualified").any()
@@ -1346,20 +1358,20 @@ def test_ufc_single_soft_failure_is_held_but_second_failure_removes_with_exact_r
     source = active_primary_moneyline("ufc", candidate, game_id="ufc-soft", supported_side="Candidate")
     source["kickoff_iso"] = "2026-09-06T23:00:00Z"
     for captured in ("2026-09-06T20:00:00Z", "2026-09-06T20:15:00Z"):
-        update_favorite_tracking(
+        track_fresh_capture(
             apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured),
             tmp_path, as_of=captured,
         )
 
     unconfirmed = dict(source, supported_side="")
-    first = update_favorite_tracking(
+    first = track_fresh_capture(
         apply_red_fox_favorites(pd.DataFrame([unconfirmed]), as_of="2026-09-06T20:25:00Z"),
         tmp_path, as_of="2026-09-06T20:25:00Z",
     )
     assert first.iloc[0].red_fox_favorite == "true"
     assert first.iloc[0].favorite_review_state == "pending_removal"
 
-    second = update_favorite_tracking(
+    second = track_fresh_capture(
         apply_red_fox_favorites(pd.DataFrame([unconfirmed]), as_of="2026-09-06T20:40:00Z"),
         tmp_path, as_of="2026-09-06T20:40:00Z",
     )
@@ -1374,7 +1386,7 @@ def test_ufc_and_nhl_hard_risk_removes_immediately(tmp_path: Path, sport: str, r
     source = active_primary_moneyline(sport, candidate, game_id=f"{sport}-risk", supported_side="Candidate")
     source["kickoff_iso"] = "2026-09-06T23:00:00Z"
     for captured in ("2026-09-06T20:00:00Z", "2026-09-06T20:15:00Z"):
-        update_favorite_tracking(
+        track_fresh_capture(
             apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured),
             tmp_path, as_of=captured,
         )
@@ -1384,7 +1396,7 @@ def test_ufc_and_nhl_hard_risk_removes_immediately(tmp_path: Path, sport: str, r
         sport, risky_candidate, game_id=f"{sport}-risk", supported_side="Candidate",
     )
     risky["kickoff_iso"] = source["kickoff_iso"]
-    removed = update_favorite_tracking(
+    removed = track_fresh_capture(
         apply_red_fox_favorites(pd.DataFrame([risky]), as_of="2026-09-06T20:20:00Z"),
         tmp_path, as_of="2026-09-06T20:20:00Z",
     )
@@ -1397,7 +1409,7 @@ def test_ufc_t30_requalification_rejects_adverse_probability_move(tmp_path: Path
     source = active_primary_moneyline("ufc", candidate, game_id="ufc-lock", supported_side="Candidate")
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:00:00Z", "2026-09-06T19:15:00Z"):
-        update_favorite_tracking(
+        track_fresh_capture(
             apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured),
             tmp_path, as_of=captured,
         )
@@ -1409,7 +1421,7 @@ def test_ufc_t30_requalification_rejects_adverse_probability_move(tmp_path: Path
     adverse["kickoff_iso"] = source["kickoff_iso"]
     raw = apply_red_fox_favorites(pd.DataFrame([adverse]), as_of="2026-09-06T20:35:00Z")
     assert raw.iloc[0].red_fox_favorite == "true"
-    locked = update_favorite_tracking(raw, tmp_path, as_of="2026-09-06T20:35:00Z")
+    locked = track_fresh_capture(raw, tmp_path, as_of="2026-09-06T20:35:00Z")
     assert locked.iloc[0].red_fox_favorite == "false"
     assert locked.iloc[0].favorite_late_invalidated == "true"
     assert "implied probability moved" in locked.iloc[0].favorite_late_invalidated_reason
@@ -1438,38 +1450,40 @@ def test_established_favorite_requires_two_nonqualifying_scrapes_before_t40(tmp_
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:20:00Z", "2026-09-06T19:30:00Z"):
         qualified = apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured)
-        update_favorite_tracking(qualified, tmp_path, as_of=captured)
+        track_fresh_capture(qualified, tmp_path, as_of=captured)
     lost = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T19:40:00Z")
     lost["red_fox_favorite"] = "false"
     lost["favorite_state"] = "not_qualified"
-    held = update_favorite_tracking(lost, tmp_path, as_of="2026-09-06T19:40:00Z")
+    held = track_fresh_capture(lost, tmp_path, as_of="2026-09-06T19:40:00Z")
     assert held.iloc[0].red_fox_favorite == "true"
     assert held.iloc[0].favorite_review_state == "pending_removal"
     tracking = pd.read_csv(tmp_path / "red_fox_favorite_tracking.csv", dtype=str, keep_default_na=False)
     assert tracking.iloc[-1].favorite_state == "qualified"
-    recovered = update_favorite_tracking(
+    recovered = track_fresh_capture(
         apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T19:50:00Z"),
         tmp_path, as_of="2026-09-06T19:50:00Z",
     )
     assert recovered.iloc[0].red_fox_favorite == "true"
     second_loss = lost.copy()
-    removed = update_favorite_tracking(second_loss, tmp_path, as_of="2026-09-06T20:00:00Z")
+    removed = track_fresh_capture(second_loss, tmp_path, as_of="2026-09-06T20:00:00Z")
     assert removed.iloc[0].red_fox_favorite == "true"
-    removed = update_favorite_tracking(second_loss, tmp_path, as_of="2026-09-06T20:10:00Z")
+    removed = track_fresh_capture(second_loss, tmp_path, as_of="2026-09-06T20:10:00Z")
     assert removed.iloc[0].red_fox_favorite == "false"
 
 
-def test_missing_market_requires_two_scrapes_to_remove_established_favorite_before_t40(tmp_path: Path):
+def test_missing_market_remains_held_until_existing_freshness_veto(tmp_path: Path):
     source = market("ncaaf", "SPREAD", pair_for(ncaaf_candidate(bets=30, money=20)))
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:20:00Z", "2026-09-06T19:30:00Z"):
         qualified = apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured)
-        update_favorite_tracking(qualified, tmp_path, as_of=captured)
+        track_fresh_capture(qualified, tmp_path, as_of=captured)
     empty = pd.DataFrame(columns=apply_red_fox_favorites(pd.DataFrame([source])).columns)
-    held = update_favorite_tracking(empty, tmp_path, as_of="2026-09-06T19:40:00Z")
+    held = track_fresh_capture(empty, tmp_path, as_of="2026-09-06T19:40:00Z")
     assert len(held) == 1
     assert held.iloc[0].red_fox_favorite == "true"
-    removed = update_favorite_tracking(empty, tmp_path, as_of="2026-09-06T19:50:00Z")
+    retried = track_fresh_capture(empty, tmp_path, as_of="2026-09-06T19:50:00Z")
+    assert retried.iloc[0].red_fox_favorite == "true"
+    removed = track_fresh_capture(empty, tmp_path, as_of="2026-09-06T20:01:00Z")
     assert removed.empty
 
 
@@ -1478,11 +1492,11 @@ def test_review_window_keeps_confirmed_favorite_from_nonmaterial_falloff(tmp_pat
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:40:00Z", "2026-09-06T19:50:00Z"):
         qualified = apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured)
-        update_favorite_tracking(qualified, tmp_path, as_of=captured)
+        track_fresh_capture(qualified, tmp_path, as_of=captured)
     lost = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T20:30:00Z")
     lost["red_fox_favorite"] = "false"
     lost["favorite_state"] = "not_qualified"
-    locked = update_favorite_tracking(lost, tmp_path, as_of="2026-09-06T20:30:00Z")
+    locked = track_fresh_capture(lost, tmp_path, as_of="2026-09-06T20:30:00Z")
     assert locked.iloc[0].red_fox_favorite == "true"
     assert locked.iloc[0].favorite_state == "qualified"
 
@@ -1508,11 +1522,11 @@ def test_material_addition_can_confirm_between_t40_and_t20(tmp_path: Path):
     source = market("ncaaf", "SPREAD", pair_for(candidate))
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
     first = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T20:25:00Z")
-    pending = update_favorite_tracking(first, tmp_path, as_of="2026-09-06T20:25:00Z")
+    pending = track_fresh_capture(first, tmp_path, as_of="2026-09-06T20:25:00Z")
     assert pending.iloc[0].red_fox_favorite == "false"
     assert pending.iloc[0].favorite_review_state == "pending_addition"
     second = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T20:35:00Z")
-    applied = update_favorite_tracking(second, tmp_path, as_of="2026-09-06T20:35:00Z")
+    applied = track_fresh_capture(second, tmp_path, as_of="2026-09-06T20:35:00Z")
     assert applied.iloc[0].red_fox_favorite == "true"
     assert applied.iloc[0].favorite_review_state == "applied_addition"
 
@@ -1528,7 +1542,7 @@ def test_prior_favorite_restores_after_full_stable_whipsaw_recovery_inside_t20(t
     )
     original["kickoff_iso"] = "2026-09-25T00:15:00Z"
     for captured in ("2026-09-24T20:22:00Z", "2026-09-24T20:32:00Z"):
-        update_favorite_tracking(
+        track_fresh_capture(
             apply_red_fox_favorites(pd.DataFrame([original]), as_of=captured),
             tmp_path, as_of=captured,
         )
@@ -1546,7 +1560,7 @@ def test_prior_favorite_restores_after_full_stable_whipsaw_recovery_inside_t20(t
     retraced["kickoff_iso"] = original["kickoff_iso"]
     for captured in ("2026-09-24T21:52:00Z", "2026-09-24T22:02:00Z"):
         raw = apply_red_fox_favorites(pd.DataFrame([retraced]), as_of=captured)
-        reviewed = update_favorite_tracking(raw, tmp_path, as_of=captured)
+        reviewed = track_fresh_capture(raw, tmp_path, as_of=captured)
     assert reviewed.iloc[0].red_fox_favorite == "false"
 
     restored_side = side(
@@ -1562,13 +1576,13 @@ def test_prior_favorite_restores_after_full_stable_whipsaw_recovery_inside_t20(t
     restored["kickoff_iso"] = original["kickoff_iso"]
     assert apply_red_fox_favorites(pd.DataFrame([restored]), as_of="2026-09-24T23:52:00Z").iloc[0].red_fox_favorite == "false"
 
-    first = update_favorite_tracking(
+    first = track_fresh_capture(
         apply_red_fox_favorites(pd.DataFrame([restored]), as_of="2026-09-24T23:52:00Z"),
         tmp_path, as_of="2026-09-24T23:52:00Z",
     )
     assert first.iloc[0].red_fox_favorite == "false"
     assert first.iloc[0].favorite_review_state == "pending_addition"
-    second = update_favorite_tracking(
+    second = track_fresh_capture(
         apply_red_fox_favorites(pd.DataFrame([restored]), as_of="2026-09-25T00:02:00Z"),
         tmp_path, as_of="2026-09-25T00:02:00Z",
     )
@@ -1583,7 +1597,7 @@ def test_material_removal_requires_two_scrapes_between_t40_and_t20(tmp_path: Pat
     original["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:30:00Z", "2026-09-06T19:40:00Z"):
         qualified = apply_red_fox_favorites(pd.DataFrame([original]), as_of=captured)
-        update_favorite_tracking(qualified, tmp_path, as_of=captured)
+        track_fresh_capture(qualified, tmp_path, as_of=captured)
     moved_side = side("Away +4.5", "+4.5 (-110)", bets=40, money=40, open_line="+4.5 (-110)")
     moved = market("ncaaf", "SPREAD", pair_for(moved_side), supported_side="Away +4.5")
     moved["kickoff_iso"] = "2026-09-06T21:00:00Z"
@@ -1591,7 +1605,7 @@ def test_material_removal_requires_two_scrapes_between_t40_and_t20(tmp_path: Pat
         raw = apply_red_fox_favorites(pd.DataFrame([moved]), as_of=captured)
         raw["red_fox_favorite"] = "false"
         raw["favorite_state"] = "not_qualified"
-        reviewed = update_favorite_tracking(raw, tmp_path, as_of=captured)
+        reviewed = track_fresh_capture(raw, tmp_path, as_of=captured)
         assert reviewed.iloc[0].red_fox_favorite == expected
 
 
@@ -1601,13 +1615,13 @@ def test_t20_hard_supported_side_flip_suppresses_display_and_preserves_archive(t
     source["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:30:00Z", "2026-09-06T19:40:00Z"):
         qualified = apply_red_fox_favorites(pd.DataFrame([source]), as_of=captured)
-        update_favorite_tracking(qualified, tmp_path, as_of=captured)
+        track_fresh_capture(qualified, tmp_path, as_of=captured)
     lost = apply_red_fox_favorites(pd.DataFrame([source]), as_of="2026-09-06T20:45:00Z")
     lost["red_fox_favorite"] = "false"
     lost["favorite_state"] = "not_qualified"
     # A confirmed opposite supported side overrides the ordinary T-20 lock.
     lost["supported_side"] = "Opponent -4.5"
-    locked = update_favorite_tracking(lost, tmp_path, as_of="2026-09-06T20:45:00Z")
+    locked = track_fresh_capture(lost, tmp_path, as_of="2026-09-06T20:45:00Z")
     assert locked.iloc[0].red_fox_favorite == "false"
     assert locked.iloc[0].favorite_state == "not_qualified"
     assert locked.iloc[0].favorite_late_invalidated == "true"
@@ -1623,7 +1637,7 @@ def test_t20_destructive_line_reversal_suppresses_even_if_raw_rules_still_qualif
     original = market("ncaaf", "SPREAD", pair_for(original_side), game_id="destructive")
     original["kickoff_iso"] = "2026-09-06T21:00:00Z"
     for captured in ("2026-09-06T19:30:00Z", "2026-09-06T19:40:00Z"):
-        update_favorite_tracking(apply_red_fox_favorites(pd.DataFrame([original]), as_of=captured), tmp_path, as_of=captured)
+        track_fresh_capture(apply_red_fox_favorites(pd.DataFrame([original]), as_of=captured), tmp_path, as_of=captured)
 
     reversed_side = ncaaf_candidate("Away +4", "+4 (-110)", "+5.5 (-110)", bets=25, money=20)
     reversed_row = market(
@@ -1632,7 +1646,7 @@ def test_t20_destructive_line_reversal_suppresses_even_if_raw_rules_still_qualif
     reversed_row["kickoff_iso"] = "2026-09-06T21:00:00Z"
     raw = apply_red_fox_favorites(pd.DataFrame([reversed_row]), as_of="2026-09-06T20:45:00Z")
     assert raw.iloc[0].red_fox_favorite == "true"
-    suppressed = update_favorite_tracking(raw, tmp_path, as_of="2026-09-06T20:45:00Z")
+    suppressed = track_fresh_capture(raw, tmp_path, as_of="2026-09-06T20:45:00Z")
     assert suppressed.iloc[0].red_fox_favorite == "false"
     assert suppressed.iloc[0].favorite_late_invalidated == "true"
     assert "moved 0.5 against" in suppressed.iloc[0].favorite_late_invalidated_reason
@@ -1643,7 +1657,7 @@ def test_t20_full_return_to_active_game_week_opener_is_hard_removal(tmp_path: Pa
     original = market("nfl", "SPREAD", pair_for(original_side), game_id="jets")
     original["kickoff_iso"] = "2026-09-27T17:05:00Z"
     for captured in ("2026-09-27T15:30:00Z", "2026-09-27T15:40:00Z"):
-        update_favorite_tracking(
+        track_fresh_capture(
             apply_red_fox_favorites(pd.DataFrame([original]), as_of=captured), tmp_path, as_of=captured
         )
 
@@ -1655,7 +1669,7 @@ def test_t20_full_return_to_active_game_week_opener_is_hard_removal(tmp_path: Pa
     returned["kickoff_iso"] = "2026-09-27T17:05:00Z"
     returned["return_toward_open"] = "true"
     returned["active_worsening_reversal"] = "true"
-    reviewed = update_favorite_tracking(
+    reviewed = track_fresh_capture(
         apply_red_fox_favorites(pd.DataFrame([returned]), as_of="2026-09-27T16:52:00Z"),
         tmp_path, as_of="2026-09-27T16:52:00Z",
     )
