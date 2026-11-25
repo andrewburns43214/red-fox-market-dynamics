@@ -1005,6 +1005,14 @@ def _apply_visibility_lock(
                         review_records.append(_review_record(row, at, "late_invalidated", "removal", reason))
                     continue
             if raw_favorite == active:
+                if raw_favorite and cfb_spread_favorite(row):
+                    _restore_favorite(result, index, row)
+                    result.at[index, "_visibility_restored"] = "false"
+                    evidence = json.loads(row["favorite_supporting_evidence"])
+                    evidence["closing_anchor_quote"] = _closing_review_quote(source)
+                    result.at[index, "favorite_supporting_evidence"] = json.dumps(evidence, separators=(",", ":"))
+                    result.at[index, "favorite_reason"] = "Official Favorite locked at T-20 after same-path requalification."
+                    _set_review(result, index, "requalified_at_lock", result.at[index, "favorite_reason"], at)
                 _clear_pending_review(reviews, review_records, row, key, at)
             elif raw_favorite:
                 material, reason = _material_addition(row)
@@ -1253,6 +1261,19 @@ def _material_addition(row: pd.Series) -> tuple[bool, str]:
     return material, f"Material closing addition: {threshold}; observed move {move:g}."
 
 
+def _closing_review_quote(source: pd.Series | None) -> str:
+    if source is None:
+        return ""
+    if cfb_spread_favorite(source):
+        try:
+            evidence = json.loads(str(source.get("favorite_supporting_evidence") or "{}"))
+        except (TypeError, ValueError):
+            evidence = {}
+        if isinstance(evidence, dict) and evidence.get("closing_anchor_quote"):
+            return str(evidence["closing_anchor_quote"])
+    return favorite_side_quote(source)
+
+
 def _material_removal(row: pd.Series, source: pd.Series | None) -> tuple[bool, bool, str]:
     if source is None:
         return False, False, "No prior frozen Favorite evidence was available."
@@ -1285,7 +1306,7 @@ def _material_removal(row: pd.Series, source: pd.Series | None) -> tuple[bool, b
             return True, True, f"Hard removal: blocking {sport.upper()} risk state {', '.join(risks)}."
         if str(side.get("data_badge", "")) != "Clean":
             return True, True, f"Hard removal: {sport.upper()} market data is no longer Clean."
-    previous_line = favorite_side_quote(source)
+    previous_line = _closing_review_quote(source)
     previous = _line_value(previous_line, market)
     current = _line_value(side.get("current_line", ""), market)
     if market == "MONEYLINE" and sport in {"ufc", "nhl"}:

@@ -521,6 +521,18 @@ def _merge_final_raw_confirmation(candidate: pd.Series, raw: pd.Series, side: di
     return merged
 
 
+def _cfb_lock_proved(candidate: pd.Series, scoped: pd.DataFrame, kickoff: pd.Timestamp) -> bool:
+    if scoped.empty or pd.isna(kickoff):
+        return False
+    latest = scoped.iloc[-1]
+    return (
+        latest.get("favorite_state") == "qualified"
+        and latest["_recorded_at"] >= kickoff - pd.Timedelta(minutes=20)
+        and latest.get("favorite_rule_version") == candidate.get("favorite_rule_version")
+        and _favorite_side_identity(latest.get("favorite_side")) == _favorite_side_identity(candidate.get("favorite_side"))
+    )
+
+
 def favorite_handoff_states(
     candidates: pd.DataFrame,
     now: datetime,
@@ -577,12 +589,7 @@ def favorite_handoff_states(
             # qualified Favorite when the final paired market still confirms
             # the same side. Explicit invalidations and adverse moves remain.
             if cfb_spread_favorite(candidate):
-                latest_qualified = (
-                    latest_qualified and not scoped.empty
-                    and scoped.iloc[-1].get("favorite_rule_version") == candidate.get("favorite_rule_version")
-                    and _favorite_side_identity(scoped.iloc[-1].get("favorite_side"))
-                    == _favorite_side_identity(candidate.get("favorite_side"))
-                )
+                latest_qualified = _cfb_lock_proved(candidate, scoped, kickoff)
             keep.append(latest_qualified or confirmed_side is not None)
         favorite = favorite.loc[pd.Series(keep, index=favorite.index)]
     elif not favorite.empty:
@@ -614,11 +621,13 @@ def suppress_stale_retained_favorites(
     but leaves an older stale Favorite badge customer-visible until retention
     expires.
     """
-    if frame.empty or tracking is None or tracking.empty:
+    if frame.empty:
         return frame
     required = {"sport", "game_id", "market_display", "kickoff_iso"}
-    if not required.issubset(frame.columns) or "recorded_at" not in tracking:
+    if not required.issubset(frame.columns):
         return frame
+    if tracking is None or "recorded_at" not in tracking:
+        tracking = pd.DataFrame(columns=[*required, "recorded_at"])
 
     result = frame.copy()
     favorite = result.get(
@@ -646,13 +655,17 @@ def suppress_stale_retained_favorites(
         if pd.notna(kickoff):
             scoped = scoped[scoped["_recorded_at"].notna() & (scoped["_recorded_at"] <= kickoff)]
         scoped = scoped.sort_values("_recorded_at", kind="mergesort")
-        if scoped.empty or str(scoped.iloc[-1].get("favorite_state", "")) == "qualified":
+        extra = cfb_spread_favorite(row)
+        if extra:
+            if _cfb_lock_proved(row, scoped, kickoff):
+                continue
+        elif scoped.empty or str(scoped.iloc[-1].get("favorite_state", "")) == "qualified":
             continue
         result.at[index, "red_fox_favorite"] = "false"
         result.at[index, "favorite_state"] = "not_qualified"
         result.at[index, "favorite_reason"] = (
-            "Favorite removed: a later explicit pregame falloff superseded the "
-            "archived qualified snapshot."
+            "CFB spread Favorite withheld at handoff without matching T-20 requalification."
+            if extra else "Favorite removed: a later explicit pregame falloff superseded the archived qualified snapshot."
         )
     return result
 

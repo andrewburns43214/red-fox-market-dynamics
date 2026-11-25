@@ -1863,3 +1863,17 @@ def test_cfb_extra_does_not_displace_active_legacy_moneyline(tmp_path):
                                       cfb_enabled=frozenset({CFB_PUBLIC_FOLLOW}))
     assert current.iloc[0].favorite_review_state != "pending_addition"
     assert is_favorite(current,1)
+
+
+def test_cfb_extra_handoff_requires_a_verified_closing_review(tmp_path):
+    from build_live_recent import favorite_handoff_states
+    from red_fox_favorite import CFB_PUBLIC_FOLLOW
+
+    enabled = frozenset({CFB_PUBLIC_FOLLOW})
+    for at in ("2026-11-24T22:00:00Z", "2026-11-24T22:10:00Z"):
+        result = update_favorite_tracking(cfb_extra_capture(at), tmp_path, at, cfb_enabled=enabled)
+    assert is_favorite(result)
+    read = lambda f: pd.read_csv(tmp_path / f, dtype=str, keep_default_na=False)
+    frozen = favorite_handoff_states(read("red_fox_favorite_freeze_candidates.csv"),
+        pd.Timestamp("2026-11-25T01:05:00Z"), read("red_fox_favorite_tracking.csv"))
+    assert frozen.empty
