@@ -5,6 +5,8 @@ import pandas as pd
 import red_fox_favorite as favorite
 
 PUBLIC = "public_backed_moneyline"
+PUBLIC_MIN_TICKETS = 80
+PUBLIC_MIN_MONEY = 55
 CROSSOVER = "genuine_crossover"
 CROSSOVER_LOW = "genuine_crossover_contrarian_splits"
 LANES = (PUBLIC, CROSSOVER, CROSSOVER_LOW)
@@ -34,7 +36,7 @@ def profile(lane, side, other, opener, current):
             or abs(values[0] + values[2] - 100) > 2 or abs(values[1] + values[3] - 100) > 2):
         return "Invalid, capped or noncomplementary paired splits"
     bets, money, opp_bets, opp_money = values
-    if lane == PUBLIC and (bets < 80 or money < 55):
+    if lane == PUBLIC and (bets < PUBLIC_MIN_TICKETS or money < PUBLIC_MIN_MONEY):
         return "Public tickets below 80% or handle below 55%"
     if lane == CROSSOVER_LOW and not (bets <= 45 and money <= 45 and bets < opp_bets and money < opp_money):
         return "Existing Contrarian split restriction failed"

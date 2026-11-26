@@ -6,6 +6,7 @@ import pandas as pd
 
 from build_live_recent import favorite_handoff_states
 from favorite_nhl_goalies import _atomic, goalie_evidence, paper_dir, read_league_cache
+from favorite_split_evidence import capture as capture_review_evidence, matchup_rows
 from nhl_release_config import enabled, switches
 from nhl_release_policy import (PUBLIC, CROSSOVER, advance, assess, fair, first_confirmed_by_pathway,
                                 first_confirmed_lane, handoff_issue)
@@ -90,6 +91,7 @@ def unique_pairs(row, away, home):
 def record_paper(board, history, cache, schedule, saved, active, observed, *,
                  official_since=None, blocked_games=frozenset()):
     second=int(observed.timestamp())
+    games_by_vendor = matchup_rows(board) if official_since is not None else {}
     if not board.empty:
         current=board[board.sport.eq("nhl")&board.market_display.eq("MONEYLINE")]
         for row in current.to_dict("records"):
@@ -158,15 +160,34 @@ def record_paper(board, history, cache, schedule, saved, active, observed, *,
                     if official_since is not None:
                         quote.update(source_at=at.isoformat(), line=str(side["current_line"]),
                                      team_name=side["flagged_side"])
-                    if status["status"]=="verified_change" and state.get("entry") and not state.get("removed"):
-                        state["removed"]="Verified confirmed goalie pair changed"
-                        game["events"].append(dict(lane=lane,stage="removed",quote=quote,reason=state["removed"],
-                                                   evaluated_at=second))
-                        continue
-                    issue,hard=assess(row,side["flagged_side"],lane,at,game["open"].get(selected),status)
-                    stage=advance(state,clock,remaining,quote,issue,hard)
+                    goalie_change = status["status"] == "verified_change" and state.get("entry") and not state.get("removed")
+                    if goalie_change:
+                        state["removed"] = issue = "Verified confirmed goalie pair changed"
+                        stage = "removed"
+                    else:
+                        issue, hard = assess(row, side["flagged_side"], lane, at, game["open"].get(selected), status)
+                        pending_start = (official_since is not None and not state.get("entry")
+                                         and 40 < remaining <= 1440 and clock > state.get("last", 0)
+                                         and any(0 < clock - previous <= 1800 for previous in state.get("pending", ())))
+                        stage = advance(state, clock, remaining, quote, issue, hard)
+                        if pending_start and issue and not state.get("pending") and not stage:
+                            stage = "initial_confirmation_failed"
                     if stage:
-                        game["events"].append(dict(lane=lane,stage=stage,quote=quote,reason=state.get("removed","")))
+                        event = dict(lane=lane, stage=stage, quote=quote, reason=state.get("removed", "") or issue)
+                        if goalie_change:
+                            event["evaluated_at"] = second
+                        if official_since is not None:
+                            identity = {"favorite_side": side["flagged_side"], "favorite_pathway": lane}
+                            phase = "removal" if stage == "removed" else "initial_confirmation"
+                            evidence = capture_review_evidence(
+                                row, identity, games_by_vendor.get(("nhl", row["game_id"])), phase=phase,
+                            )
+                            evidence["outcome_lookup"].update(
+                                archive="var/nhl-qualification/replacement_official_state.json", league_event_id=key,
+                            )
+                            evidence["published_lane_at_capture"] = game.get("selected_lane") == lane_key
+                            event["decision_evidence"] = evidence
+                        game["events"].append(event)
             if "selected_lane" not in game and (winner:=first_confirmed_lane(game["lanes"])) is not None:
                 game["selected_lane"]=winner
     for key,game in saved.items():

@@ -102,6 +102,13 @@ class FavoriteConfig:
 
 
 CONFIG = FavoriteConfig()
+NBA_PUBLIC_MIN_TICKETS = 70
+NBA_PUBLIC_MIN_MONEY = 55
+CFB_PUBLIC_MIN_TICKETS = 70
+CFB_PUBLIC_MIN_MONEY = 55
+CFB_HIGH_MAX_TICKETS = 35
+CFB_HIGH_MIN_GAP = 15
+CLOSING_ADDITION_MAX_SPLIT = 35
 VISIBILITY_INVALIDATED_FAVORITES = frozenset({
     ("ncaaf", "34603681", "SPREAD"),  # Jacksonville State @ Ohio, 2026-09-12
 })
@@ -163,12 +170,12 @@ TRACKING_COLUMNS = [
     "final_pregame_line", "final_pregame_market_read", "final_pregame_rank", "board_rank", "reaction", "path",
     "whipsaw_state", "cross_market_state", "supporting_evidence", "snapshot_id",
     "disappearance_reason", "closing_line", "clv", "result",
-    "source_observed_at", "entry_observed_at", "transition_reason",
+    "source_observed_at", "entry_observed_at", "transition_reason", "decision_evidence",
 ]
 REVIEW_COLUMNS = [
     "recorded_at", "sport", "game_id", "game", "market_display", "kickoff_iso",
     "review_state", "review_action", "favorite_side", "current_line", "reason",
-    "favorite_rule_version", "source_observed_at",
+    "favorite_rule_version", "source_observed_at", "decision_evidence",
 ]
 REVIEW_BOARD_COLUMNS = ["favorite_review_state", "favorite_review_reason", "favorite_review_at"]
 SHADOW_COLUMNS = [
@@ -478,7 +485,10 @@ def update_favorite_tracking(
                 if all(identity):
                     first_entries.setdefault((*key, *identity), prior)
 
+    from favorite_split_evidence import capture, matchup_rows
+
     records = []
+    removal_games = None
     current_keys = set()
     for index, row in current.iterrows():
         key = tuple(str(row.get(column, "")) for column in keys)
@@ -534,9 +544,13 @@ def update_favorite_tracking(
             gate_reason = str(row.get("_favorite_gate_reason", "")).strip()
             if gate_reason and gate_reason.lower() != "nan":
                 review_reason = " | ".join(dict.fromkeys(filter(None, (review_reason, gate_reason))))
+            if removal_games is None:
+                removal_games = matchup_rows(board)
+            decision_evidence = capture(row, prior, removal_games.get(key[:2]), phase="removal")
             record.update(
                 recorded_at=at,
                 favorite_state="not_qualified",
+                decision_evidence=json.dumps(decision_evidence, separators=(",", ":"), default=str),
                 disappearance_reason=rejection or "current qualification gates no longer satisfied",
                 source_observed_at=_review_source_observed_at(row, prior.get("favorite_side", "")),
                 transition_reason=review_reason or str(row.get("favorite_reason", "")).strip(),
@@ -556,7 +570,9 @@ def update_favorite_tracking(
         record = {column: str(prior.get(column, "")) for column in TRACKING_COLUMNS}
         record.update(recorded_at=at, favorite_state="not_qualified",
                       disappearance_reason="no longer published or eligible",
-                      source_observed_at="", transition_reason="Market absent from the evaluated board.")
+                      source_observed_at="", transition_reason="Market absent from the evaluated board.",
+                      decision_evidence=json.dumps(capture(prior, prior, None, phase="removal", market_available=False),
+                                                   separators=(",", ":"), default=str))
         records.append(record)
 
     if records:
@@ -966,7 +982,7 @@ def _apply_visibility_lock(
             _late_invalidate_favorite(result, index, stale_reason, at)
             _set_review(result, index, "late_invalidated", stale_reason, at)
             if not _review_already_recorded(reviews, key, "late_invalidated"):
-                review_records.append(_review_record(row, at, "late_invalidated", "removal", stale_reason))
+                review_records.append(_review_record(row, at, "late_invalidated", "removal", stale_reason, evidence_identity=source))
             continue
 
         if active and mlb_static_favorite(source) and raw_favorite and not mlb_static_favorite(row):
@@ -1022,7 +1038,7 @@ def _apply_visibility_lock(
                     reason = "11/24 NHL Favorite invalidated after a confirmed starting-goalie change."
                     _late_invalidate_favorite(result, index, reason, at)
                     _set_review(result, index, "late_invalidated", reason, at)
-                    review_records.append(_review_record(row, at, "late_invalidated", "removal", reason))
+                    review_records.append(_review_record(row, at, "late_invalidated", "removal", reason, evidence_identity=source))
                     continue
 
         if raw_favorite and not active and str(row.get("favorite_rule_version")) == NOV24_VERSION:
@@ -1134,7 +1150,7 @@ def _apply_visibility_lock(
                 if not _review_already_recorded(reviews, key, "late_invalidated"):
                     review_records.append(_review_record(row, at, "late_invalidated", "removal", reason, identity_row=source)
                                           if source is not None and cfb_spread_favorite(source)
-                                          else _review_record(row, at, "late_invalidated", "removal", reason))
+                                          else _review_record(row, at, "late_invalidated", "removal", reason, evidence_identity=source))
                 continue
             if active:
                 _restore_favorite(result, index, source)
@@ -1147,7 +1163,7 @@ def _apply_visibility_lock(
                     _late_invalidate_favorite(result, index, reason, at)
                     _set_review(result, index, "late_invalidated", reason, at)
                     if not _review_already_recorded(reviews, key, "late_invalidated"):
-                        review_records.append(_review_record(row, at, "late_invalidated", "removal", reason))
+                        review_records.append(_review_record(row, at, "late_invalidated", "removal", reason, evidence_identity=source))
                     continue
             if raw_favorite == active:
                 if raw_favorite and cfb_spread_favorite(row):
@@ -1212,6 +1228,10 @@ def _apply_visibility_lock(
         for index, row in result.loc[picked & added].iterrows():
             if (row["sport"], row["game_id"]) in legacy_games:
                 _late_invalidate_favorite(result, index, "11/24 pathway superseded by the existing Favorite pathway.", at)
+    from favorite_split_evidence import annotate_reviews, matchup_rows
+
+    if review_records:
+        annotate_reviews(review_records, history, matchup_rows(current))
     _write_review(review_path, reviews, review_records)
     if "_nov24_added_support" in result:
         provisional = result["_nov24_added_support"].eq(True) & ~result["red_fox_favorite"].map(_truthy)
@@ -1384,7 +1404,7 @@ def _latest_review_reason(history: pd.DataFrame, key: tuple[str, str, str]) -> s
 
 
 def _review_record(row: pd.Series, at: str, state: str, action: str, reason: str,
-                   *, identity_row: pd.Series | None = None) -> dict:
+                   *, identity_row: pd.Series | None = None, evidence_identity: pd.Series | None = None) -> dict:
     candidate = row if identity_row is None else identity_row
     favorite_side = candidate.get("favorite_side", "")
     proof = ufc_market_proof(candidate) if row.get("sport") == "ufc" else {}
@@ -1398,13 +1418,17 @@ def _review_record(row: pd.Series, at: str, state: str, action: str, reason: str
         "current_line": row.get("current_line", ""), "reason": reason,
         "favorite_rule_version": candidate.get("favorite_rule_version", ""),
         "source_observed_at": _review_source_observed_at(row, favorite_side),
+        "_observation": row,
+        "_candidate": candidate if evidence_identity is None else evidence_identity,
     }
 
 
 def _clear_pending_review(history: pd.DataFrame, records: list[dict], row: pd.Series, key: tuple[str, str, str], at: str) -> None:
     scoped = _review_rows(history, key)
     if not scoped.empty and scoped.iloc[-1].get("review_state") in {"pending", "missing_market"}:
-        records.append(_review_record(row, at, "cleared", str(scoped.iloc[-1].get("review_action", "")), "Pending review condition cleared."))
+        pending = scoped.iloc[-1]
+        records.append(_review_record(row, at, "cleared", str(pending.get("review_action", "")),
+                                      "Pending review condition cleared.", evidence_identity=pending))
 
 
 def _set_review(frame: pd.DataFrame, index: object, state: str, reason: str, at: str) -> None:
@@ -1420,7 +1444,7 @@ def _material_addition(row: pd.Series) -> tuple[bool, str]:
         evidence = {}
     bets = _number(evidence.get("bets_pct"))
     money = _number(evidence.get("money_pct"))
-    if bets is None or money is None or bets > 35 or money > 35:
+    if bets is None or money is None or max(bets, money) > CLOSING_ADDITION_MAX_SPLIT:
         return False, "Closing support is not sufficiently low (requires no more than 35% bets and money)."
     market = str(row.get("market_display", "")).upper()
     sport = str(row.get("sport", "")).lower()
@@ -2198,8 +2222,8 @@ def _cfb_spread_decision(row: pd.Series, game: pd.DataFrame, history: pd.DataFra
         money = _number(side.get("money_pct"))
         if bets is None or money is None:
             continue
-        public = CFB_PUBLIC_FOLLOW in allowed and bets >= 70 and money >= 55
-        high = CFB_HIGH_MONEY in allowed and bets <= 35 and money - bets >= 15
+        public = CFB_PUBLIC_FOLLOW in allowed and bets >= CFB_PUBLIC_MIN_TICKETS and money >= CFB_PUBLIC_MIN_MONEY
+        high = CFB_HIGH_MONEY in allowed and bets <= CFB_HIGH_MAX_TICKETS and money - bets >= CFB_HIGH_MIN_GAP
         if not (public or high):
             continue
         current = _line_value(side.get("current_line"), "SPREAD")
@@ -2263,7 +2287,7 @@ def _nba_public_selection(game: pd.DataFrame, now: pd.Timestamp) -> tuple | None
             if price is None or not -165 <= price <= -100 or not _base_quality(side):
                 continue
             bets, money = _number(side.get("bets_pct")), _number(side.get("money_pct"))
-            if bets is None or money is None or bets < 70 or money < 55:
+            if bets is None or money is None or bets < NBA_PUBLIC_MIN_TICKETS or money < NBA_PUBLIC_MIN_MONEY:
                 continue
             spread = _matching_market_side(game, "SPREAD", name)
             if not spread or not _base_quality(spread):
