@@ -971,8 +971,9 @@ FAVORITE_AVERAGE_ARCHIVE_QUOTES = {
 # Both observations precede their scheduled starts.
 
 
-def _favorite_average_entry_odds(graded_favorites: pd.DataFrame) -> dict | None:
+def _favorite_priced_performance(graded_favorites: pd.DataFrame) -> dict | None:
     profits = []
+    settled_units = []
     fallback_quotes = 0
     for row in graded_favorites.itertuples(index=False):
         price = _text(row.decision_price)
@@ -987,15 +988,21 @@ def _favorite_average_entry_odds(graded_favorites: pd.DataFrame) -> dict | None:
         if profit is None or not math.isfinite(profit) or profit <= 0:
             continue
         profits.append(profit)
+        settled_units.append(profit if row.grade == "W" else -1.0 if row.grade == "L" else 0.0)
         fallback_quotes += int(fallback)
     if not profits:
         return None
     mean_profit = math.fsum(profits) / len(profits)
     american = mean_profit * 100 if mean_profit >= 1 else -100 / mean_profit
+    net_units = math.fsum(settled_units)
     return {
-        "american": round(american, 6),
-        "priced_selections": len(profits),
-        "pregame_fallback_quotes": fallback_quotes,
+        "average_entry_odds": {
+            "american": round(american, 6),
+            "priced_selections": len(profits),
+            "pregame_fallback_quotes": fallback_quotes,
+        },
+        "net_units": round(net_units, 6),
+        "roi": round(net_units / len(profits), 6),
     }
 
 
@@ -1520,9 +1527,13 @@ def update_performance_ledger(
     }
     favorite_rows = graded[graded["favorite_qualified"].eq("yes")]
     favorite_sport = favorite_rows.get("sport", pd.Series("", index=favorite_rows.index, dtype=str)).astype(str).str.strip().str.lower()
+    overall_priced = _favorite_priced_performance(favorite_rows)
     sport_records = []
+    sport_priced = {}
     for sport, label in FAVORITE_SPORTS:
-        sport_records.append({"sport": sport, "label": label, **summary(favorite_rows[favorite_sport.eq(sport)])})
+        sport_rows = favorite_rows[favorite_sport.eq(sport)]
+        sport_records.append({"sport": sport, "label": label, **summary(sport_rows)})
+        sport_priced[sport] = _favorite_priced_performance(sport_rows)
     sport_records.sort(key=lambda record: (
         record["win_rate_excluding_pushes"] == "",
         -float(record["win_rate_excluding_pushes"] or 0),
@@ -1550,7 +1561,8 @@ def update_performance_ledger(
     )
     _atomic_json({
         **result["favorites"],
-        "average_entry_odds": _favorite_average_entry_odds(favorite_rows),
+        "average_entry_odds": overall_priced["average_entry_odds"] if overall_priced else None,
+        "priced_performance": {"overall": overall_priced, "sports": sport_priced},
         **({"cfb_spread_pathways": new_path_records} if new_path_records else {}),
         **({"nhl_replacement_pathways": nhl_path_records}
            if ledger["favorite_rule_version"].isin(OFFICIAL_VERSIONS.values()).any() else {}),

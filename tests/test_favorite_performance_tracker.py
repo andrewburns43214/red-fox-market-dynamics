@@ -71,6 +71,12 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
     assert payload["games"][0]["bets_pct"] == "0"
     assert payload["games"][0]["money_pct"] == ""
     assert payload["games"][2]["money_pct"] == "61"
+    priced = payload["priced_performance"]
+    assert priced["overall"]["net_units"] == 0.818182
+    assert priced["overall"]["roi"] == 0.204545
+    assert priced["sports"]["nba"]["net_units"] == -1.0
+    assert priced["sports"]["nba"]["roi"] == -1.0
+    assert priced["sports"]["nhl"] is None
     assert "ledger_id" not in payload["games"][0]
     assert "score_provider_event_id" not in payload["games"][0]
 
@@ -107,6 +113,10 @@ def test_average_entry_odds_include_manual_and_audited_quotes_without_rewriting_
     assert payload["average_entry_odds"] == {
         "american": 109.346405, "priced_selections": 3, "pregame_fallback_quotes": 1,
     }
+    overall = payload["priced_performance"]["overall"]
+    assert overall["net_units"] == 2.480392
+    assert overall["roi"] == 0.826797
+    assert payload["priced_performance"]["sports"]["nfl"] == overall
     ledger = pd.read_csv(tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False)
     assert ledger.loc[ledger["ledger_id"].eq(recovery["ledger_id"]), "decision_price"].item() == ""
 
@@ -159,7 +169,7 @@ def test_tracker_uses_one_shared_payload_for_desktop_mobile_and_guide():
     assert "favoritePerformanceFooter()" in BOARD
     assert 'class="favorite-guide-record"' in BOARD
     assert "footer.innerHTML=favoritePerformanceFooterContent(text);" in BOARD
-    assert 'class="favorite-guide-sports-title">Record by sport</div>' in BOARD
+    assert 'class="favorite-guide-sports-title">By sport</div>' in BOARD
     assert 'class="favorite-performance-sports" aria-label="Red Fox Favorite win percentage by sport"' in BOARD
     assert "10 Graded" not in BOARD
 
@@ -167,7 +177,8 @@ def test_tracker_uses_one_shared_payload_for_desktop_mobile_and_guide():
 def test_every_favorite_logo_routes_to_the_same_information_modal():
     assert "favorite=game.hasFavorite?favoriteBadge(favoriteContext):'';" in BOARD
     assert "onclick=\"event.stopPropagation();hideFavoriteTooltip();openFavoriteBadge(this)\"" in BOARD
-    assert 'class="favorite-performance-logo-button"' in BOARD
+    assert '<button class="favorite-performance-main" type="button" aria-haspopup="dialog"' in BOARD
+    assert 'aria-label="Open Red Fox Favorite information and performance"' in BOARD
     assert "onclick=\"event.stopPropagation();openSignalGuide('Red Fox Favorite')\"" in BOARD
     assert "overlay.classList.toggle('favorite-guide-open',requested==='Red Fox Favorite');" in BOARD
     assert "overlay.classList.remove('open','favorite-guide-open');" in BOARD
@@ -180,7 +191,7 @@ def test_performance_widget_uses_crisp_cropped_brand_gold_frame_and_sans_record_
     assert ".favorite-performance-desktop .favorite-performance-brand{width:136px;left:-15px;top:-9px;}" in BOARD
     assert "object-fit:cover" not in BOARD
     assert "border:1px solid #c79532;" in BOARD
-    assert ".sandbox-action-widgets .favorite-performance-logo-button" in BOARD
+    assert ".sandbox-action-widgets .favorite-performance-main" in BOARD
     assert "background:transparent!important" in BOARD
 
 

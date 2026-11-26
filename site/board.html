@@ -1293,7 +1293,39 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .favorite-guide-copy ul { margin:5px 0 12px; padding-left:20px; }
 .favorite-guide-copy li { margin:0 0 6px; }
 .favorite-guide-record { margin-top:11px; padding-top:10px; border-top:1px solid var(--border); color:var(--text); font:700 11px/1.35 var(--mono); font-variant-numeric:tabular-nums; }
-.favorite-guide-overall{display:flex;align-items:baseline;justify-content:space-between;gap:14px}.favorite-guide-overall strong{font:800 10px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase}.favorite-guide-overall span{font:800 12px/1.3 var(--sans);font-variant-numeric:tabular-nums}.favorite-guide-sports-title{margin:14px 0 8px;color:var(--text3);font:800 9px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase}.favorite-guide-sports{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.favorite-guide-sport{display:grid;gap:4px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg2)}.favorite-guide-sport-name{color:var(--text3);font:800 8px/1 var(--sans);letter-spacing:.08em}.favorite-guide-sport-record{color:var(--text);font:800 11px/1 var(--sans);font-variant-numeric:tabular-nums}.favorite-guide-sport-rate{color:var(--green);font:800 11px/1 var(--sans);font-variant-numeric:tabular-nums}
+.favorite-guide-overall{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 9px}
+.favorite-guide-overall h3{margin:0;font:800 12px/1.1 var(--sans);letter-spacing:.06em;text-transform:uppercase}
+.favorite-guide-date{color:var(--text2);font:600 10px/1.3 var(--sans)}
+.favorite-guide-sports-title{margin:15px 0 8px;color:var(--text2);font:750 9px/1.1 var(--sans);letter-spacing:.08em;text-transform:uppercase}
+.favorite-guide-sports{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.favorite-guide-sport{min-width:0;display:grid;gap:8px;padding:10px 11px;border:1px solid var(--border);border-radius:8px;background:#f8f7f4;color:var(--text)}
+.favorite-guide-sport-header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.favorite-guide-sport-name{font:800 10px/1 var(--sans);letter-spacing:.07em}
+.favorite-guide-sport-arrow{width:5px;height:5px;margin-right:2px;border-top:1.4px solid currentColor;border-right:1.4px solid currentColor;color:var(--text3);transform:rotate(45deg)}
+.favorite-guide-sport-metrics,.favorite-guide-pricing,.favorite-guide-summary{display:grid;gap:7px}
+.favorite-guide-sport-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+.favorite-guide-pricing{grid-template-columns:repeat(3,minmax(0,1fr));padding-top:8px;border-top:1px solid var(--border)}
+.favorite-guide-summary{grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px}
+.favorite-guide-metric{display:grid;align-content:start;gap:3px}
+.favorite-guide-metric-value{white-space:nowrap;font:750 12px/1.15 var(--sans);font-variant-numeric:tabular-nums}
+.favorite-guide-summary .favorite-guide-metric-value{font-size:14px}
+.favorite-guide-metric-label{color:var(--text2);font:600 8px/1.2 var(--sans);white-space:nowrap}
+.favorite-guide-metric-value.is-positive{color:#15775f}
+.favorite-guide-metric-value.is-negative{color:#a1433b}
+.favorite-guide-record .favorite-guide-return-note{margin:9px 0 0;color:var(--text2);font:500 9px/1.4 var(--sans)}
+@media(max-width:850px){
+  .favorite-guide-sports{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .favorite-guide-sport{gap:6px;padding:8px}
+  .favorite-guide-pricing{gap:4px;padding-top:6px}
+  .favorite-guide-summary{gap:6px;padding:9px 8px}
+  .favorite-guide-metric-value,.favorite-guide-summary .favorite-guide-metric-value{font-size:10px}
+}
+@media(max-width:360px){
+  .favorite-guide-summary{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 6px}
+  .favorite-guide-sport{padding:7px}
+  .favorite-guide-metric-value{font-size:9px}
+  .favorite-guide-metric-label{font-size:7.5px}
+}
 .td-total .mr { display:inline-flex; align-items:center; margin:2px 4px 2px 0 !important; padding:3px 6px; font-size:8px; line-height:1.1; }
 .mr-aligned { background:#e7f3f1; color:#176454; border-color:#c7e4de; }
 .mr-freeze { background:#e7f0f6; color:#2f607f; border-color:#c8dce9; }
@@ -1531,7 +1563,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none!important}.content{min-height:100vh;background:#faf9f6}.board{padding:76px 28px 0}.lpane{border:0;box-shadow:none;border-radius:0;background:transparent}.pane-hdr{padding:0 0 13px;background:transparent;border:0}.pane-title,.mfilters{display:none!important}.tscroll{border-top:1px solid var(--border)}.signal-guide-btn{display:inline-flex}.board-tools input{background:#fff}.statusbar{display:none}
 .app-board-controls{position:fixed;top:0;left:280px;right:0;z-index:110;display:flex;align-items:center;gap:8px;min-height:62px;padding:13px 28px;background:#fffdfb;border-bottom:1px solid var(--border);font:700 10px var(--sans);letter-spacing:.06em}.app-board-controls>span{color:#20272a}.app-board-controls button{border:1px solid var(--border);border-radius:999px;background:#fff;color:var(--text2);padding:7px 12px;font:500 12px var(--sans);letter-spacing:0;cursor:pointer}.app-board-controls button.active{background:#ed5149;border-color:#ed5149;color:#fff;font-weight:700}.app-board-controls .app-sport-label{margin-left:10px}.app-board-controls label{display:flex;align-items:center;gap:6px;margin-left:auto;border:1px solid var(--border);border-radius:5px;background:#fff;padding:7px 9px;color:var(--text3);font-size:12px;letter-spacing:0}.app-board-controls input{width:180px;border:0;outline:0;background:transparent;color:var(--text);font:500 12px var(--sans)}
 .favorite-performance{display:none;align-items:center;min-width:0;color:var(--text);font-family:var(--sans);white-space:nowrap}.favorite-performance[hidden]{display:none!important}.favorite-performance-brand-crop{position:relative;display:block;flex:0 0 auto;overflow:hidden}.favorite-performance-brand{position:absolute;display:block;max-width:none;height:auto;image-rendering:auto}.favorite-performance-sep{width:1px;height:13px;margin:0 9px;background:var(--border2)}.favorite-performance-record,.favorite-performance-rate{font:700 11px/1 var(--mono);font-variant-numeric:tabular-nums}.favorite-performance-since{color:var(--text3);font:600 9px/1 var(--sans)}
-.favorite-performance-main{display:flex;align-items:center;min-width:0}.favorite-performance-logo-button{display:block;flex:0 0 auto;border:0;background:transparent;padding:0;cursor:pointer}.favorite-performance-logo-button:focus-visible{outline:2px solid var(--red);outline-offset:2px;border-radius:4px}.favorite-performance-sports{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:3px;padding-top:4px;border-top:1px solid rgba(199,149,50,.28);font:800 8px/1 var(--sans);font-variant-numeric:tabular-nums}.favorite-performance-sport{display:inline-flex;gap:3px}.favorite-performance-sport-name{color:var(--text3)}.favorite-performance-sport-rate{color:var(--text)}
+.favorite-performance-main{display:flex;align-items:center;min-width:0;border:0;background:transparent;padding:0;color:inherit;font:inherit;white-space:inherit;cursor:pointer}.favorite-performance-main:focus-visible{outline:2px solid var(--red);outline-offset:2px;border-radius:4px}.favorite-performance-sports{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:3px;padding-top:4px;border-top:1px solid rgba(199,149,50,.28);font:800 8px/1 var(--sans);font-variant-numeric:tabular-nums}.favorite-performance-sport{display:inline-flex;gap:3px}.favorite-performance-sport-name{color:var(--text3)}.favorite-performance-sport-rate{color:var(--text)}
 .favorite-performance-sport[data-favorite-sport]{cursor:pointer}
 .favorite-performance-sport:focus-visible{outline:2px solid var(--red);outline-offset:-2px}
 @media(max-width:850px){body{padding-left:0}.sandbox-rail{display:none}.app-board-controls{position:static;left:auto;right:auto;overflow-x:auto;min-height:0;padding:12px 10px;white-space:nowrap}.app-board-controls label{display:none}.board{padding:14px 10px 0}.topbar,.tabs{display:flex!important}.metricbar{display:none!important}}
@@ -1560,7 +1592,7 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .sandbox-static-search input{width:160px;border:0;outline:0;background:transparent;color:var(--text);font:500 10px var(--sans)}
   .sandbox-action-widgets{display:flex;align-items:center;gap:4px;padding:0 0 7px;border-bottom:1px solid var(--border)}
   .sandbox-action-widgets{position:relative}.sandbox-action-widgets button{display:inline-flex;align-items:center;gap:4px;border:1px solid #050708;border-radius:7px;background:#050708;color:#fff;padding:4px 6px;font:500 8px/1 var(--sans);cursor:pointer}
-  .sandbox-action-widgets .favorite-performance-logo-button,.sandbox-action-widgets .favorite-performance-logo-button:hover,.sandbox-action-widgets .favorite-performance-logo-button:active{display:block;border:0!important;border-radius:4px!important;background:transparent!important;color:inherit!important;padding:0!important;box-shadow:none!important}
+  .sandbox-action-widgets .favorite-performance-main,.sandbox-action-widgets .favorite-performance-main:hover,.sandbox-action-widgets .favorite-performance-main:active{display:flex;gap:0;font:inherit;border:0!important;border-radius:4px!important;background:transparent!important;color:inherit!important;padding:0!important;box-shadow:none!important}
   .favorite-performance-desktop{display:flex;height:27px;margin-left:auto;padding:0 8px;border:1px solid var(--border);border-radius:5px;background:#fff;box-shadow:0 1px 2px rgba(20,33,39,.03)}
   .favorite-performance-mobile{display:none!important}
   .sandbox-action-widgets button svg{width:10px;height:10px;stroke-width:1.9}
@@ -1781,7 +1813,6 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .favorite-performance-mobile .favorite-performance-brand{width:121px;left:-13px;top:-8px;}
   .favorite-performance-mobile .favorite-performance-sep{background:#dfc486;}
   .favorite-performance-mobile .favorite-performance-main{justify-content:center}.favorite-performance-mobile .favorite-performance-sports{justify-content:center;gap:5px;overflow-x:auto}.favorite-performance-mobile .favorite-performance-sport{font-size:7.5px}
-  .favorite-guide-sports{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(min-width:851px) and (max-width:980px){
   .favorite-performance-desktop .favorite-performance-main:has(.favorite-performance-odds){min-height:27px}
@@ -5623,6 +5654,15 @@ async function loadCSV(url){
   try{return await request;}finally{_csvRequests.delete(url);}
 }
 
+function favoriteAverageOddsText(odds, graded){
+  if(!Number.isFinite(odds?.american)||odds.priced_selections<=0) return null;
+  const count=odds.pregame_fallback_quotes;
+  return {
+    label:(odds.american>0?'+':'\u2212')+Math.round(Math.abs(odds.american)),
+    description:odds.priced_selections+' of '+graded+' graded selections priced'
+      +(count?' \u00b7 includes '+count+' frozen pregame fallback '+(count===1?'quote':'quotes'):''),
+  };
+}
 function normalizeFavoritePerformance(payload){
   if(!payload||typeof payload!=='object') return null;
   const wins=Math.max(0,Number.parseInt(payload.wins,10)||0);
@@ -5635,20 +5675,16 @@ function normalizeFavoritePerformance(payload){
     const sport=normSportKey(item&&item.sport), label=String(item&&item.label||sportLabel(sport)).trim();
     const sportWins=Math.max(0,Number.parseInt(item&&item.wins,10)||0), sportLosses=Math.max(0,Number.parseInt(item&&item.losses,10)||0), sportPushes=Math.max(0,Number.parseInt(item&&item.pushes,10)||0);
     const sportDecisions=sportWins+sportLosses;
-    return {sport,label,wins:sportWins,losses:sportLosses,pushes:sportPushes,gradedDecisions:sportDecisions,winPercentage:sportDecisions?sportWins/sportDecisions*100:null};
+    return {sport,label,wins:sportWins,losses:sportLosses,pushes:sportPushes,gradedDecisions:sportDecisions,winPercentage:sportDecisions?sportWins/sportDecisions*100:null,priced:payload.priced_performance?.sports?.[sport]};
   }).filter(item=>item.sport&&item.label).sort((a,b)=>{
     if(a.winPercentage===null) return b.winPercentage===null?a.label.localeCompare(b.label):1;
     if(b.winPercentage===null) return -1;
     return b.winPercentage-a.winPercentage||a.label.localeCompare(b.label);
   });
   const games=Array.isArray(payload.games)?payload.games.filter(row=>row&&['W','L','Push'].includes(row.grade)):null;
-  const odds=payload.average_entry_odds;
-  const averageOdds=Number.isFinite(odds?.american)&&odds.priced_selections>0?{
-    label:(odds.american>0?'+':'\u2212')+Math.round(Math.abs(odds.american)),
-    description:odds.priced_selections+' of '+(gradedDecisions+pushes)+' graded selections priced'
-      +(odds.pregame_fallback_quotes?' · includes '+odds.pregame_fallback_quotes+' frozen pregame fallback quotes':''),
-  }:null;
-  return {wins,losses,pushes,winPercentage:gradedDecisions?wins/gradedDecisions*100:0,trackingStartDate,sports,games,averageOdds,logicRecords:payload.logic_change_records||{}};
+  const averageOdds=favoriteAverageOddsText(payload.average_entry_odds,gradedDecisions+pushes);
+  return {wins,losses,pushes,winPercentage:gradedDecisions?wins/gradedDecisions*100:0,trackingStartDate,sports,games,
+    averageOdds,priced:payload.priced_performance?.overall,logicRecords:payload.logic_change_records||{}};
 }
 function favoritePerformanceDate(value){
   const parsed=new Date(value+'T12:00:00Z');
@@ -5661,16 +5697,39 @@ function favoritePerformanceText(){
     rate:favoritePerformance.winPercentage.toFixed(1)+'%',
     since:'Since '+favoritePerformanceDate(favoritePerformance.trackingStartDate),
     averageOdds:favoritePerformance.averageOdds,
+    priced:favoritePerformance.priced,
+    graded:favoritePerformance.wins+favoritePerformance.losses+favoritePerformance.pushes,
     sports:favoritePerformance.sports.map(item=>({
       ...item,
+      graded:item.wins+item.losses+item.pushes,
       record:`${item.wins}-${item.losses}-${item.pushes}`,
       rate:item.winPercentage===null?'—':item.winPercentage.toFixed(1)+'%',
     })),
   };
 }
+function favoriteGuideMetric(label,value,amount=0){
+  const tone=amount>0?' is-positive':amount<0?' is-negative':'';
+  return `<span class="favorite-guide-metric"><span class="favorite-guide-metric-value${tone}">${escHtml(value)}</span><span class="favorite-guide-metric-label">${escHtml(label)}</span></span>`;
+}
+function favoriteGuidePricedMetrics(item){
+  const {priced}=item;
+  const odds=favoriteAverageOddsText(priced?.average_entry_odds,item.graded);
+  const signed=(value,suffix)=>Number.isFinite(value)?(value>0?'+':value<0?'\u2212':'')+Math.abs(value).toFixed(2)+suffix:'\u2014';
+  const roi=Number.isFinite(priced?.roi)?priced.roi*100:null;
+  return favoriteGuideMetric('ROI',signed(roi,'%'),roi)
+    +favoriteGuideMetric('Net units',signed(priced?.net_units,'u'),priced?.net_units)
+    +favoriteGuideMetric('Avg. odds',odds?.label||'\u2014');
+}
 function favoritePerformanceSportCards(text){
   if(!text||!text.sports.length) return '';
-  return '<div class="favorite-guide-sports-title">Record by sport</div><div class="favorite-guide-sports">'+text.sports.map(item=>`<button class="favorite-guide-sport" type="button" data-favorite-sport="${escHtml(item.sport)}" aria-haspopup="dialog" aria-label="${escHtml(item.label+' '+item.record+', view games')}"><span class="favorite-guide-sport-name">${escHtml(item.label)}</span><span class="favorite-guide-sport-record">${escHtml(item.record)}</span><span class="favorite-guide-sport-rate">${escHtml(item.rate)}</span></button>`).join('')+'</div>';
+  return '<div class="favorite-guide-sports-title">By sport</div><div class="favorite-guide-sports">'+text.sports.map(item=>{
+    const odds=favoriteAverageOddsText(item.priced?.average_entry_odds,item.graded);
+    const description=odds?' title="'+escHtml(odds.description)+'"':'';
+    return `<button class="favorite-guide-sport" type="button" data-favorite-sport="${escHtml(item.sport)}" aria-haspopup="dialog" aria-label="${escHtml(item.label+' '+item.record+', view games')}"${description}>
+      <span class="favorite-guide-sport-header"><span class="favorite-guide-sport-name">${escHtml(item.label)}</span><span class="favorite-guide-sport-arrow" aria-hidden="true"></span></span>
+      <span class="favorite-guide-sport-metrics">${favoriteGuideMetric('Record',item.record)}${favoriteGuideMetric('Win rate',item.rate)}</span>
+      <span class="favorite-guide-pricing">${favoriteGuidePricedMetrics(item)}</span></button>`;
+  }).join('')+'</div>';
 }
 function favoriteHistoryResult(row){
   const result=String(row.final_score||'');
@@ -5757,7 +5816,10 @@ function setupFavoriteHistory(){
 }
 function favoritePerformanceFooterContent(text){
   if(!text) return '';
-  return `<div class="favorite-guide-overall"><strong>Overall record</strong><span>${escHtml(text.record)} · ${escHtml(text.rate)} · ${escHtml(text.since)}</span></div>${favoritePerformanceSportCards(text)}`;
+  const pricingNote=text.averageOdds?' '+escHtml(text.averageOdds.description)+'.':'';
+  return `<div class="favorite-guide-overall"><h3>Performance</h3><span class="favorite-guide-date">${escHtml(text.since)}</span></div>
+    <div class="favorite-guide-summary">${favoriteGuideMetric('Record',text.record)}${favoriteGuideMetric('Win rate',text.rate)}${favoriteGuidePricedMetrics(text)}</div>
+    ${favoritePerformanceSportCards(text)}<p class="favorite-guide-return-note">ROI assumes 1u risked per priced selection.${pricingNote}</p>`;
 }
 function favoritePerformanceFooter(){
   const text=favoritePerformanceText();
@@ -5771,7 +5833,7 @@ function renderFavoritePerformance(){
   document.querySelectorAll('[data-favorite-performance]').forEach(host=>{
     host.hidden=!text;
     const sports=text?text.sports.map(item=>`<span class="favorite-performance-sport" role="button" tabindex="0" data-favorite-sport="${escHtml(item.sport)}" aria-haspopup="dialog" aria-label="${escHtml(item.label+' '+item.record+', view games')}"><span class="favorite-performance-sport-name">${escHtml(item.label)}</span><span class="favorite-performance-sport-rate">${escHtml(item.rate)}</span></span>`).join(''):'';
-    host.innerHTML=text?`<div class="favorite-performance-main"><button class="favorite-performance-logo-button" type="button" onclick="event.stopPropagation();openSignalGuide('Red Fox Favorite')" aria-label="Open Red Fox Favorite information and records"><span class="favorite-performance-brand-crop" aria-hidden="true"><img class="favorite-performance-brand" src="assets/red-fox-favorite.png" alt=""></span></button><span class="favorite-performance-sep" aria-hidden="true"></span><span class="favorite-performance-record">${escHtml(text.record)}</span><span class="favorite-performance-sep" aria-hidden="true"></span><span class="favorite-performance-rate">${escHtml(text.rate)}</span><span class="favorite-performance-sep" aria-hidden="true"></span>${oddsMarkup}<span class="favorite-performance-since">${escHtml(text.since)}</span></div><div class="favorite-performance-sports" aria-label="Red Fox Favorite win percentage by sport">${sports}</div>`:'';
+    host.innerHTML=text?`<button class="favorite-performance-main" type="button" aria-haspopup="dialog" onclick="event.stopPropagation();openSignalGuide('Red Fox Favorite')" aria-label="Open Red Fox Favorite information and performance"><span class="favorite-performance-brand-crop" aria-hidden="true"><img class="favorite-performance-brand" src="assets/red-fox-favorite.png" alt=""></span><span class="favorite-performance-sep" aria-hidden="true"></span><span class="favorite-performance-record">${escHtml(text.record)}</span><span class="favorite-performance-sep" aria-hidden="true"></span><span class="favorite-performance-rate">${escHtml(text.rate)}</span><span class="favorite-performance-sep" aria-hidden="true"></span>${oddsMarkup}<span class="favorite-performance-since">${escHtml(text.since)}</span></button><div class="favorite-performance-sports" aria-label="Red Fox Favorite win percentage by sport">${sports}</div>`:'';
     if(text) host.setAttribute('aria-label',`Red Fox Favorite record ${text.record}, ${text.rate}${averageOdds?', average entry odds '+averageOdds.label:''}, ${text.since}`);
   });
   document.querySelectorAll('.favorite-guide-record').forEach(footer=>{
