@@ -144,7 +144,7 @@ def test_strongest_side_uses_confirmed_backend_support_not_anchor_or_chip_count(
     assert "signalCount=sideSignals(side).length" not in BOARD
     assert "side.evidence_role" in BOARD
     assert "Public Pressure must never" not in BOARD  # implementation, not user-facing prose
-    assert "never a positive vote" in BOARD
+    assert "Read the chip alongside the line or price response." in BOARD
 
 
 def test_evidence_role_chips_use_neutral_context_color_without_changing_movement_colors():
@@ -281,8 +281,8 @@ def test_cross_market_split_badge_is_pair_context_with_mismatch_priority():
 
 
 def test_market_guide_explains_authoritative_supported_side_semantics():
-    assert "['Supported Side', 'A green-highlighted row means Red Fox has confirmed a supported side for that market." in BOARD
-    assert "If neither side is highlighted, no confirmed directional side has been established." in BOARD
+    assert "['Supported Side', 'On the pregame Market Board, green marks the confirmed Supported Side." in BOARD
+    assert BOARD.count("In Live & Recent, green marks the frozen Red Fox Favorite.") == 2
     assert "It does not establish direction or imply a recommendation." in BOARD
     assert "'Contrarian':{cls:'mr-aligned',tip:'Directional." in BOARD
     assert "'Follow':{cls:'mr-aligned',tip:'Directional." in BOARD
@@ -291,7 +291,7 @@ def test_market_guide_explains_authoritative_supported_side_semantics():
     assert "Otherwise, Freeze remains non-directional." in BOARD
     assert "'Watch':{cls:'mr-neutral',tip:'Non-directional." in BOARD
     assert "Market-behavior and context chips do not independently create a Supported Side." in BOARD
-    assert "No green means the market is neutral" in BOARD
+    assert "Open the game details to review the pregame market read." in BOARD
     assert "A highly ranked market can still be neutral and have no green Supported Side." in BOARD
 
 
