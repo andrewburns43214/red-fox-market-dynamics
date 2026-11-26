@@ -2627,11 +2627,10 @@ function marketGuideSection(title,labels,note=''){
 }
 function redFoxFavoriteGuideSection(includeHeading=true){
   return '<div class="signal-guide-section red-fox-favorite-guide">'+(includeHeading?'<h3>Red Fox Favorite</h3>':'')+'<div class="favorite-guide-copy">'+
-    '<p>A selective designation for a confirmed Supported Side that matches Red Fox’s preferred wager profile, including a reasonably actionable range and reliable data.</p>'+
+    '<p>A Red Fox Favorite is a selection that meets the price, market evidence, and data-quality requirements for its sport and market. Confirmation and closing checks vary by pathway. Material integrity issues can still invalidate a Favorite before the event starts.</p>'+
     '<p>Examples of qualifying structures include:</p>'+
     '<ul><li><strong>Lower-support Contrarian</strong> — the lower-supported side receives meaningful movement in its favor.</li><li><strong>Lower-support Freeze / Fade</strong> — concentrated pressure fails to earn the expected response, and Red Fox may support the opposing side as the fade.</li><li><strong>Confirmed Follow</strong> — aligned positioning and movement provide sufficient confirmation in an eligible market.</li></ul>'+
-    '<p>For football and basketball, additions and ordinary removals require two consecutive captures, preventing a one-cycle classification or source-availability change from altering an established Favorite. From 40 to 20 minutes before kickoff, only a confirmed material move can add or remove a Favorite. At 20 minutes, the official Favorite and KPI state lock; later material changes appear in the Favorite review queue without rewriting the play.</p>'+
-    '<p>Red Fox Favorite is a binary, selective designation. It requires a confirmed Supported Side and a qualifying, reliable market setup. Reversals, integrity conflicts, stale data, or other reliability concerns can prevent Favorite status, although Whipsaw alone does not automatically disqualify a market.</p>'+favoritePerformanceFooter()+
+    favoritePerformanceFooter()+
     '</div></div>';
 }
 function marketIntegrityGuideSection(includeHeading=true,selected=''){
@@ -2697,7 +2696,7 @@ function openSignalGuide(selected,favoriteRow){
       marketGuideSection(MARKET_GUIDE_SECTIONS[3][0],MARKET_GUIDE_SECTIONS[3][1])+
       '<div class="signal-guide-section"><h3>Board Fields</h3>'+MARKET_GUIDE_BOARD_FIELDS.map(boardFieldGuideItem).join('')+'</div>'+
       '<div class="signal-guide-section"><h3>Drilldown</h3>'+MARKET_GUIDE_DRILLDOWN_FIELDS.map(boardFieldGuideItem).join('')+'<p class="signal-guide-section-note">Use the full path and milestone view to confirm how the market developed, including meaningful moves, reversals, timing, and the latest state.</p></div>'+
-      '<div class="signal-guide-section"><h3>How to Read Red Fox</h3>'+signalGuideItem('1. Start with Market Read','Understand Red Fox’s interpretation of the selected market.')+signalGuideItem('2. Check Supported Side','Green identifies the one confirmed directional side. No green means the market is neutral, even when the read or rank is notable.')+signalGuideItem('3. Use Market Rank for context','Compare the selected market’s relative significance across the board; rank does not establish direction or imply a recommendation.')+signalGuideItem('4. Treat Favorite as narrower','Red Fox Favorite identifies a selective subset of confirmed Supported Sides that also meet preferred wager and reliability criteria.')+signalGuideItem('5. Validate the context','Use behavior, positioning, movement, integrity, risk, and drilldown evidence to understand why the read was surfaced.')+'</div>';
+      '<div class="signal-guide-section"><h3>How to Read Red Fox</h3>'+signalGuideItem('1. Start with Market Read','Understand Red Fox’s interpretation of the selected market.')+signalGuideItem('2. Check Supported Side','Green identifies the one confirmed directional side. No green means the market is neutral, even when the read or rank is notable.')+signalGuideItem('3. Use Market Rank for context','Compare the selected market’s relative significance across the board; rank does not establish direction or imply a recommendation.')+signalGuideItem('4. Check Favorite qualification','A Red Fox Favorite meets the requirements for its sport, market, and qualification pathway.')+signalGuideItem('5. Validate the context','Use behavior, positioning, movement, integrity, risk, and drilldown evidence to understand why the read was surfaced.')+'</div>';
   }
   overlay.classList.add('open');
 }

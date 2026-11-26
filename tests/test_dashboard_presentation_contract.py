@@ -200,12 +200,11 @@ def test_red_fox_favorite_guide_section_and_tooltip_are_isolated_copy_additions(
     assert intro < favorite < directional
     assert '<h3>Red Fox Favorite</h3>' in BOARD
     assert '<p><strong>Red Fox Favorite</strong></p>' not in BOARD
-    assert "A selective designation for a confirmed Supported Side that matches Red Fox’s preferred wager profile" in BOARD
+    assert "A Red Fox Favorite is a selection that meets the price, market evidence, and data-quality requirements for its sport and market." in BOARD
     assert "based on current DraftKings positioning" not in BOARD
     assert "Lower-support Freeze / Fade" in BOARD
-    assert "reasonably actionable range" in BOARD
-    assert "Red Fox Favorite is a binary, selective designation." in BOARD
-    assert "Whipsaw alone does not automatically disqualify a market." in BOARD
+    assert "Confirmation and closing checks vary by pathway." in BOARD
+    assert "Material integrity issues can still invalidate a Favorite before the event starts." in BOARD
     assert "Matches Red Fox’s preferred wager criteria based on market support, movement, price/number, and data quality." in BOARD
     assert 'aria-describedby="favorite-badge-tooltip"' in BOARD
     assert 'onmouseenter="showFavoriteTooltip(this)"' in BOARD
@@ -380,7 +379,7 @@ def test_market_guide_generalizes_implementation_sensitive_details():
         "meaningful movement",
         "concentrated pressure",
         "lower-supported side",
-        "reasonably actionable range",
+        "price, market evidence, and data-quality requirements",
         "sufficient confirmation",
         "reliable market data",
     ):
@@ -446,8 +445,8 @@ def test_live_recent_green_is_reserved_for_the_exact_favorite_market_side():
 def test_internal_favorite_review_state_is_not_customer_visible():
     assert 'id="favorite-review-queue"' not in BOARD
     assert "function renderFavoriteReviewQueue()" not in BOARD
-    assert "From 40 to 20 minutes before kickoff" in BOARD
-    assert "At 20 minutes, the official Favorite and KPI state lock" in BOARD
+    assert "From 40 to 20 minutes before kickoff" not in BOARD
+    assert "At 20 minutes, the official Favorite and KPI state lock" not in BOARD
 
 
 def test_mobile_counts_and_live_scores_use_centered_sans_numerals():
