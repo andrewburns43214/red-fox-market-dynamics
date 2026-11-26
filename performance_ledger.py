@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 from datetime import datetime, timezone
@@ -943,6 +944,61 @@ def _american_profit(price: object) -> float | None:
     return odds / 100.0 if odds > 0 else 100.0 / abs(odds)
 
 
+# Audited supplemental quotes for the average-entry-odds display. These two
+# grades have a spread but no attached odds in the original ledger. Match the
+# exact retained state before using either quote and leave the ledger intact.
+FAVORITE_AVERAGE_ARCHIVE_QUOTES = {
+    "0bbd0934a6431da48d41": {
+        "market": "SPREAD",
+        "side": "ARI Cardinals +8.5",
+        "observed_at": "2026-09-13T20:16:25.192992+00:00",
+        "price": "-102",
+        "archive": "snapshots-before-20260924T191337Z.csv.gz",
+    },
+    "dada179caa295b0a54dd": {
+        "market": "SPREAD",
+        "side": "Pittsburgh +2.5",
+        "observed_at": "2026-10-02T22:48:44.522011+00:00",
+        "price": "-118",
+        "archive": "snapshots-before-20261008T192833Z.csv.gz",
+    },
+}
+# Audited existing final-pregame fallbacks remain distinguishable in the export.
+# Georgia Southern +7 at -110, 2026-10-10T23:38:44.614057+00:00,
+# snapshots-before-20261017T031551Z.csv.gz (event 34745984).
+# UTEP +6.5 at +100, 2026-10-18T00:59:47.520097+00:00,
+# snapshots-before-20261024T050504Z.csv.gz (event 34788277).
+# Both observations precede their scheduled starts.
+
+
+def _favorite_average_entry_odds(graded_favorites: pd.DataFrame) -> dict | None:
+    profits = []
+    fallback_quotes = 0
+    for row in graded_favorites.itertuples(index=False):
+        price = _text(row.decision_price)
+        fallback = _text(row.decision_line_source).endswith("final_pregame_fallback")
+        quote = FAVORITE_AVERAGE_ARCHIVE_QUOTES.get(row.ledger_id)
+        if (not price and fallback and quote and row.market == quote["market"]
+                and row.side == quote["side"]
+                and row.final_pregame_state_at_utc == quote["observed_at"]):
+            price = quote["price"]
+            fallback = False
+        profit = _american_profit(price) if re.fullmatch(r"[+-]?\d+(?:\.\d+)?", price) else None
+        if profit is None or not math.isfinite(profit) or profit <= 0:
+            continue
+        profits.append(profit)
+        fallback_quotes += int(fallback)
+    if not profits:
+        return None
+    mean_profit = math.fsum(profits) / len(profits)
+    american = mean_profit * 100 if mean_profit >= 1 else -100 / mean_profit
+    return {
+        "american": round(american, 6),
+        "priced_selections": len(profits),
+        "pregame_fallback_quotes": fallback_quotes,
+    }
+
+
 def _implied_probability(price: object) -> float | None:
     odds = _number(price)
     if odds is None or -100 < odds < 100 or odds == 0:
@@ -1494,6 +1550,7 @@ def update_performance_ledger(
     )
     _atomic_json({
         **result["favorites"],
+        "average_entry_odds": _favorite_average_entry_odds(favorite_rows),
         **({"cfb_spread_pathways": new_path_records} if new_path_records else {}),
         **({"nhl_replacement_pathways": nhl_path_records}
            if ledger["favorite_rule_version"].isin(OFFICIAL_VERSIONS.values()).any() else {}),

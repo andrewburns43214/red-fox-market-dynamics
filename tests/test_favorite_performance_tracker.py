@@ -44,6 +44,9 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
     assert payload["pushes"] == 1
     assert payload["win_rate_excluding_pushes"] == 0.666667
     assert payload["tracking_start_date"] == FAVORITE_TRACKING_START_DATE
+    assert payload["average_entry_odds"] == {
+        "american": -110.0, "priced_selections": 4, "pregame_fallback_quotes": 0,
+    }
     assert [row["label"] for row in payload["sports"]] == ["NFL", "NBA", "CFB", "MLB", "NCAAB", "NHL", "UFC"]
     nfl = next(row for row in payload["sports"] if row["sport"] == "nfl")
     assert nfl == {
@@ -71,6 +74,41 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
     assert "ledger_id" not in payload["games"][0]
     assert "score_provider_event_id" not in payload["games"][0]
 
+
+
+def test_average_entry_odds_include_manual_and_audited_quotes_without_rewriting_history(tmp_path):
+    common = dict(
+        favorite_qualified="yes", sport="nfl", market="SPREAD", grade="W",
+        scheduled_start="2026-09-13T20:25:00Z",
+    )
+    recovery = dict(
+        ledger_id="0bbd0934a6431da48d41", side="ARI Cardinals +8.5",
+        decision_line="+8.5", decision_line_source="final_pregame_fallback",
+        final_pregame_state_at_utc="2026-09-13T20:16:25.192992+00:00",
+    )
+    rows = [
+        {**common, **recovery},
+        {**common, "ledger_id": "manual", "favorite_origin": "manual",
+         "decision_price": "+150", "decision_line_source": "owner_selected_quote"},
+        {**common, "ledger_id": "fallback", "decision_price": "-125",
+         "decision_line_source": "final_pregame_fallback", "grade": "Push"},
+        {**common, "ledger_id": "invalid-price", "decision_price": "bad-110"},
+        {**common, **recovery, "ledger_id": "different-selection"},
+        {**common, "ledger_id": "void", "decision_price": "+900", "grade": "Void"},
+        {**common, "ledger_id": "pending", "decision_price": "+900", "grade": ""},
+        {**common, "ledger_id": "other", "decision_price": "+900", "favorite_qualified": "no"},
+    ]
+    pd.DataFrame(rows).to_csv(tmp_path / "performance_ledger.csv", index=False)
+
+    update_performance_ledger(tmp_path, frozen_sources=[], attach_results=False)
+
+    payload = json.loads((tmp_path / "favorite_performance.json").read_text(encoding="utf-8"))
+    assert payload["total_graded"] == 5
+    assert payload["average_entry_odds"] == {
+        "american": 109.346405, "priced_selections": 3, "pregame_fallback_quotes": 1,
+    }
+    ledger = pd.read_csv(tmp_path / "performance_ledger.csv", dtype=str, keep_default_na=False)
+    assert ledger.loc[ledger["ledger_id"].eq(recovery["ledger_id"]), "decision_price"].item() == ""
 
 def test_logic_change_record_counts_official_entries_from_release_not_rule_version(tmp_path):
     examples = [
