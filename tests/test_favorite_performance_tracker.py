@@ -54,8 +54,12 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
     assert nba["wins"] == 0
     assert nba["losses"] == 1
     assert nba["win_rate_excluding_pushes"] == 0.0
-    assert set(payload["logic_change_records"]) == {"ncaab", "nba", "nhl"}
-    assert payload["logic_change_records"]["nba"]["losses"] == 1
+    assert set(payload["logic_change_records"]) == {"ncaab", "nba", "nhl", "ncaaf", "mlb", "ufc"}
+    assert payload["logic_change_records"]["nba"]["since"] == "2026-11-24"
+    for sport in ("ncaaf", "mlb", "ufc"):
+        assert payload["logic_change_records"][sport]["since"] == "2026-11-25"
+        assert payload["logic_change_records"][sport]["total_graded"] == 0
+    assert payload["logic_change_records"]["nba"]["losses"] == 0
     assert payload["logic_change_records"]["ncaab"]["total_graded"] == 0
     assert [row["game"] for row in payload["games"]] == ["Game 3", "Game 2", "Game 1", "Game 0"]
     assert [row["grade"] for row in payload["games"] if row["sport"] == "nfl"] == ["Push", "W", "W"]
@@ -66,6 +70,44 @@ def test_performance_summary_is_derived_from_the_favorite_ledger(tmp_path):
     assert payload["games"][2]["money_pct"] == "61"
     assert "ledger_id" not in payload["games"][0]
     assert "score_provider_event_id" not in payload["games"][0]
+
+
+def test_logic_change_record_counts_official_entries_from_release_not_rule_version(tmp_path):
+    examples = [
+        ("Prior NBA Favorite", "nba", "red_fox_favorite_basketball_v2", "2026-11-24T17:39:01-05:00", "W", "yes"),
+        ("At release NBA Favorite", "nba", "red_fox_favorite_basketball_v2", "2026-11-24T17:39:02-05:00", "L", "yes"),
+        ("NBA replacement", "nba", "red_fox_favorite_nba_public_neutral_v1", "2026-11-25T17:00:00Z", "W", "yes"),
+        ("Louisville", "ncaab", "red_fox_favorite_20261124", "2026-11-24T23:01:48Z", "W", "yes"),
+        ("Xavier", "ncaab", "red_fox_favorite_basketball_v2", "2026-11-25T15:48:00Z", "W", "yes"),
+        ("Missing entry time", "ncaab", "red_fox_favorite_20261124", "", "W", "yes"),
+        ("Not official", "ncaab", "red_fox_favorite_basketball_v2", "2026-11-25T17:00:00Z", "W", "no"),
+        ("Not settled", "ncaab", "red_fox_favorite_basketball_v2", "2026-11-25T17:00:00Z", "", "yes"),
+        ("NHL replacement", "nhl", "red_fox_favorite_nhl_genuine_crossover_v1", "2026-11-25T22:00:00Z", "Push", "yes"),
+        ("Early CFB", "ncaaf", "red_fox_favorite_v8", "2026-11-25T05:19:34Z", "L", "yes"),
+        ("Post-change CFB", "ncaaf", "red_fox_favorite_cfb_high_money_v1", "2026-11-25T05:19:35Z", "W", "yes"),
+        ("Early MLB", "mlb", "red_fox_favorite_v5", "2026-11-25T18:13:32Z", "L", "yes"),
+        ("Post-change MLB", "mlb", "red_fox_favorite_mlb_static_ml_v1", "2026-11-25T18:13:33Z", "W", "yes"),
+        ("Early UFC", "ufc", "red_fox_favorite_ufc_v1", "2026-11-25T18:40:18Z", "L", "yes"),
+        ("Post-change UFC", "ufc", "red_fox_favorite_ufc_v1", "2026-11-25T18:40:19Z", "W", "yes"),
+    ]
+    pd.DataFrame([
+        dict(ledger_id=str(index), game=name, sport=sport, favorite_rule_version=version,
+             favorite_first_qualified_at=entry, scheduled_start="2026-11-26T02:00:00Z",
+             grade=grade, favorite_qualified=favorite)
+        for index, (name, sport, version, entry, grade, favorite) in enumerate(examples)
+    ]).to_csv(tmp_path / "performance_ledger.csv", index=False)
+
+    update_performance_ledger(tmp_path, frozen_sources=[], attach_results=False)
+
+    records = json.loads((tmp_path / "favorite_performance.json").read_text(encoding="utf8"))
+    assert records["wins"] == 8
+    current = records["logic_change_records"]
+    assert (current["nba"]["wins"], current["nba"]["losses"]) == (1, 1)
+    assert (current["ncaab"]["wins"], current["ncaab"]["total_graded"]) == (2, 2)
+    assert current["nhl"]["pushes"] == 1
+    for sport in ("ncaaf", "mlb", "ufc"):
+        assert current[sport]["wins"] == current[sport]["total_graded"] == 1
+        assert current[sport]["losses"] == 0
 
 
 def test_tracker_uses_one_shared_payload_for_desktop_mobile_and_guide():

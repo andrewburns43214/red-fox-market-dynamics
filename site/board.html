@@ -5782,13 +5782,14 @@ function setupFavoriteHistory(){
     const games=favoritePerformance.games;
     const rows=games?.filter(row=>normSportKey(row.sport)===selectedSport)||[];
     document.getElementById('favorite-history-title').textContent=sport.label+' Favorite history';
-    document.getElementById('favorite-history-record').textContent=sport.record+' · '+sport.rate;
+    document.getElementById('favorite-history-record').textContent=sport.record+' · '+sport.rate+' · Overall record';
     const logic=document.getElementById('favorite-history-logic-record');
     const cohort=favoritePerformance.logicRecords[selectedSport];
     logic.hidden=!cohort;
     const logicDecisions=cohort?cohort.wins+cohort.losses:0;
+    const logicDate=(cohort?.since||'2026-11-24').slice(5).replace('-','/');
     const logicRate=logicDecisions?` · ${(100*cohort.wins/logicDecisions).toFixed(1)}%`:'';
-    logic.textContent=cohort?`${cohort.wins}-${cohort.losses}-${cohort.pushes}${logicRate} · 11/24 Logic changes`:'';
+    logic.textContent=cohort?`${cohort.wins}-${cohort.losses}-${cohort.pushes}${logicRate} · Since ${logicDate} logic changes`:'';
     document.getElementById('favorite-history-rows').innerHTML=rows.map(row=>{
       const date=new Date(row.scheduled_start||'');
       const day=Number.isNaN(date.getTime())?'—':dateFormat.format(date);

@@ -24,13 +24,23 @@ from manual_favorites import HANDOFF as MANUAL_HANDOFF, VERSION as MANUAL_VERSIO
 from anomaly_action_results import _grade_action
 from nhl_release_config import OFFICIAL_HANDOFF, OFFICIAL_VERSIONS, official_nhl_favorite
 import ufc_bout_integrity as ufc
-from red_fox_favorite import (CFB_SPREAD_VERSIONS, NBA_PUBLIC_VERSION, MLB_STATIC_VERSION, NOV24_SPORTS, NOV24_VERSION,
+from red_fox_favorite import (CFB_SPREAD_VERSIONS, NBA_PUBLIC_VERSION, MLB_STATIC_VERSION, NOV24_VERSION,
                               cfb_spread_favorite, nba_public_favorite, mlb_static_favorite, tracked_entry_quote)
 
 
 SUPPORTED_SIDE_VALID_FROM = pd.Timestamp("2026-09-07T17:57:58Z")
 FAVORITE_VALID_FROM = pd.Timestamp("2026-09-07T22:11:12Z")
 FAVORITE_TRACKING_START_DATE = "2026-09-07"
+# Initial production cutovers for the dated, sport-specific Favorite releases.
+NOV24_LOGIC_ACTIVATED_AT = pd.Timestamp("2026-11-24T22:39:02Z")  # 88fa199
+FAVORITE_LOGIC_CUTOVERS = {
+    "ncaab": NOV24_LOGIC_ACTIVATED_AT,
+    "nba": NOV24_LOGIC_ACTIVATED_AT,
+    "nhl": NOV24_LOGIC_ACTIVATED_AT,
+    "ncaaf": pd.Timestamp("2026-11-25T05:19:35Z"),  # aab6888, CFB spread release
+    "mlb": pd.Timestamp("2026-11-25T18:13:33Z"),  # a13bcf0, automatic Static ML rollout
+    "ufc": pd.Timestamp("2026-11-25T18:40:19Z"),  # verified-bout production activation
+}
 FAVORITE_SPORTS = (
     ("mlb", "MLB"),
     ("nba", "NBA"),
@@ -1479,6 +1489,9 @@ def update_performance_ledger(
         pathway: summary(favorite_rows.loc[favorite_rows["favorite_rule_version"].eq(version)])
         for pathway, version in OFFICIAL_VERSIONS.items()
     }
+    first_qualified = pd.to_datetime(
+        favorite_rows["favorite_first_qualified_at"], utc=True, format="mixed", errors="coerce",
+    )
     _atomic_json({
         **result["favorites"],
         **({"cfb_spread_pathways": new_path_records} if new_path_records else {}),
@@ -1490,8 +1503,11 @@ def update_performance_ledger(
            if (data_dir / "mlb_static_activated_at").exists() or ledger["favorite_rule_version"].eq(MLB_STATIC_VERSION).any() else {}),
         "sports": sport_records,
         "logic_change_records": {
-            sport: summary(favorite_rows[favorite_sport.eq(sport) & favorite_rows["favorite_rule_version"].eq(NOV24_VERSION)])
-            for sport in sorted(NOV24_SPORTS)
+            sport: {
+                **summary(favorite_rows.loc[favorite_sport.eq(sport) & first_qualified.ge(cutover)]),
+                "since": cutover.tz_convert("America/New_York").date().isoformat(),
+            }
+            for sport, cutover in FAVORITE_LOGIC_CUTOVERS.items()
         },
         "games": favorite_rows.sort_values(
             ["scheduled_start", "event_id"], ascending=False, kind="mergesort",
