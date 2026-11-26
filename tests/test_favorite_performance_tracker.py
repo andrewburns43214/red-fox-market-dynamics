@@ -169,7 +169,7 @@ def test_tracker_uses_one_shared_payload_for_desktop_mobile_and_guide():
     assert "favoritePerformanceFooter()" in BOARD
     assert 'class="favorite-guide-record"' in BOARD
     assert "footer.innerHTML=favoritePerformanceFooterContent(text);" in BOARD
-    assert 'class="favorite-guide-sports-title">By sport</div>' in BOARD
+    assert 'class="favorite-guide-heading favorite-guide-sports-title">By sport</h4>' in BOARD
     assert 'class="favorite-performance-sports" aria-label="Red Fox Favorite win percentage by sport"' in BOARD
     assert "10 Graded" not in BOARD
 

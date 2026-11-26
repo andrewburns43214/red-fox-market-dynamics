@@ -274,6 +274,9 @@ def test_dashboard_buttons_are_only_inside_existing_popups():
     page=Path("site/board.html").read_text(encoding="utf-8")
     script=Path("site/manual-favorites.js").read_text(encoding="utf-8-sig")
     assert page.count("manualFavoriteButton(")==2
+    assert "const manualControls=favoriteRow?manualFavoriteButton(favoriteRow):'';" in page
+    assert 'if(manualControls){' in page
+    assert "choice+manualControls+'</div>'" in page
     assert "if(!state.frozenPregame) html+=manualFavoriteButton(r);" in page
     assert "if(!manualFavoriteEnabled||!row?.game_id) return '';" in script
     assert "manualFavoriteEnabled=state?.enabled===true" in script

@@ -1294,9 +1294,9 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .favorite-guide-copy li { margin:0 0 6px; }
 .favorite-guide-record { margin-top:11px; padding-top:10px; border-top:1px solid var(--border); color:var(--text); font:700 11px/1.35 var(--mono); font-variant-numeric:tabular-nums; }
 .favorite-guide-overall{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 9px}
-.favorite-guide-overall h3{margin:0;font:800 12px/1.1 var(--sans);letter-spacing:.06em;text-transform:uppercase}
+.favorite-guide-record .favorite-guide-heading{margin:0;color:var(--text2);font:800 10px/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase}
 .favorite-guide-date{color:var(--text2);font:600 10px/1.3 var(--sans)}
-.favorite-guide-sports-title{margin:15px 0 8px;color:var(--text2);font:750 9px/1.1 var(--sans);letter-spacing:.08em;text-transform:uppercase}
+.favorite-guide-record .favorite-guide-sports-title{margin:15px 0 8px}
 .favorite-guide-sports{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .favorite-guide-sport{min-width:0;display:grid;gap:8px;padding:10px 11px;border:1px solid var(--border);border-radius:8px;background:#f8f7f4;color:var(--text)}
 .favorite-guide-sport-header{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -1824,8 +1824,12 @@ body{padding-left:280px;background:#faf9f6}.topbar,.tabs,.metricbar{display:none
   .favorite-performance-desktop .favorite-performance-odds-label{font-size:6.5px}
   .favorite-performance-desktop:has(.favorite-performance-odds) .favorite-performance-sports{justify-content:flex-start;overflow-x:auto;scrollbar-width:none}
 }
-.signal-guide-overlay.favorite-guide-open{align-items:center;padding:12px 28px}.signal-guide-overlay.favorite-guide-open .signal-guide-sheet{width:min(1190px,100%);max-height:calc(100dvh - 24px);border-radius:28px;box-shadow:0 24px 80px rgba(12,26,35,.28)}.signal-guide-overlay.favorite-guide-open .signal-guide-head{padding:27px 31px 21px}.signal-guide-overlay.favorite-guide-open .signal-guide-title{font-size:26px}.signal-guide-overlay.favorite-guide-open .signal-guide-close{width:54px;height:54px;font-size:28px}.signal-guide-overlay.favorite-guide-open .signal-guide-body{padding:24px 31px 34px}.signal-guide-overlay.favorite-guide-open .favorite-guide-copy{font-size:16px;line-height:1.55}.signal-guide-overlay.favorite-guide-open .favorite-guide-record{font-size:14px}
-@media(max-width:850px){.signal-guide-overlay.favorite-guide-open{align-items:flex-end;padding:0}.signal-guide-overlay.favorite-guide-open .signal-guide-sheet{width:100%;max-height:calc(100dvh - env(safe-area-inset-top));border-radius:16px 16px 0 0}.signal-guide-overlay.favorite-guide-open .signal-guide-head{padding:16px 18px 12px}.signal-guide-overlay.favorite-guide-open .signal-guide-title{font-size:17px}.signal-guide-overlay.favorite-guide-open .signal-guide-close{width:34px;height:34px;font-size:22px}.signal-guide-overlay.favorite-guide-open .signal-guide-body{padding:14px 18px 24px}.signal-guide-overlay.favorite-guide-open .favorite-guide-copy{font-size:12px}}
+.signal-guide-overlay.favorite-guide-open{align-items:center;padding:12px 28px}.signal-guide-overlay.favorite-guide-open .signal-guide-sheet{width:min(1190px,100%);max-height:calc(100dvh - 24px);border-radius:28px;box-shadow:0 24px 80px rgba(12,26,35,.28)}.signal-guide-overlay.favorite-guide-open .signal-guide-head{padding:14px 31px}.signal-guide-overlay.favorite-guide-open .signal-guide-title{font-size:26px}.signal-guide-overlay.favorite-guide-open .signal-guide-close{width:44px;height:44px;font-size:24px}.signal-guide-overlay.favorite-guide-open .signal-guide-body{padding:13px 31px 24px}
+.signal-guide-overlay.favorite-guide-open .red-fox-favorite-guide{margin-top:0}
+.signal-guide-overlay.favorite-guide-open .favorite-guide-copy{padding-top:0;border-top:0;font-size:16px;line-height:1.55}
+.favorite-guide-owner:has([data-manual-favorite-control]){margin-bottom:8px}
+.favorite-guide-owner:not(:has([data-manual-favorite-control])){display:none}.signal-guide-overlay.favorite-guide-open .favorite-guide-record{font-size:14px}
+@media(max-width:850px){.signal-guide-overlay.favorite-guide-open{align-items:flex-end;padding:0}.signal-guide-overlay.favorite-guide-open .signal-guide-sheet{width:100%;max-height:calc(100dvh - env(safe-area-inset-top));border-radius:16px 16px 0 0}.signal-guide-overlay.favorite-guide-open .signal-guide-head{padding:9px 18px}.signal-guide-overlay.favorite-guide-open .signal-guide-title{font-size:17px}.signal-guide-overlay.favorite-guide-open .signal-guide-close{width:34px;height:34px;font-size:22px}.signal-guide-overlay.favorite-guide-open .signal-guide-body{padding:11px 18px 24px}.signal-guide-overlay.favorite-guide-open .favorite-guide-copy{font-size:12px}}
 </style>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -2645,12 +2649,13 @@ function openSignalGuide(selected,favoriteRow){
   if(requested==='Red Fox Favorite'){
     title.textContent='Red Fox Favorite';
     body.innerHTML=redFoxFavoriteGuideSection(false);
-    if(favoriteRow){
+    const manualControls=favoriteRow?manualFavoriteButton(favoriteRow):'';
+    if(manualControls){
       const origin=favoriteRow.favorite_origin==='manual'?'Manual':'Automatic';
       const price=favoriteRow.manual_entry_price?' ('+favoriteRow.manual_entry_price+')':'';
       const choice=isRedFoxFavorite(favoriteRow)?'<p class="signal-guide-section-note">'+
         escHtml(origin+' qualification · '+favoriteRow.favorite_side+price)+'</p>':'';
-      body.insertAdjacentHTML('afterbegin',choice+manualFavoriteButton(favoriteRow));
+      body.insertAdjacentHTML('afterbegin','<div class="favorite-guide-owner">'+choice+manualControls+'</div>');
     }
   } else if(requested==='Cross-Market Split'){
     title.textContent='Market Integrity — Cross-Market Split';
@@ -5722,7 +5727,7 @@ function favoriteGuidePricedMetrics(item){
 }
 function favoritePerformanceSportCards(text){
   if(!text||!text.sports.length) return '';
-  return '<div class="favorite-guide-sports-title">By sport</div><div class="favorite-guide-sports">'+text.sports.map(item=>{
+  return '<h4 class="favorite-guide-heading favorite-guide-sports-title">By sport</h4><div class="favorite-guide-sports">'+text.sports.map(item=>{
     const odds=favoriteAverageOddsText(item.priced?.average_entry_odds,item.graded);
     const description=odds?' title="'+escHtml(odds.description)+'"':'';
     return `<button class="favorite-guide-sport" type="button" data-favorite-sport="${escHtml(item.sport)}" aria-haspopup="dialog" aria-label="${escHtml(item.label+' '+item.record+', view games')}"${description}>
@@ -5817,7 +5822,7 @@ function setupFavoriteHistory(){
 function favoritePerformanceFooterContent(text){
   if(!text) return '';
   const pricingNote=text.averageOdds?' '+escHtml(text.averageOdds.description)+'.':'';
-  return `<div class="favorite-guide-overall"><h3>Performance</h3><span class="favorite-guide-date">${escHtml(text.since)}</span></div>
+  return `<div class="favorite-guide-overall"><h3 class="favorite-guide-heading">Performance</h3><span class="favorite-guide-date">${escHtml(text.since)}</span></div>
     <div class="favorite-guide-summary">${favoriteGuideMetric('Record',text.record)}${favoriteGuideMetric('Win rate',text.rate)}${favoriteGuidePricedMetrics(text)}</div>
     ${favoritePerformanceSportCards(text)}<p class="favorite-guide-return-note">ROI assumes 1u risked per priced selection.${pricingNote}</p>`;
 }
