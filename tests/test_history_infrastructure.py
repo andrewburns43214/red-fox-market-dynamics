@@ -1,4 +1,5 @@
 import csv
+from datetime import datetime, timezone
 import gzip
 import importlib.util
 import json
@@ -9,6 +10,9 @@ import time
 import pytest
 
 from history_store import connect, import_outcomes, ingest_board, ingest_quotes, paired_as_of, store_outcome
+from history_store import quote_row
+from history_blocks import fingerprint, FIELDS, migrate
+from history_comparisons import candidates, rebuild
 from history_outcomes import resolve_mlb
 from mlb_fixtures import team_key
 
@@ -44,7 +48,7 @@ def test_archive_deduplication_conflicts_and_as_of(tmp_path):
         assert ingest_quotes(db, gzip_path := gz, immutable=True) == 4
         assert ingest_quotes(db, gzip_path, immutable=True) == 0
         assert ingest_quotes(db, plain) == 4
-        assert db.execute("SELECT count(*) FROM quotes").fetchone()[0] == 4
+        assert db.execute("SELECT sum(observations) FROM quote_blocks").fetchone()[0] == 4
         rows = paired_as_of(db, "nfl", "one", "SPREAD", "2026-11-27T00:40:00Z", early)
         assert [r["price"] for r in rows] == [-110, -110]
         assert [r["line"] for r in rows] == [3, -3]
@@ -55,8 +59,73 @@ def test_archive_deduplication_conflicts_and_as_of(tmp_path):
         conflicting = pair(early)[0] | {"current_line": "BUF Bills +3 @ -115"}
         write_quotes(plain, pair(early) + pair(late) + [conflicting])
         ingest_quotes(db, plain)
-        assert db.execute("SELECT count(*) FROM quotes").fetchone()[0] == 5
+        assert db.execute("SELECT sum(observations) FROM quote_blocks").fetchone()[0] == 5
         assert paired_as_of(db, "nfl", "one", "SPREAD", "2026-11-27T00:40:00Z", early) == []
+
+
+def test_compact_migration_preserves_variants_and_reclaims_legacy_pages(tmp_path):
+    early = "2026-11-26T23:59:00Z"
+    late = "2026-11-27T00:40:00Z"
+    original = pair(early) + pair(late)
+    variant = pair(late)[0] | {"current_line": "BUF Bills +3 @ -115"}
+    with connect(tmp_path) as db:
+        db.execute("""
+            CREATE TABLE quotes(sport,event_id,market,captured_at,side,fingerprint,scheduled_at,
+                                line REAL,price INTEGER,open_line REAL,open_price INTEGER,
+                                tickets REAL,money REAL,evidence,
+                                PRIMARY KEY(sport,event_id,market,captured_at,side,fingerprint))
+            WITHOUT ROWID
+        """)
+        for r in original + [variant]:
+            row = quote_row(r)
+            identifier = fingerprint(dict(zip(FIELDS, row[3:])))
+            db.execute("INSERT INTO quotes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                       (*row[:5], identifier, *row[5:]))
+        db.commit()
+        assert migrate(db, tmp_path, 0, batch=1) == {"migrated_quotes": 5, "vacuum_pending": False}
+        assert not db.execute("SELECT 1 FROM sqlite_master WHERE name='quotes'").fetchone()
+        assert db.execute("SELECT sum(observations) FROM quote_blocks").fetchone()[0] == 5
+        rows = paired_as_of(db, "nfl", "one", "SPREAD", late, early)
+        assert [(r["side"], r["line"], r["price"]) for r in rows] == [
+            ("buf bills", 3.0, -110), ("kc chiefs", -3.0, -110)
+        ]
+        assert migrate(db, tmp_path, 0)["migrated_quotes"] == 0
+
+
+def test_comparison_windows_use_only_known_inputs_and_one_verified_fixture(tmp_path):
+    pre = "2026-11-27T00:48:00Z"
+    after_decision = "2026-11-27T00:55:00Z"
+    after_start = "2026-11-27T01:14:00Z"
+    rows = pair(pre) + [dict(row, current_line=row["current_line"].replace("-110", "-119"))
+                        for row in pair(after_decision) + pair(after_start)]
+    ml = [
+        dict(row, side=team, open_line=f"{team} @ {opening:+}",
+             current_line=f"{team} @ {current:+}")
+        for row, (team, opening, current) in zip(pair(pre), (("BUF Bills", 150, 130), ("KC Chiefs", -180, -140)))
+    ]
+    tape = tmp_path / "snapshots.csv"
+    write_quotes(tape, rows + ml + [dict(row, game_id="duplicate") for row in rows + ml])
+    now = datetime(2026, 11, 28, tzinfo=timezone.utc)
+    with connect(tmp_path / "state") as db:
+        ingest_quotes(db, tape)
+        for key in ("one", "duplicate"):
+            store_outcome(db, "nfl", key, "espn", "verified", {
+                "provider_event_id": "same-fixture", "matchup": "BUF Bills @ KC Chiefs",
+                "actual_start": "2026-11-27T01:12:00Z", "observed_at": "2026-11-27T05:00:00Z",
+                "score_away": 21, "score_home": 24,
+            })
+        db.commit()
+        assert rebuild(db, now, 20)["fixtures"] == 2
+        cohort = list(candidates(db, "nfl", "SPREAD", 30, now))
+        assert len(cohort) == 1
+        entry = cohort[0]
+        assert entry["entry_at"] == entry["cross_entry_at"] == "2026-11-27T00:48:00.000000+00:00"
+        assert entry["decision_at"] == "2026-11-27T00:50:00.000000+00:00"
+        assert [row["price"] for row in entry["sides"]] == [-110, -110]
+        assert [row["result"] for row in entry["sides"]] == ["push", "push"]
+        assert entry["sides"][0]["cross_market"]["price_toward_implied"] > 0
+        assert list(candidates(db, "nfl", "SPREAD", 10, now))  # 01:10 predates verified 01:12 start.
+        assert not list(candidates(db, "nfl", "SPREAD", 30, "2026-11-27T02:00:00Z"))
 
 
 def test_nonfavorite_public_states_and_research_outcomes(tmp_path):

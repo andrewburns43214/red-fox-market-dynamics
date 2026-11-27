@@ -4,6 +4,7 @@ import argparse
 from contextlib import contextmanager
 import csv
 from datetime import datetime, timedelta, timezone
+from itertools import groupby
 import gzip
 import hashlib
 import json
@@ -14,6 +15,8 @@ import re
 import shutil
 import sqlite3
 import time
+
+import history_blocks as blocks
 
 SPORTS = {"nfl", "ncaaf", "nba", "ncaab", "nhl", "mlb", "ufc"}
 FREE_DISK_RESERVE = 15 * 1024**3
@@ -40,14 +43,6 @@ CREATE TABLE IF NOT EXISTS fixtures (
     first_at TEXT NOT NULL, last_at TEXT NOT NULL, scheduled_at TEXT,
     PRIMARY KEY (sport,event_id)
 ) WITHOUT ROWID;
-CREATE TABLE IF NOT EXISTS quotes (
-    sport TEXT NOT NULL, event_id TEXT NOT NULL, market TEXT NOT NULL,
-    captured_at TEXT NOT NULL, side TEXT NOT NULL, fingerprint TEXT NOT NULL,
-    scheduled_at TEXT, line REAL, price INTEGER NOT NULL, open_line REAL,
-    open_price INTEGER, tickets REAL, money REAL, evidence TEXT NOT NULL,
-    PRIMARY KEY (sport,event_id,market,captured_at,side,fingerprint)
-) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS quotes_by_time ON quotes(captured_at,sport,market);
 CREATE TABLE IF NOT EXISTS decisions (
     sport TEXT NOT NULL, event_id TEXT NOT NULL, market TEXT NOT NULL,
     known_at TEXT NOT NULL, source TEXT NOT NULL, digest TEXT NOT NULL, evidence TEXT NOT NULL,
@@ -109,7 +104,7 @@ def connect(state):
     db = sqlite3.connect(state / "history.sqlite3", timeout=20)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA journal_mode=WAL")
-    db.executescript(SCHEMA)
+    db.executescript(SCHEMA + blocks.SCHEMA)
     return db
 
 
@@ -170,14 +165,12 @@ def quote_row(row):
     evidence = packed({key: row.get(key) for key in (
         "game", "side", "market", "open_line", "current_line", "injury_news", "key_number_note"
     ) if row.get(key)})
-    fingerprint = digest(packed([scheduled, current, price, opening, open_price, tickets, money, evidence]))
     return (
-        sport, event, market, captured, identity, fingerprint, scheduled,
+        sport, event, market, captured, identity, scheduled,
         current, price, opening, open_price, tickets, money, evidence,
     )
 
 
-INSERT_QUOTES = "INSERT OR IGNORE INTO quotes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
 INSERT_FIXTURE = """
 INSERT INTO fixtures VALUES (?,?,?,?,?,?)
 ON CONFLICT(sport,event_id) DO UPDATE SET
@@ -227,15 +220,15 @@ def ingest_quotes(db, path, *, immutable=False, seconds=None):
             event = row[:2]
             capture = row[3]
             if event not in fixtures:
-                fixtures[event] = (raw["game"], capture, capture, row[6])
+                fixtures[event] = (raw["game"], capture, capture, row[5])
             else:
                 game, first, last, start = fixtures[event]
                 fixtures[event] = (
                     raw["game"] if capture >= last else game, min(first, capture), max(last, capture),
-                    (row[6] or start) if capture >= last else start,
+                    (row[5] or start) if capture >= last else start,
                 )
             if len(quote_buffer) == 4000:
-                db.executemany(INSERT_QUOTES, quote_buffer)
+                blocks.merge(db, quote_buffer)
                 quote_buffer.clear()
                 if immutable:
                     # Keep consecutive board publications writable during large historical imports.
@@ -243,7 +236,7 @@ def ingest_quotes(db, path, *, immutable=False, seconds=None):
                     db.commit()
                 if seconds and time.monotonic() - enter > seconds:
                     raise TimeoutError(f"Quote ingest exceeded time budget: {path.name}")
-        db.executemany(INSERT_QUOTES, quote_buffer)
+        blocks.merge(db, quote_buffer)
         db.executemany(INSERT_FIXTURE, ((*key, *value) for key, value in fixtures.items()))
         if not immutable and fixtures:
             newest = max(value[2] for value in fixtures.values())
@@ -346,48 +339,75 @@ def health(db, root, state):
             if not Path(row["path"]).is_file() or file_digest(Path(row["path"])) != row["sha256"]:
                 raise RuntimeError(f"Historical archive integrity failure: {Path(row['path']).name}")
     disk = shutil.disk_usage(root)
+    # Independently decode a rotating sample of blocks as well as hashing raw sources.
+    for recorded, payload in db.execute("""
+        SELECT observations,payload FROM quote_blocks
+        WHERE day>=date('now', '-' || (abs(random()) % 360) || ' days') LIMIT 12
+    """):
+        if len(blocks.decode(payload)) != recorded:
+            raise RuntimeError("Historical quote block row count changed")
     summary = {"at": now_iso(), "disk_total": disk.total, "disk_available": disk.free,
                "source_files": len(shards), "index_bytes": (state / "history.sqlite3").stat().st_size,
                "capacity_warning": disk.free < FREE_DISK_RESERVE}
+    summary["quote_blocks"], summary["quotes"], summary["quote_payload_bytes"] = db.execute("""
+        SELECT count(*),coalesce(sum(observations),0),coalesce(sum(length(payload)),0) FROM quote_blocks
+    """).fetchone()
+    summary["comparison_windows"] = db.execute("SELECT count(*) FROM comparison_windows").fetchone()[0]
     with atomic_text(state / "health.json", packed(summary)):
         pass
     return summary
 
 
+def start_evidence(db, sport, event):
+    starts = []
+    for state, raw in db.execute(
+        "SELECT status,evidence FROM outcomes WHERE sport=? AND event_id=?", (sport, event)
+    ):
+        value = json.loads(raw)
+        clock = utc(value.get("actual_start") or value.get("first_pitch"))
+        if sport == "ufc" and state in {"verified", "push", "void"} and value.get("start_source"):
+            clock = clock or utc(value.get("start"))
+        if clock:
+            starts.append(clock)
+    return min(starts, default=None)
+
+
+def eligible_pairs(db, sport, event, market, until, since="", *, actual_start=None):
+    if sport == "ufc" and actual_start is None:
+        return
+    rows = blocks.read_quotes(db, (sport, event, market), since, until)
+    for capture, group in groupby(rows, key=lambda row: row["captured_at"]):
+        if actual_start is not None and capture >= actual_start:
+            break
+        pair = tuple(group)
+        if len(pair) != 2 or pair[0]["side"] == pair[1]["side"]:
+            continue
+        scheduled = pair[0]["scheduled_at"]
+        if scheduled and scheduled == pair[1]["scheduled_at"] and capture < scheduled:
+            yield capture, pair
+
+
 def paired_as_of(db, sport, event, market, decision_at, since):
-    """Return identifiable pairs known by the decision clock, excluding conflicts."""
-    return db.execute("""
-      WITH scoped AS (
-        SELECT * FROM quotes WHERE sport=? AND event_id=? AND market=?
-          AND captured_at BETWEEN ? AND ?
-          AND scheduled_at IS NOT NULL AND captured_at<scheduled_at
-          AND NOT EXISTS (
-            SELECT 1 FROM outcomes o WHERE o.sport=quotes.sport AND o.event_id=quotes.event_id
-              AND julianday(captured_at)>=julianday(COALESCE(
-                json_extract(o.evidence,'$.actual_start'),json_extract(o.evidence,'$.first_pitch')
-              ))
-          )
-          AND (sport<>'ufc' OR julianday(captured_at)<(
-            SELECT min(julianday(COALESCE(json_extract(o.evidence,'$.actual_start'),json_extract(o.evidence,'$.start'))))
-            FROM outcomes o WHERE o.sport=quotes.sport AND o.event_id=quotes.event_id
-              AND o.status IN ('verified','push')
-          ))
-      ), paired AS (
-        SELECT captured_at FROM scoped GROUP BY captured_at
-          HAVING count(*)=2 AND count(DISTINCT side)=2
-      )
-      SELECT q.* FROM scoped q JOIN paired p USING (captured_at)
-      ORDER BY q.captured_at,q.side
-    """, (sport, event, market, utc(since), utc(decision_at))).fetchall()
+    """Return identifiable pre-start pairs known by the decision clock."""
+    start, end = utc(since), utc(decision_at)
+    if not start or not end:
+        return []
+    actual = start_evidence(db, sport, event)
+    return [{key: value for key, value in row.items() if key != "legacy_fingerprint"} |
+            {"fingerprint": blocks.fingerprint(row)}
+            for _, pair in eligible_pairs(db, sport, event, market, end, start, actual_start=actual)
+            for row in pair]
 
 
 def store_outcome(db, sport, event, source, status, evidence):
     value = packed(evidence)
     identity = {key: val for key, val in evidence.items() if key != "observed_at"}
-    db.execute("INSERT OR IGNORE INTO outcomes VALUES (?,?,?,?,?,?,?,?)", (
+    inserted = db.execute("INSERT OR IGNORE INTO outcomes VALUES (?,?,?,?,?,?,?,?)", (
         sport, event, source, utc(evidence.get("observed_at")) or now_iso(), status,
         evidence.get("provider_event_id"), value, digest(packed(identity)),
-    ))
+    )).rowcount
+    if inserted:
+        db.execute("INSERT OR IGNORE INTO comparison_pending VALUES (?,?)", (sport, event))
 
 
 def import_outcomes(db, path):
@@ -405,6 +425,24 @@ def import_outcomes(db, path):
             store_outcome(db, row["sport"], row["event_id"], row["source"], row["status"], row)
             count += 1
     return count
+
+
+def restore_evidence(db, source):
+    """Load a backup's private evidence exports into a new isolated store."""
+    counts = {}
+    with db:
+        for table in ("decisions", "outcomes", "unresolved"):
+            columns = [row[1] for row in db.execute(f"PRAGMA table_info({table})")]
+            placeholders = ",".join("?" for _ in columns)
+            with (source / f"{table}.jsonl").open(encoding="utf-8") as stream:
+                for line in stream:
+                    record = json.loads(line)
+                    if set(record) != set(columns):
+                        raise ValueError(f"Invalid {table} evidence record")
+                    db.execute(f"INSERT INTO {table} VALUES ({placeholders})",
+                               tuple(record[column] for column in columns))
+            counts[table] = db.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+    return counts
 
 
 def archive_sources(root, state):
@@ -425,13 +463,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path("/opt/red-fox-market-dynamics"))
     parser.add_argument("--state", type=Path, default=Path("/var/lib/redfox-history/private"))
-    parser.add_argument("command", choices=("archive", "observe", "decisions", "import-results", "summary", "hot", "health"))
+    parser.add_argument("command", choices=("archive", "compact", "observe", "decisions",
+                                            "import-results", "restore-evidence", "summary", "hot", "health"))
     parser.add_argument("--input", type=Path)
     parser.add_argument("--max-shards", type=int, default=64)
     options = parser.parse_args()
+    if options.command == "restore-evidence":
+        if not options.input or (options.state / "history.sqlite3").exists():
+            parser.error("restore-evidence needs --input and a new isolated --state directory")
     data = options.root / "data"
     with connect(options.state) as db:
-        if options.command == "archive":
+        if options.command == "compact":
+            print(packed(blocks.migrate(db, options.state, FREE_DISK_RESERVE)))
+        elif options.command == "archive":
             seen = 0
             deferred = False
             for path in archive_sources(options.root, options.state):
@@ -458,6 +502,8 @@ def main():
                 print(packed({"indexed_rows": ingest_quotes(db, data / "snapshots.csv")}))
         elif options.command == "import-results":
             print(packed({"evidence_rows": import_outcomes(db, options.input)}))
+        elif options.command == "restore-evidence":
+            print(packed(restore_evidence(db, options.input)))
         elif options.command == "health":
             summary = health(db, options.root, options.state)
             print(packed(summary))
@@ -465,9 +511,9 @@ def main():
                 raise SystemExit("Historical storage early warning: less than 15 GiB free.")
         else:
             counts = db.execute("""
-                SELECT sport,market,count(*) AS rows,count(DISTINCT event_id) AS events,
-                       min(captured_at) AS first,max(captured_at) AS last
-                FROM quotes GROUP BY sport,market
+                SELECT sport,market,sum(observations) AS rows,count(DISTINCT event_id) AS events,
+                       min(first_at) AS first,max(last_at) AS last
+                FROM quote_blocks GROUP BY sport,market
             """).fetchall()
             print(packed([dict(r) for r in counts]))
 

@@ -15,4 +15,6 @@ UMask=0022
 ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python history_store.py hot
 ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python history_store.py decisions
 ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python history_outcomes.py
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python history_store.py compact
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python history_comparisons.py
 ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python history_store.py archive --max-shards 256
