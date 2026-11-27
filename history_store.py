@@ -230,10 +230,8 @@ def ingest_quotes(db, path, *, immutable=False, seconds=None):
             if len(quote_buffer) == 4000:
                 blocks.merge(db, quote_buffer)
                 quote_buffer.clear()
-                if immutable:
-                    # Keep consecutive board publications writable during large historical imports.
-                    # An interrupted source is retried and the quote key makes each batch idempotent.
-                    db.commit()
+                # An interrupted source is retried and these writes are idempotent.
+                db.commit()
                 if seconds and time.monotonic() - enter > seconds:
                     raise TimeoutError(f"Quote ingest exceeded time budget: {path.name}")
         blocks.merge(db, quote_buffer)
@@ -248,22 +246,32 @@ def ingest_quotes(db, path, *, immutable=False, seconds=None):
     return accepted
 
 
+def save_decisions(db, rows):
+    with db:
+        db.executemany("INSERT OR IGNORE INTO decisions VALUES (?,?,?,?,?,?,?)", rows)
+
+
 def ingest_decisions(db, path):
     sig = source_signature(path)
     prior = db.execute("SELECT signature FROM sources WHERE path=?", (str(path),)).fetchone()
     if prior and prior["signature"] == sig:
         return 0
     count = 0
-    with db, path.open(newline="", encoding="utf-8-sig") as handle:
+    batch = []
+    with path.open(newline="", encoding="utf-8-sig") as handle:
         for r in csv.DictReader(handle):
             sport, event = r.get("sport"), r.get("game_id")
             clock = utc(r.get("recorded_at") or r.get("reviewed_at") or r.get("captured_at_utc"))
             if sport not in SPORTS or not event or not clock:
                 continue
             value = packed(r)
-            db.execute("INSERT OR IGNORE INTO decisions VALUES (?,?,?,?,?,?,?)",
-                       (sport, event, r.get("market_display", ""), clock, path.stem, digest(value), value))
+            batch.append((sport, event, r.get("market_display", ""), clock, path.stem, digest(value), value))
             count += 1
+            if len(batch) == 250:
+                save_decisions(db, batch)
+                batch.clear()
+    save_decisions(db, batch)
+    with db:
         if source_signature(path) == sig:
             db.execute("INSERT OR REPLACE INTO sources VALUES (?,?,?,?)", (str(path), sig, None, count))
     return count
@@ -317,14 +325,18 @@ def ingest_coverage(db, path):
           SELECT sport,game_id,market_display,recorded_at,state,payload
           FROM transitions WHERE recorded_at>=? ORDER BY recorded_at
         """, (start,)).fetchall()
+    batch = []
+    for sport, event, market, observed, state, payload in records:
+        known_at = utc(observed)
+        if sport not in SPORTS or not event or not known_at:
+            continue
+        value = packed({"state": state, "source": json.loads(payload)})
+        batch.append((sport, event, market, known_at, "publication_transition", digest(value), value))
+        if len(batch) == 250:
+            save_decisions(db, batch)
+            batch.clear()
+    save_decisions(db, batch)
     with db:
-        for sport, event, market, observed, state, payload in records:
-            known_at = utc(observed)
-            if sport not in SPORTS or not event or not known_at:
-                continue
-            value = packed({"state": state, "source": json.loads(payload)})
-            db.execute("INSERT OR IGNORE INTO decisions VALUES (?,?,?,?,?,?,?)",
-                       (sport, event, market, known_at, "publication_transition", digest(value), value))
         if records:
             db.execute("INSERT OR REPLACE INTO jobs VALUES ('coverage_watermark',?)", (records[-1][3],))
     return len(records)

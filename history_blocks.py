@@ -1,7 +1,6 @@
 """Lossless quote blocks partitioned by UTC date and indexed by fixture and market."""
 
 from collections import defaultdict
-from itertools import groupby
 import hashlib
 import json
 import shutil
@@ -54,7 +53,7 @@ def merge(db, rows, *, verify=False):
     grouped = defaultdict(set)
     for row in rows:
         grouped[(*row[:3], row[3][:10])].add(row[3:])
-    dirty = set()
+    updates = []
     for key, incoming in grouped.items():
         old = db.execute("SELECT payload FROM quote_blocks WHERE (sport,event_id,market,day)=(?,?,?,?)",
                          key).fetchone()
@@ -69,10 +68,10 @@ def merge(db, rows, *, verify=False):
         payload = encode(merged)
         if verify and {tuple(row) for row in decode(payload)} != existing | incoming:
             raise RuntimeError(f"Historical quote round-trip failed for {key}")
-        db.execute("INSERT OR REPLACE INTO quote_blocks VALUES (?,?,?,?,?,?,?,?)",
-                   (*key, merged[0][0], merged[-1][0], len(merged), payload))
-        dirty.add(key[:2])
-    db.executemany("INSERT OR IGNORE INTO comparison_pending VALUES (?,?)", dirty)
+        updates.append((*key, merged[0][0], merged[-1][0], len(merged), payload))
+    db.executemany("INSERT OR REPLACE INTO quote_blocks VALUES (?,?,?,?,?,?,?,?)", updates)
+    db.executemany("INSERT OR IGNORE INTO comparison_pending VALUES (?,?)",
+                   {row[:2] for row in updates})
 
 
 def read_quotes(db, key, since="", until="9999"):
@@ -123,11 +122,10 @@ def migrate(db, state, reserve, *, batch=128):
                     SELECT * FROM quotes WHERE (sport,event_id,market)=(?,?,?)
                     ORDER BY captured_at,side,fingerprint
                 """, tuple(key))
+                rows = [logical_row(tuple(row)) for row in raw]
                 with db:
-                    for _, day in groupby(raw, key=lambda row: row["captured_at"][:10]):
-                        rows = [logical_row(tuple(row)) for row in day]
-                        merge(db, rows, verify=True)
-                        migrated += len(rows)
+                    merge(db, rows, verify=True)
+                    migrated += len(rows)
                     db.execute("INSERT OR REPLACE INTO jobs VALUES ('legacy_quote_cursor',?)",
                                (compact_json(tuple(key)),))
         else:
