@@ -4,7 +4,6 @@ Description=Monitor Red Fox historical infrastructure and send operational alert
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/red-fox-market-dynamics
-EnvironmentFile=-/etc/environment
 EnvironmentFile=-/etc/redfox-history-monitor.env
 Nice=15
 UMask=0077
