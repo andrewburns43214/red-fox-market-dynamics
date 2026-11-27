@@ -20,6 +20,7 @@ PRODUCTION_DATA = Path("/opt/red-fox-market-dynamics/data")
 PRODUCTION_STORE = Path("/var/lib/redfox-manual-favorites/decisions.sqlite3")
 MARKETS = ("SPREAD", "MONEYLINE", "TOTAL")
 MAX_QUOTE_AGE = timedelta(minutes=10)
+NCAAB_DELAY_WINDOW = timedelta(hours=2)
 
 
 def now_utc():
@@ -250,24 +251,68 @@ def same_fixture(row, decision):
     return row.get("game") == decision["game"] and stamp(row.get("kickoff_iso")) == stamp(decision["board_start"])
 
 
+def delayed_ncaab_book_start(row, decision):
+    if (row.get("sport") != "ncaab" or row.get("game") != decision["game"]
+            or decision["fixture"].get("source") != "espn"):
+        return None
+    original = stamp(decision["board_start"])
+    revised = stamp(row.get("kickoff_iso"))
+    return revised if original and revised and original < revised <= original + NCAAB_DELAY_WINDOW else None
+
+
+def matches_manual_espn_score(row, item, identity, start):
+    revised = stamp(item.get("event_time"))
+    if not (identity and str(item.get("score_provider_event_id")) == identity and start and revised):
+        return False
+    return revised == start or (row.get("sport") == "ncaab" and start < revised <= start + NCAAB_DELAY_WINDOW)
+
+
+def verified_delayed_start(row, decision, now, score_cache):
+    """Check an intranight schedule change against the saved provider event."""
+    book = delayed_ncaab_book_start(row, decision)
+    if not book or now >= book:
+        return None
+    from build_live_recent import exact_scores, fetch_scoreboard
+    from zoneinfo import ZoneInfo
+
+    fixture = decision["fixture"]
+    original = stamp(fixture.get("provider_start"))
+    if not original:
+        return None
+    tz = ZoneInfo("America/New_York")
+    days = tuple(sorted({start.astimezone(tz).date() for start in (original, book)}))
+    if days not in score_cache:
+        score_cache[days], _ = fetch_scoreboard("ncaab", now, dates=days, timeout=3)
+    for item in exact_scores(score_cache[days], row):
+        if not matches_manual_espn_score(row, item, fixture["id"], original):
+            continue
+        revised = stamp(item["event_time"])
+        if (original < revised and now < min(book, revised) and abs(book - revised) <= timedelta(minutes=45)
+                and item.get("score_state") == "pre" and item.get("score_status_code") == "STATUS_SCHEDULED"):
+            return min(book, revised)
+    return None
+
+
 def project_board(board, data_dir, now, ufc_proofs=None, *, saved=None):
     active = {key: value for key, value in (decisions(data_dir) if saved is None else saved).items()
               if value["action"] != "restore"}
     if not active or board.empty:
         return board
     result = board.copy()
+    score_cache = {}
     for index, row in board.iterrows():
         decision = active.get(scope(row))
         if not decision or row.get("game") != decision["game"]:
             continue
         result.at[index, "manual_revision"] = str(decision["revision"])
-        if (decision["action"] == "remove" or not same_fixture(row, decision)
-                or row.get("market_display") != decision["quote"]["market"]):
+        if decision["action"] == "remove" or row.get("market_display") != decision["quote"]["market"]:
             result.at[index, "red_fox_favorite"] = "false"
             result.at[index, "favorite_side"] = ""
             continue
         q = decision["quote"]
-        start = stamp(decision["fixture"].get("start"))
+        original_fixture = same_fixture(row, decision)
+        start = (stamp(decision["fixture"].get("start")) if original_fixture
+                 else verified_delayed_start(row, decision, now, score_cache))
         names = [selected_side(q["market"], side.get("flagged_side", "")) for side in sides(row)]
         current = stamp(row.get("state_as_of_utc"))
         proof = (ufc_proofs or {}).get(scope(row)[1])
@@ -275,7 +320,7 @@ def project_board(board, data_dir, now, ufc_proofs=None, *, saved=None):
             not ufc.allowed_pre(proof) or proof["bout_id"] != decision["fixture"]["id"]
             or proof["athlete_ids"] != decision["fixture"]["proof"]["athlete_ids"]
         )
-        if ((start and now >= start) or names.count(q["side"]) != 1
+        if ((not original_fixture and not start) or (start and now >= start) or names.count(q["side"]) != 1
                 or not current or not timedelta(0) <= now - current <= timedelta(minutes=30)
                 or str(row.get("data_badge", "")).lower() in {"retained", "unverified"}
                 or yes(row.get("cross_market_mismatch")) or yes(row.get("cross_market_opener_mismatch_verified"))
@@ -295,7 +340,8 @@ def owner_board_patches(data_dir, now):
         return []
     directory = Path(data_dir)
     rows = [row for row in csv_rows(directory / "anomaly_board.csv")
-            if (decision := saved.get(scope(row))) and same_fixture(row, decision)]
+            if (decision := saved.get(scope(row)))
+            and (same_fixture(row, decision) or delayed_ncaab_book_start(row, decision))]
     if not rows:
         return []
     ufc_proofs = {}
@@ -374,14 +420,17 @@ def freeze_overrides(live, market_candidates, data_dir, bouts, notices, now):
             result.at[index, "red_fox_favorite"] = "false"
             result.at[index, "favorite_side"] = ""
     frozen = []
+    raw_markets = {(scope(r), r.get("market_display")): r for r in market_candidates.to_dict("records")} if not market_candidates.empty else {}
     for event, decision in active.items():
         if event in already or decision["action"] == "remove":
             continue
         saved, fixture, q = stamp(decision["saved_at"]), decision["fixture"], decision["quote"]
         start = stamp(fixture.get("start"))
+        raw = raw_markets.get((event, q["market"]), {})
+        if revised := delayed_ncaab_book_start(raw, decision):
+            start = revised
         method, result_fields, proof = HANDOFF, {}, {}
         if fixture["source"] == "ufc":
-            raw = next((r for r in market_candidates.to_dict("records") if scope(r) == event and r.get("market_display") == "MONEYLINE"), None)
             evidence = ufc_handoff(decision, raw, bouts, notices, now)
             if not evidence:
                 continue
@@ -423,6 +472,6 @@ def manual_score(row, scores, data_dir, now):
     from build_live_recent import exact_scores
 
     for item in exact_scores(scores, row):
-        if str(item.get("score_provider_event_id")) == identity and stamp(item.get("event_time")) == start:
+        if matches_manual_espn_score(row, item, identity, start):
             return item
     return None

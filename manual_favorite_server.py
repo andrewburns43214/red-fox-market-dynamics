@@ -13,7 +13,8 @@ from zoneinfo import ZoneInfo
 from access_verifier import access_token, bearer_token, verified_user
 from build_live_recent import fetch_scoreboard, exact_scores
 from manual_favorites import (csv_rows, decisions, event_rows, latest_quotes, now_utc,
-                              official_board_choice, owner_board_patches, save, same_fixture, scope, snapshot_revision, stamp)
+                              delayed_ncaab_book_start, official_board_choice, owner_board_patches, save,
+                              same_fixture, scope, snapshot_revision, stamp)
 from mlb_fixtures import match_fixture, read_context
 import ufc_bout_integrity as ufc
 import pandas as pd
@@ -105,7 +106,7 @@ def event_context(data_dir, event):
     rows = event_rows(data_dir, event)
     current = decisions(data_dir, event).get(event)
     choice = official_board_choice(rows)
-    if current and rows and same_fixture(rows[0], current):
+    if current and rows and (same_fixture(rows[0], current) or delayed_ncaab_book_start(rows[0], current)):
         if current["action"] == "remove":
             choice = None
         elif current["action"] in {"add", "change"}:
@@ -151,7 +152,8 @@ def persist(data_dir, event, owner, request):
             return 409, {"error": "The quote changed or is unavailable. Review the current prices and confirm.", "refresh": True}
         q, row = offers[requested_quote]
     fixture = check_pregame(data_dir, row)
-    if not fixture or (current and same_fixture(row, current) and current["fixture"]["id"] != fixture["id"]):
+    same_event = current and (same_fixture(row, current) or delayed_ncaab_book_start(row, current))
+    if not fixture or (same_event and current["fixture"]["id"] != fixture["id"]):
         return 409, {"error": "Pregame status or fixture identity could not be verified."}
     if q:
         if fixture["source"] == "ufc" and stamp(q["observed"]) > stamp(fixture["pre_observed"]):

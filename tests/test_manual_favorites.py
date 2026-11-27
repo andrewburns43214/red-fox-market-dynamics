@@ -156,6 +156,43 @@ def test_owner_preview_uses_saved_selection_before_the_board_is_republished(tmp_
     assert not any(patch["favorite"] for patch in manual.owner_board_patches(tmp_path,NOW))
 
 
+def test_delayed_ncaab_manual_favorite_keeps_saved_quote_and_pinned_result(tmp_path, server, monkeypatch):
+    import build_live_recent
+
+    event=("ncaab","101")
+    seed(tmp_path,favorite=False,sport="ncaab")
+    monkeypatch.setattr(server,"check_pregame",lambda *_:fixture())
+    board=manual.event_rows(tmp_path,event)
+    quote=next(q for q,_ in manual.latest_quotes(tmp_path,board,NOW).values()
+               if q["market"]=="SPREAD" and q["side"]=="Away")
+    assert commit(server,tmp_path,"add",0,quote["token"],event)[0]==200
+    during_delay=START+timedelta(minutes=4)
+    revised=START+timedelta(minutes=20)
+    board=pd.DataFrame(board).assign(kickoff_iso=revised.isoformat(),state_as_of_utc=during_delay.isoformat())
+    board.to_csv(tmp_path/"anomaly_board.csv",index=False)
+    latest={"score_provider_event_id":"501","event_time":(revised-timedelta(minutes=2)).isoformat(),
+            "score_state":"pre","score_status_code":"STATUS_SCHEDULED"}
+    key=build_live_recent.game_key("Away @ Home","ncaab")
+    monkeypatch.setattr(build_live_recent,"fetch_scoreboard",lambda *a,**kw:({key:[latest]},"available"))
+    projected=manual.project_board(board,tmp_path,during_delay)
+    assert list(active(projected)["favorite_side"])==["Away +3"]
+    assert list(active(projected)["manual_entry_price"])==["-105"]
+    assert any(p["favorite"] for p in manual.owner_board_patches(tmp_path,during_delay))
+    assert manual.freeze_overrides(pd.DataFrame(),board,tmp_path,{},{},during_delay).empty
+    late=manual.freeze_overrides(pd.DataFrame(),board,tmp_path,{},{},revised)
+    record=active(late).iloc[0]
+    assert record["kickoff_iso"]==revised.isoformat()
+    assert record["manual_provider_start"]==START.isoformat()
+    assert record["manual_entry_price"]=="-105"
+    latest.update(score_state="post",score_status_code="STATUS_FINAL")
+    assert manual.manual_score(record,{key:[latest]},tmp_path,revised)==latest
+    assert active(manual.project_board(board,tmp_path,during_delay)).empty
+    latest["score_provider_event_id"]="wrong-fixture"
+    assert manual.manual_score(record,{key:[latest]},tmp_path,revised) is None
+    latest.update(score_provider_event_id="501",event_time=(START+timedelta(days=1)).isoformat())
+    assert manual.manual_score(record,{key:[latest]},tmp_path,revised) is None
+
+
 @pytest.mark.parametrize("market,side,scores,grade",[
     ("SPREAD","Away",(28,31),"Push"),
     ("MONEYLINE","Home",(28,31),"W"),
