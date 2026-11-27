@@ -18,7 +18,7 @@
 <script src="/pwa.js" defer></script>
 <script src="/manual-favorites.js?v=3" defer></script>
 <link rel="stylesheet" href="/historical-comparison.css?v=4">
-<script src="/historical-comparison.js?v=4" defer></script>
+<script src="/historical-comparison.js?v=5" defer></script>
 <script>
 // Keep the server-side access cookie aligned with the signed-in Supabase session.
 (function () {
@@ -1488,6 +1488,7 @@ td:last-child { border-radius: 0 8px 8px 0; }
 .detail-frozen-status { margin-top:4px; color:var(--red); font:800 9px var(--mono); text-transform:uppercase; letter-spacing:.06em; }
 .detail-history-loading { display:flex; align-items:center; gap:9px; min-height:58px; margin:10px 0 12px; padding:12px 14px; border:1px solid var(--border); border-radius:8px; background:var(--bg3); color:var(--text3); font:700 11px var(--sans); }
 .detail-history-loading::before { content:""; width:14px; height:14px; flex:0 0 auto; border:2px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:detail-history-spin .7s linear infinite; }
+.detail-comparison-status { margin:8px 0 4px; color:var(--text3); font:600 11px/1.4 var(--sans); }
 @keyframes detail-history-spin { to { transform:rotate(360deg); } }
 .live-empty { grid-column:1/-1; width:min(620px,100%); margin:12px 0 0; padding:16px 18px; background:#fff; border:1px solid var(--border); border-radius:9px; text-align:center; color:var(--text3); font-size:12px; }
 .live-more { grid-column:1/-1; min-height:44px; border:1px solid var(--border2); border-radius:8px; background:#fff; color:var(--accent); font:700 11px var(--sans); cursor:pointer; }
@@ -5321,6 +5322,8 @@ function renderGameDetail(){
   html+='<div class="detail-game-header">'+spChip(r.sport)+'<div class="detail-game-identity"><div class="detail-game-heading">'+escHtml(r.game||'--')+'</div><div class="detail-game-meta">'+escHtml(r.kickoff_time||'--')+'</div>'+frozenStatus+marketSwitcher+'</div></div>';
   if(!state.frozenPregame) html+=manualFavoriteButton(r);
   html+='<section style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px">'+sideToggle;
+  const comparisonStatus=window.redfoxHistory?.status(r,state.sideIndex);
+  if(comparisonStatus) html+='<p class="detail-comparison-status">'+escHtml(comparisonStatus)+'</p>';
   html+='<div class="detail-current-read"><div><div class="detail-current-line">'+escHtml(selected.current_line||'--')+'</div>'+(currentMovement?'<div class="detail-current-movement">'+currentMovement+'</div>':'')+'<div class="detail-current-splits"><span>'+escHtml(detailPct(selected.bets_pct,'Bets'))+'</span><span>'+escHtml(detailPct(selected.money_pct,'Money'))+'</span></div></div><div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">'+signals.map(anomalyBadge).join('')+'</div></div>';
   if(state.historyLoading) html+='<div class="detail-history-loading" role="status">Loading market trajectory and observation history…</div>';
   html+=movementChart(detailRows,r.market_display,state.selectedJourneyTimestamp,selected.flagged_side||sideLabel(selected,r));

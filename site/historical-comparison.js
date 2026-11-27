@@ -26,49 +26,76 @@
   }).format(new Date(value)) : "—";
   const minuteText = value => value >= 60 ? `${Math.floor(value / 60)}h ${Math.round(value % 60)}m`
     : `${Math.max(0, Math.round(value))} min`;
-  let manifest = {}, pending = {}, manifestHash = "", active = null, request = 0, lastButton = null;
+  let manifest = {}, availability = {}, pending = {}, payloads = {}, frozenGames = new Set();
+  let manifestHash = "", manifestState = "", active = null, request = 0, lastButton = null;
   const dialog = () => document.getElementById("historical-comparison");
   const authorized = (url) => window.redfoxAuthorizedFetch(url, {cache: "no-store"});
   const defaultCohort = report => Object.keys(cohorts).find(group => report[group]?.graded > 0) || "closest";
 
   async function refreshManifest() {
+    let current = {};
     try {
       const response = await window.redfoxAuthorizedFetch(base + "index.json", {cache: "no-store"}, {required: false});
-      const current = response.ok ? await response.json() : {};
-      const fresh = Date.now() - Date.parse(current.generated) < 40 * 60000;
-      manifest = current.enabled && fresh ? current.sides || {} : {};
-      pending = current.enabled && fresh ? current.pending || {} : {};
-      const hash = JSON.stringify([Object.entries(manifest).sort(), Object.entries(pending).sort()]);
-      if (hash !== manifestHash) {
-        if (dialog()?.open) return;
-        manifestHash = hash;
-        if (document.body.classList.contains("live-recent-active")) window.renderLiveRecent();
-        else window.renderBoard?.(false);
-      }
+      if (response.ok) current = await response.json();
     } catch (_) {
       // The normal board is independent of the optional research endpoint.
     }
+    const fresh = Date.now() - Date.parse(current.generated) < 40 * 60000;
+    manifestState = current.enabled === false ? "disabled" : current.enabled && fresh ? "ready" : "failed";
+    const ready = manifestState === "ready";
+    manifest = ready ? current.sides || {} : {};
+    availability = ready ? current.availability || {} : {};
+    pending = ready ? current.pending || {} : {};
+    payloads = ready ? current.payloads || {} : {};
+    frozenGames = new Set(ready ? current.frozen_games : []);
+    const hash = JSON.stringify([manifestState, Object.entries(manifest).sort(), Object.entries(pending).sort(),
+      Object.entries(availability).sort(), Object.entries(payloads).sort(), [...frozenGames].sort()]);
+    if (hash !== manifestHash && !dialog()?.open) {
+      manifestHash = hash;
+      if (document.body.classList.contains("live-recent-active")) window.renderLiveRecent();
+      else window.renderBoard?.(false);
+    }
+  }
+
+  function status(row, index) {
+    const key = gameKey(row);
+    if (manifestState === "failed") return "Historical comparison updates are temporarily unavailable.";
+    if (manifestState !== "ready") return "";
+    const started = row.sport !== "ufc" && Date.parse(row.kickoff_iso) <= Date.now();
+    if (started && !frozenGames.has(key)) return "Verified pregame comparison for this market is unavailable.";
+    const state = availability[key]?.[row.market_display]?.[index] || "source_limited";
+    return {
+      processing: "Historical comparisons for this market are waiting to be processed.",
+      backfill: "Historical captures for this decision window are still being indexed.",
+      source_limited: started ? "Verified pregame comparison for this market is unavailable."
+        : "Source coverage is insufficient to verify a comparable market setup.",
+      unverified: "Similar setups exist, but none has both a verified outcome and entry price.",
+      insufficient: "No comparable historical games met this setup’s criteria."
+    }[state] || "";
   }
 
   function available(row) {
-    return manifest[gameKey(row)]?.[row.market_display]?.some(Boolean) || false;
+    const key = gameKey(row);
+    return Boolean(payloads[key] && manifest[key]?.[row.market_display]?.some(Boolean));
   }
 
   function button(row, index, name) {
-    if (!manifest[gameKey(row)]?.[row.market_display]?.[index]) {
-      return pending[gameKey(row)]?.includes(row.market_display)
+    const key = gameKey(row);
+    if (row.sport !== "ufc" && Date.parse(row.kickoff_iso) <= Date.now() && !frozenGames.has(key)) return "";
+    if (!payloads[key] || !manifest[key]?.[row.market_display]?.[index]) {
+      return pending[key]?.includes(row.market_display)
         ? '<span class="historic-placeholder" title="Historical comparisons are processing" role="img" aria-label="Historical comparisons are processing">'+clockIcon+'</span>'
         : "";
     }
     return `<button type="button" class="historic-launch" title="Historical Comparisons"
       aria-haspopup="dialog" aria-label="Historical Comparisons for ${escape(name)}"
-      data-historic-game="${escape(gameKey(row))}" data-historic-market="${escape(row.market_display)}"
+      data-historic-game="${escape(key)}" data-historic-payload="${escape(payloads[key])}" data-historic-market="${escape(row.market_display)}"
       data-historic-lane="${index}" data-historic-observation="${escape(row.source_latest_at)}"
       onclick="event.stopPropagation();window.redfoxHistory.open(this)"><span class="historic-launch-mark">${icon}</span></button>`;
   }
 
   function liveButton(row) {
-    if (!available(row)) return "";
+    if (!available(row) || !frozenGames.has(gameKey(row))) return "";
     const name = row.flagged_side;
     const side = window.marketSideIdentity(row, row);
     const lanes = row.market_display === "TOTAL" ? ["OVER", "UNDER"] :
@@ -88,22 +115,23 @@
     if (!modal.open) modal.showModal();
     active = null;
     try {
-      const game = button.dataset.historicGame;
-      if (!/^[a-z]+--[A-Za-z0-9_-]{1,75}$/.test(game)) throw new Error();
-      const response = await authorized(base + game + ".json");
+      const file = button.dataset.historicPayload;
+      if (!/^snapshot--[a-f0-9]{24}$/.test(file)) throw new Error();
+      const response = await authorized(base + file + ".json");
       if (!response.ok) throw new Error();
       const payload = await response.json();
       if (!modal.open || token !== request) return;
       const market = button.dataset.historicMarket;
-      if (!payload.markets?.[market]) throw new Error();
       const index = Number(button.dataset.historicLane);
+      if (payload.sport+"--"+payload.event !== button.dataset.historicGame ||
+          !payload.markets?.[market]?.sides?.[index]?.comparison) throw new Error();
       active = {payload, market, team: market === "TOTAL" ? 0 : index, total: market === "TOTAL" ? index : 0,
         boardObservation: button.dataset.historicObservation, boardMarket: market,
         cohort: defaultCohort(payload.markets[market].sides[index].comparison)};
       render();
     } catch (_) {
       if (modal.open && token === request) modal.querySelector("[data-historic-body]").innerHTML =
-        '<p class="historic-empty" role="status">A verified comparison is temporarily unavailable for this market. You can still open the game’s Market Journey from the board.</p>';
+        '<p class="historic-empty" role="status">The published comparison could not be loaded. Market Journey is available from the board.</p>';
     }
   }
 
@@ -154,12 +182,14 @@
   }
 
   function performance(result, report) {
-    const notice=!result?.graded?(report.pending?"Processing history":"Insufficient history"):result.status==="limited"?"Limited sample":"";
-    const reason=!result?(report.reason||"Cross-sport context is unavailable for this market."):
+    const notice=!result?.graded?(report.reason?"Source coverage":report.pending?"Backfill pending":
+      result?.matched?"Unverified results":!result&&active.cohort==="cross"?"Unavailable":"Insufficient sample")
+      :result.status==="limited"?"Limited sample":"";
+    const reason=report.reason||(!result?"Cross-sport context is unavailable for this market.":
       !result.graded?(report.pending?"Historical captures are still being indexed for this decision window.":
-        result.matched?"Matched quotes have no verified grades as of this comparison.":"No comparable games in this group."):
+        result.matched?"Matched quotes need a verified outcome and entry price to count.":"No comparable games in this group."):
         active.cohort!=="closest"&&!report.closest?.graded?
-          "No priced, graded closest matches. Showing "+cohorts[active.cohort].toLowerCase()+"." : "";
+          "No priced, graded closest matches. Showing "+cohorts[active.cohort].toLowerCase()+"." : "");
     return `<section class="historic-performance" aria-label="Historical performance">
       <div class="historic-performance-head"><label><span>Comparison group</span><select data-historic-cohort aria-label="Comparison group">
         ${Object.entries(cohorts).map(([key,name])=>`<option value="${key}"${active.cohort===key?" selected":""}>${name}</option>`).join("")}
@@ -305,7 +335,7 @@
     window.setInterval(() => { if (!document.hidden) refreshManifest(); }, 120000);
   }
 
-  window.redfoxHistory = {available, button, liveButton, open};
+  window.redfoxHistory = {available, button, liveButton, open, status};
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, {once: true});
   else init();
 })();

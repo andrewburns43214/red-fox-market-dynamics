@@ -47,6 +47,10 @@ def test_archive_deduplication_conflicts_and_as_of(tmp_path):
     with connect(tmp_path / "state") as db:
         assert ingest_quotes(db, gzip_path := gz, immutable=True) == 4
         assert ingest_quotes(db, gzip_path, immutable=True) == 0
+        duplicate = tmp_path / "second_backup.csv.gz"
+        duplicate.write_bytes(gz.read_bytes())
+        assert ingest_quotes(db, duplicate, immutable=True) == 4
+        assert db.execute("SELECT count(*), count(distinct sha256) FROM sources").fetchone()[:] == (2, 1)
         assert ingest_quotes(db, plain) == 4
         assert db.execute("SELECT sum(observations) FROM quote_blocks").fetchone()[0] == 4
         rows = paired_as_of(db, "nfl", "one", "SPREAD", "2026-11-27T00:40:00Z", early)
@@ -83,6 +87,31 @@ def test_timed_archive_resumes_at_last_committed_csv_record(tmp_path, monkeypatc
         assert ingest_quotes(db, source, immutable=True, seconds=60) == 4002
         assert db.execute("SELECT sum(observations) FROM quote_blocks").fetchone()[0] == 4002
         assert not db.execute("SELECT 1 FROM jobs WHERE name LIKE 'archive_cursor:%'").fetchone()
+
+
+def test_checkpoint_upgrade_budget_and_sport_rotation(tmp_path, monkeypatch):
+    from history_comparisons import CONTEXT_VERSION
+
+    now = datetime(2026, 11, 27, 20, tzinfo=timezone.utc)
+    visited = []
+
+    def record(db, sport, event):
+        visited.append((sport, event))
+        return []
+
+    monkeypatch.setattr("history_comparisons.generate", record)
+    with connect(tmp_path) as db:
+        for sport, event, date in (("ncaab", "newest", "2026-11-25"), ("ncaab", "next", "2026-11-24"),
+                                   ("nhl", "other", "2026-11-22")):
+            db.execute("INSERT INTO comparison_windows VALUES (?,?,?,?,?,?,?,?)",
+                       (sport, "MONEYLINE", 30, event, date, date, date, b""))
+        db.commit()
+        assert rebuild(db, now, 2, upgrade_only=True, budget=0)["budget_deferred"] == 2
+        assert not visited
+        assert rebuild(db, now, 2, upgrade_only=True)["context_upgraded"] == 2
+        assert visited == [("ncaab", "newest"), ("nhl", "other")]
+        assert db.execute("SELECT count(*) FROM comparison_context_ready WHERE version=?",
+                          (CONTEXT_VERSION,)).fetchone()[0] == 2
 
 
 def test_compact_migration_preserves_variants_and_reclaims_legacy_pages(tmp_path):

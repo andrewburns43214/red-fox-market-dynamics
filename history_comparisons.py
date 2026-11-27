@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import re
 import shutil
+import time
 
 from history_blocks import decode, encode
 from history_store import FREE_DISK_RESERVE, connect, eligible_pairs, latest_provider_outcomes, number, packed, start_evidence, utc
@@ -305,7 +306,7 @@ def generate(db, sport, event):
     return known_match.values()
 
 
-def rebuild(db, now, limit, *, upgrade_only=False, upgrade_sport=None):
+def rebuild(db, now, limit, *, upgrade_only=False, upgrade_sport=None, budget=None):
     db.execute("""CREATE TABLE IF NOT EXISTS comparison_context_ready(
         sport TEXT,event_id TEXT,version INTEGER,PRIMARY KEY(sport,event_id)) WITHOUT ROWID""")
     events = [] if upgrade_only else db.execute("""
@@ -314,15 +315,31 @@ def rebuild(db, now, limit, *, upgrade_only=False, upgrade_sport=None):
         ORDER BY f.last_at DESC LIMIT ?
     """, (utc(now - timedelta(hours=3)), utc(now - timedelta(days=1)), max(1, limit * 3 // 4))).fetchall()
     upgrade = db.execute("""
-        SELECT w.sport,w.event_id FROM comparison_windows w
-        LEFT JOIN comparison_context_ready v USING(sport,event_id)
-        WHERE coalesce(v.version,0)<? AND (? IS NULL OR w.sport=?) AND NOT EXISTS (
-            SELECT 1 FROM comparison_pending p WHERE p.sport=w.sport AND p.event_id=w.event_id)
-        GROUP BY w.sport,w.event_id ORDER BY max(w.scheduled_at) DESC LIMIT ?
+        WITH eligible AS (
+            SELECT w.sport,w.event_id,max(w.scheduled_at) AS scheduled FROM comparison_windows w
+            LEFT JOIN comparison_context_ready v USING(sport,event_id)
+            WHERE coalesce(v.version,0)<? AND (? IS NULL OR w.sport=?) AND NOT EXISTS (
+                SELECT 1 FROM comparison_pending p WHERE p.sport=w.sport AND p.event_id=w.event_id)
+            GROUP BY w.sport,w.event_id
+        ), ranked AS (
+            SELECT *, row_number() OVER (PARTITION BY sport ORDER BY scheduled DESC,event_id) AS position
+            FROM eligible
+        )
+        SELECT sport,event_id FROM ranked ORDER BY position,scheduled DESC,sport LIMIT ?
     """, (CONTEXT_VERSION, upgrade_sport, upgrade_sport, max(0, limit - len(events)))).fetchall()
-    windows = 0
+    queue = []
+    for index in range(max((len(events) + 2) // 3, len(upgrade))):
+        if index < len(upgrade):
+            queue.append((True, upgrade[index]))
+        queue.extend((False, event) for event in events[index * 3:index * 3 + 3])
+    deadline = time.monotonic() + budget if budget is not None else None
+    fixtures = upgraded = windows = 0
     replaced = 0
-    for sport, event in (*events, *upgrade):
+    processed = 0
+    for is_upgrade, (sport, event) in queue:
+        if deadline is not None and time.monotonic() >= deadline:
+            break
+        processed += 1
         generated = generate(db, sport, event)
         with db:
             if upgrade_only:
@@ -340,10 +357,13 @@ def rebuild(db, now, limit, *, upgrade_only=False, upgrade_sport=None):
             db.execute("INSERT OR REPLACE INTO comparison_context_ready VALUES (?,?,?)",
                        (sport, event, CONTEXT_VERSION))
         windows += len(generated)
+        fixtures += 1
+        upgraded += is_upgrade
     if windows or replaced:
         with db:
             db.execute("INSERT OR REPLACE INTO jobs VALUES ('comparison_generation',?)", (utc(now),))
-    return {"fixtures": len(events) + len(upgrade), "windows": windows, "context_upgraded": len(upgrade)}
+    return {"fixtures": fixtures, "windows": windows, "context_upgraded": upgraded,
+            "budget_deferred": len(queue) - processed}
 
 
 def grade(sport, market, side, state, result):
@@ -447,6 +467,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--state", type=Path, default=Path("/var/lib/redfox-history/private"))
     parser.add_argument("--limit", type=int, default=128)
+    parser.add_argument("--seconds", type=float, default=480)
     parser.add_argument("--upgrade-existing", action="store_true")
     parser.add_argument("--upgrade-sport", choices=("nfl", "ncaaf", "nba", "ncaab", "nhl", "mlb", "ufc"))
     args = parser.parse_args()
@@ -456,7 +477,7 @@ def main():
     with connect(args.state) as db:
         print(packed(rebuild(db, datetime.now(timezone.utc), args.limit,
                              upgrade_only=args.upgrade_existing or bool(args.upgrade_sport),
-                             upgrade_sport=args.upgrade_sport)))
+                             upgrade_sport=args.upgrade_sport, budget=args.seconds)))
 
 
 if __name__ == "__main__":

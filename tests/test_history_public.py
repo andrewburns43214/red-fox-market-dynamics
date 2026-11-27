@@ -322,3 +322,44 @@ def test_delayed_board_keeps_only_the_identical_still_pregame_cached_quote(tmp_p
         row["market_sides"] = row["market_sides"].replace("+6 (-105)", "+6 (-108)")
         write_csv(source, row)
         assert build(db, tmp_path, output, tmp_path / "disabled", later)["games"] == 0
+
+
+def test_active_manifest_keeps_fetchable_version_when_next_payload_freezes_only_spread(tmp_path, monkeypatch):
+    now = datetime(2026, 11, 27, 20, tzinfo=timezone.utc)
+    data, output = tmp_path / "data", tmp_path / "public"
+    data.mkdir()
+    row = board_row(now)
+    write_csv(data / "anomaly_board.csv", row)
+
+    def setup(frozen):
+        keys = ("SPREAD",) if frozen else ("SPREAD", "MONEYLINE", "TOTAL")
+        return {"sport": "nfl", "event": "test", "game": row["game"], "frozen": frozen,
+                "markets": {market: {"observed": row["source_latest_at"], "scheduled": row["kickoff_iso"],
+                                      "sides": [{"comparison": {"closest": {"graded": 1}}} for _ in (0, 1)]}
+                            for market in keys}}
+
+    monkeypatch.setattr("history_public.render_fixture", lambda db, history, key, group, now, frozen: setup(frozen))
+    with connect(tmp_path) as db:
+        build(db, tmp_path, output, tmp_path / "disabled", now)
+        index = output / "index.json"
+        first = json.loads(index.read_bytes())
+        old_alias = output / (first["payloads"]["nfl--test"] + ".json")
+        old_bytes = old_alias.read_bytes()
+        write_csv(data / "live_recent.csv", row | {"frozen_at_utc": row["kickoff_iso"]})
+        assert build(db, tmp_path, output, tmp_path / "disabled", now + timedelta(minutes=30))["frozen"] == 1
+        second = json.loads(index.read_bytes())
+        assert second["frozen_games"] == ["nfl--test"]
+        assert second["sides"]["nfl--test"] == {"SPREAD": [True, True]}
+        assert second["payloads"]["nfl--test"] != first["payloads"]["nfl--test"]
+        assert old_alias.read_bytes() == old_bytes
+        new_alias = output / (second["payloads"]["nfl--test"] + ".json")
+        assert set(json.loads(new_alias.read_bytes())["markets"]) == {"SPREAD"}
+
+
+def test_no_grade_status_distinguishes_backfill_from_missing_evidence_and_no_matches():
+    from history_public import availability_for_side
+
+    assert availability_for_side({"comparison": {"pending": True}}, False) == "backfill"
+    assert availability_for_side({"comparison": {"reason": "Capped splits"}}, False) == "source_limited"
+    assert availability_for_side({"comparison": {"broader": {"matched": 2, "graded": 0}}}, False) == "unverified"
+    assert availability_for_side({"comparison": {"broader": {"matched": 0, "graded": 0}}}, False) == "insufficient"

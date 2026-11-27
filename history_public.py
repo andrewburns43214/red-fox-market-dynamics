@@ -6,6 +6,7 @@ import csv
 from datetime import datetime, timedelta, timezone
 import json
 import math
+import os
 from pathlib import Path
 import re
 import shutil
@@ -720,6 +721,19 @@ def usable_sides(payload, markets):
     ) for side in payload["markets"][market]["sides"]] for market in markets}
 
 
+def availability_for_side(side, usable):
+    report = side.get("comparison") or {}
+    if usable:
+        return "available"
+    if report.get("reason"):
+        return "source_limited"
+    if report.get("pending"):
+        return "backfill"
+    if any((report.get(group) or {}).get("matched") for group in ("closest", "broader", "cross")):
+        return "unverified"
+    return "insufficient"
+
+
 def build(db, root, output, control, now, *, preview=False, events=(), budget=None):
     if not preview:
         db.execute(FROZEN_SCHEMA)
@@ -745,11 +759,33 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
     available = {}
     masks = {}
     pending = {}
+    availability = {}
+    payloads = {}
+    frozen_games = []
 
     def register(path, payload, markets):
         keys.append(path.stem)
         available[path.stem] = list(markets)
         masks[path.stem] = usable_sides(payload, markets)
+        for market in markets:
+            availability[path.stem][market] = [
+                availability_for_side(side, usable)
+                for side, usable in zip(payload["markets"][market]["sides"], masks[path.stem][market])
+            ]
+        if payload.get("frozen"):
+            frozen_games.append(path.stem)
+        if any(any(sides) for sides in masks[path.stem].values()):
+            # An earlier manifest can still be in a browser while the worker
+            # replaces the canonical file with a new capture or a frozen game.
+            # Link the exact bytes for this manifest before publishing it.
+            name = "snapshot--" + digest(path.read_text(encoding="utf-8"))[:24]
+            alias = output / (name + ".json")
+            try:
+                alias.hardlink_to(path)
+            except FileExistsError:
+                pass
+            os.utime(alias, (now.timestamp(), now.timestamp()))
+            payloads[path.stem] = name
         for market in markets:
             if any(side.get("comparison", {}).get("pending") for side in payload["markets"][market]["sides"]):
                 pending.setdefault(path.stem, []).append(market)
@@ -767,6 +803,9 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
         group = recent.get(key) or board[key]
         frozen = key in recent
         path, old = paths[key], cached[key]
+        availability[path.stem] = {
+            market: ["source_limited"] * 2 for market in (board.get(key, {}).keys() | group.keys())
+        }
         signature = capture_signature(group, revision)
         if frozen and not preview and (old := db.execute("SELECT payload FROM comparison_frozen WHERE (sport,event_id)=(?,?)",
                                          key).fetchone()):
@@ -783,6 +822,9 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
                 register(path, old, valid)
             if expired and old.get("signature") != signature:
                 pending[path.stem] = list(group)
+                for market in group:
+                    if market not in valid:
+                        availability[path.stem][market] = ["processing"] * 2
             continue
         payload = render_fixture(db, history, key, group, now, frozen)
         if not frozen:
@@ -803,10 +845,16 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
         write(path, payload)
         register(path, payload, payload["markets"])
         updated += 1
-    write(manifest, {"enabled": True, "games": available, "sides": masks, "pending": pending, "generated": stamp})
+    write(manifest, {"enabled": True, "games": available, "sides": masks, "pending": pending,
+                     "availability": availability,
+                     "payloads": payloads, "frozen_games": frozen_games, "generated": stamp})
     present = set(keys)
+    snapshots = set(payloads.values())
     for path in output.glob("*--*.json"):
-        if path.stem not in present and now.timestamp() - path.stat().st_mtime > 86400:
+        if path.stem.startswith("snapshot--"):
+            if path.stem not in snapshots and now.timestamp() - path.stat().st_mtime > 45 * 60:
+                path.unlink()
+        elif path.stem not in present and now.timestamp() - path.stat().st_mtime > 86400:
             path.unlink()
     return {"games": len(keys), "updated": updated, "frozen": frozen_count, "deferred": deferred}
 

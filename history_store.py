@@ -207,6 +207,18 @@ def ingest_quotes(db, path, *, immutable=False, seconds=None):
     progress = json.loads(prior[0]) if prior else {}
     if progress.get("signature") != sig:
         progress = {}
+    source_hash = (progress.get("sha256") or file_digest(path)) if immutable else None
+    if source_hash:
+        duplicate = db.execute("SELECT rows FROM sources WHERE sha256=? LIMIT 1", (source_hash,)).fetchone()
+        if duplicate and source_signature(path) == sig:
+            # The complete byte-identical source is already in the index.
+            # Record provenance for this copy while retaining both raw files.
+            with db:
+                db.execute("INSERT OR REPLACE INTO sources VALUES (?,?,?,?)",
+                           (str(path), sig, source_hash, duplicate[0]))
+                if cursor_key:
+                    db.execute("DELETE FROM jobs WHERE name=?", (cursor_key,))
+            return duplicate[0]
     accepted = progress.get("rows", 0)
     fixtures = {}
     quote_buffer = []
@@ -243,7 +255,7 @@ def ingest_quotes(db, path, *, immutable=False, seconds=None):
                     db.executemany(INSERT_FIXTURE, ((*key, *value) for key, value in fixtures.items()))
                     fixtures.clear()
                     db.execute("INSERT OR REPLACE INTO jobs VALUES (?,?)", (cursor_key, packed({
-                        "signature": sig, "offset": handle.tell(), "rows": accepted,
+                        "signature": sig, "offset": handle.tell(), "rows": accepted, "sha256": source_hash,
                     })))
                 db.commit()
                 if seconds and time.monotonic() - enter > seconds:
@@ -256,7 +268,7 @@ def ingest_quotes(db, path, *, immutable=False, seconds=None):
                        "ON CONFLICT(name) DO UPDATE SET value=max(value,excluded.value)", (newest,))
         if source_signature(path) == sig:
             db.execute("INSERT OR REPLACE INTO sources VALUES (?,?,?,?)",
-                       (str(path), sig, file_digest(path) if immutable else None, accepted))
+                       (str(path), sig, source_hash, accepted))
             if cursor_key:
                 db.execute("DELETE FROM jobs WHERE name=?", (cursor_key,))
     return accepted
