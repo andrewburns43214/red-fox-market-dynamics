@@ -44,7 +44,10 @@ def side_key(value, sport, market):
 def line_price(value, market):
     if market == "MONEYLINE":
         n = number(value)
-        return None, int(n) if n is not None and n.is_integer() and abs(n) >= 100 else None
+        if n is not None and n.is_integer() and abs(n) >= 100:
+            return None, int(n)
+        _, price, _ = quote_part(str(value or ""))
+        return None, price if implied(price) is not None else None
     line, price, _ = quote_part("Market " + str(value or ""))
     return line, price if implied(price) is not None else None
 
@@ -68,6 +71,29 @@ def metadata(value):
     ) if key in value}
 
 
+def recover_frozen_clock(db, sport, event, market, sides, scheduled, frozen_at, actual):
+    """Recover a legacy frozen timestamp only against matching archived prices and splits."""
+    if not scheduled or not frozen_at or not isinstance(sides, list) or len(sides) != 2:
+        return None
+    stop = min(scheduled, frozen_at, actual or scheduled)
+    start = utc(datetime.fromisoformat(stop) - timedelta(minutes=45))
+    for clock, pair in reversed(list(eligible_pairs(db, sport, event, market, stop, start, actual_start=actual))):
+        if clock >= stop or pair[0]["scheduled_at"] != scheduled:
+            continue
+        keys = {side_key(quote["side"], sport, market): quote for quote in pair}
+        for row in sides:
+            quote = keys.get(side_key(row.get("flagged_side"), sport, market)) if isinstance(row, dict) else None
+            if not quote or line_price(row.get("current_line"), market) != (quote["line"], quote["price"]):
+                break
+            if line_price(row.get("open_line"), market) != (quote["open_line"], quote["open_price"]):
+                break
+            if (pct(row.get("bets_pct")), pct(row.get("money_pct"))) != (quote["tickets"], quote["money"]):
+                break
+        else:
+            return clock
+    return None
+
+
 def query_features(db, group, row, frozen, now):
     sport, event = row["sport"], row["game_id"]
     market = row.get("market_display")
@@ -75,17 +101,21 @@ def query_features(db, group, row, frozen, now):
         return None
     scheduled = utc(row.get("kickoff_iso"))
     observed = utc(row.get("source_latest_at"))
-    if not scheduled or not observed or observed > utc(now) or observed >= scheduled:
+    try:
+        raw = json.loads(row.get("market_sides") or "[]")
+    except ValueError:
         return None
     actual = start_evidence(db, sport, event)
+    if frozen and not observed:
+        observed = recover_frozen_clock(db, sport, event, market, raw, scheduled, utc(row.get("frozen_at_utc")), actual)
+        if observed:
+            raw = [side | {"source_latest_at": observed} for side in raw]
+    if not scheduled or not observed or observed > utc(now) or observed >= scheduled:
+        return None
     if actual and observed >= actual or frozen and sport == "ufc" and actual is None:
         return None
     if not frozen and (scheduled <= utc(now) or
                        now - datetime.fromisoformat(observed) > timedelta(minutes=35)):
-        return None
-    try:
-        raw = json.loads(row.get("market_sides") or "[]")
-    except ValueError:
         return None
     if not isinstance(raw, list) or not 1 <= len(raw) <= 2 or any(
         not isinstance(side, dict) or

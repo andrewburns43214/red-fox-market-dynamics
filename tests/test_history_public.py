@@ -113,6 +113,14 @@ def test_frozen_one_side_requires_the_exact_paired_archived_quote(tmp_path):
         setup = query_features(db, {}, row, True, now)
         assert [(item["name"], item["price"]) for item in setup["sides"]] == [
             ("NY Giants", -115), ("IND Colts", -105)]
+        legacy = board_row(now)
+        old_sides = [dict(item, source_latest_at=None) for item in json.loads(legacy["market_sides"])]
+        old_sides[0]["current_line"], old_sides[1]["current_line"] = "NY Giants -6 @ -115", "IND Colts +6 @ -105"
+        old_sides[0]["open_line"], old_sides[1]["open_line"] = "NY Giants -6.5 @ -110", "IND Colts +6.5 @ -110"
+        legacy.update(source_latest_at="", market_sides=json.dumps(old_sides), frozen_at_utc=schedule)
+        assert query_features(db, {}, legacy, True, now)["observed"] == capture
+        old_sides[1]["money_pct"] = 21
+        assert query_features(db, {}, legacy | {"market_sides": json.dumps(old_sides)}, True, now) is None
         shown[0]["current_line"] = "+6 (-107)"
         assert query_features(db, {}, row | {"market_sides": json.dumps(shown)}, True, now) is None
 

@@ -149,8 +149,10 @@ def generate(db, sport, event):
                 values = [features(history[row["side"]], row, market) for row in pair]
                 audits = recorded_split_context(db, sport, event, market, deadline)
                 for value in values:
-                    if value["side"] in audits:
-                        value["split_audit"] = audits[value["side"]]
+                    name = value["side"]
+                    identity = fighter_key(name) if sport == "ufc" else normalize_team_name(name, sport)
+                    if identity in audits:
+                        value["split_audit"] = audits[identity]
                 cross = "MONEYLINE" if market == "SPREAD" else "SPREAD" if market == "MONEYLINE" else None
                 cross_at = None
                 if cross:
