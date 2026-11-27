@@ -13,10 +13,12 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 
 import pandas as pd
 from anomaly_board import quote_change
 from nhl_release_config import official_nhl_favorite
+from snapshot_store import atomic_snapshot, snapshot_lock
 from ufc_bout_integrity import (PROOF as UFC_PROOF, read_market_proof as ufc_market_proof,
                                 retain_favorite_quotes as retain_ufc_quotes, row_proof as ufc_row_proof)
 
@@ -431,9 +433,16 @@ def update_favorite_tracking(
     nhl_selections: dict | None = None,
     mlb_enabled: bool | None = None,
     mlb_promotion_games: frozenset[str] | None = None,
+    deferred_markets: frozenset[tuple[str, str, str]] = frozenset(),
+    unavailable_sports: frozenset[str] = frozenset(),
 ) -> pd.DataFrame:
     """Persist every prospective snapshot and carry first qualification forward."""
     current = board.copy()
+    if not current.empty and (deferred_markets or unavailable_sports):
+        current = current.loc[[
+            key not in deferred_markets and key[0] not in unavailable_sports
+            for key in current[["sport", "game_id", "market_display"]].astype(str).itertuples(index=False, name=None)
+        ]].copy()
     at = _timestamp(as_of)
     path = Path(data_dir) / "red_fox_favorite_tracking.csv"
     history = _read_tracking(path)
@@ -451,7 +460,8 @@ def update_favorite_tracking(
         apply_static_moneyline(current, history, market_history, at, mlb_enabled, Path(data_dir),
                                diagnostics=mlb_diagnostics, promotion_games=mlb_promotion_games)
     current = _apply_visibility_lock(current, history, Path(data_dir), at, nba_hold_legacy=nba_config[1],
-                                     nhl_hypothetical=nhl_hypothetical)
+                                     nhl_hypothetical=nhl_hypothetical, deferred_markets=deferred_markets,
+                                     unavailable_sports=unavailable_sports)
     current = _apply_manual_favorite_inclusions(current, at)
     if nhl_selections:
         from nhl_official_release import publish_official
@@ -561,7 +571,8 @@ def update_favorite_tracking(
     # ceased to meet a gate. Record that transition without rewriting its frozen
     # Live & Recent row.
     for key, prior in previous.items():
-        if key in current_keys or str(prior.get("favorite_state", "")) != "qualified":
+        if (key in current_keys or key in deferred_markets or key[0] in unavailable_sports
+                or str(prior.get("favorite_state", "")) != "qualified"):
             continue
         # Kickoff removes a market from the live pregame board, but it must not
         # rewrite the official qualification history as a Favorite fall-off.
@@ -652,10 +663,6 @@ def _apply_manual_favorite_inclusions(frame: pd.DataFrame, at: str) -> pd.DataFr
 def _update_candidate_shadow(current: pd.DataFrame, data_dir: Path, at: str) -> None:
     """Append every published Supported Side evaluation, accepted or rejected."""
     path = data_dir / "red_fox_favorite_shadow.csv"
-    try:
-        history = pd.read_csv(path, dtype=str, keep_default_na=False) if path.exists() and path.stat().st_size else pd.DataFrame(columns=SHADOW_COLUMNS)
-    except (OSError, pd.errors.EmptyDataError):
-        history = pd.DataFrame(columns=SHADOW_COLUMNS)
     records = []
     captured = pd.Timestamp(at)
     captured = captured.tz_localize("UTC") if captured.tzinfo is None else captured.tz_convert("UTC")
@@ -768,15 +775,30 @@ def _update_candidate_shadow(current: pd.DataFrame, data_dir: Path, at: str) -> 
         })
     if not records:
         return
-    new = pd.DataFrame(records, columns=SHADOW_COLUMNS)
-    updated = new if history.empty else pd.concat(
-        [history.reindex(columns=SHADOW_COLUMNS), new], ignore_index=True,
-    )
-    updated = updated.drop_duplicates("capture_id", keep="last")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name("." + path.name + ".tmp")
-    updated.to_csv(temporary, index=False)
-    temporary.replace(path)
+    new = pd.DataFrame(records, columns=SHADOW_COLUMNS).drop_duplicates("capture_id", keep="last")
+    with snapshot_lock(path) as locked:
+        with atomic_snapshot(locked) as temporary:
+            if not locked.exists() or not locked.stat().st_size:
+                new.to_csv(temporary, index=False)
+                return
+            columns = pd.read_csv(locked, nrows=0).columns.tolist()
+            indexed = columns == SHADOW_COLUMNS
+            if indexed:
+                capture_ids = pd.read_csv(locked, usecols=["capture_id"], dtype=str, keep_default_na=False)
+                indexed = not capture_ids["capture_id"].isin(new["capture_id"]).any()
+            if indexed:
+                # Copy the existing CSV bytes without constructing a full
+                # DataFrame or serializing old rows on every market refresh.
+                shutil.copyfile(locked, temporary)
+                with temporary.open("rb+") as handle:
+                    handle.seek(-1, os.SEEK_END)
+                    if handle.read(1) not in (b"\n", b"\r"):
+                        handle.write(b"\n")
+                new.to_csv(temporary, mode="a", header=False, index=False)
+            else:
+                history = pd.read_csv(locked, dtype=str, keep_default_na=False)
+                updated = pd.concat([history.reindex(columns=SHADOW_COLUMNS), new], ignore_index=True)
+                updated.drop_duplicates("capture_id", keep="last").to_csv(temporary, index=False)
 
 
 def _visibility_review_minutes(sport: str) -> float:
@@ -796,6 +818,8 @@ def _apply_visibility_lock(
     at: str,
     *, nba_hold_legacy: bool = False,
     nhl_hypothetical: bool = False,
+    deferred_markets: frozenset[tuple[str, str, str]] = frozenset(),
+    unavailable_sports: frozenset[str] = frozenset(),
 ) -> pd.DataFrame:
     """Apply the two-stage T-40 review window and T-20 display lock with safety suppression."""
     if current is None or "kickoff_iso" not in current:
@@ -825,6 +849,16 @@ def _apply_visibility_lock(
     review_records: list[dict] = []
 
     keys = ("sport", "game_id", "market_display")
+    if not history.empty and all(column in history for column in (*keys, "recorded_at", "favorite_state")):
+        states = history.loc[:, [*keys, "recorded_at", "favorite_state"]]
+        by_market = dict(iter(states.groupby([states[column].astype(str) for column in keys], sort=False)))
+    else:
+        by_market = {}
+    if all(column in archived for column in keys):
+        archived_rows = {tuple(str(row.get(column, "")) for column in keys): row
+                         for _, row in archived.iterrows()}
+    else:
+        archived_rows = {}
     extra_slates = {}
     if not archived.empty and "favorite_rule_version" in archived:
         for _, row in archived.loc[archived["favorite_rule_version"].eq(NOV24_VERSION)].iterrows():
@@ -852,7 +886,8 @@ def _apply_visibility_lock(
         additions = []
         for _, row in archived.iterrows():
             key = tuple(str(row.get(column, "")) for column in keys)
-            if key in current_keys or official_nhl_favorite(row) or (key[0] == 'ufc' and ufc_row_proof(row)):
+            if (key in current_keys or key in deferred_markets or key[0] in unavailable_sports
+                    or official_nhl_favorite(row) or (key[0] == 'ufc' and ufc_row_proof(row))):
                 continue
             identity = (key[0].lower(), key[1], key[2].upper())
             if (identity in VISIBILITY_INVALIDATED_FAVORITES
@@ -863,8 +898,7 @@ def _apply_visibility_lock(
             if pd.isna(kickoff):
                 continue
             minutes = (kickoff - now).total_seconds() / 60
-            active = _official_active(history, key, now)
-            if not active or minutes < 0:
+            if minutes < 0 or key not in by_market or not _official_active(by_market[key], key, now):
                 continue
             stale_reason = _freshness_failure(None, row, now)
             if stale_reason:
@@ -925,8 +959,8 @@ def _apply_visibility_lock(
         review_minutes = _visibility_review_minutes(identity[0])
         lock_minutes = _visibility_lock_minutes(identity[0])
         raw_favorite = _truthy(row.get("red_fox_favorite"))
-        active = _official_active(history, key, now)
-        source = _archived_row(archived, key)
+        active = key in by_market and _official_active(by_market[key], key, now)
+        source = archived_rows.get(key)
         ufc_verified = identity[0] == 'ufc' and row.get('_ufc_integrity') == 'verified'
         if identity[0] == 'ufc' and row.get('_ufc_integrity') in {'verified','withheld'}:
             proof = ufc_market_proof(row)
@@ -1606,18 +1640,6 @@ def _freshness_failure(row: pd.Series | None, source: pd.Series | None, now: pd.
     if age > maximum:
         return f"Favorite unavailable: latest verified market state is {age:.1f} minutes old (maximum {maximum})."
     return ""
-
-
-def _archived_row(archived: pd.DataFrame, key: tuple[str, str, str]) -> pd.Series | None:
-    if archived.empty:
-        return None
-    mask = pd.Series(True, index=archived.index)
-    for column, value in zip(("sport", "game_id", "market_display"), key):
-        if column not in archived:
-            return None
-        mask &= archived[column].astype(str).eq(value)
-    matches = archived.loc[mask]
-    return matches.iloc[-1] if not matches.empty else None
 
 
 def _restore_favorite(frame: pd.DataFrame, index: object, source: pd.Series | None) -> None:

@@ -1,9 +1,11 @@
 """Build the public anomaly board without rerunning the legacy report pipeline."""
 
 from datetime import datetime, timezone
+from functools import lru_cache
 import json
 import os
 from pathlib import Path
+from time import perf_counter, process_time
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -84,7 +86,7 @@ def filter_fresh_market_rows(dashboard, now=None, max_age_minutes=None):
     else:
         current = current.tz_convert("UTC")
     captured = pd.to_datetime(dashboard["timestamp"], utc=True, errors="coerce")
-    return dashboard.loc[captured >= current - pd.Timedelta(minutes=max_age_minutes)].copy()
+    return dashboard.loc[captured.between(current - pd.Timedelta(minutes=max_age_minutes), current)].copy()
 
 
 def select_current_and_retained_markets(complete, now, retained_minutes=720, unavailable_sports=()):
@@ -154,7 +156,7 @@ def write_board_freshness(dashboard, data_dir=DATA, now=None, source_state="LIVE
     return oldest, newest, market_count
 
 
-def restore_retained_favorites(board, data_dir=DATA, now=None):
+def restore_retained_favorites(board, data_dir=DATA, now=None, *, previous_board=None):
     """Carry the last confirmed Favorite through a confirmed provider outage.
 
     This never creates a Favorite from a retained row. It restores only a
@@ -179,6 +181,13 @@ def restore_retained_favorites(board, data_dir=DATA, now=None):
     current = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
     current = current.tz_localize("UTC") if current.tzinfo is None else current.tz_convert("UTC")
     archived = archived.sort_values("candidate_recorded_at_utc", kind="mergesort").drop_duplicates(keys, keep="last")
+    carried = None
+    if previous_board is not None:
+        carried = {
+            (*[str(row.get(column, "")) for column in keys], str(row.get("favorite_side", "")).strip().casefold())
+            for row in previous_board.to_dict("records")
+            if str(row.get("red_fox_favorite", "")).lower() == "true"
+        }
     lookup = {
         tuple(str(row.get(column, "")) for column in keys): row
         for _, row in archived.iterrows()
@@ -230,6 +239,8 @@ def restore_retained_favorites(board, data_dir=DATA, now=None):
             continue
         supported = str(row.get("supported_side", "")).strip().casefold()
         favorite = str(source.get("favorite_side", "")).strip().casefold()
+        if carried is not None and (*key, favorite) not in carried:
+            continue
         if not supported or supported != favorite:
             continue
         for column in FAVORITE_COLUMNS:
@@ -243,6 +254,31 @@ def restore_retained_favorites(board, data_dir=DATA, now=None):
             "Favorite retained from the last confirmed pre-outage capture; live provider unavailable."
         )
     return result
+
+
+DECISION_KEYS = ["sport", "game_id", "market_display"]
+PAIRED_TEAM_SPORTS = {"nfl", "ncaaf", "cfb", "nba", "ncaab", "cbb"}
+
+
+def uncaptured_decision_markets(board, fresh_keys, deferred, now):
+    """Defer decisions when the final quote or its team-market peer is stale."""
+    if board.empty:
+        return frozenset(deferred)
+    observed = pd.to_datetime(board["source_latest_at"], errors="coerce", utc=True, format="mixed")
+    clocks = board.assign(timestamp=observed)
+    accepted = filter_fresh_market_rows(clocks, now=now)
+    invalid = clocks.loc[~clocks.index.isin(accepted.index)]
+    stale = set(deferred) | set(invalid[DECISION_KEYS].astype(str).itertuples(index=False, name=None)) | (
+        set(board[DECISION_KEYS].astype(str).itertuples(index=False, name=None)) - fresh_keys)
+    return frozenset(stale | {(sport, game, "MONEYLINE" if market == "SPREAD" else "SPREAD")
+                             for sport, game, market in stale
+                             if sport in PAIRED_TEAM_SPORTS and market in {"SPREAD", "MONEYLINE"}})
+
+
+def without_deferred_markets(frame, deferred):
+    if frame.empty or not deferred:
+        return frame
+    return frame.loc[~pd.MultiIndex.from_frame(frame[DECISION_KEYS].astype(str)).isin(list(deferred))]
 
 
 def compact_public_board_payload(board):
@@ -569,6 +605,17 @@ def main():
 
 
 def _refresh(coverage):
+    from publication_coverage import active_sports, keys as coverage_keys
+
+    wall, cpu = perf_counter(), process_time()
+
+    def stage(name):
+        nonlocal wall, cpu
+        now, used = perf_counter(), process_time()
+        print(f"[publisher] {name} wall={now - wall:.2f}s cpu={used - cpu:.2f}s", flush=True)
+        wall, cpu = now, used
+
+    side_key = lru_cache(maxsize=8192)(normalize_side_key)
     DATA.mkdir(parents=True, exist_ok=True)
     # Capture any just-started games from the prior pregame export before this
     # run replaces it. The separate file is the only source for Live & Recent.
@@ -599,7 +646,7 @@ def _refresh(coverage):
     active = snapshots[snapshots["timestamp"] >= newest_snapshot - pd.Timedelta(minutes=retained_minutes)].copy()
     coverage.stage(snapshots, active, "STALE_CAPTURE")
     active["side_key"] = [
-        normalize_side_key(sport, market, side)
+        side_key(sport, market, side)
         for sport, market, side in zip(active["sport"], active["market_display"], active["side"])
     ] if len(active) else pd.Series(dtype=str)
     dashboard = latest_synchronized_market_rows(active)
@@ -617,6 +664,14 @@ def _refresh(coverage):
     )
     coverage.stage(complete, dashboard, "STALE_CAPTURE")
     retained_source = bool(retained_keys)
+    fresh_keys = coverage_keys(dashboard) - retained_keys
+    unavailable_sports = frozenset(active_sports(coverage.now) - {sport for sport, _, _ in fresh_keys})
+    deferred = set(retained_keys) | {
+        key for key, reason in coverage.reasons.items()
+        if reason in {"STALE_CAPTURE", "AWAITING_COMPLETE_PAIR", "INCOMPLETE_MARKET_DATA",
+                      "CAPTURE_TIMESTAMP_INVALID", "RAW_MARKET_PARSE_FAILED"}
+        and key not in fresh_keys
+    }
     if retained_source:
         print(f"[degraded] retained {len(retained_keys)} verified markets within {retained_minutes} minutes of their actual captures")
     print(f"[ok] kept {len(dashboard)}/{before_freshness} rows within the public source-freshness window")
@@ -629,7 +684,8 @@ def _refresh(coverage):
         coverage.stage(dashboard, verified, 'KICKOFF_GATE')
         dashboard = verified
         print(f'[ufc-integrity] verified {len(ufc_proofs)} captured bout identities',flush=True)
-    update_market_candidates(dashboard, DATA / MARKET_CANDIDATES.name, as_of=newest_snapshot, ufc_proofs=ufc_proofs)
+    update_market_candidates(without_deferred_markets(dashboard, retained_keys), DATA / MARKET_CANDIDATES.name,
+                             as_of=newest_snapshot, ufc_proofs=ufc_proofs)
     dashboard["canonical_key"] = dashboard["sport"] + "|" + dashboard["game_id"]
     dashboard["_sort_time"] = dashboard.get("dk_start_iso", "")
 
@@ -649,6 +705,7 @@ def _refresh(coverage):
     coverage.stage(dashboard, in_window, "OUTSIDE_PUBLICATION_WINDOW")
     dashboard = in_window
     print(f"[ok] kept {len(dashboard)}/{before_window} markets after rolling football publication window")
+    stage("paired captures")
 
     # Expand lifetime paths only for markets that survived every existing
     # publication gate.  Previously the engine normalized and evaluated the
@@ -661,23 +718,31 @@ def _refresh(coverage):
     if ufc_proofs:
         history = ufc_integrity.scoped_history(history, ufc_proofs, ufc_bouts)
     history["side_key"] = [
-        normalize_side_key(sport, market, side)
+        side_key(sport, market, side)
         for sport, market, side in zip(history["sport"], history["market_display"], history["side"])
     ] if len(history) else pd.Series(dtype=str)
 
     l2 = load_current_l2(DATA, newest_snapshot)
+    stage("active market history")
     # Evaluate timing against the latest source capture, not the web server's
     # wall clock. This keeps Late deterministic and prevents historical data
     # or a delayed refresh from being mislabeled as a closing-window move.
     board, events = build_anomaly_outputs(dashboard, history, l2, as_of=newest_snapshot.to_pydatetime())
+    stage("market reads and timelines")
     # The evaluator's existing history requirement is unchanged. Every input
     # market omitted by it receives an explicit terminal state.
     coverage.stage(dashboard, board, "INSUFFICIENT_HISTORY")
-    from publication_coverage import keys as coverage_keys
     coverage.gate_ready = coverage_keys(board)
-    action_count = update_action_ledger(board, DATA, newest_snapshot.to_pydatetime())
+    deferred = uncaptured_decision_markets(board, fresh_keys, deferred, coverage.now)
+    action_count = update_action_ledger(without_deferred_markets(board, deferred), DATA, newest_snapshot.to_pydatetime())
     board = apply_recorded_signals(board, DATA)
     board = select_market_leaders(board)
+    display_only = board.loc[~board.index.isin(without_deferred_markets(board, deferred).index)].copy()
+    if not display_only.empty:
+        display_only["kpi_eligible"] = "false"
+        display_only["favorite_state"] = "source_deferred"
+        display_only["red_fox_favorite"] = "false"
+        board = without_deferred_markets(board, deferred).copy()
     board = apply_cross_market_integrity(board, history, as_of=newest_snapshot)
     board = apply_cross_market_split(board)
     if ufc_enabled and ufc_proofs:
@@ -698,7 +763,7 @@ def _refresh(coverage):
     # Persist the source observation time used for each published market.  The
     # downstream freeze worker can then select/validate the final state by
     # source time rather than by the minute at which its timer happens to run.
-    state_keys = ["sport", "game_id", "market_display"]
+    state_keys = DECISION_KEYS
     if not board.empty and all(column in board for column in state_keys):
         state_times = (
             dashboard.groupby(state_keys, as_index=False)["timestamp"]
@@ -731,13 +796,14 @@ def _refresh(coverage):
     except Exception as exc:
         print(f"[nhl-paper] capture failed: {type(exc).__name__}: {exc}", flush=True)
     nhl_selections = {}
-    if not retained_source:
+    if "nhl" not in unavailable_sports:
         try:
             from nhl_official_release import capture_official
 
             nhl_selections = capture_official(classified, history, nhl_goalies, DATA)
         except Exception as exc:
             print(f"[nhl-official] capture failed: {type(exc).__name__}: {exc}", flush=True)
+    stage("qualification inputs and NHL lifecycle")
     mlb_mode = os.environ.get(MLB_STATIC_FLAG, '').strip().lower()
     mlb_promotion_games = None
     mlb_context = DATA / MLB_CONTEXT_DIR
@@ -754,14 +820,20 @@ def _refresh(coverage):
     board = update_favorite_tracking(board, DATA, as_of=newest_snapshot, market_history=history,
                                      nba_config=nba_config, nhl_selections=nhl_selections,
                                      mlb_enabled=bool(mlb_promotion_games) if mlb_promotion_games is not None else None,
-                                     mlb_promotion_games=mlb_promotion_games)
-    if retained_source and not board.empty:
-        retained_rows = [
-            (row.sport, row.game_id, row.market_display) in retained_keys
-            for row in board.itertuples()
-        ]
-        board.loc[retained_rows, "data_badge"] = "RETAINED"
-        board = restore_retained_favorites(board, DATA, now=coverage.now)
+                                     mlb_promotion_games=mlb_promotion_games, deferred_markets=deferred,
+                                     unavailable_sports=unavailable_sports)
+    if not display_only.empty:
+        display_only["data_badge"] = "RETAINED"
+        display_only["state_as_of_utc"] = display_only["source_latest_at"]
+        display_only["favorite_reason"] = "Waiting for current market evidence."
+        try:
+            prior = pd.read_csv(DATA / "anomaly_board.csv", dtype=str, keep_default_na=False,
+                                usecols=[*DECISION_KEYS, "red_fox_favorite", "favorite_side"])
+        except (OSError, ValueError):
+            prior = pd.DataFrame()
+        display_only = restore_retained_favorites(display_only, DATA, now=coverage.now, previous_board=prior)
+        board = pd.concat([board, display_only], ignore_index=True, sort=False).sort_values("board_rank", kind="mergesort")
+    stage("favorite lifecycle and tracking")
     if ufc_enabled and not board.empty and board["sport"].eq("ufc").any():
         ufc_bouts, ufc_notices = ufc_integrity.load_context(DATA)
         now = pd.Timestamp.now(tz="UTC")
@@ -802,6 +874,7 @@ def _refresh(coverage):
             if retained_source else ""
         ),
     )
+    stage("board and timeline publication")
     resolved_count = rebuild_action_results(DATA)
     if legacy_board is not None:
         try:
@@ -810,6 +883,7 @@ def _refresh(coverage):
             record_recoveries(nba_raw, legacy_board, board, DATA, newest_snapshot, nba_config)
         except Exception as exc:
             print(f"[nba-recovered-shadow] capture failed: {type(exc).__name__}: {exc}", flush=True)
+    stage("settlement and shadow reconciliation")
     freshness_summary = "no current source rows" if freshness is None else (
         f"source range {freshness[0].isoformat()} to {freshness[1].isoformat()} across {freshness[2]} markets"
     )

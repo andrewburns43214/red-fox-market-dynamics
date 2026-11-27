@@ -25,6 +25,7 @@ from manual_favorites import HANDOFF as MANUAL_HANDOFF, VERSION as MANUAL_VERSIO
 from anomaly_action_results import _grade_action
 from nhl_release_config import OFFICIAL_HANDOFF, OFFICIAL_VERSIONS, official_nhl_favorite
 import ufc_bout_integrity as ufc
+from snapshot_store import atomic_snapshot, snapshot_lock
 from red_fox_favorite import (CFB_SPREAD_VERSIONS, NBA_PUBLIC_VERSION, MLB_STATIC_VERSION, NOV24_VERSION,
                               cfb_spread_favorite, nba_public_favorite, mlb_static_favorite, tracked_entry_quote)
 
@@ -1231,13 +1232,9 @@ def _exports(ledger: pd.DataFrame, data_dir: Path) -> None:
 def _update_ncaaf_shadow_results(ledger: pd.DataFrame, data_dir: Path) -> None:
     """Attach outcomes to prospective NCAAF shadow rows without reclassifying history."""
     path = data_dir / "red_fox_favorite_shadow.csv"
-    shadow = _read_csv(path)
-    if shadow.empty or ledger.empty:
+    if ledger.empty or not path.is_file():
         return
     result_columns = ["closing_spread", "game_result", "grade", "units_won_lost", "clv"]
-    for column in result_columns:
-        if column not in shadow:
-            shadow[column] = ""
     graded = ledger.loc[
         ledger.get("sport", pd.Series("", index=ledger.index)).astype(str).str.lower().isin({"ncaaf", "cfb"})
         & ledger.get("grade", pd.Series("", index=ledger.index)).astype(str).isin({"W", "L", "Push"})
@@ -1251,28 +1248,43 @@ def _update_ncaaf_shadow_results(ledger: pd.DataFrame, data_dir: Path) -> None:
         graded["event_id"].astype(str), graded["market"].astype(str).str.upper(),
     ))
     graded["_side_identity"] = graded["side"].map(_identity)
-    exact = {
-        (row["_event_market"], row["_side_identity"]): row
-        for _, row in graded.iterrows()
-    }
-    fallback = {row["_event_market"]: row for _, row in graded.iterrows()}
-    scoped = shadow.get("sport", pd.Series("", index=shadow.index)).astype(str).str.lower().isin({"ncaaf", "cfb"})
-    for index in shadow.index[scoped]:
-        key = (
-            _text(shadow.at[index, "game_id"]),
-            _text(shadow.at[index, "market_display"]).upper(),
-        )
-        matched = exact.get((key, _identity(shadow.at[index, "candidate_side"])))
-        if matched is None:
-            matched = fallback.get(key)
-        if matched is None:
-            continue
-        shadow.at[index, "closing_spread"] = matched.get("closing_line", "")
-        shadow.at[index, "game_result"] = matched.get("market_result", "") or matched.get("final_score", "")
-        shadow.at[index, "grade"] = matched.get("grade", "")
-        shadow.at[index, "units_won_lost"] = matched.get("net_profit_units", "")
-        shadow.at[index, "clv"] = matched.get("clv", "")
-    _atomic_csv(shadow, path)
+    exact, fallback = {}, {}
+    for row in graded.to_dict("records"):
+        key = row["_event_market"]
+        values = tuple(_text(value) for value in (
+            row.get("closing_line", ""), row.get("market_result", "") or row.get("final_score", ""),
+            row.get("grade", ""), row.get("net_profit_units", ""), row.get("clv", ""),
+        ))
+        exact[key, row["_side_identity"]] = values
+        fallback[key] = values
+    inputs = ["sport", "game_id", "market_display", "candidate_side"]
+    with snapshot_lock(path) as locked:
+        if not locked.stat().st_size:
+            return
+        columns = pd.read_csv(locked, nrows=0).columns
+        check = pd.read_csv(locked, dtype=str, keep_default_na=False, usecols=columns.intersection(inputs + result_columns))
+        if check.empty or not set(inputs).issubset(check.columns):
+            return
+        scoped = check.loc[check["sport"].str.lower().isin({"ncaaf", "cfb"})].reindex(
+            columns=inputs[1:] + result_columns, fill_value="")
+        updates = {}
+        for index, event, market, side, *current in scoped.itertuples():
+            key = (_text(event), _text(market).upper())
+            if key not in fallback:
+                continue
+            values = exact.get((key, _identity(side)), fallback[key])
+            if values != tuple(current):
+                updates[index] = values
+        if not updates:
+            return
+        shadow = _read_csv(locked)
+        for column in result_columns:
+            if column not in shadow:
+                shadow[column] = ""
+        changed = pd.DataFrame.from_dict(updates, orient="index", columns=result_columns)
+        shadow.loc[changed.index, result_columns] = changed
+        with atomic_snapshot(locked) as temporary:
+            shadow.to_csv(temporary, index=False)
 
 
 def update_performance_ledger(

@@ -34,7 +34,7 @@ def test_retained_source_keeps_true_capture_age_and_explicit_state(tmp_path):
 
 def test_retained_mode_is_bounded_and_never_fakes_live_timestamp():
     assert 'REDFOX_RETAINED_SOURCE_MAX_AGE_MINUTES", "720"' in REFRESH
-    assert 'board.loc[retained_rows, "data_badge"] = "RETAINED"' in REFRESH
+    assert 'display_only["data_badge"] = "RETAINED"' in REFRESH
     assert "Retained source" in BOARD
     assert "sources[0].label='Retained source'; sources[0].forced='warn'" in BOARD
 
@@ -157,3 +157,37 @@ def test_retained_mode_restores_only_matching_pre_outage_favorite(tmp_path):
     assert "pre-outage" in result.loc[result.game_id.eq("keep"), "favorite_reason"].iloc[0]
     assert result.loc[result.game_id.eq("mismatch"), "red_fox_favorite"].iloc[0] == "false"
     assert result.loc[result.game_id.eq("historical"), "red_fox_favorite"].iloc[0] == "false"
+    withheld = restore_retained_favorites(board, tmp_path, now="2026-09-20T16:30:00Z",
+                                          previous_board=board)
+    assert withheld.red_fox_favorite.eq("false").all()
+
+
+def test_stale_evidence_cannot_write_a_new_decision_or_remove_old_ones(tmp_path):
+    from red_fox_favorite import FAVORITE_COLUMNS, TRACKING_COLUMNS, update_favorite_tracking
+    from refresh_anomaly_board import uncaptured_decision_markets
+
+    now = pd.Timestamp("2026-11-27T16:00:00Z")
+    rows = [{"sport": sport, "game_id": "held", "market_display": "MONEYLINE",
+             "source_latest_at": "2026-11-27T15:40:00Z", "red_fox_favorite": "true",
+             "kickoff_iso": "2026-11-27T18:00:00Z"}
+            for sport in ("nfl", "ncaaf", "nba", "ncaab", "nhl", "mlb", "ufc")]
+    rows += [{"sport": "ncaab", "game_id": "held", "market_display": "SPREAD",
+              "source_latest_at": "2026-11-27T15:58:00Z", "red_fox_favorite": "true",
+              "kickoff_iso": "2026-11-27T18:00:00Z"}]
+    path = tmp_path / "red_fox_favorite_tracking.csv"
+    pd.DataFrame([row | {"favorite_state": "qualified", "recorded_at": "2026-11-27T15:40:00Z"}
+                  for row in rows], columns=TRACKING_COLUMNS).to_csv(path, index=False)
+    original = path.read_bytes()
+    keys = {(row["sport"], row["game_id"], row["market_display"]) for row in rows}
+    board = pd.DataFrame(rows)
+    for field in FAVORITE_COLUMNS:
+        if field not in board:
+            board[field] = ""
+    deferred = uncaptured_decision_markets(board, keys, set(), now)
+    assert keys <= deferred
+    updated = update_favorite_tracking(board, tmp_path, as_of=now, deferred_markets=deferred)
+    assert updated.empty
+    assert path.read_bytes() == original
+    assert not (tmp_path / "red_fox_favorite_review.csv").exists()
+    assert not (tmp_path / "red_fox_favorite_shadow.csv").exists()
+    assert not (tmp_path / "red_fox_favorite_freeze_candidates.csv").exists()

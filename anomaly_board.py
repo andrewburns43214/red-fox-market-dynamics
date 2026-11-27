@@ -2,6 +2,7 @@ import json
 import math
 import re
 from datetime import datetime, timezone
+from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -124,7 +125,7 @@ def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
     history_groups = {}
     if not history_df.empty:
         for group_key, group in history_df.groupby(["sport", "game_id", "market_display", "side_key"], dropna=False):
-            history_groups[group_key] = group.sort_values("timestamp", kind="mergesort").copy()
+            history_groups[group_key] = group.sort_values("timestamp", kind="mergesort")
 
     board_rows = []
     event_rows = []
@@ -139,7 +140,7 @@ def build_anomaly_outputs(latest_side_df, history_df, l2_df=None, as_of=None):
                 str(side_row.get("market_display", "")).upper(),
                 str(side_row.get("side_key", "")),
             )
-            hist = history_groups.get(latest_key, pd.DataFrame()).copy()
+            hist = history_groups.get(latest_key)
             evaluation = _evaluate_side(side_row, hist, pair_df, l2_df, as_of)
             if evaluation is None:
                 continue
@@ -729,7 +730,8 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         if market == "MONEYLINE"
         else line_move_abs >= line_move_threshold / 2 or price_move_pct >= MEANINGFUL_PRICE_MOVE_PCT / 2
     )
-    kickoff_ts = _coerce_ts(latest_row.get("_sort_time")) or _coerce_ts(latest_row.get("_game_time")) or _coerce_ts(latest_row.get("dk_start_iso"))
+    kickoff_ts = (_history_timestamp(latest_row.get("_sort_time")) or _history_timestamp(latest_row.get("_game_time"))
+                  or _history_timestamp(latest_row.get("dk_start_iso")))
     hours_to_kickoff = (kickoff_ts - as_of).total_seconds() / 3600 if kickoff_ts else None
     late_move = _is_late_move(points, market, move_threshold, hours_to_kickoff, sport)
     raw_whipsaw = dir_changes >= 1 and max_excursion >= move_threshold
@@ -964,17 +966,22 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
         key_number_pinned=bool(key_number_pinned and reaction == "Freeze"),
     )
 
+    event_fields = {
+        "sport": sport, "game_id": str(latest_row.get("game_id", "")),
+        "canonical_key": str(latest_row.get("canonical_key", "")), "game": str(latest_row.get("game", "")),
+        "market_display": market, "flagged_side": flagged_side, "focus_basis": focus_basis,
+        **action,
+    }
+    event_context = {
+        "reaction": reaction, "path": path_label, "first_anomaly_seen": first_seen,
+        "max_excursion": round(max_excursion, 3), "return_toward_open": return_to_open,
+        "broader_market_comparison": broader["summary"], "key_number_note": key_number,
+        "key_numbers_crossed": " | ".join(key_numbers_crossed),
+    }
     event_rows = []
     for index, point in enumerate(points):
         event_rows.append({
-            "sport": sport,
-            "game_id": str(latest_row.get("game_id", "")),
-            "canonical_key": str(latest_row.get("canonical_key", "")),
-            "game": str(latest_row.get("game", "")),
-            "market_display": market,
-            "flagged_side": flagged_side,
-            "focus_basis": focus_basis,
-            **action,
+            **event_fields,
             "timestamp": point["timestamp"].isoformat(),
             "step_index": index + 1,
             "observation_count": observation_count,
@@ -986,14 +993,7 @@ def _evaluate_side(latest_row, history_rows, pair_df, l2_df, as_of):
             "money_pct": point["money_pct"],
             "is_open": index == 0,
             "is_current": index == (observation_count - 1),
-            "reaction": reaction,
-            "path": path_label,
-            "first_anomaly_seen": first_seen,
-            "max_excursion": round(max_excursion, 3),
-            "return_toward_open": return_to_open,
-            "broader_market_comparison": broader["summary"],
-            "key_number_note": key_number,
-            "key_numbers_crossed": " | ".join(key_numbers_crossed),
+            **event_context,
         })
 
     return {
@@ -1060,47 +1060,44 @@ def _build_history_points(history_rows, market):
     if history_rows is None or history_rows.empty:
         return []
 
-    columns = {column: index for index, column in enumerate(history_rows.columns)}
-    current_index = columns.get("current_line")
-    timestamp_index = columns.get("timestamp")
-    bets_index = columns.get("bets_pct")
-    money_index = columns.get("money_pct")
-    if current_index is None or timestamp_index is None:
+    if not {"current_line", "timestamp"}.issubset(history_rows.columns):
         return []
 
-    points = []
-    for row in history_rows.itertuples(index=False, name=None):
-        raw_line = row[current_index]
-        parsed = _parse_snapshot_value(raw_line, market)
-        if parsed["value"] is None:
+    # Most quotes repeat prices and share capture timestamps with other markets.
+    # Iterate only the columns used here and keep the final quote at each instant.
+    latest_by_timestamp = {}
+    for line, captured, bets, money in history_rows.reindex(
+            columns=["current_line", "timestamp", "bets_pct", "money_pct"], fill_value=0
+    ).itertuples(index=False, name=None):
+        parsed = _parse_snapshot_value(line, market)
+        timestamp = _history_timestamp(captured)
+        if parsed["value"] is None or timestamp is None:
             continue
-        points.append({
-            "timestamp": _coerce_ts(row[timestamp_index]),
+        latest_by_timestamp[timestamp] = {
+            "timestamp": timestamp,
             "value": parsed["value"],
             "display": parsed["display"],
             "base_display": parsed.get("base_display", parsed["display"]),
             "odds": parsed.get("odds"),
             "implied_pct": parsed.get("implied_pct"),
-            "bets_pct": _num(row[bets_index]) if bets_index is not None else 0.0,
-            "money_pct": _num(row[money_index]) if money_index is not None else 0.0,
-        })
-
-    points = [point for point in points if point["timestamp"] is not None]
-    points.sort(key=lambda point: point["timestamp"])
-    if not points:
-        return []
-
-    # A scraper retry can append two values with the same source timestamp.
-    # Keep the final capture for that instant so the timeline remains one
-    # coherent state sequence rather than plotting contradictory duplicates.
-    latest_by_timestamp = {}
-    for point in points:
-        latest_by_timestamp[point["timestamp"]] = point
+            "bets_pct": _num(bets),
+            "money_pct": _num(money),
+        }
     return [latest_by_timestamp[timestamp] for timestamp in sorted(latest_by_timestamp)]
+
+
+@lru_cache(maxsize=8192)
+def _history_timestamp(captured):
+    return _coerce_ts(captured)
 
 
 def _parse_snapshot_value(raw_line, market):
     text = str(raw_line or "").strip()
+    return _parse_quote_text(text, market)
+
+
+@lru_cache(maxsize=16384)
+def _parse_quote_text(text, market):
     if not text:
         return {"value": None, "display": ""}
 
@@ -1108,7 +1105,6 @@ def _parse_snapshot_value(raw_line, market):
     implied_pct = _american_to_implied_pct(odds)
 
     if market == "MONEYLINE":
-        odds = _extract_last_number(text)
         if odds is None:
             return {"value": None, "display": ""}
         return {

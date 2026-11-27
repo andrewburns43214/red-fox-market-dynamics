@@ -507,18 +507,25 @@ def _confirm_favorite_with_final_raw_market(candidate: pd.Series, raw: pd.Series
         sides = [item for item in json.loads(str(raw.get("market_sides", "")) or "[]") if isinstance(item, dict)]
     except (TypeError, ValueError, json.JSONDecodeError):
         return None
+    from red_fox_favorite import _freshness_failure, _truthy
+
+    kickoff = pd.to_datetime(candidate.get("kickoff_iso"), utc=True, errors="coerce")
+    state_at = pd.to_datetime(raw.get("state_as_of_utc"), utc=True, errors="coerce")
+    if pd.isna(kickoff) or pd.isna(state_at) or state_at > kickoff:
+        return None
+    if str(raw.get("data_badge", "")).upper() == "RETAINED":
+        return None
+    evidence = raw.copy()
+    evidence["source_latest_at"] = state_at.isoformat()
+    if _freshness_failure(evidence, candidate, kickoff):
+        return None
     favorite_identity = _favorite_side_identity(candidate.get("favorite_side", ""))
     if nba_public_favorite(candidate):
-        from red_fox_favorite import _freshness_failure, _truthy
-
-        kickoff = pd.to_datetime(candidate.get("kickoff_iso"), utc=True, errors="coerce")
-        state_at = pd.to_datetime(raw.get("state_as_of_utc"), utc=True, errors="coerce")
         support = _favorite_side_identity(raw.get("supported_side", ""))
         matching = [item for item in sides if _favorite_side_identity(item.get("flagged_side")) == favorite_identity]
-        if (pd.isna(kickoff) or pd.isna(state_at) or state_at > kickoff or len(matching) != 1
+        if (len(matching) != 1
                 or support not in {"", favorite_identity}
-                or any(_truthy(raw.get(field)) for field in ("cross_market_mismatch", "cross_market_opener_mismatch_verified"))
-                or _freshness_failure(raw, candidate, kickoff)):
+                or any(_truthy(raw.get(field)) for field in ("cross_market_mismatch", "cross_market_opener_mismatch_verified"))):
             return None
     side = next(
         (item for item in sides if _favorite_side_identity(item.get("flagged_side", "")) == favorite_identity),

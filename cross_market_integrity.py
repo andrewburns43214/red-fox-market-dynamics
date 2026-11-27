@@ -11,6 +11,7 @@ from collections import defaultdict, deque
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 import json
+from itertools import groupby
 import re
 
 import pandas as pd
@@ -193,12 +194,13 @@ def _market_observations(history: pd.DataFrame, market: str) -> list[dict]:
         ["timestamp", "side", "current_line", "open_line"],
     ]
     observations = []
-    for timestamp, captured in rows.groupby("timestamp", sort=True):
+    ordered = rows.sort_values("timestamp", kind="mergesort")
+    for timestamp, captured in groupby(ordered.itertuples(index=False, name=None), key=lambda row: row[0]):
         current, opening, displays = {}, {}, {}
         reliable = True
         # Tuple iteration avoids allocating a pandas Series for every retained
         # historical side (hundreds of thousands per production refresh).
-        for _, side, current_line, open_line in captured.itertuples(index=False, name=None):
+        for _, side, current_line, open_line in captured:
             team = _team_identity(side)
             if not team or team in current:
                 reliable = False
@@ -266,14 +268,14 @@ def _pair_observations(spread: list[dict], moneyline: list[dict]) -> list[dict]:
 
 
 def _conflict_streak(pairs: list[dict], use_open: bool) -> dict:
-    evaluations = [_evaluate_pair(pair, use_open=use_open) for pair in pairs]
-    latest = evaluations[-1]
+    latest = _evaluate_pair(pairs[-1], use_open=use_open)
     if not latest["conflict"]:
         return {**latest, "count": 0, "duration": 0.0}
     streak = [(pairs[-1], latest)]
-    for pair, evaluation in reversed(list(zip(pairs[:-1], evaluations[:-1]))):
+    for pair in reversed(pairs[:-1]):
         newer_pair, newer_evaluation = streak[-1]
         gap = (newer_pair["time"] - pair["time"]).total_seconds() / 60.0
+        evaluation = _evaluate_pair(pair, use_open=use_open)
         same_story = evaluation["conflict"] and evaluation["team"] == newer_evaluation["team"]
         if not same_story or gap > CONFIG.maximum_streak_gap_minutes:
             break
