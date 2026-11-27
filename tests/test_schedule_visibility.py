@@ -57,7 +57,7 @@ def test_board_shows_schedule_only_game_without_a_market_read():
             page = browser.new_page()
             page.goto(board_path.as_uri(), wait_until="domcontentloaded")
             result = page.evaluate("""() => {
-              allDash=[]; sport='NHL'; market='ALL'; filter='all';
+              allDash=[]; _boardDataReady=true; sport='NHL'; market='ALL'; filter='all';
               publicationCoverage={scheduled_without_markets:[{sport:'nhl',game:'Buffalo Sabres @ Pittsburgh Penguins',kickoff_iso:new Date(Date.now()+3600000).toISOString()}]};
               renderBoard();
               return {cards:document.querySelectorAll('.schedule-coverage-game').length,

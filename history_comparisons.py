@@ -14,10 +14,11 @@ from team_aliases import _split_game, normalize_team_name
 from ufc_bout_integrity import fighter_key
 
 
-WINDOWS = (4320, 2880, 1440, 360, 120, 60, 40, 30, 20, 10)
+ADDED_WINDOWS = (2160, 960, 600, 240, 180, 90)
+WINDOWS = tuple(sorted((4320, 2880, 1440, 360, 120, 60, 40, 30, 20, 10, *ADDED_WINDOWS), reverse=True))
 MAX_AGE = timedelta(minutes=20)
 MARKETS = ("SPREAD", "MONEYLINE", "TOTAL")
-CONTEXT_VERSION = 4
+CONTEXT_VERSION = 5
 
 
 def side_key(value, sport, market):
@@ -106,9 +107,10 @@ def features(history, entry, market):
     else:
         path = [direction * row["line"] if row["line"] is not None else None for row in history]
         anchor = direction * entry["open_line"] if entry["open_line"] is not None else None
-    turn = next((row for row, value in zip(history, path) if anchor is not None and value is not None and
+    valid_path = [(row, value) for row, value in zip(history, path) if value is not None]
+    turn = next((row for row, value in valid_path if anchor is not None and
                  value - anchor >= (.005 if market == "MONEYLINE" else .25)), {})
-    path = [value for value in path if value is not None]
+    path = [value for _, value in valid_path]
     steps = [1 if b > a else -1 for a, b in zip(path, path[1:]) if a != b]
     first = history[0] if history else {}
     def opening_split(key):
@@ -134,6 +136,12 @@ def features(history, entry, market):
         trajectory = ("retraced" if retreat >= threshold and max(path) - anchor >= threshold else
                       "recovered" if rebound >= threshold and (min(path) < anchor - threshold or -1 in steps) else
                       stance)
+    turns = []
+    if trajectory in {"retraced", "recovered"} and valid_path[:-1]:
+        for extreme, value in (min(valid_path[:-1], key=lambda item: item[1]), max(valid_path[:-1], key=lambda item: item[1])):
+            if abs(value - anchor) >= threshold and abs(value - path[-1]) >= threshold:
+                turns.append({key: extreme[key] for key in ("line", "price", "captured_at")})
+        turns.sort(key=lambda row: row["captured_at"])
     return {
         "side": entry["side"], "line": entry["line"], "price": entry["price"],
         "open_line": entry["open_line"], "open_price": entry["open_price"],
@@ -151,7 +159,7 @@ def features(history, entry, market):
         "money_after_move": delta(entry["money"], turn.get("money")),
         "split_gap": delta(entry["money"], entry["tickets"]),
         "observations": len(history),
-        "stance": stance, "trajectory": trajectory,
+        "stance": stance, "trajectory": trajectory, "path_turns": turns,
         "ticket_growth_price_held": entry["tickets"] > initial_tickets if support_held and
         initial_tickets is not None and entry["tickets"] is not None else None,
         "money_growth_price_held": entry["money"] > initial_money if support_held and
@@ -227,7 +235,7 @@ def aligned_values(pairs, index, pair, market, schedule):
                   row["scheduled_at"] == schedule]
         fields = ("side", "line", "price", "open_line", "open_price", "tickets", "money",
                   "line_toward", "price_toward_implied", "path_retrace", "path_direction_changes",
-                  "stance", "trajectory")
+                  "stance", "trajectory", "path_turns")
         result[quote["side"]] = {key: full[key] for key in fields} | {
             "market": market, "captured_at": quote["captured_at"],
             "sustained_toward": cross_evidence(market, quote, recent)["sustained_toward"] if market != "TOTAL" else None,
@@ -297,7 +305,7 @@ def generate(db, sport, event):
     return known_match.values()
 
 
-def rebuild(db, now, limit, *, upgrade_only=False):
+def rebuild(db, now, limit, *, upgrade_only=False, upgrade_sport=None):
     db.execute("""CREATE TABLE IF NOT EXISTS comparison_context_ready(
         sport TEXT,event_id TEXT,version INTEGER,PRIMARY KEY(sport,event_id)) WITHOUT ROWID""")
     events = [] if upgrade_only else db.execute("""
@@ -308,10 +316,10 @@ def rebuild(db, now, limit, *, upgrade_only=False):
     upgrade = db.execute("""
         SELECT w.sport,w.event_id FROM comparison_windows w
         LEFT JOIN comparison_context_ready v USING(sport,event_id)
-        WHERE coalesce(v.version,0)<? AND NOT EXISTS (
+        WHERE coalesce(v.version,0)<? AND (? IS NULL OR w.sport=?) AND NOT EXISTS (
             SELECT 1 FROM comparison_pending p WHERE p.sport=w.sport AND p.event_id=w.event_id)
         GROUP BY w.sport,w.event_id ORDER BY max(w.scheduled_at) DESC LIMIT ?
-    """, (CONTEXT_VERSION, max(0, limit - len(events)))).fetchall()
+    """, (CONTEXT_VERSION, upgrade_sport, upgrade_sport, max(0, limit - len(events)))).fetchall()
     windows = 0
     replaced = 0
     for sport, event in (*events, *upgrade):
@@ -440,12 +448,15 @@ def main():
     parser.add_argument("--state", type=Path, default=Path("/var/lib/redfox-history/private"))
     parser.add_argument("--limit", type=int, default=128)
     parser.add_argument("--upgrade-existing", action="store_true")
+    parser.add_argument("--upgrade-sport", choices=("nfl", "ncaaf", "nba", "ncaab", "nhl", "mlb", "ufc"))
     args = parser.parse_args()
     if shutil.disk_usage(args.state).free < FREE_DISK_RESERVE:
         print(packed({"deferred": "disk reserve"}))
         return
     with connect(args.state) as db:
-        print(packed(rebuild(db, datetime.now(timezone.utc), args.limit, upgrade_only=args.upgrade_existing)))
+        print(packed(rebuild(db, datetime.now(timezone.utc), args.limit,
+                             upgrade_only=args.upgrade_existing or bool(args.upgrade_sport),
+                             upgrade_sport=args.upgrade_sport)))
 
 
 if __name__ == "__main__":

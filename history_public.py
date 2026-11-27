@@ -13,7 +13,7 @@ import sqlite3
 import time
 
 from history_blocks import decode, encode, read_quotes
-from history_comparisons import (CONTEXT_VERSION, MARKETS, WINDOWS, aligned_game, delta, features,
+from history_comparisons import (ADDED_WINDOWS, CONTEXT_VERSION, MARKETS, WINDOWS, aligned_game, delta, features,
                                  fixture_pairs, grade, implied, recorded_split_context, side_key)
 from history_store import FREE_DISK_RESERVE, SPORTS, atomic_text, digest, eligible_pairs, latest_provider_outcomes, number, packed, quote_part, start_evidence, utc
 from team_aliases import _split_game, normalize_team_name
@@ -61,6 +61,14 @@ def metadata(value):
         "reaction", "path", "data_badge", "evidence_role", "whipsaw_recovered", "context_chips",
         "key_numbers_crossed", "response_direction", "active_worsening_reversal",
     ) if key in value}
+
+
+def capped_splits(side):
+    context = side.get("context") or {}
+    return (side.get("tickets"), side.get("money")) in {(0, 0), (100, 100)} and (
+        str(context.get("data_badge") or "").upper() == "SPLIT RISK" or
+        "split cap" in str(context.get("context_chips") or "").casefold()
+    )
 
 
 def recover_frozen_clock(db, sport, event, market, sides, scheduled, frozen_at, actual):
@@ -194,7 +202,7 @@ def query_features(db, group, row, frozen, now, *, archive=None):
                                   "path_max_toward", "path_min_toward", "path_retrace", "path_direction_changes",
                                   "duration_minutes", "tickets_after_move", "money_after_move"):
                 value[name_of_value] = None
-        value.update(name=name, context=metadata(raw_side), index=len(values), captured_at=observed)
+        value.update(name=name, context=metadata(raw_side) or metadata(row), index=len(values), captured_at=observed)
         if identity in audits:
             value["split_audit"] = audits[identity]
         value["favorite"] = (str(row.get("red_fox_favorite")).casefold() == "true" and
@@ -291,7 +299,7 @@ def joint_factors(current, previous, sport, market):
 def distance(current, previous, sport, market, cross_sport=False):
     scale = .018 if market == "MONEYLINE" else (.7 if sport in {"nfl", "ncaaf", "nhl", "mlb"} else 1.5)
     left_move, right_move = movement(current, market), movement(previous, market)
-    if any(current.get(k) is None or previous.get(k) is None for k in ("tickets", "money")):
+    if capped_splits(previous) or any(current.get(k) is None or previous.get(k) is None for k in ("tickets", "money")):
         return None
     if left_move is None or right_move is None:
         return None
@@ -446,6 +454,23 @@ class History:
         self.slots = {}
         self.results = {}
         self.cutoff = {}
+        self.upgrades = {}
+        self.has_version_table = db.execute("""
+            SELECT 1 FROM sqlite_master WHERE type='table' AND name='comparison_context_ready'
+        """).fetchone() is not None
+
+    def checkpoint_pending(self, sport, market, before):
+        key = sport, market, before[:10]
+        if key not in self.upgrades:
+            from_sql = ("comparison_windows w LEFT JOIN comparison_context_ready v USING(sport,event_id)"
+                        if self.has_version_table else "comparison_windows w")
+            version_sql = "AND coalesce(v.version,0)<?" if self.has_version_table else ""
+            params = (sport, market, before, CONTEXT_VERSION) if self.has_version_table else (sport, market, before)
+            self.upgrades[key] = self.db.execute(f"""
+                SELECT 1 FROM {from_sql} WHERE w.sport=? AND w.market=?
+                AND w.scheduled_at<? {version_sql} LIMIT 1
+            """, params).fetchone() is not None
+        return self.upgrades[key]
 
     def windows(self, sport, market, minutes):
         key = sport, market, minutes
@@ -580,6 +605,8 @@ class History:
 
     def comparison(self, query, sport, event, market, setup):
         window, before = setup["window"], setup["observed"]
+        if capped_splits(query):
+            return {"reason": "The source flagged this capture’s splits as capped. The price remains available on the board."}
         if window is None:
             return {"reason": "There is no historical checkpoint close to this observation time."}
         fixture = tournament_identity(sport, event, setup["game"], setup["scheduled"]) if setup.get("game") else None
@@ -589,12 +616,14 @@ class History:
         # Frozen comparisons keep their original pregame knowledge clock.
         verified_by = setup.get("verified_by", before)
         closest = self.report([r for r in ranked if r[4]], market, verified_by, list_matches=True)
-        broader = self.report(ranked, market, verified_by)
+        broader = self.report(ranked, market, verified_by, list_matches=True)
         since = min((r["scheduled_at"][:10] for r in self.windows(sport, market, window)
                      if r["scheduled_at"] < before), default=None)
         related = self.rank(query, sport, event, market, window, before, cross=True)
-        cross = self.report(related, market, verified_by) if related else None
+        cross = self.report(related, market, verified_by, list_matches=True) if related else None
+        pending = since is None and window in ADDED_WINDOWS and self.checkpoint_pending(sport, market, before)
         return {"closest": closest, "broader": broader, "cross": cross, "since": since,
+                "pending": pending,
                 "cross_sports": sorted({item[2]["sport"] for item in related})}
 
 
@@ -657,6 +686,13 @@ def current_markets(payload, now):
             now - datetime.fromisoformat(item["observed"]) <= timedelta(minutes=35)]
 
 
+def usable_sides(payload, markets):
+    return {market: [not capped_splits(side) and any(
+        ((side.get("comparison") or {}).get(group) or {}).get("graded", 0) > 0
+        for group in ("closest", "broader", "cross")
+    ) for side in payload["markets"][market]["sides"]] for market in markets}
+
+
 def build(db, root, output, control, now, *, preview=False, events=(), budget=None):
     if not preview:
         db.execute(FROZEN_SCHEMA)
@@ -680,6 +716,17 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
     """).fetchone())
     keys = []
     available = {}
+    masks = {}
+    pending = {}
+
+    def register(path, payload, markets):
+        keys.append(path.stem)
+        available[path.stem] = list(markets)
+        masks[path.stem] = usable_sides(payload, markets)
+        for market in markets:
+            if any(side.get("comparison", {}).get("pending") for side in payload["markets"][market]["sides"]):
+                pending.setdefault(path.stem, []).append(market)
+
     updated, frozen_count, deferred = 0, 0, 0
     cutoff = time.monotonic() + budget if budget is not None else None
     paths = {key: output / f"{key[0]}--{key[1]}.json" for key in dict.fromkeys((*recent, *board))
@@ -696,20 +743,19 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
         signature = capture_signature(group, revision)
         if frozen and not preview and (old := db.execute("SELECT payload FROM comparison_frozen WHERE (sport,event_id)=(?,?)",
                                          key).fetchone()):
-            if not path.exists():
-                write(path, decode(old[0]))
-            elif not cached[key].get("frozen"):
-                write(path, decode(old[0]))
-            keys.append(path.stem)
-            available[path.stem] = list(decode(old[0])["markets"])
+            payload = decode(old[0])
+            if not cached[key].get("frozen"):
+                write(path, payload)
+            register(path, payload, payload["markets"])
             continue
         expired = not frozen and cutoff is not None and time.monotonic() >= cutoff
         if not frozen and (old.get("signature") == signature or expired):
             deferred += expired and old.get("signature") != signature
             valid = current_markets(old, now)
             if valid:
-                keys.append(path.stem)
-                available[path.stem] = valid
+                register(path, old, valid)
+            if expired and old.get("signature") != signature:
+                pending[path.stem] = list(group)
             continue
         payload = render_fixture(db, history, key, group, now, frozen)
         if not payload["markets"]:
@@ -721,10 +767,9 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
                            (*key, min(row["frozen_at_utc"] for row in group.values()), encode(payload)))
             frozen_count += 1
         write(path, payload)
-        keys.append(path.stem)
-        available[path.stem] = list(payload["markets"])
+        register(path, payload, payload["markets"])
         updated += 1
-    write(manifest, {"enabled": True, "games": available, "generated": stamp})
+    write(manifest, {"enabled": True, "games": available, "sides": masks, "pending": pending, "generated": stamp})
     present = set(keys)
     for path in output.glob("*--*.json"):
         if path.stem not in present and now.timestamp() - path.stat().st_mtime > 86400:

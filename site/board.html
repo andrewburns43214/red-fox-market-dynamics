@@ -17,8 +17,8 @@
 <script src="config.js"></script>
 <script src="/pwa.js" defer></script>
 <script src="/manual-favorites.js?v=3" defer></script>
-<link rel="stylesheet" href="/historical-comparison.css?v=2">
-<script src="/historical-comparison.js?v=2" defer></script>
+<link rel="stylesheet" href="/historical-comparison.css?v=3">
+<script src="/historical-comparison.js?v=3" defer></script>
 <script>
 // Keep the server-side access cookie aligned with the signed-in Supabase session.
 (function () {
@@ -36,9 +36,12 @@
       document.cookie = cookieName + '=; Path=/; Secure; SameSite=Lax; Max-Age=0';
     }
   }
-  client.auth.getSession().then(function (result) { syncAccessCookie(result.data.session); });
+  const accessReady = client.auth.getSession()
+    .then(function (result) { syncAccessCookie(result.data.session); })
+    .catch(function () { /* Continue with any server access cookie already present. */ });
   client.auth.onAuthStateChange(function (_event, session) { syncAccessCookie(session); });
-  window.redfoxAuthorizedFetch = async function (input, init) {
+  window.redfoxAuthorizedFetch = async function (input, init, {required=true}={}) {
+    await accessReady;
     const response = await fetch(input, init);
     if (response.status !== 401) return response;
 
@@ -55,7 +58,7 @@
 
     const session = await accessRefreshPromise;
     if (session) return fetch(input, init);
-    window.location.replace('/?auth=required');
+    if (required) window.location.replace('/?auth=required');
     return response;
   };
 })();
@@ -2365,22 +2368,23 @@ const MOCK_LEDGER = [
   {ts:'2026-02-27T17:30:00',sport:'nba',game:'CLE @ DET',market:'TOTAL',side:'Under 226.5',event:'LEAN',score:66.4,timing_bucket:'EARLY',net_edge:10.0},
   {ts:'2026-02-27T17:10:00',sport:'nba',game:'OKC @ SAC',market:'SPREAD',side:'OKC -3',event:'BET',score:73.8,timing_bucket:'EARLY',net_edge:17.2},
 ];
-const MOCK_RESULTS = [
-  {date:'2026-02-26',game:'Auburn @ Kentucky',market_display:'SPREAD',favored_side:'Kentucky -2',game_confidence:69.1,net_edge:11.2,result:'WIN',timing_bucket:'MID',sport:'ncaab'},
-  {date:'2026-02-26',game:'Marquette @ Seton Hall',market_display:'SPREAD',favored_side:'Seton Hall +8',game_confidence:73.4,net_edge:18.6,result:'WIN',timing_bucket:'MID',sport:'ncaab'},
-  {date:'2026-02-26',game:'MIA Heat @ BOS Celtics',market_display:'MONEYLINE',favored_side:'BOS Celtics',game_confidence:68.2,net_edge:14.3,result:'WIN',timing_bucket:'MID',sport:'nba'},
-  {date:'2026-02-25',game:'GSW @ LAC',market_display:'TOTAL',favored_side:'Under 224.5',game_confidence:62.1,net_edge:5.8,result:'LOSS',timing_bucket:'LATE',sport:'nba'},
-  {date:'2026-02-25',game:'Kansas @ Iowa State',market_display:'SPREAD',favored_side:'Iowa State -1.5',game_confidence:74.8,net_edge:22.1,result:'WIN',timing_bucket:'MID',sport:'ncaab'},
-  {date:'2026-02-24',game:'UConn @ Marquette',market_display:'SPREAD',favored_side:'UConn +3',game_confidence:70.3,net_edge:16.4,result:'LOSS',timing_bucket:'MID',sport:'ncaab'},
-  {date:'2026-02-24',game:'TOR @ MTL',market_display:'MONEYLINE',favored_side:'Montreal',game_confidence:66.8,net_edge:8.9,result:'WIN',timing_bucket:'EARLY',sport:'nhl'},
-];
-
 let allDash=[], allLedger=[], allEvents=[], allResults=[], allKPI=[], allLiveRecent=[];
 let publicationCoverage=null;
 let favoritePerformance=null;
 let liveRecentSport='ALL', liveRecentStatus='ALL', liveRecentSort='STATUS_TIME', liveRecentVisible=18;
 let _liveRecentLoaded=false, _liveRecentLoading=null, _liveRecentObserver=null;
 let sport='ALL', market='ALL', filter='all', tabId='board';
+const boardFilterKey='redfox-market-board-filters-v1';
+function persistBoardFilters(){
+  try{localStorage.setItem(boardFilterKey,JSON.stringify({sport,market}));}catch(_error){}
+}
+function restoreBoardFilters(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(boardFilterKey)||'{}');
+    if(['ALL','NFL','CFB','NBA','NCAAB','MLB','NHL','UFC'].includes(saved.sport)) sport=saved.sport;
+    if(['ALL','SPREAD','MONEYLINE','TOTAL'].includes(saved.market)) market=saved.market;
+  }catch(_error){}
+}
 let sortCol='board_rank', sortAsc=true;
 let _bookLines=null, _selectedBook='dk';
 // Captured with the board payload so exports carry the same freshness context
@@ -2811,10 +2815,10 @@ function gameLanes(r){
   const sport=hasHeader?'':'<span class="game-sport">'+spChip(r.sport)+'</span>';
   const retained=String(r.data_badge||'').trim().toUpperCase()==='RETAINED';
   const retainedNote=retained?'<span class="retained-market-note">RETAINED · Last verified '+escHtml(et(r.state_as_of_utc||r.source_latest_at))+' ET</span>':'';
-  const withHistory=!!home&&window.redfoxHistory?.available(r);
+  const withHistory=!!home;
   const laneName=(name,identity,index)=>withHistory
-    ?'<span class="history-lane">'+teamName(name,identity)+window.redfoxHistory.button(r,index,
-      r.market_display==='TOTAL'?(index===0?'Over':'Under'):name)+'</span>'
+    ?'<span class="history-lane">'+teamName(name,identity)+(window.redfoxHistory?.button(r,index,
+      r.market_display==='TOTAL'?(index===0?'Over':'Under'):name)||'')+'</span>'
     :teamName(name,identity);
   return '<div class="two-side-cell two-side-game'+(favorite?' is-favorite':'')+(withHistory?' has-history':'')+'">'
     +'<span class="game-name" style="display:none">'+escHtml(game)+'</span>'
@@ -2960,8 +2964,8 @@ function setTab(el){
   if(tabId==='results') renderResults();
   if(tabId==='perf' && typeof Chart!=='undefined') buildKPIs();
 }
-function setSport(s,el){ sport=s; document.querySelectorAll('.sfilters .schip:not(#grp-toggle)').forEach(x=>x.classList.remove('on')); el.classList.add('on'); renderBoard(); }
-function setMarket(m,el){ market=m; document.querySelectorAll('#market-filters .mchip').forEach(x=>x.classList.remove('on')); el.classList.add('on'); renderBoard(); }
+function setSport(s,el){ sport=s; persistBoardFilters(); document.querySelectorAll('.sfilters .schip:not(#grp-toggle)').forEach(x=>x.classList.remove('on')); el.classList.add('on'); renderBoard(); }
+function setMarket(m,el){ market=m; persistBoardFilters(); document.querySelectorAll('#market-filters .mchip').forEach(x=>x.classList.remove('on')); el.classList.add('on'); renderBoard(); }
 function sortBy(col,th){ if(sortCol===col) sortAsc=!sortAsc; else{sortCol=col;sortAsc=false;} document.querySelectorAll('thead th').forEach(t=>t.classList.remove('sorted','asc')); th.classList.add('sorted'); if(sortAsc) th.classList.add('asc'); renderBoard(); }
 let groupMode=false;
 let boardDateFilter='ALL';
@@ -3043,7 +3047,7 @@ function exportCSV(){
   if(note) note.textContent=`Exported ${exported.length} complete two-sided markets${omitted?`; ${omitted} incomplete markets omitted`:''}.`;
 }
 function resetMobileBoardView(){
-  filter='all'; sport='ALL'; market='ALL'; boardDateFilter='ALL'; boardSignalFilter='ALL';
+  filter='all'; sport='ALL'; market='ALL'; boardDateFilter='ALL'; boardSignalFilter='ALL'; persistBoardFilters();
   const boardTab=document.querySelector('.tab[data-tab="board"][data-filter="all"]'); if(boardTab) setTab(boardTab);
   document.querySelectorAll('.sfilters .schip').forEach(node=>node.classList.toggle('on',node.textContent.trim().toUpperCase()==='ALL'));
   document.querySelectorAll('[data-production-market]').forEach(node=>node.classList.toggle('active',node.dataset.productionMarket==='ALL'));
@@ -3453,7 +3457,8 @@ function filtered(){
 
 window._boardRows=[];
 let _visibleBoardRows=0;
-let _boardHasRendered=false;
+let _boardDataReady=false;
+let _boardLoadError=false;
 let _renderedFavoriteSignature='';
 function boardFavoriteSignature(rows){
   return rows.filter(isRedFoxFavorite).map(row=>JSON.stringify([boardGameKey(row),row.market_display,row.favorite_side])).sort().join('\n');
@@ -3561,6 +3566,13 @@ function renderScheduleCoverage(rows){
   target.innerHTML='<h3>Scheduled games awaiting verified markets</h3><p>These games are on the schedule. Market reads appear when complete, verified betting observations arrive.</p><div class="schedule-coverage-grid">'+rows.map(row=>'<div class="schedule-coverage-game"><strong>'+escHtml(row.game)+'</strong><span>'+escHtml(sportLabel(row.sport))+' · '+escHtml(etT(row.kickoff_iso))+'</span></div>').join('')+'</div>';
 }
 function renderBoard(resetPage=true){
+  const tbody=document.getElementById('tbody');
+  if(!_boardDataReady){
+    tbody.innerHTML=_boardLoadError
+      ? '<tr class="board-empty"><td colspan="8"><strong>Could not load the Market Board.</strong><button type="button" onclick="refreshBoardNow()">Try again</button></td></tr>'
+      : '<tr class="board-empty"><td colspan="8" role="status">Loading markets…</td></tr>';
+    return;
+  }
   const marketRows=filtered();
   const scheduledGames=scheduledGamesForView();
   const grouped=new Map();
@@ -3584,7 +3596,7 @@ function renderBoard(resetPage=true){
   const _nGames=games.length;
   const _marketLabel=market==='ALL'?'all markets':market.toLowerCase();
   document.getElementById('board-meta').textContent=`${_nGames} market games | ${marketRows.length} markets | ${scheduledGames.length} awaiting markets | showing ${visibleGames.length} market games | ${_marketLabel}`;
-  const tbody=document.getElementById('tbody'); tbody.innerHTML='';
+  tbody.innerHTML='';
   if(!games.length){
     const tr=document.createElement('tr'); tr.className='board-empty';
     const sportKey=sport==='NFL'?'nfl':sport==='CFB'?'ncaaf':'';
@@ -3633,7 +3645,6 @@ function renderBoard(resetPage=true){
     if(button && !more.hidden) button.textContent=`Load ${Math.min(boardPageSize(),games.length-_visibleBoardRows)} more games`;
   }
   renderScheduleCoverage(scheduledGames);
-  _boardHasRendered=true;
   _renderedFavoriteSignature=boardFavoriteSignature(allDash);
 }
 
@@ -4927,7 +4938,6 @@ function buildKPIs(){
 }
 
 
-async function loadCSV(url){ try{ const r=await window.redfoxAuthorizedFetch(url+'?t='+Date.now()); if(!r.ok) return null; const txt=await r.text(); return Papa.parse(txt,{header:true,skipEmptyLines:true}).data.map(row=>{ const o={}; Object.keys(row).forEach(k=>{o[k.replace(/\ufeff|\r|\n/g,'').trim()]=row[k];}); return o; }); }catch(e){ return null; } }
 
 function updateFreshness(f){
   const bar=document.getElementById('fresh-bar');
@@ -5432,21 +5442,63 @@ async function ensureEvents(){
   }).finally(()=>{ _eventsLoadPromise=null; });
   return _eventsLoadPromise;
 }
-async function loadAll({forceRender=false}={}){
-  let freshJson=null;
-  try{ const r=await window.redfoxAuthorizedFetch('/data/freshness.json?_='+Date.now()); if(r.ok) freshJson=await r.json(); } catch(e){}
-  _boardFreshness=freshJson;
-  const[dash,results,kpi,coverage]=await Promise.all([
-    loadCSV(DASH_URL),
-    loadCSV(RESULTS_URL),
-    loadCSV('/data/kpi_master_dataset.csv'),
-    window.redfoxAuthorizedFetch('/data/publication_coverage.json?_='+Date.now(),{cache:'no-store'}).then(response=>response.ok?response.json():null).catch(()=>null),
-  ]);
-  publicationCoverage=coverage;
-  updateFreshness(freshJson);
-  const dashRaw=manualFavoriteProjection((dash&&dash.length)?dash:[]);
-  allResults=results||MOCK_RESULTS;
-  allKPI=kpi||[];
+let _boardLoadRequest=null;
+let _boardExtrasPending=null;
+
+function loadBoardExtras(){
+  if(_boardExtrasPending) return _boardExtrasPending;
+  const json=async url=>{
+    try{
+      const r=await window.redfoxAuthorizedFetch(url,{cache:'no-store'},{required:false});
+      return r.ok?await r.json():null;
+    }catch(_error){return null;}
+  };
+  _boardExtrasPending=Promise.allSettled([
+    json('/data/freshness.json').then(fresh=>{
+      if(fresh){_boardFreshness=fresh;updateFreshness(fresh);}
+    }),
+    json('/data/publication_coverage.json').then(coverage=>{
+      if(coverage&&coverage.as_of!==publicationCoverage?.as_of){
+        publicationCoverage=coverage;
+        if(_boardDataReady&&tabId==='board') renderBoard(false);
+      }
+    }),
+    Promise.all([loadCSV(RESULTS_URL,{required:false}),loadCSV('/data/kpi_master_dataset.csv',{required:false})]).then(([results,kpi])=>{
+      if(results) allResults=results;
+      if(kpi) allKPI=kpi;
+      updateStats();
+      renderResults();
+      if(tabId==='history'){
+        renderHistory();
+        ensureEvents().then(renderHistory);
+      }
+    }),
+  ]).finally(()=>{_boardExtrasPending=null;});
+  return _boardExtrasPending;
+}
+
+function loadAll({forceRender=false}={}){
+  if(!_boardLoadRequest){
+    _boardLoadRequest=loadBoardMarkets().finally(()=>{_boardLoadRequest=null;});
+  }
+  return _boardLoadRequest.then(loaded=>{
+    if(loaded) loadBoardExtras();
+    if(forceRender&&loaded) document.getElementById('board-update-note').textContent='';
+    return loaded;
+  });
+}
+
+async function loadBoardMarkets(){
+  const dash=await loadCSV(DASH_URL);
+  if(!dash){
+    _boardLoadError=true;
+    if(!_boardDataReady&&tabId==='board') renderBoard(false);
+    return false;
+  }
+  const dashRaw=typeof manualFavoriteProjection==='function'?manualFavoriteProjection(dash):dash;
+  const first=!_boardDataReady;
+  _boardDataReady=true;
+  _boardLoadError=false;
   allDash=dashRaw.filter(r=>{
     const sportKey=normSportKey(r.sport);
     // UFC feed is intentionally limited to its supported moneyline market.
@@ -5470,30 +5522,13 @@ async function loadAll({forceRender=false}={}){
     return String(a.game||'').localeCompare(String(b.game||''));
   });
 
-  const _hash=dashRaw.map(r=>(r.game_id||'')+(r.market_display||'')+(r.flagged_side||'')+(r.reaction||'')+(r.recorded_reaction||'')+(r.recorded_note||'')+(r.path||'')+(r.context_chips||'')+(r.data_badge||'')+(r.rank_reason||'')+(r.current_line||'')).join('|')+'|'+(coverage?.as_of||'')+'|'+(coverage?.latest_scrapes?.nfl?.state||'')+'|'+(coverage?.latest_scrapes?.ncaaf?.state||'')+'|'+JSON.stringify(coverage?.scheduled_without_markets||[]);
-  const _changed=_hash!==_lastDashHash;
-  _lastDashHash=_hash;
+  const hash=JSON.stringify(dashRaw);
+  const changed=hash!==_lastDashHash || boardFavoriteSignature(allDash)!==_renderedFavoriteSignature;
+  _lastDashHash=hash;
+  if((first||changed)&&tabId==='board') renderBoard(first);
   updateStats();
-  renderResults();
-  if(tabId==='history'){
-    renderHistory();
-    // Full history is intentionally loaded only when this workspace is opened.
-    // Detail views use small, game-scoped payloads instead.
-    ensureEvents().then(renderHistory);
-  }
-  if(_changed||boardFavoriteSignature(allDash)!==_renderedFavoriteSignature){
-    const updateNote=document.getElementById('board-update-note');
-    if(forceRender || !_boardHasRendered){
-      renderBoard();
-      if(updateNote) updateNote.textContent='';
-    } else if(updateNote){
-      updateNote.textContent='Live update ready';
-    }
-  } else if(forceRender){
-    const updateNote=document.getElementById('board-update-note');
-    if(updateNote) updateNote.textContent='Up to date';
-  }
-  if(manualFavoriteEnabled) syncManualFavoriteState();
+  if(typeof manualFavoriteEnabled!=='undefined'&&manualFavoriteEnabled) syncManualFavoriteState();
+  return true;
 }
 
 async function refreshBoardNow(){
@@ -5660,11 +5695,12 @@ function renderLedger(){
 }
 
 const _csvRequests=new Map();
-async function loadCSV(url){
-  if(_csvRequests.has(url)) return _csvRequests.get(url);
+async function loadCSV(url,{required=true}={}){
+  const requestKey=JSON.stringify([url,required]);
+  if(_csvRequests.has(requestKey)) return _csvRequests.get(requestKey);
   const request=(async()=>{
     try{
-      const r=await window.redfoxAuthorizedFetch(url,{cache:'no-store'});
+      const r=await window.redfoxAuthorizedFetch(url,{cache:'no-store'},{required});
       if(!r.ok) return null;
       const text=await r.text();
       return new Promise(resolve=>{
@@ -5676,8 +5712,8 @@ async function loadCSV(url){
       });
     }catch(e){return null;}
   })();
-  _csvRequests.set(url,request);
-  try{return await request;}finally{_csvRequests.delete(url);}
+  _csvRequests.set(requestKey,request);
+  try{return await request;}finally{_csvRequests.delete(requestKey);}
 }
 
 function favoriteAverageOddsText(odds, graded){
@@ -5879,10 +5915,16 @@ async function loadFavoritePerformance(){
 }
 
 setupFavoriteHistory();
-loadAll();
-loadFavoritePerformance();
+document.addEventListener('DOMContentLoaded',()=>{
+  restoreBoardFilters();
+  renderBoard(false);
+  loadAll();
+  loadFavoritePerformance();
+},{once:true});
+window.addEventListener('pageshow',event=>{if(event.persisted)loadAll();});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadAll();});
 setInterval(updateStats, 1000);
-setInterval(loadAll, 60000);
+setInterval(()=>{if(!document.hidden)loadAll();},60000);
 setInterval(loadFavoritePerformance, 60000);
 setInterval(refreshLiveRecentScores, 60000);
 
@@ -5974,8 +6016,7 @@ setInterval(refreshLiveRecentScores, 60000);
   };
   const baseRender=window.renderBoard;
   function syncApprovedBoardControls(){
-    const activeMarket=document.querySelector('#market-filters .mchip.on')?.textContent.trim().toUpperCase();
-    const activeSport=document.querySelector('.sfilters .schip.on')?.textContent.trim().toUpperCase();
+    const activeMarket=market, activeSport=sport;
     if(activeMarket)document.querySelectorAll('[data-production-market]').forEach(node=>node.classList.toggle('active',node.dataset.productionMarket===activeMarket));
     if(activeSport)document.querySelectorAll('[data-production-sport]').forEach(node=>node.classList.toggle('active',node.dataset.productionSport===activeSport));
   }

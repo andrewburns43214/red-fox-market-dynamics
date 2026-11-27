@@ -298,7 +298,8 @@ def test_market_guide_explains_authoritative_supported_side_semantics():
 def test_mobile_selected_market_rank_sits_beneath_unchanged_saved_control():
     assert '<span class="mobile-selected-rank">MKT #${boardRank(r)}</span>' in BOARD
     assert ".mobile-selected-rank{display:none}" in BOARD
-    assert ".td-rank .mobile-selected-rank{display:block;position:absolute;top:34px;left:50%;width:44px" in BOARD
+    assert ".td-rank .mobile-selected-rank{display:block;position:absolute;top:29px;left:50%;width:44px" in BOARD
+    assert ".game-lane.game-away > .game-lane-name{grid-column:2}" in BOARD
     assert "color:#7b858a;font:400 7px/1.2 var(--sans)" in BOARD
     assert ".td-rank .production-save{right:7px!important;left:auto!important;font-size:24px!important;color:#dd4a40!important}" in BOARD
     assert "boardGameSelections.set(String(gameId),String(marketName).toUpperCase());\n  renderBoard(false);" in BOARD

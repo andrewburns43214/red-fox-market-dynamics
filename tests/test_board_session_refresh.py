@@ -18,9 +18,11 @@ def test_failed_session_refresh_uses_existing_auth_recovery_route():
 
 
 def test_board_data_loaders_use_authorized_fetch_wrapper():
-    assert "window.redfoxAuthorizedFetch('/data/freshness.json" in BOARD
-    assert "window.redfoxAuthorizedFetch('/data/publication_coverage.json" in BOARD
+    assert "await accessReady;" in BOARD
+    assert "json('/data/freshness.json')" in BOARD
+    assert "json('/data/publication_coverage.json')" in BOARD
+    assert "window.redfoxAuthorizedFetch(url,{cache:'no-store'},{required:false})" in BOARD
     assert "window.redfoxAuthorizedFetch(FAVORITE_PERFORMANCE_URL" in BOARD
-    assert "window.redfoxAuthorizedFetch(url,{cache:'no-store'})" in BOARD
+    assert "window.redfoxAuthorizedFetch(url,{cache:'no-store'},{required})" in BOARD
     assert "window.redfoxAuthorizedFetch(url+'?_='+Date.now())" in BOARD
 

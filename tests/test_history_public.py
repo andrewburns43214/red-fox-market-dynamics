@@ -5,7 +5,7 @@ import json
 from history_blocks import merge
 from history_comparisons import aligned_game, cross_evidence, features, rebuild, recorded_split_context
 from history_monitor import GIB, forecast
-from history_public import History, build, decision_window, distance, line_price, query_features
+from history_public import History, build, decision_window, distance, line_price, query_features, usable_sides
 from history_store import connect, store_outcome, utc
 
 
@@ -26,6 +26,35 @@ def test_nearest_scores_market_evidence_not_results_and_limits_market_types():
     assert line_price("O 8.5 (+111)", "TOTAL") == (8.5, 111)
     assert line_price("-155", "MONEYLINE") == (None, -155)
     assert decision_window(32) == 30 and decision_window(7000) is None
+    assert decision_window(571.6) == 600 and decision_window(1000) == 960
+
+
+def test_observed_trajectory_preserves_verified_turn_quotes():
+    for market, name, quotes, opening, expected in (
+        ("SPREAD", "away", [(4.5, -110), (2.5, -119), (3.5, -112)], (4.5, -110), (2.5, -119)),
+        ("TOTAL", "over", [(154, -110), (157, -102), (155, -114)], (154, -110), (157, -102)),
+        ("MONEYLINE", "away", [(None, 154), (None, 125), (None, 139)], (None, 154), (None, 125)),
+    ):
+        history = [side(name, price, line) | {"captured_at": f"2026-11-27T15:{i}0:00+00:00",
+                                             "open_line": opening[0], "open_price": opening[1]}
+                   for i, (line, price) in enumerate(quotes)]
+        value = features(history, history[-1], market)
+        assert value["trajectory"] == "retraced"
+        assert value["path_turns"] == [{"line": expected[0], "price": expected[1],
+                                         "captured_at": history[1]["captured_at"]}]
+        assert features([history[0], history[0]], history[0], market)["path_turns"] == []
+
+
+def test_manifest_availability_depends_on_usable_grade_and_side(tmp_path):
+    capped = {"tickets": 0, "money": 0, "context": {"data_badge": "Split Risk"}}
+    sides = [
+        {"comparison": {"closest": {"graded": 0}, "broader": {"graded": 1, "roi": -100}}},
+        {"comparison": {"closest": {"graded": 0, "matched": 12}}, **capped},
+    ]
+    assert usable_sides({"markets": {"MONEYLINE": {"sides": sides}}}, ("MONEYLINE",)) == {"MONEYLINE": [True, False]}
+    with connect(tmp_path) as db:
+        report = History(db).comparison(capped, "nhl", "event", "TOTAL", {"window": 600, "observed": "2026-11-27"})
+        assert "capped" in report["reason"]
 
 
 def test_joint_matching_uses_aligned_secondary_quotes_and_distinguishes_no_data():
@@ -246,6 +275,7 @@ def test_verified_result_enters_next_publication_without_new_board_capture(tmp_p
 
         build(db, tmp_path, output, tmp_path / "disabled", now)
         assert colts_result()["graded"] == 0 and colts_result()["matched"] == 1
+        assert json.loads((output / "index.json").read_bytes())["sides"]["nfl--test"]["SPREAD"] == [False, False]
         store_outcome(db, "nfl", "past", "verified", "verified", {
             "provider_event_id": "unique", "observed_at": utc(now + timedelta(minutes=1)),
             "matchup": "First Team @ Second Team", "score_away": 20, "score_home": 16})
@@ -253,6 +283,7 @@ def test_verified_result_enters_next_publication_without_new_board_capture(tmp_p
         build(db, tmp_path, output, tmp_path / "disabled", now + timedelta(minutes=2))
         assert colts_result()["graded"] == 1 and colts_result()["roi"] == 95.24
         assert colts_result()["match_list"][0][4] == -105
+        assert json.loads((output / "index.json").read_bytes())["sides"]["nfl--test"]["SPREAD"] == [True, True]
 
 
 def test_expired_publication_budget_keeps_fresh_cached_capture(tmp_path):
@@ -267,6 +298,7 @@ def test_expired_publication_budget_keeps_fresh_cached_capture(tmp_path):
         write_csv(data / "anomaly_board.csv", row | {"favorite_side": ""})
         partial = build(db, tmp_path, output, tmp_path / "disabled", now, budget=0)
         assert partial["games"] == 1 and partial["deferred"] == 1
+        assert json.loads((output / "index.json").read_bytes())["pending"] == {"nfl--test": ["SPREAD"]}
         assert (output / "nfl--test.json").read_bytes() == old
         completed = build(db, tmp_path, output, tmp_path / "disabled", now)
         assert completed["games"] == 1 and not completed["deferred"]
