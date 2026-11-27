@@ -126,6 +126,13 @@ def generate(db, sport, event):
         market: list(eligible_pairs(db, sport, event, market, "9999", actual_start=actual))
         for market in ("SPREAD", "MONEYLINE", "TOTAL")
     }
+    if sport == "ufc":
+        fixture = db.execute("SELECT matchup FROM fixtures WHERE (sport,event_id)=(?,?)", (sport, event)).fetchone()
+        names = {fighter_key(name) for name in _split_game(fixture[0])} if fixture else set()
+        if len(names) != 2 or "" in names:
+            return ()
+        markets["MONEYLINE"] = [(clock, pair) for clock, pair in markets["MONEYLINE"]
+                                if {fighter_key(row["side"]) for row in pair} == names]
     clocks = {market: [capture for capture, _ in pairs] for market, pairs in markets.items()}
     known_match = {}
     for market, pairs in markets.items():

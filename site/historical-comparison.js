@@ -113,8 +113,10 @@
   function setupCopy(setup, side, market) {
     const move = market === "MONEYLINE" ? side.price_toward_implied : side.line_toward;
     const tol = market === "MONEYLINE" ? .005 : .25;
-    const direction = move == null ? "Movement is unavailable." : move >= tol ? "The market moved toward this side."
-      : move <= -tol ? "The market moved against this side." : "The market showed little directional movement.";
+    const magnitude = move == null ? "" : market === "MONEYLINE" ?
+      `${Math.round(Math.abs(move) * 1000) / 10} implied points` : `${Math.abs(move)} ${Math.abs(move) === 1 ? "point" : "points"}`;
+    const direction = move == null ? "Movement is unavailable." : move >= tol ? `The market moved ${magnitude} toward this side.`
+      : move <= -tol ? `The market moved ${magnitude} against this side.` : "The market showed little directional movement.";
     const other = setup.sides.find(item => item.index !== side.index);
     const signal = side.context || {};
     const breach = {ticket_only: "Ticket threshold breach", money_only: "Money threshold breach", both: "Ticket and money threshold breach"};

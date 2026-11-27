@@ -407,6 +407,10 @@ class History:
         for score, event, row, side, tight, factors in ranked:
             league = row["sport"]
             sources = self.evidence(league, event, before)
+            if league == "ufc":
+                expected = {fighter_key(item["side"]) for item in row["sides"]}
+                sources = [r for r in sources if len(expected) == 2 and expected ==
+                           {fighter_key(name) for name in _split_game(r[4].get("matchup"))}]
             identities = {tournament_identity(league, event, row["matchup"], row["scheduled_at"])}
             identities.update(("provider", "nhl-league" if s == "verified_research_nhl" else league, key)
                               for s, _, key, _, _ in sources if key)

@@ -148,3 +148,18 @@ def test_storage_forecast_requires_sustained_daily_trend():
     points = {str(day): (30 - day / 50) * GIB for day in range(33)}
     assert forecast({"10": 21 * GIB}, 21 * GIB) is None
     assert abs(forecast(points, 20 * GIB) - 250) < .01
+
+
+def test_replaced_ufc_opponent_cannot_grade_an_older_quote(tmp_path):
+    with connect(tmp_path) as db:
+        before = utc("2026-11-27T00:00:00Z")
+        old_side = side("First Fighter", -110)
+        row = {"sport": "ufc", "matchup": "First Fighter vs Old Opponent",
+               "scheduled_at": utc("2026-11-20T20:00:00Z"), "entry_at": utc("2026-11-20T19:30:00Z"),
+               "sides": [old_side, side("Old Opponent", -110)]}
+        store_outcome(db, "ufc", "bout", "verified", "verified", {
+            "provider_event_id": "replacement", "observed_at": "2026-11-20T23:00:00Z",
+            "matchup": "First Fighter vs New Opponent", "winner": "First Fighter",
+        })
+        report = History(db).report([(0, "bout", row, old_side, True, ())], "MONEYLINE", before)
+        assert (report["matched"], report["graded"], report["unresolved"]) == (1, 0, 1)
