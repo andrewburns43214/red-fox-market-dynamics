@@ -16,6 +16,7 @@ import time
 from history_blocks import decode, encode, read_quotes
 from history_comparisons import (ADDED_WINDOWS, CONTEXT_VERSION, MARKETS, WINDOWS, aligned_game, delta, features,
                                  fixture_pairs, grade, implied, recorded_split_context, side_key)
+from history_evidence import EvidenceStore, Ledger, LEDGER_VERSION
 from history_store import FREE_DISK_RESERVE, SPORTS, atomic_text, digest, eligible_pairs, latest_provider_outcomes, number, packed, quote_part, start_evidence, utc
 from team_aliases import _split_game, normalize_team_name
 from ufc_bout_integrity import fighter_key
@@ -455,10 +456,12 @@ def outcome_signature(sport, state, evidence):
 
 
 class History:
-    def __init__(self, db):
+    def __init__(self, db, evidence_store=None):
         self.db = db
+        self.evidence_store = evidence_store
         self.slots = {}
         self.results = {}
+        self.score_lines = {}
         self.cutoff = {}
         self.upgrades = {}
         self.has_version_table = db.execute("""
@@ -527,7 +530,7 @@ class History:
         ranked.sort(key=lambda item: (item[0], item[2]["sport"], item[1], item[3]["side"]))
         return ranked
 
-    def report(self, ranked, market, before, examples=True, *, list_matches=False):
+    def report(self, ranked, market, before, examples=True, *, list_matches=False, ledger=None, group=None):
         used = set()
         groups, grades, odds, numbers, exemplars, match_list = [], [], [], [], [], []
         missing_price, unresolved, void = 0, 0, 0
@@ -564,20 +567,31 @@ class History:
             if side.get("line") is not None:
                 numbers.append(side["line"])
             grades.append(result)
-            if (examples and len(exemplars) < 3) or (list_matches and len(match_list) < 60):
-                selection = next((name for name in _split_game(row["matchup"])
-                                  if side_key(name, league, market) == side["side"]), side["side"].title())
+            show_example = examples and len(exemplars) < 3
+            if show_example or (list_matches and len(match_list) < 60) or ledger is not None:
+                names = row.setdefault("selection_names", {})
+                if side["side"] not in names:
+                    names[side["side"]] = next((name for name in _split_game(row["matchup"])
+                                               if side_key(name, league, market) == side["side"]), side["side"].title())
+                selection = names[side["side"]]
+            if show_example or ledger is not None:
+                revision = tuple(id(evidence) for _, evidence in results)
+                if revision not in self.score_lines:
+                    self.score_lines[revision] = next((text for _, evidence in results if (text := score_line(evidence))), None)
+                final_score = self.score_lines[revision]
+                if ledger is not None:
+                    ledger.add(group, row, side, selection, result, final_score, factors, score)
             if list_matches and len(match_list) < 60:
                 match_list.append([row["scheduled_at"], row["matchup"], selection, side["line"], side["price"],
                                    side["tickets"], side["money"], result])
-            if examples and len(exemplars) < 3:
+            if show_example:
                 common = sorted((d, label) for label, d, _ in factors if d <= .75)
                 differences = sorted(((d, label) for label, d, _ in factors if d > 1), reverse=True)
                 exemplars.append({
                     "sport": league, "game": row["matchup"], "date": row["scheduled_at"],
                     "entry": row["entry_at"], "decision": row["decision_at"] if "decision_at" in row else None,
                     "side": side, "grade": result, "selection": selection,
-                    "score": next((score_line(e) for _, e in results if score_line(e)), None),
+                    "score": final_score,
                     "matched": [label for _, label in common[:4]], "differences": [label for _, label in differences[:3]],
                 })
         counts = {key: grades.count(key) for key in ("win", "loss", "push")}
@@ -621,16 +635,21 @@ class History:
         # graded archive may use results already verified at generation.
         # Frozen comparisons keep their original pregame knowledge clock.
         verified_by = setup.get("verified_by", before)
-        closest = self.report([r for r in ranked if r[4]], market, verified_by, list_matches=True)
-        broader = self.report(ranked, market, verified_by, list_matches=True)
+        ledger = Ledger() if self.evidence_store else None
+        closest = self.report([r for r in ranked if r[4]], market, verified_by, list_matches=ledger is None,
+                              ledger=ledger, group="closest")
+        broader = self.report(ranked, market, verified_by, list_matches=ledger is None, ledger=ledger, group="broader")
         since = min((r["scheduled_at"][:10] for r in self.windows(sport, market, window)
                      if r["scheduled_at"] < before), default=None)
         related = self.rank(query, sport, event, market, window, before, cross=True)
-        cross = self.report(related, market, verified_by, list_matches=True) if related else None
+        cross = self.report(related, market, verified_by, list_matches=ledger is None, ledger=ledger,
+                            group="cross") if related else None
         pending = since is None and window in ADDED_WINDOWS and self.checkpoint_pending(sport, market, before)
-        return {"closest": closest, "broader": broader, "cross": cross, "since": since,
-                "pending": pending,
-                "cross_sports": sorted({item[2]["sport"] for item in related})}
+        reports = {"closest": closest, "broader": broader, "cross": cross, "since": since,
+                   "pending": pending, "cross_sports": sorted({item[2]["sport"] for item in related})}
+        if ledger is not None and (name := ledger.publish(self.evidence_store, query, sport, event, market, setup, reports)):
+            reports["ledger"] = name
+        return reports
 
 
 def read_rows(path):
@@ -751,7 +770,7 @@ def availability_for_side(side, usable):
     return "insufficient"
 
 
-def build(db, root, output, control, now, *, preview=False, events=(), budget=None):
+def build(db, root, output, control, now, *, preview=False, events=(), budget=None, study=None):
     if not preview:
         db.execute(FROZEN_SCHEMA)
     output.mkdir(parents=True, exist_ok=True, mode=0o755)
@@ -764,14 +783,15 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
     board = fixture_groups(read_rows(root / "data/anomaly_board.csv"))
     recent = fixture_groups(row for row in read_rows(root / "data/live_recent.csv")
                             if utc(row.get("frozen_at_utc")))
-    history = History(db)
+    store = EvidenceStore(output, now)
+    history = History(db, store)
     stamp = utc(now)
     # Global token is cheap and changes whenever historical materialization
     # or verified outcomes change. Keep current quote signatures per event.
     revision = tuple(db.execute("""
         SELECT (SELECT count(*) FROM comparison_windows), (SELECT max(observed_at) FROM outcomes),
         (SELECT value FROM jobs WHERE name='comparison_generation')
-    """).fetchone())
+    """).fetchone()) + (LEDGER_VERSION,)
     keys = []
     available = {}
     masks = {}
@@ -779,6 +799,7 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
     availability = {}
     payloads = {}
     frozen_games = []
+    study_receipts = []
 
     def register(path, payload, markets):
         keys.append(path.stem)
@@ -789,7 +810,9 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
                 availability_for_side(side, usable)
                 for side, usable in zip(payload["markets"][market]["sides"], masks[path.stem][market])
             ]
+        store.retain(payload)
         if payload.get("frozen"):
+            store.pin(payload)
             frozen_games.append(path.stem)
         if any(any(sides) for sides in masks[path.stem].values()):
             # An earlier manifest can still be in a browser while the worker
@@ -806,6 +829,8 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
         for market in markets:
             if any(side.get("comparison", {}).get("pending") for side in payload["markets"][market]["sides"]):
                 pending.setdefault(path.stem, []).append(market)
+        if study is not None and not payload.get("frozen"):
+            study_receipts.append(payload | {"markets": {market: payload["markets"][market] for market in markets}})
 
     updated, frozen_count, deferred = 0, 0, 0
     cutoff = time.monotonic() + budget if budget is not None else None
@@ -871,9 +896,19 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
         write(path, payload)
         register(path, payload, payload["markets"])
         updated += 1
+    store.retire()
     write(manifest, {"enabled": True, "games": available, "sides": masks, "pending": pending,
                      "availability": availability,
                      "payloads": payloads, "frozen_games": frozen_games, "generated": stamp})
+    if study is not None:
+        try:
+            for document in study_receipts:
+                study.observe(document)
+            verified_at = datetime.now(timezone.utc)
+            study.reconcile(history, verified_at)
+            study.save_summary(verified_at)
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            print(f"[comparison-study] receipt or reconciliation deferred: {type(exc).__name__}", flush=True)
     present = set(keys)
     snapshots = set(payloads.values())
     for path in output.glob("*--*.json"):
@@ -901,9 +936,21 @@ def main():
     connection = db_path.resolve().as_uri() + "?mode=ro" if args.preview else db_path
     with sqlite3.connect(connection, timeout=20, uri=args.preview) as db:
         db.row_factory = sqlite3.Row
-        print(packed(build(db, args.root, args.output, args.disable_file, datetime.now(timezone.utc),
-                           preview=args.preview, events=args.event,
-                           budget=None if args.preview else args.budget_seconds)))
+        study = None
+        if not args.preview:
+            from history_prospective import Study
+
+            try:
+                study = Study(args.state / "comparison-prospective.sqlite3", args.output)
+            except sqlite3.Error as exc:
+                print(f"[comparison-study] instrumentation unavailable: {type(exc).__name__}", flush=True)
+        try:
+            print(packed(build(db, args.root, args.output, args.disable_file, datetime.now(timezone.utc),
+                               preview=args.preview, events=args.event, study=study,
+                               budget=None if args.preview else args.budget_seconds)))
+        finally:
+            if study is not None:
+                study.close()
 
 
 if __name__ == "__main__":

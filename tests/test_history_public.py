@@ -1,4 +1,5 @@
 import csv
+import gzip
 from datetime import datetime, timedelta, timezone
 import json
 
@@ -282,7 +283,9 @@ def test_verified_result_enters_next_publication_without_new_board_capture(tmp_p
         rebuild(db, now + timedelta(minutes=2), 12)
         build(db, tmp_path, output, tmp_path / "disabled", now + timedelta(minutes=2))
         assert colts_result()["graded"] == 1 and colts_result()["roi"] == 95.24
-        assert colts_result()["match_list"][0][4] == -105
+        saved = json.loads(path.read_bytes())["markets"]["SPREAD"]["sides"][1]["comparison"]
+        ledger = json.loads(gzip.decompress((output / (saved["ledger"] + ".json.gz")).read_bytes()))
+        assert ledger["rows"][ledger["groups"]["closest"][0]]["side"]["price"] == -105
         assert json.loads((output / "index.json").read_bytes())["sides"]["nfl--test"]["SPREAD"] == [True, True]
 
 
