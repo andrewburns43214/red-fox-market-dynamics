@@ -202,13 +202,22 @@ def ingest_quotes(db, path, *, immutable=False, seconds=None):
         if latest:
             watermark = utc(datetime.fromisoformat(latest[0]) - timedelta(hours=1))
     read = gzip.open if path.suffix == ".gz" else open
-    accepted = 0
+    cursor_key = f"archive_cursor:{path}" if immutable and seconds is not None else None
+    prior = db.execute("SELECT value FROM jobs WHERE name=?", (cursor_key,)).fetchone() if cursor_key else None
+    progress = json.loads(prior[0]) if prior else {}
+    if progress.get("signature") != sig:
+        progress = {}
+    accepted = progress.get("rows", 0)
     fixtures = {}
     quote_buffer = []
     with db, read(path, "rt", newline="", encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(handle)
+        # readline keeps text seek cookies available after logical CSV
+        # records, including records with quoted embedded newlines.
+        reader = csv.DictReader(iter(handle.readline, ""))
         if not {"timestamp", "sport", "game_id", "current_line"}.issubset(reader.fieldnames or ()):
             raise ValueError(f"Unrecognized archive header: {path.name}")
+        if progress:
+            handle.seek(progress["offset"])
         for raw in reader:
             if watermark and (captured := utc(raw.get("timestamp"))) and captured < watermark:
                 continue
@@ -230,7 +239,12 @@ def ingest_quotes(db, path, *, immutable=False, seconds=None):
             if len(quote_buffer) == 4000:
                 blocks.merge(db, quote_buffer)
                 quote_buffer.clear()
-                # An interrupted source is retried and these writes are idempotent.
+                if cursor_key:
+                    db.executemany(INSERT_FIXTURE, ((*key, *value) for key, value in fixtures.items()))
+                    fixtures.clear()
+                    db.execute("INSERT OR REPLACE INTO jobs VALUES (?,?)", (cursor_key, packed({
+                        "signature": sig, "offset": handle.tell(), "rows": accepted,
+                    })))
                 db.commit()
                 if seconds and time.monotonic() - enter > seconds:
                     raise TimeoutError(f"Quote ingest exceeded time budget: {path.name}")
@@ -243,6 +257,8 @@ def ingest_quotes(db, path, *, immutable=False, seconds=None):
         if source_signature(path) == sig:
             db.execute("INSERT OR REPLACE INTO sources VALUES (?,?,?,?)",
                        (str(path), sig, file_digest(path) if immutable else None, accepted))
+            if cursor_key:
+                db.execute("DELETE FROM jobs WHERE name=?", (cursor_key,))
     return accepted
 
 
@@ -484,12 +500,12 @@ def restore_evidence(db, source):
 def archive_sources(root, state):
     data = root / "data"
     known = [
+        *sorted((data / "snapshot_archive").glob("snapshots-before-*.csv.gz"), reverse=True),
         data / "snapshots_PREBACKFILL.csv",
         data / "snapshots.bak_before_movement.csv",
         data / "_pre_v12_archive" / "snapshots.PRE_V12_BACKUP.csv",
         data / "v2_backup_epoch" / "snapshots.csv",
         *sorted(data.glob("snapshots.csv.bak_*")),
-        *sorted((data / "snapshot_archive").glob("snapshots-before-*.csv.gz")),
         *sorted((state / "research").glob("quotes-*.csv.gz")),
     ]
     return [path for path in known if path.is_file()]
@@ -503,6 +519,7 @@ def main():
                                             "import-results", "restore-evidence", "summary", "hot", "health"))
     parser.add_argument("--input", type=Path)
     parser.add_argument("--max-shards", type=int, default=64)
+    parser.add_argument("--archive-seconds", type=int, default=420)
     options = parser.parse_args()
     if options.command == "restore-evidence":
         if not options.input or (options.state / "history.sqlite3").exists():
@@ -513,16 +530,26 @@ def main():
             print(packed(blocks.migrate(db, options.state, FREE_DISK_RESERVE)))
         elif options.command == "archive":
             seen = 0
-            deferred = False
+            capacity_deferred, budget_deferred = False, False
+            end = time.monotonic() + options.archive_seconds
             for path in archive_sources(options.root, options.state):
                 if shutil.disk_usage(options.state).free < FREE_DISK_RESERVE:
-                    deferred = True
+                    capacity_deferred = True
                     break
-                if ingest_quotes(db, path, immutable=True):
-                    seen += 1
+                remaining = end - time.monotonic()
+                if remaining <= 0:
+                    budget_deferred = True
+                    break
+                try:
+                    if ingest_quotes(db, path, immutable=True, seconds=remaining):
+                        seen += 1
+                except TimeoutError:
+                    budget_deferred = True
+                    break
                 if seen >= options.max_shards:
                     break
-            print(packed({"imported_shards": seen, "capacity_deferred": deferred}))
+            print(packed({"imported_shards": seen, "capacity_deferred": capacity_deferred,
+                          "budget_deferred": budget_deferred}))
         elif options.command == "observe":
             print(packed({"decision_changes": ingest_board(db, data / "anomaly_board.csv")}))
         elif options.command == "decisions":

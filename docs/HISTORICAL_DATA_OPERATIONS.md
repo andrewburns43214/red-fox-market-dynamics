@@ -16,6 +16,8 @@ Install the history observer, maintenance, detail and health units in deploy. En
 
 Below the 15 GiB reserve, quote indexing and comparison materialization defer while normal capture, protected Game Detail service and compression continue. The maintenance unit migrates the former per-quote table by fixture with a persisted cursor and verifies every migrated block before retiring the old derived table. SQLite releases those pages only when the compaction can complete above the reserve. Repeated starts resume automatically. Keep the complete compressed capture tape as the reconstruction source. Compare recurring free space, quote payload bytes, fixture counts, and compressed Game Detail growth after initial backfill and during peak seasons. A falling reserve margin first calls for checking transient files, exceptional ingest growth, and the projected annual rate.
 
+Archive intake processes newer finalized gzip shards before legacy backup copies. It has a seven-minute maintenance budget and resumes at the last committed CSV record. The quote blocks, fixture metadata and resume position are committed together. The source manifest gains a SHA-256 record once the complete file has been indexed. A budget deferral is expected during legacy backfill.
+
 ## Backup and recovery
 
 Enable redfox-history-backup.timer only after an existing private remote restic repository has been approved and tested. Install restic using the host package manager and store repository credentials in a root-only /etc/redfox-history-backup.env or its referenced credential files. Supply RESTIC_REPOSITORY and RESTIC_PASSWORD_FILE. Keep a recovery copy of the repository credentials outside production and separate from the repository.

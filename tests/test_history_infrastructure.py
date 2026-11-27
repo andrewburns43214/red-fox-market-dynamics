@@ -63,6 +63,28 @@ def test_archive_deduplication_conflicts_and_as_of(tmp_path):
         assert paired_as_of(db, "nfl", "one", "SPREAD", "2026-11-27T00:40:00Z", early) == []
 
 
+def test_timed_archive_resumes_at_last_committed_csv_record(tmp_path, monkeypatch):
+    plain = tmp_path / "old.csv"
+    rows = []
+    for micros in range(2001):
+        rows.extend(pair(f"2026-11-27T00:30:00.{micros:06d}Z"))
+    rows[-1]["game"] += "\n"
+    write_quotes(plain, rows)
+    source = tmp_path / "old.csv.gz"
+    source.write_bytes(gzip.compress(plain.read_bytes()))
+    with connect(tmp_path / "state") as db:
+        clock = iter((0, 2))
+        with monkeypatch.context() as patch:
+            patch.setattr("history_store.time.monotonic", lambda: next(clock))
+            with pytest.raises(TimeoutError):
+                ingest_quotes(db, source, immutable=True, seconds=1)
+        assert db.execute("SELECT sum(observations) FROM quote_blocks").fetchone()[0] == 4000
+        assert not db.execute("SELECT 1 FROM sources").fetchone()
+        assert ingest_quotes(db, source, immutable=True, seconds=60) == 4002
+        assert db.execute("SELECT sum(observations) FROM quote_blocks").fetchone()[0] == 4002
+        assert not db.execute("SELECT 1 FROM jobs WHERE name LIKE 'archive_cursor:%'").fetchone()
+
+
 def test_compact_migration_preserves_variants_and_reclaims_legacy_pages(tmp_path):
     early = "2026-11-26T23:59:00Z"
     late = "2026-11-27T00:40:00Z"
