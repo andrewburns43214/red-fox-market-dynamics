@@ -203,7 +203,7 @@ def candidates(db, sport, market, minutes, before, *, excluded_events=()):
                 continue
             result = json.loads(data)
             names = _split_game(result.get("matchup"))
-            namespace = "nhl" if sport == "nhl" and source == "verified_research_nhl" else sport
+            namespace = "nhl_league" if sport == "nhl" and source == "verified_research_nhl" else sport
             identity_key = namespace, identity
             identities.add(identity_key)
             # ESPN and the NHL league feed can use different IDs for one fixture.
