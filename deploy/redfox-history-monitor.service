@@ -1,0 +1,12 @@
+[Unit]
+Description=Monitor Red Fox historical infrastructure and send operational alerts
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/red-fox-market-dynamics
+EnvironmentFile=-/etc/environment
+EnvironmentFile=-/etc/redfox-history-monitor.env
+Nice=15
+UMask=0077
+TimeoutStartSec=75
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python history_monitor.py

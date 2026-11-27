@@ -17,6 +17,8 @@
 <script src="config.js"></script>
 <script src="/pwa.js" defer></script>
 <script src="/manual-favorites.js?v=3" defer></script>
+<link rel="stylesheet" href="/historical-comparison.css?v=1">
+<script src="/historical-comparison.js?v=1" defer></script>
 <script>
 // Keep the server-side access cookie aligned with the signed-in Supabase session.
 (function () {
@@ -2695,6 +2697,7 @@ function openSignalGuide(selected,favoriteRow){
       marketGuideSection(MARKET_GUIDE_SECTIONS[2][0],MARKET_GUIDE_SECTIONS[2][1])+
       '<div class="signal-guide-section"><h3>Market Movement</h3>'+MARKET_GUIDE_MOVEMENT.map(function(item){return signalGuideItem(item[0],item[1]);}).join('')+'<p class="signal-guide-note">A blank movement indicator does not necessarily mean the market never moved. Open Market Trajectory or Market Journey to review the full path, including reversals.</p></div>'+
       marketIntegrityGuideSection()+
+      '<div class="signal-guide-section"><h3>Historical Market Comparisons</h3><p>Open the green chart beside either side to compare that market with archived Favorites and non-Favorites. Red Fox prioritizes the same sport and compares earlier setups using prices, splits, movement, and similar timing. Broader groups relax some comparisons and can overlap the closest group.</p><p>Matched games are unique fixtures. A graded record uses verified results and recorded entry prices. Net units and ROI assume one unit risked per graded wager, and average entry odds average those prices. Small samples can swing sharply. The icon opens research and carries no Supported Side or Favorite designation.</p></div>'+
       marketGuideSection(MARKET_GUIDE_SECTIONS[3][0],MARKET_GUIDE_SECTIONS[3][1])+
       '<div class="signal-guide-section"><h3>Board Fields</h3>'+MARKET_GUIDE_BOARD_FIELDS.map(boardFieldGuideItem).join('')+'</div>'+
       '<div class="signal-guide-section"><h3>Drilldown</h3>'+MARKET_GUIDE_DRILLDOWN_FIELDS.map(boardFieldGuideItem).join('')+'<p class="signal-guide-section-note">Use the full path and milestone view to confirm how the market developed, including meaningful moves, reversals, timing, and the latest state.</p></div>'+
@@ -2807,11 +2810,16 @@ function gameLanes(r){
   const sport=hasHeader?'':'<span class="game-sport">'+spChip(r.sport)+'</span>';
   const retained=String(r.data_badge||'').trim().toUpperCase()==='RETAINED';
   const retainedNote=retained?'<span class="retained-market-note">RETAINED · Last verified '+escHtml(et(r.state_as_of_utc||r.source_latest_at))+' ET</span>':'';
-  return '<div class="two-side-cell two-side-game'+(favorite?' is-favorite':'')+'">'
+  const withHistory=!!home&&window.redfoxHistory?.available(r);
+  const laneName=(name,identity,index)=>withHistory
+    ?'<span class="history-lane">'+teamName(name,identity)+window.redfoxHistory.button(r,index,
+      r.market_display==='TOTAL'?(index===0?'Over':'Under'):name)+'</span>'
+    :teamName(name,identity);
+  return '<div class="two-side-cell two-side-game'+(favorite?' is-favorite':'')+(withHistory?' has-history':'')+'">'
     +'<span class="game-name" style="display:none">'+escHtml(game)+'</span>'
     +header
-    +'<div class="two-side-row"><div class="game-lane game-away">'+sport+'<span class="game-lane-mark away">A</span>'+teamName(away,awayIdentity)+'</div></div>'
-    +'<div class="two-side-row"><div class="game-lane"><span class="game-lane-mark home">H</span><span class="game-lane-stack">'+teamName(home||'—',homeIdentity)+'<span class="game-lane-time">'+escHtml(r.kickoff_time||'')+'</span></span></div></div>'
+    +'<div class="two-side-row"><div class="game-lane game-away">'+sport+'<span class="game-lane-mark away">A</span>'+laneName(away,awayIdentity,0)+'</div></div>'
+    +'<div class="two-side-row"><div class="game-lane"><span class="game-lane-mark home">H</span><span class="game-lane-stack">'+laneName(home||'—',homeIdentity,1)+'<span class="game-lane-time">'+escHtml(r.kickoff_time||'')+'</span></span></div></div>'
     +retainedNote
     +'</div>';
 }
@@ -3170,6 +3178,12 @@ function openLiveRecentCard(index,side,event){
   }
   openGameDetail(allLiveRecent[index],side);
 }
+function liveMarketComparisonRow(section,item){
+  const sideArg=JSON.stringify(item.side.flagged_side||'').replace(/"/g,'&quot;');
+  const journey=`<button class="live-market-side-row${item.supported?' is-supported':''}" type="button" onclick="openGameDetail(allLiveRecent[${item.index}],${sideArg})" aria-label="Open frozen pregame ${escHtml(section.market)} market for ${escHtml(item.side.flagged_side||'side')}"><span class="live-market-side">${escHtml(item.side.flagged_side||'--')}</span><span class="live-market-meta">${escHtml(item.side.open_line||'--')} → ${escHtml(item.side.current_line||'--')} · ${escHtml(detailPercent(item.side.bets_pct))} Bets / ${escHtml(detailPercent(item.side.money_pct))} Money</span></button>`;
+  const history=window.redfoxHistory?.liveButton({...item.row,flagged_side:item.side.flagged_side});
+  return history?'<div class="historic-live-lane">'+journey+history+'</div>':journey;
+}
 function liveGameCard(game){
   const first=game.first, markets=game.rows, key=escHtml(game.key), score=liveScoreText(first), status=liveDisplayStatus(first);
   const favoriteContext=game.favoriteMarkets.join(', '), favorite=game.hasFavorite?favoriteBadge(favoriteContext):'';
@@ -3177,7 +3191,7 @@ function liveGameCard(game){
   const primary=[...markets].sort((a,b)=>Number(isRedFoxFavorite(b))-Number(isRedFoxFavorite(a))||frozenFavoriteRank(a)-frozenFavoriteRank(b)||boardRank(a)-boardRank(b))[0]||first;
   const primaryIndex=allLiveRecent.indexOf(primary), primarySide=JSON.stringify(primary.flagged_side||'').replace(/"/g,'&quot;');
   const openLabel='Open '+String(first.game||'game')+' drill-in';
-  return `<article class="live-game-card" tabindex="0" data-live-game-key="${key}" onclick="openLiveRecentCard(${primaryIndex},${primarySide},event)" onkeydown="openLiveRecentCard(${primaryIndex},${primarySide},event)" aria-label="${escHtml(openLabel)}" title="${escHtml(openLabel)}"><div class="live-game-top"><div class="live-game-heading"><div class="live-game-badges">${spChip(first.sport)}${favorite}</div><div class="live-game-name">${escHtml(first.game||'--')}</div><div class="live-status">${escHtml(status)}</div></div><div class="live-game-score-actions"><div class="live-score">${escHtml(score)}</div><button class="live-save" type="button" aria-label="${escHtml(saveLabel)}" title="${escHtml(saveLabel)}" aria-pressed="${game.saved}" onclick="toggleSavedLiveGame(${JSON.stringify(game.key).replace(/"/g,'&quot;')},event)">${game.saved?'★':'☆'}</button></div></div><div class="live-freeze">Frozen pregame record</div>${liveMarketSections(markets).map(function(section){return `<section class="live-market-section"><div class="live-market-type">${escHtml(section.market)}</div>${section.sides.map(function(item){const sideArg=JSON.stringify(item.side.flagged_side||'').replace(/"/g,'&quot;');return `<button class="live-market-side-row${item.supported?' is-supported':''}" type="button" onclick="openGameDetail(allLiveRecent[${item.index}],${sideArg})" aria-label="Open frozen pregame ${escHtml(section.market)} market for ${escHtml(item.side.flagged_side||'side')}"><span class="live-market-side">${escHtml(item.side.flagged_side||'--')}</span><span class="live-market-meta">${escHtml(item.side.open_line||'--')} → ${escHtml(item.side.current_line||'--')} · ${escHtml(detailPercent(item.side.bets_pct))} Bets / ${escHtml(detailPercent(item.side.money_pct))} Money</span></button>`;}).join('')}</section>`;}).join('')}</article>`;
+  return `<article class="live-game-card" tabindex="0" data-live-game-key="${key}" onclick="openLiveRecentCard(${primaryIndex},${primarySide},event)" onkeydown="openLiveRecentCard(${primaryIndex},${primarySide},event)" aria-label="${escHtml(openLabel)}" title="${escHtml(openLabel)}"><div class="live-game-top"><div class="live-game-heading"><div class="live-game-badges">${spChip(first.sport)}${favorite}</div><div class="live-game-name">${escHtml(first.game||'--')}</div><div class="live-status">${escHtml(status)}</div></div><div class="live-game-score-actions"><div class="live-score">${escHtml(score)}</div><button class="live-save" type="button" aria-label="${escHtml(saveLabel)}" title="${escHtml(saveLabel)}" aria-pressed="${game.saved}" onclick="toggleSavedLiveGame(${JSON.stringify(game.key).replace(/"/g,'&quot;')},event)">${game.saved?'★':'☆'}</button></div></div><div class="live-freeze">Frozen pregame record</div>${liveMarketSections(markets).map(function(section){return `<section class="live-market-section"><div class="live-market-type">${escHtml(section.market)}</div>${section.sides.map(item=>liveMarketComparisonRow(section,item)).join('')}</section>`;}).join('')}</article>`;
 }
 function renderLiveRecent(){
   const grid=document.getElementById('live-recent-grid'); if(!grid)return;
@@ -5986,6 +6000,18 @@ setInterval(refreshLiveRecentScores, 60000);
     <p role="status" aria-live="polite"></p>
     <button type="submit" class="manual-favorite-button" disabled>Save</button>
   </form>
+</dialog>
+<dialog id="historical-comparison" class="historic-dialog" aria-labelledby="historic-title">
+  <header class="historic-header">
+    <div data-historic-title-icon></div>
+    <div class="historic-title-group">
+      <h2 id="historic-title">Historical Market Comparison</h2>
+      <p data-historic-context></p>
+    </div>
+    <span data-historic-favorite></span>
+    <form method="dialog"><button type="submit" class="historic-close" aria-label="Close historical comparison">×</button></form>
+  </header>
+  <div class="historic-body" data-historic-body aria-live="polite"></div>
 </dialog>
 <style>
   .manual-favorite-dialog{max-width:min(420px,calc(100% - 24px));width:100%;max-height:85vh;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:18px;font:inherit}

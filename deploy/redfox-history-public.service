@@ -1,0 +1,15 @@
+[Unit]
+Description=Build protected Historical Market Comparisons
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/red-fox-market-dynamics
+Nice=12
+CPUQuota=22%
+CPUWeight=4
+IOWeight=10
+IOSchedulingClass=idle
+TimeoutStartSec=720
+UMask=0022
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python history_public.py

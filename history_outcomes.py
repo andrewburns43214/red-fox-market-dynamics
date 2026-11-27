@@ -143,7 +143,8 @@ def main():
     parser.add_argument("--day-limit", type=int, default=8)
     args = parser.parse_args()
     with connect(args.state) as db:
-        print(packed(collect(db, args.root, datetime.now(timezone.utc), day_limit=args.day_limit)))
+        print(packed({"outcome_reconciliation": collect(db, args.root, datetime.now(timezone.utc),
+                                                        day_limit=args.day_limit)}))
 
 
 if __name__ == "__main__":

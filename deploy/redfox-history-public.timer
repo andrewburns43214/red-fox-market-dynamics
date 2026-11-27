@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh private historical comparisons independently of board publication
+
+[Timer]
+OnCalendar=*-*-* *:02/5:15
+AccuracySec=25s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
