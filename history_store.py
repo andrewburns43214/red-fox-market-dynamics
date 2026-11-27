@@ -411,15 +411,39 @@ def paired_as_of(db, sport, event, market, decision_at, since):
             for row in pair]
 
 
-def store_outcome(db, sport, event, source, status, evidence):
+def store_outcome(db, sport, event, source, status, evidence, *, correction=False):
     value = packed(evidence)
     identity = {key: val for key, val in evidence.items() if key != "observed_at"}
+    fingerprint = digest(packed(identity))
+    if correction:
+        prior = db.execute("""
+            SELECT status,evidence FROM outcomes WHERE (sport,event_id,source)=(?,?,?)
+            ORDER BY observed_at DESC,digest LIMIT 1
+        """, (sport, event, source)).fetchone()
+        if prior:
+            original = json.loads(prior[1])
+            original.pop("observed_at", None)
+            if prior[0] == status and original == identity:
+                return
+            # Retain each confirmed revision, including a correction back
+            # to an earlier score. Historical cutoffs still see the old row.
+            fingerprint = digest(packed((status, evidence)))
     inserted = db.execute("INSERT OR IGNORE INTO outcomes VALUES (?,?,?,?,?,?,?,?)", (
         sport, event, source, utc(evidence.get("observed_at")) or now_iso(), status,
-        evidence.get("provider_event_id"), value, digest(packed(identity)),
+        evidence.get("provider_event_id"), value, fingerprint,
     )).rowcount
     if inserted:
         db.execute("INSERT OR IGNORE INTO comparison_pending VALUES (?,?)", (sport, event))
+
+
+def latest_provider_outcomes(rows, cutoff):
+    """Keep the latest known revision for each source/verified identity."""
+    latest = {}
+    for row in rows:
+        source, _, provider, observed, _ = row
+        if observed <= cutoff and (source, provider) not in latest:
+            latest[source, provider] = row
+    return list(latest.values())
 
 
 def import_outcomes(db, path):

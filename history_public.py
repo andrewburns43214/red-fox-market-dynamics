@@ -12,13 +12,13 @@ import shutil
 import sqlite3
 
 from history_blocks import decode, encode, read_quotes
-from history_comparisons import WINDOWS, cross_evidence, delta, features, grade, implied, recorded_split_context
-from history_store import FREE_DISK_RESERVE, SPORTS, atomic_text, digest, eligible_pairs, number, packed, quote_part, start_evidence, utc
+from history_comparisons import (CONTEXT_VERSION, MARKETS, WINDOWS, aligned_game, delta, features,
+                                 fixture_pairs, grade, implied, recorded_split_context, side_key)
+from history_store import FREE_DISK_RESERVE, SPORTS, atomic_text, digest, eligible_pairs, latest_provider_outcomes, number, packed, quote_part, start_evidence, utc
 from team_aliases import _split_game, normalize_team_name
 from ufc_bout_integrity import fighter_key
 
 
-MARKETS = ("SPREAD", "MONEYLINE", "TOTAL")
 KEY = re.compile(r"[A-Za-z0-9_-]{1,75}\Z")
 MARKET_LABELS = {"SPREAD": "Spread", "MONEYLINE": "Moneyline", "TOTAL": "Total"}
 CROSS = {"nfl": ("ncaaf",), "ncaaf": ("nfl",), "nba": ("ncaab",), "ncaab": ("nba",)}
@@ -30,15 +30,6 @@ CREATE TABLE IF NOT EXISTS comparison_frozen(
     PRIMARY KEY(sport,event_id)
 ) WITHOUT ROWID
 """
-
-
-def side_key(value, sport, market):
-    value = str(value or "").strip()
-    if market == "TOTAL":
-        label = value.split(" ", 1)[0].casefold()
-        return {"under": "under", "u": "under", "over": "over", "o": "over"}.get(label, "")
-    value = re.sub(r"\s[+-]?\d+(?:\.\d+)?(?:\s*\([^)]*\))?\s*$", "", value) if market == "SPREAD" else value
-    return fighter_key(value) if sport == "ufc" else normalize_team_name(value, sport)
 
 
 def line_price(value, market):
@@ -94,7 +85,37 @@ def recover_frozen_clock(db, sport, event, market, sides, scheduled, frozen_at, 
     return None
 
 
-def query_features(db, group, row, frozen, now):
+def published_pair(row, sport, market, schedule, cutoff, names):
+    """Use a newer published peer only when both sides share a valid clock."""
+    if not row or utc(row.get("kickoff_iso")) != schedule:
+        return None
+    observed = utc(row.get("source_latest_at"))
+    if not observed or observed > cutoff or observed >= schedule:
+        return None
+    try:
+        sides = json.loads(row.get("market_sides") or "[]")
+    except ValueError:
+        return None
+    if not isinstance(sides, list) or len(sides) != 2:
+        return None
+    pair = []
+    for side in sides:
+        if (not isinstance(side, dict) or utc(side.get("source_latest_at")) != observed or
+                str(side.get("data_badge") or row.get("data_badge") or "").upper() not in {"CLEAN", "THIN"}):
+            return None
+        line, price = line_price(side.get("current_line"), market)
+        open_line, open_price = line_price(side.get("open_line"), market)
+        if price is None or market != "MONEYLINE" and line is None:
+            return None
+        pair.append({"side": side.get("flagged_side"), "line": line, "price": price,
+                     "open_line": open_line, "open_price": open_price,
+                     "tickets": pct(side.get("bets_pct")), "money": pct(side.get("money_pct")),
+                     "scheduled_at": schedule, "captured_at": observed})
+    aligned = fixture_pairs([(observed, pair)], sport, market, names)
+    return aligned[0] if aligned else None
+
+
+def query_features(db, group, row, frozen, now, *, archive=None):
     sport, event = row["sport"], row["game_id"]
     market = row.get("market_display")
     if market not in MARKETS or (sport == "ufc" and market != "MONEYLINE"):
@@ -141,39 +162,6 @@ def query_features(db, group, row, frozen, now):
                 for _, q in values):
             for identity, quote in values:
                 selected[identity].append(quote)
-    paired_market = "MONEYLINE" if market == "SPREAD" else "SPREAD" if market == "MONEYLINE" else ""
-    related = group.get(paired_market)
-    cross = {}
-    if related:
-        cross_at = utc(related.get("source_latest_at"))
-        if (cross_at and cross_at <= observed and utc(related.get("kickoff_iso")) == scheduled and
-                datetime.fromisoformat(observed) - datetime.fromisoformat(cross_at) <= timedelta(minutes=20)):
-            try:
-                related_sides = json.loads(related.get("market_sides") or "[]")
-            except ValueError:
-                related_sides = []
-            if not isinstance(related_sides, list):
-                related_sides = []
-            cross = {side_key(item.get("flagged_side"), sport, paired_market): item for item in related_sides
-                     if isinstance(item, dict) and utc(item.get("source_latest_at")) == cross_at and
-                     str(item.get("data_badge") or "").upper() in {"CLEAN", "THIN"}}
-            if set(cross) != set(keys):
-                cross = {}
-    archived_cross = {}
-    cross_priors = defaultdict(list)
-    if related:
-        cross_pairs = list(eligible_pairs(db, sport, event, paired_market, observed, actual_start=actual))
-        if cross_pairs:
-            cross_at, pair = cross_pairs[-1]
-            indexed = {side_key(quote["side"], sport, paired_market): quote for quote in pair}
-            if (set(indexed) == set(keys) and pair[0]["scheduled_at"] == scheduled and
-                    datetime.fromisoformat(observed) - datetime.fromisoformat(cross_at) <= timedelta(minutes=20)):
-                archived_cross = indexed
-                for captured, prior_pair in cross_pairs[-3:-1]:
-                    if (prior_pair[0]["scheduled_at"] == scheduled and
-                            datetime.fromisoformat(cross_at) - datetime.fromisoformat(captured) <= timedelta(minutes=30)):
-                        for quote in prior_pair:
-                            cross_priors[side_key(quote["side"], sport, paired_market)].append(quote)
     values = []
     audits = recorded_split_context(db, sport, event, market, observed)
     for identity, name in zip(keys, names):
@@ -210,15 +198,24 @@ def query_features(db, group, row, frozen, now):
             value["split_audit"] = audits[identity]
         value["favorite"] = (str(row.get("red_fox_favorite")).casefold() == "true" and
                              side_key(row.get("favorite_side"), sport, market) == identity)
-        if identity in cross:
-            cross_line, cross_price = line_price(cross[identity].get("current_line"), paired_market)
-            cross_open, cross_open_price = line_price(cross[identity].get("open_line"), paired_market)
-            same_archive_capture = identity in archived_cross and utc(cross[identity]["source_latest_at"]) == cross_at
-            quote = {"line": cross_line, "price": cross_price, "open_line": cross_open, "open_price": cross_open_price}
-            value["cross_market"] = cross_evidence(paired_market, quote, cross_priors[identity] if same_archive_capture else ())
-        elif identity in archived_cross:
-            value["cross_market"] = cross_evidence(paired_market, archived_cross[identity], cross_priors[identity])
         values.append(value)
+    markets = {}
+    for peer in MARKETS:
+        if peer == market or sport == "ufc":
+            continue
+        source = group.get(peer)
+        pairs = (archive or {}).get(peer)
+        if pairs is None:
+            pairs = fixture_pairs(eligible_pairs(db, sport, event, peer, observed, actual_start=actual),
+                                  sport, peer, _split_game(row["game"]))
+        fresh_pair = published_pair(source, sport, peer, scheduled, observed, _split_game(row["game"]))
+        if fresh_pair:
+            peers = dict(pairs)
+            peers[fresh_pair[0]] = fresh_pair[1]
+            pairs = sorted(peers.items())
+        markets[peer] = pairs
+    aligned_game(markets, {m: [clock for clock, _ in pairs] for m, pairs in markets.items()},
+                 market, observed, scheduled, values)
     lead = (datetime.fromisoformat(scheduled) - datetime.fromisoformat(observed)).total_seconds() / 60
     return {"observed": observed, "scheduled": scheduled, "lead": lead,
             "window": decision_window(lead), "sides": values}
@@ -238,6 +235,56 @@ def confirmation(value):
         return None
     return (polarity(cross.get("price_toward_implied"), .005) if cross["market"] == "MONEYLINE"
             else polarity(cross.get("line_toward"), .25))
+
+
+def relationship(primary, peer):
+    if not primary.get("stance") or not peer.get("stance"):
+        return None
+    if primary.get("trajectory") == peer.get("trajectory") == "retraced":
+        return "Spread and moneyline both retraced"
+    if primary.get("trajectory") == "retraced" and peer.get("sustained_toward"):
+        return "Other market held through the retracement"
+    if peer.get("trajectory") == "retraced" and primary.get("stance") == "toward":
+        return "Other market retraced while selected market held"
+    if primary["stance"] == peer["stance"] == "toward":
+        return "Spread and moneyline both moved toward the team"
+    if {primary["stance"], peer["stance"]} == {"toward", "against"}:
+        return "Spread and moneyline moved in opposite directions"
+    if primary["stance"] == "toward" and peer["stance"] == "steady":
+        return "Directional move without cross-market confirmation"
+    if primary["stance"] == "steady" and peer["stance"] == "against":
+        return "Stable selected market with pressure against the team elsewhere"
+    return f'{primary["stance"]} / {peer["stance"]}'
+
+
+def joint_factors(current, previous, sport, market):
+    left, right = current.get("game_context", {}), previous.get("game_context", {})
+    for peer in sorted(left.keys() & right.keys()):
+        a, b = left[peer], right[peer]
+        label = MARKET_LABELS[peer]
+        scale = .022 if peer == "MONEYLINE" else (
+            2 if peer == "TOTAL" and sport in {"nfl", "ncaaf", "nba", "ncaab"} else
+            1.5 if peer == "SPREAD" and sport in {"nba", "ncaab"} else .75)
+        for suffix, field, tolerance, weight in (
+            ("ticket positioning", "tickets", 15, .36), ("money positioning", "money", 18, .44),
+            ("attached price movement", "price_toward_implied", .026, .37),
+            ("retracement", "path_retrace", scale, .39),
+            ("move size", "price_toward_implied" if peer == "MONEYLINE" else "line_toward", scale, .6),
+        ):
+            if peer == "MONEYLINE" and suffix == "attached price movement":
+                continue
+            x, y = a.get(field), b.get(field)
+            if x is not None and y is not None:
+                yield f"{label} {suffix}", min(3, abs(x - y) / tolerance), weight
+        if a.get("trajectory") and b.get("trajectory"):
+            yield f"{label} path", 0 if a["trajectory"] == b["trajectory"] else 1.5, .52
+        if peer != "TOTAL" and market != "TOTAL":
+            pattern, historical = relationship(current, a), relationship(previous, b)
+            if pattern and historical:
+                display = pattern if pattern == historical and " / " not in pattern else "Spread–moneyline relationship"
+                yield display, 0 if pattern == historical else 2, 1.25
+        elif a.get("stance") and b.get("stance"):
+            yield f"{label} direction", 0 if a["stance"] == b["stance"] else 2, .52
 
 
 def distance(current, previous, sport, market, cross_sport=False):
@@ -311,9 +358,23 @@ def distance(current, previous, sport, market, cross_sport=False):
     current_context = current.get("context") or {}
     previous_context = previous.get("context") or {}
     if not cross_sport:
-        flag("Same-side cross-market direction", confirmation(current), confirmation(previous), 1.25)
-        flag("Sustained cross-market support", (current.get("cross_market") or {}).get("sustained_toward"),
-             (previous.get("cross_market") or {}).get("sustained_toward"), .65)
+        if not (current.get("game_context") and previous.get("game_context")):
+            flag("Same-side cross-market direction", confirmation(current), confirmation(previous), 1.25)
+        for key, label in (
+            ("ticket_growth_price_held", "Ticket support grew without adverse movement"),
+            ("money_growth_price_held", "Money support grew without adverse movement"),
+        ):
+            if current.get(key) or previous.get(key):
+                flag(label, current.get(key), previous.get(key), .62)
+        if market == "SPREAD":
+            for label, field, threshold in (("Stationary handicap with heavy money", "money", 65),
+                                             ("Stationary handicap with juice movement", "price_toward_implied", .012)):
+                a, b = current.get(field), previous.get(field)
+                if a is not None and b is not None:
+                    x = polarity(left_move, .25) == 0 and abs(a) >= threshold
+                    y = polarity(right_move, .25) == 0 and abs(b) >= threshold
+                    if x or y:
+                        flag(label, x, y, .75)
         flag("Recorded split breach pattern", (current.get("split_audit") or {}).get("split_breach"),
              (previous.get("split_audit") or {}).get("split_breach"), .35)
         for key, label, weight in (
@@ -323,9 +384,22 @@ def distance(current, previous, sport, market, cross_sport=False):
         ):
             flag(label, current_context.get(key), previous_context.get(key), weight)
     score = sum(d * w for _, d, w in factors) / sum(w for _, _, w in factors)
+    if score > 1.48:
+        return None
+    joint = list(joint_factors(current, previous, sport, market)) if not cross_sport else []
+    conflicting_peers = False
+    if joint:
+        joint_score = sum(d * w for _, d, w in joint) / sum(w for _, _, w in joint)
+        # The selected quote dominates. Secondary evidence can refine a useful
+        # primary match but cannot make a poor primary match closest.
+        score = .76 * score + .24 * joint_score
+        conflicting_peers = any(label == "Spread–moneyline relationship" and d == 2
+                                for label, d, _ in joint)
+        factors.extend(joint)
     tight = (same_direction and abs(current["tickets"] - previous["tickets"]) <= 10 and
              abs(current["money"] - previous["money"]) <= 13 and abs(left_move - right_move) <= scale and
-             (previous_price is None or abs(current_price - previous_price) <= .09) and score <= .74)
+             (previous_price is None or abs(current_price - previous_price) <= .09) and
+             score <= .74 and not conflicting_peers)
     return score, tight, factors
 
 
@@ -349,6 +423,22 @@ def score_line(result):
     return None
 
 
+def outcome_signature(sport, state, evidence):
+    if state in {"push", "void"}:
+        return state
+    if sport == "ufc":
+        return fighter_key(evidence.get("winner") or "")
+    if evidence.get("score_a") is not None:
+        names = evidence.get("team_a"), evidence.get("team_b")
+        scores = evidence.get("score_a"), evidence.get("score_b")
+    else:
+        names = _split_game(evidence.get("matchup"))
+        scores = evidence.get("score_away"), evidence.get("score_home")
+    if all(names) and None not in (points := tuple(number(score) for score in scores)):
+        return tuple(sorted((normalize_team_name(name, sport), score) for name, score in zip(names, points)))
+    return None
+
+
 class History:
     def __init__(self, db):
         self.db = db
@@ -366,6 +456,8 @@ class History:
                                   (p.sport,p.event_id)=(w.sport,w.event_id))
                 ORDER BY w.decision_at DESC,w.event_id
             """, key)]
+            for row in self.slots[key]:
+                row["fixture"] = tournament_identity(sport, row["event_id"], row["matchup"], row["scheduled_at"])
         return self.slots[key]
 
     def evidence(self, sport, event, before):
@@ -375,15 +467,18 @@ class History:
                                  for r in self.db.execute("""
                                      SELECT source,status,provider_event_id,observed_at,evidence
                                      FROM outcomes WHERE (sport,event_id)=(?,?)
+                                     ORDER BY observed_at DESC,digest
                                  """, key)]
-        return [r for r in self.results[key] if r[3] <= before]
+        return latest_provider_outcomes(self.results[key], before)
 
-    def rank(self, query, sport, event, market, window, before, cross=False):
+    def rank(self, query, sport, event, market, window, before, cross=False, fixture=None):
         ranked = []
         sports = CROSS.get(sport, ()) if cross and market == "MONEYLINE" else () if cross else (sport,)
         for league in sports:
             for row in self.windows(league, market, window):
                 if row["event_id"] == event and league == sport or row["scheduled_at"] >= before:
+                    continue
+                if fixture is not None and fixture == row["fixture"]:
                     continue
                 if row["entry_at"] > row["decision_at"] or row["decision_at"] >= before:
                     continue
@@ -400,9 +495,9 @@ class History:
         ranked.sort(key=lambda item: (item[0], item[2]["sport"], item[1], item[3]["side"]))
         return ranked
 
-    def report(self, ranked, market, before, examples=True):
+    def report(self, ranked, market, before, examples=True, *, list_matches=False):
         used = set()
-        groups, grades, odds, numbers, exemplars = [], [], [], [], []
+        groups, grades, odds, numbers, exemplars, match_list = [], [], [], [], [], []
         missing_price, unresolved, void = 0, 0, 0
         for score, event, row, side, tight, factors in ranked:
             league = row["sport"]
@@ -424,7 +519,8 @@ class History:
                 continue
             results = [(grade(league, market, side, state, result), result) for _, state, key, _, result in sources if key]
             verified = {g for g, _ in results}
-            if len(verified) != 1 or None in verified:
+            signatures = {outcome_signature(league, state, result) for _, state, key, _, result in sources if key}
+            if len(verified) != 1 or None in verified or len(signatures) != 1 or None in signatures:
                 unresolved += 1
                 continue
             result = verified.pop()
@@ -436,14 +532,19 @@ class History:
             if side.get("line") is not None:
                 numbers.append(side["line"])
             grades.append(result)
+            if (examples and len(exemplars) < 3) or (list_matches and len(match_list) < 60):
+                selection = next((name for name in _split_game(row["matchup"])
+                                  if side_key(name, league, market) == side["side"]), side["side"].title())
+            if list_matches and len(match_list) < 60:
+                match_list.append([row["scheduled_at"], row["matchup"], selection, side["line"], side["price"],
+                                   side["tickets"], side["money"], result])
             if examples and len(exemplars) < 3:
                 common = sorted((d, label) for label, d, _ in factors if d <= .75)
                 differences = sorted(((d, label) for label, d, _ in factors if d > 1), reverse=True)
                 exemplars.append({
                     "sport": league, "game": row["matchup"], "date": row["scheduled_at"],
-                    "entry": row["entry_at"], "side": side, "grade": result,
-                    "selection": next((name for name in _split_game(row["matchup"])
-                                       if side_key(name, league, market) == side["side"]), side["side"].title()),
+                    "entry": row["entry_at"], "decision": row["decision_at"] if "decision_at" in row else None,
+                    "side": side, "grade": result, "selection": selection,
                     "score": next((score_line(e) for _, e in results if score_line(e)), None),
                     "matched": [label for _, label in common[:4]], "differences": [label for _, label in differences[:3]],
                 })
@@ -473,20 +574,25 @@ class History:
                 "odds": average, "line": round(sum(numbers) / len(numbers), 2) if numbers else None,
                 "units": round(units, 2) if grades else None,
                 "roi": round(units * 100 / len(grades), 2) if grades else None,
-                "matches": matches[:8], "differences": differences[:5], "examples": exemplars,
+                "matches": matches, "differences": differences, "examples": exemplars, "match_list": match_list,
                 "status": "none" if not groups else "limited" if len(grades) < MIN_HISTORY else "available"}
 
     def comparison(self, query, sport, event, market, setup):
         window, before = setup["window"], setup["observed"]
         if window is None:
             return {"reason": "There is no historical checkpoint close to this observation time."}
-        ranked = self.rank(query, sport, event, market, window, before)
-        closest = self.report([r for r in ranked if r[4]], market, before)
-        broader = self.report(ranked, market, before)
+        fixture = tournament_identity(sport, event, setup["game"], setup["scheduled"]) if setup.get("game") else None
+        ranked = self.rank(query, sport, event, market, window, before, fixture=fixture)
+        # Quotes are anchored to the capture. For upcoming comparisons the
+        # graded archive may use results already verified at generation.
+        # Frozen comparisons keep their original pregame knowledge clock.
+        verified_by = setup.get("verified_by", before)
+        closest = self.report([r for r in ranked if r[4]], market, verified_by, list_matches=True)
+        broader = self.report(ranked, market, verified_by)
         since = min((r["scheduled_at"][:10] for r in self.windows(sport, market, window)
                      if r["scheduled_at"] < before), default=None)
         related = self.rank(query, sport, event, market, window, before, cross=True)
-        cross = self.report(related, market, before, examples=False) if related else None
+        cross = self.report(related, market, verified_by) if related else None
         return {"closest": closest, "broader": broader, "cross": cross, "since": since,
                 "cross_sports": sorted({item[2]["sport"] for item in related})}
 
@@ -510,17 +616,31 @@ def fixture_groups(rows):
     return groups
 
 
+def capture_signature(group, revision):
+    fields = ("game", "kickoff_iso", "source_latest_at", "market_sides", "data_badge",
+              "red_fox_favorite", "favorite_side", "frozen_at_utc")
+    quotes = {market: [row.get(k) for k in fields] for market, row in group.items()}
+    return digest(packed((CONTEXT_VERSION, quotes, revision)))
+
+
 def render_fixture(db, history, key, group, now, frozen):
     sport, event = key
     markets = {}
+    names = _split_game(next(iter(group.values()))["game"])
+    actual = start_evidence(db, sport, event)
+    archive = {m: fixture_pairs(eligible_pairs(db, sport, event, m, utc(now), actual_start=actual),
+                                sport, m, names) for m in (("MONEYLINE",) if sport == "ufc" else MARKETS)}
     for market, row in group.items():
-        setup = query_features(db, group, row, frozen, now)
+        setup = query_features(db, group, row, frozen, now, archive=archive)
         if setup:
+            setup["game"] = row["game"]
+            if not frozen:
+                setup["verified_by"] = utc(now)
             for query in setup["sides"]:
                 query["comparison"] = history.comparison(query, sport, event, market, setup)
             markets[market] = setup
     return {"sport": sport, "event": event, "game": next(iter(group.values()))["game"],
-            "markets": markets, "frozen": frozen}
+            "markets": markets, "frozen": frozen, "context_version": CONTEXT_VERSION}
 
 
 def write(path, content):
@@ -559,7 +679,7 @@ def build(db, root, output, control, now, *, preview=False, events=()):
         group = recent.get(key) or board[key]
         frozen = key in recent
         path = output / f"{key[0]}--{key[1]}.json"
-        signature = digest(packed((group, revision)))
+        signature = capture_signature(group, revision)
         if frozen and not preview and (old := db.execute("SELECT payload FROM comparison_frozen WHERE (sport,event_id)=(?,?)",
                                          key).fetchone()):
             if not path.exists():

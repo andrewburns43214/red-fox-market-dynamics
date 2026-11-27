@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from build_live_recent import fetch_scoreboard, game_key
-from history_store import connect, now_iso, packed, store_outcome
+from history_store import connect, now_iso, packed, store_outcome, utc
 from mlb_fixtures import NEW_YORK, match_fixture, read_context, timestamp
 from ufc_bout_integrity import cache_dir, match_bout, read_json
 
@@ -51,7 +51,8 @@ def resolve_mlb(fixture, fixtures):
     if not final:
         return "unresolved", {"reason": "no unique official fixture or first-pitch evidence"}
     evidence = {key: final.get(key) for key in (
-        "official_date", "scheduled_start", "first_pitch", "game_number", "doubleheader", "status"
+        "official_date", "scheduled_start", "first_pitch", "game_number", "doubleheader", "status",
+        "innings", "scheduled_innings",
     )}
     evidence["provider_event_id"] = str(final["game_pk"])
     if final["state"] == "void":
@@ -102,6 +103,29 @@ def collect(db, root, now, *, day_limit):
             if sum(s not in local_sources for s, _ in by_day) >= day_limit:
                 continue
         by_day[key].append(fixture)
+    # Reuse the existing providers for bounded correction checks. A result
+    # remains available if the provider is temporarily unavailable.
+    recent = defaultdict(list)
+    recheck_marks = dict(db.execute("SELECT name,value FROM jobs WHERE name LIKE 'outcome_recheck:%'"))
+    correction_cutoff = utc(now - timedelta(hours=6))
+    for fixture in db.execute("""
+        SELECT f.* FROM fixtures f WHERE f.scheduled_at BETWEEN ? AND ?
+        AND EXISTS (SELECT 1 FROM outcomes o WHERE (o.sport,o.event_id)=(f.sport,f.event_id)
+                    AND o.status IN ('verified','void','push'))
+    """, (utc(now - timedelta(days=3)), utc(now - timedelta(hours=3)))):
+        key = fixture["sport"], timestamp(fixture["scheduled_at"]).astimezone(NEW_YORK).date()
+        if recheck_marks.get(f"outcome_recheck:{key[0]}:{key[1]}", "") < correction_cutoff:
+            recent[key].append(fixture)
+    ordered = sorted(recent, key=lambda key: (recheck_marks.get(f"outcome_recheck:{key[0]}:{key[1]}", ""), key))
+    rechecked = set()
+    extras = 0
+    for key in ordered:
+        if key not in by_day and key[0] not in local_sources:
+            if extras >= 2:
+                continue
+            extras += 1
+        by_day[key].extend(recent[key])
+        rechecked.update((r["sport"], r["event_id"]) for r in recent[key])
     counts = defaultdict(int)
     for (sport, date), fixtures in by_day.items():
         if sport in local_sources:
@@ -120,19 +144,39 @@ def collect(db, root, now, *, day_limit):
         with db:
             for fixture in fixtures:
                 event = fixture["event_id"]
+                correcting = (sport, event) in rechecked
                 status, evidence = resolver(fixture, scores) if scores is not None else (
                     "unavailable", {"reason": "provider unavailable"}
                 )
-                counts[status] += 1
+                if correcting:
+                    if status not in {"verified", "void", "push"}:
+                        counts["recheck_deferred"] += 1
+                        continue
+                    known = db.execute("""
+                        SELECT provider_event_id FROM outcomes WHERE (sport,event_id,source)=(?,?,?)
+                        ORDER BY observed_at DESC LIMIT 1
+                    """, (sport, event, provider)).fetchone()
+                    if known and known[0] != evidence.get("provider_event_id"):
+                        counts["recheck_identity_conflict"] += 1
+                        continue
+                    counts["rechecked"] += 1
+                else:
+                    counts[status] += 1
                 evidence["matchup"] = fixture["matchup"]
                 evidence["fixture_scheduled_at"] = fixture["scheduled_at"]
                 evidence["observed_at"] = now_iso()
                 if status in {"verified", "void", "push"}:
-                    store_outcome(db, sport, event, provider, status, evidence)
+                    store_outcome(db, sport, event, provider, status, evidence, correction=True)
                     db.execute("DELETE FROM unresolved WHERE sport=? AND event_id=?", (sport, event))
                 else:
                     db.execute("INSERT OR REPLACE INTO unresolved VALUES (?,?,?,?,?)",
                                (sport, event, status, evidence["observed_at"], packed(evidence)))
+            if (sport, date) in recent and scores is not None:
+                db.execute("INSERT OR REPLACE INTO jobs VALUES (?,?)",
+                           (f"outcome_recheck:{sport}:{date}", utc(now)))
+    with db:
+        db.execute("DELETE FROM jobs WHERE name LIKE 'outcome_recheck:%' AND value<?",
+                   (utc(now - timedelta(days=7)),))
     return dict(counts)
 
 

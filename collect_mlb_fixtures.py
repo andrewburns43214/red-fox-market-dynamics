@@ -100,6 +100,10 @@ def league_fixture(raw):
                 scheduled_start=raw['gameDate'], time_tbd=bool(status.get('startTimeTBD')),
                 doubleheader=raw.get('doubleHeader') in {'Y', 'S'}, game_number=raw.get('gameNumber'),
                 status=detail, state=state, first_pitch=None)
+    if state == 'post':
+        # Preserve the same official inning evidence used to validate the
+        # final so the separate historical Total grader can use it too.
+        game.update(innings=inning, scheduled_innings=scheduled)
     for leg in ('away', 'home'):
         side = raw.get('teams', {}).get(leg, {})
         team = side.get('team', {})

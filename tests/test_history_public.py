@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import json
 
 from history_blocks import merge
-from history_comparisons import cross_evidence, recorded_split_context
+from history_comparisons import aligned_game, cross_evidence, features, rebuild, recorded_split_context
 from history_monitor import GIB, forecast
 from history_public import History, build, decision_window, distance, line_price, query_features
 from history_store import connect, store_outcome, utc
@@ -26,6 +26,47 @@ def test_nearest_scores_market_evidence_not_results_and_limits_market_types():
     assert line_price("O 8.5 (+111)", "TOTAL") == (8.5, 111)
     assert line_price("-155", "MONEYLINE") == (None, -155)
     assert decision_window(32) == 30 and decision_window(7000) is None
+
+
+def test_joint_matching_uses_aligned_secondary_quotes_and_distinguishes_no_data():
+    at = utc("2026-11-27T19:30:00Z")
+    prior = utc("2026-11-27T19:20:00Z")
+    stale = utc("2026-11-27T18:59:00Z")
+    later = utc("2026-11-27T19:31:00Z")
+    start = utc("2026-11-27T20:00:00Z")
+
+    def pair(clock, market, current, line):
+        return tuple(side(name, price, line * sign if line else None) | {
+            "captured_at": clock, "scheduled_at": start, "open_line": None if market == "MONEYLINE" else
+            (45 if market == "TOTAL" else line * sign + sign), "open_price": opening,
+        } for name, price, sign, opening in current)
+
+    names = (("a", 120, 1, 145), ("b", -140, -1, -170))
+    tape = {
+        "MONEYLINE": [(stale, pair(stale, "MONEYLINE", names, None)), (prior, pair(prior, "MONEYLINE", names, None)),
+                      (later, pair(later, "MONEYLINE", (("a", 160, 1, 145), ("b", -190, -1, -170)), None))],
+        "TOTAL": [(prior, pair(prior, "TOTAL", (("over", -110, 1, -110), ("under", -110, 1, -110)), 47))],
+    }
+    base = side("a") | {"stance": "toward", "trajectory": "retraced"}
+    q = dict(base)
+    aligned_game(tape, {m: [obs for obs, _ in rows] for m, rows in tape.items()}, "SPREAD", at, start, [q])
+    assert set(q["game_context"]) == {"MONEYLINE", "TOTAL"}
+    assert q["game_context"]["MONEYLINE"]["price"] == 120
+    peer = q["game_context"]["MONEYLINE"]
+    disagree = q | {"game_context": q["game_context"] | {
+        "MONEYLINE": peer | {"stance": "against", "trajectory": "against",
+                            "sustained_toward": False, "price_toward_implied": -.06}}}
+    assert distance(q, q, "nfl", "SPREAD")[0] < distance(q, disagree, "nfl", "SPREAD")[0]
+    assert not distance(q, disagree, "nfl", "SPREAD")[1]
+    assert distance(q, base, "nfl", "SPREAD")[1]
+    total = side("over") | {"stance": "toward"}
+    aligned_game(tape, {m: [obs for obs, _ in rows] for m, rows in tape.items()}, "TOTAL", at, start, [total])
+    assert total["context_reference"] == "b"
+    assert total["game_context"]["MONEYLINE"]["side"] == "b"
+    capped = side("a") | {"tickets": 100, "money": 0, "captured_at": stale}
+    latest = side("a") | {"captured_at": prior}
+    vector = features([capped, latest], latest, "SPREAD")
+    assert vector["opening_money"] is None and vector["opening_tickets"] is None
 
 
 def test_report_uses_individual_prices_asof_results_and_unique_fixtures(tmp_path):
@@ -163,3 +204,52 @@ def test_replaced_ufc_opponent_cannot_grade_an_older_quote(tmp_path):
         })
         report = History(db).report([(0, "bout", row, old_side, True, ())], "MONEYLINE", before)
         assert (report["matched"], report["graded"], report["unresolved"]) == (1, 0, 1)
+
+
+def test_new_outcome_and_correction_update_future_cohorts_with_historical_cutoff(tmp_path):
+    game = "NY Giants @ IND Colts"
+    quote = side("indianapolis colts", -125, 3)
+    ranked = [(0, "past", {"sport": "nfl", "matchup": game, "scheduled_at": "2026-11-26T20:00:00Z",
+                          "entry_at": "2026-11-26T19:30:00Z"}, quote, True, ())]
+    stamps = [utc("2026-11-27T" + hour + ":00:00Z") for hour in ("00", "01", "02")]
+    with connect(tmp_path) as db:
+        assert History(db).report(ranked, "SPREAD", stamps[0])["graded"] == 0
+        for stamp, home in zip(stamps, (21, 14, 21)):
+            store_outcome(db, "nfl", "past", "provider", "verified", {
+                "provider_event_id": "1", "observed_at": stamp, "matchup": game,
+                "score_away": 20, "score_home": home,
+            }, correction=True)
+        history = History(db)
+        assert [history.report(ranked, "SPREAD", stamp)["roi"] for stamp in stamps] == [80.0, -100.0, 80.0]
+
+
+def test_verified_result_enters_next_publication_without_new_board_capture(tmp_path):
+    now = datetime(2026, 11, 27, 20, tzinfo=timezone.utc)
+    prior, output = now - timedelta(days=1), tmp_path / "public"
+    entry, start = utc(prior - timedelta(minutes=30)), utc(prior)
+    data = tmp_path / "data"
+    data.mkdir()
+    current = board_row(now)
+    write_csv(data / "anomaly_board.csv", current)
+    with connect(tmp_path / "db") as db:
+        db.execute("INSERT INTO fixtures VALUES (?,?,?,?,?,?)",
+                   ("nfl", "past", "First Team @ Second Team", entry, entry, start))
+        merge(db, [("nfl", "past", "SPREAD", entry, team, start, line, price, opening, -110, pct, pct, "{}")
+                   for team, line, price, opening, pct in (
+                       ("first team", -6, -115, -6.5, 80), ("second team", 6, -105, 6.5, 20))])
+        rebuild(db, now, 12)
+        path = output / "nfl--test.json"
+
+        def colts_result():
+            data = json.loads(path.read_bytes())
+            return data["markets"]["SPREAD"]["sides"][1]["comparison"]["closest"]
+
+        build(db, tmp_path, output, tmp_path / "disabled", now)
+        assert colts_result()["graded"] == 0 and colts_result()["matched"] == 1
+        store_outcome(db, "nfl", "past", "verified", "verified", {
+            "provider_event_id": "unique", "observed_at": utc(now + timedelta(minutes=1)),
+            "matchup": "First Team @ Second Team", "score_away": 20, "score_home": 16})
+        rebuild(db, now + timedelta(minutes=2), 12)
+        build(db, tmp_path, output, tmp_path / "disabled", now + timedelta(minutes=2))
+        assert colts_result()["graded"] == 1 and colts_result()["roi"] == 95.24
+        assert colts_result()["match_list"][0][4] == -105

@@ -5,16 +5,38 @@ from bisect import bisect_right
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import re
 import shutil
 
 from history_blocks import decode, encode
-from history_store import FREE_DISK_RESERVE, connect, eligible_pairs, number, packed, start_evidence, utc
+from history_store import FREE_DISK_RESERVE, connect, eligible_pairs, latest_provider_outcomes, number, packed, start_evidence, utc
 from team_aliases import _split_game, normalize_team_name
 from ufc_bout_integrity import fighter_key
 
 
 WINDOWS = (4320, 2880, 1440, 360, 120, 60, 40, 30, 20, 10)
 MAX_AGE = timedelta(minutes=20)
+MARKETS = ("SPREAD", "MONEYLINE", "TOTAL")
+CONTEXT_VERSION = 4
+
+
+def side_key(value, sport, market):
+    value = str(value or "").strip()
+    if market == "TOTAL":
+        return {"under": "under", "u": "under", "over": "over", "o": "over"}.get(
+            value.split(" ", 1)[0].casefold(), "")
+    if market == "SPREAD":
+        value = re.sub(r"\s[+-]?\d+(?:\.\d+)?(?:\s*\([^)]*\))?\s*$", "", value)
+    return fighter_key(value) if sport == "ufc" else normalize_team_name(value, sport)
+
+
+def fixture_pairs(pairs, sport, market, names):
+    expected = {side_key(name, sport, market) for name in (("Over", "Under") if market == "TOTAL" else names)}
+    if len(expected) != 2 or "" in expected:
+        return []
+    return [(clock, tuple(dict(row, side=identity) for row, identity in zip(pair, keys)))
+            for clock, pair in pairs
+            if set(keys := [side_key(row["side"], sport, market) for row in pair]) == expected]
 
 
 def implied(price):
@@ -89,8 +111,29 @@ def features(history, entry, market):
     path = [value for value in path if value is not None]
     steps = [1 if b > a else -1 for a, b in zip(path, path[1:]) if a != b]
     first = history[0] if history else {}
-    initial_tickets, initial_money = first.get("tickets"), first.get("money")
+    def opening_split(key):
+        value = first.get(key)
+        return value if len(history) > 1 and value is not None and 0 < value < 100 else None
+
+    initial_tickets, initial_money = opening_split("tickets"), opening_split("money")
     start, end = utc(first.get("captured_at")), utc(entry.get("captured_at"))
+    threshold = .005 if market == "MONEYLINE" else .25
+    retreat = max(path) - path[-1] if path else None
+    rebound = path[-1] - min(path) if path else None
+    move = path[-1] - anchor if path and anchor is not None else None
+    # Measure whether price held during the interval in which the split grew.
+    # Use the opening observation as the comparison baseline, never an outcome.
+    tone = delta(current, opening) if market == "MONEYLINE" else (
+        direction * line_move if line_move is not None else None)
+    price_move = delta(current, opening)
+    support_held = (tone >= -threshold and retreat < threshold and (abs(tone) >= threshold or price_move >= -.005)
+                    if tone is not None and price_move is not None and retreat is not None else None)
+    stance = ("toward" if move >= threshold else "against" if move <= -threshold else "steady") if move is not None else None
+    trajectory = None
+    if len(path) >= 2 and stance:
+        trajectory = ("retraced" if retreat >= threshold and max(path) - anchor >= threshold else
+                      "recovered" if rebound >= threshold and (min(path) < anchor - threshold or -1 in steps) else
+                      stance)
     return {
         "side": entry["side"], "line": entry["line"], "price": entry["price"],
         "open_line": entry["open_line"], "open_price": entry["open_price"],
@@ -99,7 +142,7 @@ def features(history, entry, market):
         "price_toward_implied": delta(current, opening),
         "path_max_toward": max(path) - anchor if path and anchor is not None else None,
         "path_min_toward": min(path) - anchor if path and anchor is not None else None,
-        "path_retrace": max(path) - path[-1] if path else None,
+        "path_retrace": retreat,
         "path_direction_changes": sum(a != b for a, b in zip(steps, steps[1:])),
         "opening_tickets": initial_tickets, "opening_money": initial_money,
         "ticket_change": delta(entry["tickets"], initial_tickets),
@@ -108,6 +151,11 @@ def features(history, entry, market):
         "money_after_move": delta(entry["money"], turn.get("money")),
         "split_gap": delta(entry["money"], entry["tickets"]),
         "observations": len(history),
+        "stance": stance, "trajectory": trajectory,
+        "ticket_growth_price_held": entry["tickets"] > initial_tickets if support_held and
+        initial_tickets is not None and entry["tickets"] is not None else None,
+        "money_growth_price_held": entry["money"] > initial_money if support_held and
+        initial_money is not None and entry["money"] is not None else None,
         "duration_minutes": (datetime.fromisoformat(end) - datetime.fromisoformat(start)).total_seconds() / 60
         if start and end else None,
     }
@@ -120,21 +168,85 @@ def latest(pairs, timestamps, deadline):
     return None, None
 
 
+def sided_history(pairs, index, side):
+    return [row for _, pair in pairs[:index + 1] for row in pair if row["side"] == side]
+
+
+def aligned_capture(pairs, clocks, cutoff, schedule):
+    """A secondary market can only contribute a paired quote already known."""
+    index, pair = latest(pairs, clocks, cutoff)
+    if pair is None or pair[0]["scheduled_at"] != schedule:
+        return None
+    return index, pair
+
+
+def aligned_game(markets, clocks, primary, cutoff, schedule, values, *, vectors=None):
+    context = {}
+    if vectors is None:
+        vectors = {}
+    for market, pairs in markets.items():
+        if market == primary or not (capture := aligned_capture(pairs, clocks[market], cutoff, schedule)):
+            continue
+        index, pair = capture
+        key = market, pair[0]["captured_at"]
+        if key not in vectors:
+            vectors[key] = aligned_values(pairs, index, pair, market, schedule)
+        context[market] = vectors[key]
+    reference = None
+    if primary == "TOTAL":
+        # Compare equivalent team roles. The reference team is known before
+        # the decision and never selected using the eventual score.
+        for market, field in (("MONEYLINE", "open_price"), ("SPREAD", "open_line")):
+            quotes = [q for q in context.get(market, {}).values() if
+                      (implied(q[field]) if market == "MONEYLINE" else q[field]) is not None]
+            if len(quotes) == 2:
+                ranked = sorted(quotes, key=lambda q: -implied(q[field]) if market == "MONEYLINE" else q[field])
+                if ranked[0][field] != ranked[1][field]:
+                    reference = ranked[0]["side"]
+                    break
+    for value in values:
+        value["game_context"] = {
+            market: quotes[key] for market, quotes in context.items()
+            if (key := "over" if market == "TOTAL" else reference if primary == "TOTAL" else value["side"]) in quotes
+        }
+        if reference:
+            value["context_reference"] = reference
+        paired = "MONEYLINE" if primary == "SPREAD" else "SPREAD" if primary == "MONEYLINE" else None
+        if paired in value["game_context"]:
+            other = value["game_context"][paired]
+            value["cross_market"] = {k: other[k] for k in ("market", "line_toward", "price_toward_implied", "sustained_toward")}
+
+
+def aligned_values(pairs, index, pair, market, schedule):
+    result = {}
+    for quote in pair:
+        tape = sided_history(pairs, index, quote["side"])
+        full = features(tape, quote, market)
+        recent_start = utc(datetime.fromisoformat(quote["captured_at"]) - timedelta(minutes=30))
+        recent = [row for row in tape[-3:-1] if row["captured_at"] >= recent_start and
+                  row["scheduled_at"] == schedule]
+        fields = ("side", "line", "price", "open_line", "open_price", "tickets", "money",
+                  "line_toward", "price_toward_implied", "path_retrace", "path_direction_changes",
+                  "stance", "trajectory")
+        result[quote["side"]] = {key: full[key] for key in fields} | {
+            "market": market, "captured_at": quote["captured_at"],
+            "sustained_toward": cross_evidence(market, quote, recent)["sustained_toward"] if market != "TOTAL" else None,
+        }
+    return result
+
+
 def generate(db, sport, event):
     actual = start_evidence(db, sport, event)
+    fixture = db.execute("SELECT matchup FROM fixtures WHERE (sport,event_id)=(?,?)", (sport, event)).fetchone()
+    names = _split_game(fixture[0]) if fixture else ("", "")
     markets = {
-        market: list(eligible_pairs(db, sport, event, market, "9999", actual_start=actual))
-        for market in ("SPREAD", "MONEYLINE", "TOTAL")
+        market: fixture_pairs(eligible_pairs(db, sport, event, market, "9999", actual_start=actual),
+                              sport, market, names)
+        for market in (("MONEYLINE",) if sport == "ufc" else MARKETS)
     }
-    if sport == "ufc":
-        fixture = db.execute("SELECT matchup FROM fixtures WHERE (sport,event_id)=(?,?)", (sport, event)).fetchone()
-        names = {fighter_key(name) for name in _split_game(fixture[0])} if fixture else set()
-        if len(names) != 2 or "" in names:
-            return ()
-        markets["MONEYLINE"] = [(clock, pair) for clock, pair in markets["MONEYLINE"]
-                                if {fighter_key(row["side"]) for row in pair} == names]
     clocks = {market: [capture for capture, _ in pairs] for market, pairs in markets.items()}
     known_match = {}
+    vectors = {}
     for market, pairs in markets.items():
         schedules = {pair[0]["scheduled_at"] for _, pair in pairs}
         for minutes in WINDOWS:
@@ -148,38 +260,21 @@ def generate(db, sport, event):
 
                 # Earlier quotes with a different schedule remain part of the
                 # same fixture's movement history. Later quotes never enter it.
-                history = {row["side"]: [] for row in pair}
-                for _, prior in pairs[:index + 1]:
-                    for row in prior:
-                        if row["side"] in history:
-                            history[row["side"]].append(row)
-                values = [features(history[row["side"]], row, market) for row in pair]
-                audits = recorded_split_context(db, sport, event, market, deadline)
+                values = [features(sided_history(pairs, index, row["side"]), row, market) for row in pair]
+                # Anchor every secondary capture to the primary price timestamp.
+                # A peer quote between that timestamp and the window is lookahead.
+                aligned_game(markets, clocks, market, pair[0]["captured_at"], schedule, values, vectors=vectors)
+                audits = recorded_split_context(db, sport, event, market, pair[0]["captured_at"])
                 for value in values:
-                    name = value["side"]
-                    identity = fighter_key(name) if sport == "ufc" else normalize_team_name(name, sport)
-                    if identity in audits:
-                        value["split_audit"] = audits[identity]
-                cross = "MONEYLINE" if market == "SPREAD" else "SPREAD" if market == "MONEYLINE" else None
-                cross_at = None
-                if cross:
-                    cross_index, related = latest(markets[cross], clocks[cross], deadline)
-                    if related and related[0]["scheduled_at"] == schedule:
-                        indexed = {row["side"]: row for row in related}
-                        cross_at = related[0]["captured_at"]
-                        for value in values:
-                            other = indexed.get(value["side"])
-                            if other:
-                                prior = [row for captured, prior_pair in markets[cross][max(0, cross_index - 2):cross_index]
-                                         if datetime.fromisoformat(cross_at) - datetime.fromisoformat(captured) <=
-                                         timedelta(minutes=30) for row in prior_pair if row["side"] == value["side"]
-                                         and row["scheduled_at"] == schedule]
-                                value["cross_market"] = cross_evidence(cross, other, prior)
+                    if value["side"] in audits:
+                        value["split_audit"] = audits[value["side"]]
+                peer = next((q for q in values[0]["game_context"].values() if q["market"] != "TOTAL"), {})
+                cross_at = peer.get("captured_at")
                 context = db.execute("""
                     SELECT known_at,digest,evidence FROM decisions
                     WHERE (sport,event_id,market)=(?,?,?) AND source='published_board' AND known_at<=?
                     ORDER BY known_at DESC,digest LIMIT 1
-                """, (sport, event, market, deadline)).fetchone()
+                """, (sport, event, market, pair[0]["captured_at"])).fetchone()
                 if context:
                     proof = json.loads(context["evidence"])
                     for side in values:
@@ -196,30 +291,51 @@ def generate(db, sport, event):
                     sport, market, minutes, event, deadline, pair[0]["captured_at"], schedule,
                     encode({"sides": values, "cross_entry_at": cross_at, "verified_start": actual,
                             "published_evidence": {"known_at": context["known_at"], "digest": context["digest"]}
-                            if context else None, "version": 3}),
+                            if context else None, "version": CONTEXT_VERSION}),
                 )
                 break
     return known_match.values()
 
 
-def rebuild(db, now, limit):
-    events = db.execute("""
+def rebuild(db, now, limit, *, upgrade_only=False):
+    db.execute("""CREATE TABLE IF NOT EXISTS comparison_context_ready(
+        sport TEXT,event_id TEXT,version INTEGER,PRIMARY KEY(sport,event_id)) WITHOUT ROWID""")
+    events = [] if upgrade_only else db.execute("""
         SELECT f.sport,f.event_id FROM comparison_pending p JOIN fixtures f USING(sport,event_id)
         WHERE f.scheduled_at<=? OR (f.scheduled_at IS NULL AND f.last_at<=?)
         ORDER BY f.last_at DESC LIMIT ?
-    """, (utc(now - timedelta(hours=3)), utc(now - timedelta(days=1)), limit)).fetchall()
+    """, (utc(now - timedelta(hours=3)), utc(now - timedelta(days=1)), max(1, limit * 3 // 4))).fetchall()
+    upgrade = db.execute("""
+        SELECT w.sport,w.event_id FROM comparison_windows w
+        LEFT JOIN comparison_context_ready v USING(sport,event_id)
+        WHERE coalesce(v.version,0)<? AND NOT EXISTS (
+            SELECT 1 FROM comparison_pending p WHERE p.sport=w.sport AND p.event_id=w.event_id)
+        GROUP BY w.sport,w.event_id ORDER BY max(w.scheduled_at) DESC LIMIT ?
+    """, (CONTEXT_VERSION, max(0, limit - len(events)))).fetchall()
     windows = 0
-    for sport, event in events:
+    replaced = 0
+    for sport, event in (*events, *upgrade):
         generated = generate(db, sport, event)
         with db:
-            db.execute("DELETE FROM comparison_windows WHERE (sport,event_id)=(?,?)", (sport, event))
+            if upgrade_only:
+                db.execute("BEGIN IMMEDIATE")
+                if db.execute("""
+                    SELECT 1 FROM comparison_pending WHERE (sport,event_id)=(?,?)
+                    UNION ALL SELECT 1 FROM comparison_context_ready
+                    WHERE (sport,event_id,version)=(?,?,?) LIMIT 1
+                """, (sport, event, sport, event, CONTEXT_VERSION)).fetchone():
+                    continue
+            replaced += db.execute("DELETE FROM comparison_windows WHERE (sport,event_id)=(?,?)",
+                                   (sport, event)).rowcount
             db.executemany("INSERT INTO comparison_windows VALUES (?,?,?,?,?,?,?,?)", generated)
             db.execute("DELETE FROM comparison_pending WHERE (sport,event_id)=(?,?)", (sport, event))
+            db.execute("INSERT OR REPLACE INTO comparison_context_ready VALUES (?,?,?)",
+                       (sport, event, CONTEXT_VERSION))
         windows += len(generated)
-    if events:
+    if windows or replaced:
         with db:
             db.execute("INSERT OR REPLACE INTO jobs VALUES ('comparison_generation',?)", (utc(now),))
-    return {"fixtures": len(events), "windows": windows}
+    return {"fixtures": len(events) + len(upgrade), "windows": windows, "context_upgraded": len(upgrade)}
 
 
 def grade(sport, market, side, state, result):
@@ -283,13 +399,14 @@ def candidates(db, sport, market, minutes, before, *, excluded_events=()):
             continue
         payload = decode(window["evidence"])
         outcomes = db.execute("""
-            SELECT source,status,provider_event_id,evidence FROM outcomes
+            SELECT source,status,provider_event_id,observed_at,evidence FROM outcomes
             WHERE (sport,event_id)=(?,?) AND observed_at<=?
               AND status IN ('verified','push','void')
+            ORDER BY observed_at DESC,digest
         """, (sport, window["event_id"], before))
         states = []
         identities = set()
-        for source, status, identity, data in outcomes:
+        for source, status, identity, _, data in latest_provider_outcomes(outcomes, before):
             if not identity:
                 continue
             result = json.loads(data)
@@ -322,12 +439,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--state", type=Path, default=Path("/var/lib/redfox-history/private"))
     parser.add_argument("--limit", type=int, default=128)
+    parser.add_argument("--upgrade-existing", action="store_true")
     args = parser.parse_args()
     if shutil.disk_usage(args.state).free < FREE_DISK_RESERVE:
         print(packed({"deferred": "disk reserve"}))
         return
     with connect(args.state) as db:
-        print(packed(rebuild(db, datetime.now(timezone.utc), args.limit)))
+        print(packed(rebuild(db, datetime.now(timezone.utc), args.limit, upgrade_only=args.upgrade_existing)))
 
 
 if __name__ == "__main__":
