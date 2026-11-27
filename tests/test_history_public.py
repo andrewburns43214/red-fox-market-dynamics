@@ -363,3 +363,47 @@ def test_no_grade_status_distinguishes_backfill_from_missing_evidence_and_no_mat
     assert availability_for_side({"comparison": {"reason": "Capped splits"}}, False) == "source_limited"
     assert availability_for_side({"comparison": {"broader": {"matched": 2, "graded": 0}}}, False) == "unverified"
     assert availability_for_side({"comparison": {"broader": {"matched": 0, "graded": 0}}}, False) == "insufficient"
+
+
+def test_later_verified_market_extends_frozen_game_without_changing_existing_markets(tmp_path):
+    now = datetime(2026, 11, 27, 20, tzinfo=timezone.utc)
+    data, output = tmp_path / "data", tmp_path / "public"
+    data.mkdir()
+    spread = board_row(now)
+    start = datetime.fromisoformat(spread["kickoff_iso"])
+    spread.update(frozen_at_utc=utc(start), state_as_of_utc=spread["source_latest_at"])
+    source = data / "live_recent.csv"
+    write_csv(source, spread)
+    path = output / "nfl--test.json"
+    with connect(tmp_path) as db:
+        build(db, tmp_path, output, tmp_path / "disabled", start)
+        initial = json.loads(path.read_bytes())
+
+        def raw_market(name, offset, capture):
+            scheduled = utc(start + timedelta(minutes=5))
+            sides = [
+                dict(flagged_side=team, current_line=line, open_line=line, bets_pct=split, money_pct=split)
+                for team, line, split in offset
+            ]
+            return spread | {"market_display": name, "kickoff_iso": scheduled, "frozen_at_utc": scheduled,
+                             "source_latest_at": "", "state_as_of_utc": capture, "market_sides": json.dumps(sides)}
+
+        early, late = utc(start - timedelta(minutes=5)), utc(start + timedelta(minutes=1))
+        moneyline = raw_market("MONEYLINE", [("NY Giants", "-150", 70), ("IND Colts", "+130", 30)], early)
+        total = raw_market("TOTAL", [("Over", "O 42 (-110)", 60), ("Under", "U 42 (-110)", 40)], late)
+        merge(db, [("nfl", "test", market, capture, name, moneyline["kickoff_iso"], line, odds, line, odds, pct, pct, "{}")
+                   for market, capture, name, line, odds, pct in (
+                       ("MONEYLINE", early, "ny giants", None, -150, 70),
+                       ("MONEYLINE", early, "indianapolis colts", None, 130, 30),
+                       ("TOTAL", late, "over", 42, -110, 60), ("TOTAL", late, "under", 42, -110, 40))])
+        with source.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=spread)
+            writer.writeheader()
+            writer.writerows([spread, moneyline, total])
+        final_time = start + timedelta(minutes=10)
+        assert build(db, tmp_path, output, tmp_path / "disabled", final_time)["updated"] == 1
+        frozen = json.loads(path.read_bytes())
+        assert frozen["markets"]["SPREAD"] == initial["markets"]["SPREAD"]
+        assert frozen["markets"]["MONEYLINE"]["observed"] == early
+        assert "TOTAL" not in frozen["markets"]
+        assert build(db, tmp_path, output, tmp_path / "disabled", final_time)["updated"] == 0

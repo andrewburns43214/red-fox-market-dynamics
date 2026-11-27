@@ -72,11 +72,11 @@ def capped_splits(side):
     )
 
 
-def recover_frozen_clock(db, sport, event, market, sides, scheduled, frozen_at, actual):
+def recover_frozen_clock(db, sport, event, market, sides, scheduled, frozen_at, actual, *, before=None):
     """Recover a legacy frozen timestamp only against matching archived prices and splits."""
     if not scheduled or not frozen_at or not isinstance(sides, list) or len(sides) != 2:
         return None
-    stop = min(scheduled, frozen_at, actual or scheduled)
+    stop = min(scheduled, frozen_at, actual or scheduled, before or scheduled)
     start = utc(datetime.fromisoformat(stop) - timedelta(minutes=45))
     for clock, pair in reversed(list(eligible_pairs(db, sport, event, market, stop, start, actual_start=actual))):
         if clock >= stop or pair[0]["scheduled_at"] != scheduled:
@@ -125,7 +125,7 @@ def published_pair(row, sport, market, schedule, cutoff, names):
     return aligned[0] if aligned else None
 
 
-def query_features(db, group, row, frozen, now, *, archive=None):
+def query_features(db, group, row, frozen, now, *, archive=None, frozen_before=None):
     sport, event = row["sport"], row["game_id"]
     market = row.get("market_display")
     if market not in MARKETS or (sport == "ufc" and market != "MONEYLINE"):
@@ -138,11 +138,16 @@ def query_features(db, group, row, frozen, now, *, archive=None):
         return None
     actual = start_evidence(db, sport, event)
     if frozen and not observed:
-        observed = recover_frozen_clock(db, sport, event, market, raw, scheduled, utc(row.get("frozen_at_utc")), actual)
+        observed = recover_frozen_clock(db, sport, event, market, raw, scheduled, utc(row.get("frozen_at_utc")),
+                                       actual, before=frozen_before)
         if observed:
             raw = [side | {"source_latest_at": observed} for side in raw]
     if not scheduled or not observed or observed > utc(now) or observed >= scheduled:
         return None
+    if frozen_before:
+        recorded = utc(row.get("state_as_of_utc"))
+        if observed >= frozen_before or (recorded and observed != recorded):
+            return None
     if actual and observed >= actual or frozen and sport == "ufc" and actual is None:
         return None
     if not frozen and (scheduled <= utc(now) or
@@ -654,15 +659,27 @@ def capture_signature(group, revision):
     return digest(packed((CONTEXT_VERSION, quotes, revision)))
 
 
-def render_fixture(db, history, key, group, now, frozen):
+def render_fixture(db, history, key, group, now, frozen, *, append_to=None):
     sport, event = key
     markets = {}
     names = _split_game(next(iter(group.values()))["game"])
     actual = start_evidence(db, sport, event)
+    frozen_before = None
+    candidates = group
+    if append_to is not None:
+        # Markets can reach Live & Recent in separate handoffs. Keep the
+        # recorded results and only add markets with provable pregame quotes.
+        frozen_before = min(setup["scheduled"] for setup in append_to.values())
+        candidates = {
+            market: row for market, row in group.items() if market not in append_to
+            and "" < (utc(row.get("state_as_of_utc") or row.get("source_latest_at")) or "") < frozen_before
+        }
+        if not candidates:
+            return {"markets": markets}
     archive = {m: fixture_pairs(eligible_pairs(db, sport, event, m, utc(now), actual_start=actual),
                                 sport, m, names) for m in (("MONEYLINE",) if sport == "ufc" else MARKETS)}
-    for market, row in group.items():
-        setup = query_features(db, group, row, frozen, now, archive=archive)
+    for market, row in candidates.items():
+        setup = query_features(db, group, row, frozen, now, archive=archive, frozen_before=frozen_before)
         if setup:
             setup["game"] = row["game"]
             if not frozen:
@@ -807,10 +824,19 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
             market: ["source_limited"] * 2 for market in (board.get(key, {}).keys() | group.keys())
         }
         signature = capture_signature(group, revision)
-        if frozen and not preview and (old := db.execute("SELECT payload FROM comparison_frozen WHERE (sport,event_id)=(?,?)",
-                                         key).fetchone()):
-            payload = decode(old[0])
-            if not cached[key].get("frozen"):
+        if frozen and not preview and (stored := db.execute(
+            "SELECT payload FROM comparison_frozen WHERE (sport,event_id)=(?,?)", key
+        ).fetchone()):
+            payload = decode(stored[0])
+            if group.keys() - payload["markets"].keys():
+                additional = render_fixture(db, history, key, group, now, True, append_to=payload["markets"])["markets"]
+                if additional:
+                    payload["markets"].update(additional)
+                    with db:
+                        db.execute("UPDATE comparison_frozen SET payload=? WHERE (sport,event_id)=(?,?)",
+                                   (encode(payload), *key))
+                    updated += 1
+            if cached[key] != payload:
                 write(path, payload)
             register(path, payload, payload["markets"])
             continue
