@@ -64,9 +64,12 @@ def merge(db, rows, *, verify=False):
                         fingerprint(dict(zip(FIELDS, row))) not in exceptional}
         if incoming <= existing:
             continue
-        merged = sorted(existing | incoming, key=lambda row: (row[:2], compact_json(row[2:])))
-        payload = encode(merged)
-        if verify and {tuple(row) for row in decode(payload)} != existing | incoming:
+        # Ordering between variants at the same time and side is immaterial.
+        # The paired reader rejects that entire timestamp.
+        merged = sorted(existing | incoming, key=lambda row: row[:2])
+        text = compact_json(merged).encode("utf-8")
+        payload = zlib.compress(text, level=3)
+        if verify and zlib.decompress(payload) != text:
             raise RuntimeError(f"Historical quote round-trip failed for {key}")
         updates.append((*key, merged[0][0], merged[-1][0], len(merged), payload))
     db.executemany("INSERT OR REPLACE INTO quote_blocks VALUES (?,?,?,?,?,?,?,?)", updates)
@@ -101,6 +104,9 @@ def migrate(db, state, reserve, *, batch=128):
     exists = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quotes'").fetchone()
     migrated = 0
     if exists:
+        # The old table stays in place while copying. Sync the WAL at the
+        # schema change without forcing a disk sync for each replay batch.
+        db.execute("PRAGMA synchronous=NORMAL")
         while shutil.disk_usage(state).free > reserve:
             saved = db.execute("SELECT value FROM jobs WHERE name='legacy_quote_cursor'").fetchone()
             cursor = tuple(json.loads(saved[0])) if saved else ("", "", "")
@@ -112,22 +118,26 @@ def migrate(db, state, reserve, *, batch=128):
                 # Disable zero-filling freed index pages. This data is a derived
                 # copy and every logical row has passed the round-trip check.
                 db.execute("PRAGMA secure_delete=OFF")
+                db.execute("PRAGMA synchronous=FULL")
                 with db:
                     db.execute("DROP TABLE quotes")
                     db.execute("DELETE FROM jobs WHERE name='legacy_quote_cursor'")
                     db.execute("INSERT OR REPLACE INTO jobs VALUES ('compact_vacuum_pending','1')")
                 break
-            for key in keys:
+            rows = []
+            for index, key in enumerate(keys):
                 raw = db.execute("""
                     SELECT * FROM quotes WHERE (sport,event_id,market)=(?,?,?)
                     ORDER BY captured_at,side,fingerprint
                 """, tuple(key))
-                rows = [logical_row(tuple(row)) for row in raw]
-                with db:
-                    merge(db, rows, verify=True)
+                rows.extend(logical_row(tuple(row)) for row in raw)
+                if len(rows) >= 12000 or index == len(keys) - 1:
+                    with db:
+                        merge(db, rows, verify=True)
+                        db.execute("INSERT OR REPLACE INTO jobs VALUES ('legacy_quote_cursor',?)",
+                                   (compact_json(tuple(key)),))
                     migrated += len(rows)
-                    db.execute("INSERT OR REPLACE INTO jobs VALUES ('legacy_quote_cursor',?)",
-                               (compact_json(tuple(key)),))
+                    rows.clear()
         else:
             return {"migrated_quotes": migrated, "capacity_deferred": True}
     pending = db.execute("SELECT 1 FROM jobs WHERE name='compact_vacuum_pending'").fetchone()
