@@ -901,9 +901,10 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
                      "availability": availability,
                      "payloads": payloads, "frozen_games": frozen_games, "generated": stamp})
     if study is not None:
+        published_at = datetime.now(timezone.utc)
         try:
             for document in study_receipts:
-                study.observe(document)
+                study.observe(document, published_at)
             verified_at = datetime.now(timezone.utc)
             study.reconcile(history, verified_at)
             study.save_summary(verified_at)
@@ -942,7 +943,7 @@ def main():
 
             try:
                 study = Study(args.state / "comparison-prospective.sqlite3", args.output)
-            except sqlite3.Error as exc:
+            except (sqlite3.Error, OSError) as exc:
                 print(f"[comparison-study] instrumentation unavailable: {type(exc).__name__}", flush=True)
         try:
             print(packed(build(db, args.root, args.output, args.disable_file, datetime.now(timezone.utc),
