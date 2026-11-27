@@ -236,10 +236,11 @@ def paper_totals(saved):
     return dict(paper_only=True, totals=totals, entries=entries)
 
 
-def capture_legacy(raw, data_dir, at, where):
+def capture_legacy(raw, data_dir, at, where, *, deferred_markets=frozenset(), unavailable_sports=frozenset()):
     where=where/"legacy_hypothetical"
     where.mkdir(exist_ok=True,mode=0o700)
-    update_favorite_tracking(raw[raw.sport.eq("nhl")],where,as_of=at,nhl_hypothetical=True)
+    update_favorite_tracking(raw[raw.sport.eq("nhl")], where, as_of=at, nhl_hypothetical=True,
+                             deferred_markets=deferred_markets, unavailable_sports=unavailable_sports)
     tracking=_read_tracking(where/"red_fox_favorite_tracking.csv")
     candidates=_read_csv(where/"red_fox_favorite_freeze_candidates.csv")
     ledger_path=where/"hypothetical_results.csv"
@@ -271,7 +272,8 @@ def capture_legacy(raw, data_dir, at, where):
     _atomic(where/"hypothetical_performance.json",totals)
 
 
-def capture(board, raw, history, goalies, data_dir, at):
+def capture(board, raw, history, goalies, data_dir, at, *, deferred_markets=frozenset(),
+            unavailable_sports=frozenset()):
     settings=switches()
     active={lane for lane,flag in PAPER_FLAGS.items() if enabled(flag,settings)}
     legacy=enabled(LEGACY_FLAG,settings)
@@ -291,4 +293,5 @@ def capture(board, raw, history, goalies, data_dir, at):
         _atomic(where/"replacement_paper_performance.json",output)
         print(f"[nhl-paper] lanes={len(active)} schedule={len(schedule)} lifecycle_games={len(saved)}",flush=True)
     if legacy:
-        capture_legacy(raw,data_dir,stamp(at),where)
+        capture_legacy(raw, data_dir, stamp(at), where, deferred_markets=deferred_markets,
+                       unavailable_sports=unavailable_sports)

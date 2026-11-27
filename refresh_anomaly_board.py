@@ -785,24 +785,26 @@ def _refresh(coverage):
     if nba_config[1]:
         try:
             from nba_legacy_shadow import record_legacy
-            nba_raw = board.loc[board["sport"].eq("nba")] if "sport" in board else board.iloc[:0]
-            legacy_board = record_legacy(board, DATA, newest_snapshot)
+            legacy_board = record_legacy(board, DATA, newest_snapshot, deferred_markets=deferred,
+                                         unavailable_sports=unavailable_sports)
         except Exception as exc:
             print(f"[nba-legacy-shadow] capture failed: {type(exc).__name__}: {exc}", flush=True)
     try:
         from nhl_paper_release import capture as capture_nhl
 
-        capture_nhl(classified, board, history, nhl_goalies, DATA, newest_snapshot)
+        capture_nhl(classified, board, history, nhl_goalies, DATA, newest_snapshot,
+                    deferred_markets=deferred, unavailable_sports=unavailable_sports)
     except Exception as exc:
         print(f"[nhl-paper] capture failed: {type(exc).__name__}: {exc}", flush=True)
     nhl_selections = {}
-    if "nhl" not in unavailable_sports:
-        try:
-            from nhl_official_release import capture_official
+    try:
+        from nhl_official_release import capture_official
 
-            nhl_selections = capture_official(classified, history, nhl_goalies, DATA)
-        except Exception as exc:
-            print(f"[nhl-official] capture failed: {type(exc).__name__}: {exc}", flush=True)
+        # Only fresh quotes are classified. Scheduled handoff and verified
+        # results can still advance already-published entries during an outage.
+        nhl_selections = capture_official(classified, history, nhl_goalies, DATA)
+    except Exception as exc:
+        print(f"[nhl-official] capture failed: {type(exc).__name__}: {exc}", flush=True)
     stage("qualification inputs and NHL lifecycle")
     mlb_mode = os.environ.get(MLB_STATIC_FLAG, '').strip().lower()
     mlb_promotion_games = None

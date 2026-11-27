@@ -165,10 +165,19 @@ def test_material_moneyline_addition_preserves_fifteen_cent_threshold(opener, cu
 def test_kickoff_handoff_uses_consistent_even_money_direction(opener, current, confirmed):
     candidate = pd.Series({
         "market_display": "MONEYLINE", "favorite_side": "Team A",
+        "kickoff_iso": "2026-11-24T22:00:00Z",
         "market_sides": json.dumps([{"flagged_side": "Team A", "current_line": opener}]),
     })
-    raw = pd.Series({"market_sides": json.dumps([{"flagged_side": "Team A", "current_line": current}])})
+    raw = pd.Series({"state_as_of_utc": "2026-11-24T21:55:00Z",
+                     "market_sides": json.dumps([{"flagged_side": "Team A", "current_line": current}])})
     assert (_confirm_favorite_with_final_raw_market(candidate, raw) is not None) == confirmed
+    for observed, badge in (("", "CLEAN"), ("2026-11-24T18:00:00Z", "CLEAN"),
+                            ("2026-11-24T22:05:00Z", "CLEAN"), ("2026-11-24T21:55:00Z", "RETAINED")):
+        assert _confirm_favorite_with_final_raw_market(
+            candidate, pd.Series(raw.to_dict() | {
+                "state_as_of_utc": observed, "data_badge": badge,
+            })
+        ) is None
 
 
 def test_clv_requires_verified_closing_provenance_and_excludes_retained_estimates_from_coverage():
