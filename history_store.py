@@ -410,6 +410,8 @@ def import_outcomes(db, path):
 def archive_sources(root, state):
     data = root / "data"
     known = [
+        data / "snapshots_PREBACKFILL.csv",
+        data / "snapshots.bak_before_movement.csv",
         data / "_pre_v12_archive" / "snapshots.PRE_V12_BACKUP.csv",
         data / "v2_backup_epoch" / "snapshots.csv",
         *sorted(data.glob("snapshots.csv.bak_*")),

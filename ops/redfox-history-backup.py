@@ -10,7 +10,7 @@ import subprocess
 
 DATA = (
     "snapshots.csv", "snapshot_archive", "_pre_v12_archive", "v2_backup_epoch",
-    "snapshots_backup.csv", "snapshots_PREBACKFILL.csv",
+    "snapshots_backup.csv", "snapshots_PREBACKFILL.csv", "snapshots.bak_before_movement.csv",
     "final_scores_history.csv", "ufc_results_history.csv", "red_fox_favorite_tracking.csv",
     "red_fox_favorite_freeze_candidates.csv", "red_fox_favorite_shadow.csv",
     "red_fox_favorite_review.csv", "performance_favorites.csv", "performance_ledger.csv",
