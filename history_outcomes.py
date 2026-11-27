@@ -39,13 +39,23 @@ def resolve_team_game(fixture, scores):
 def resolve_mlb(fixture, fixtures):
     if fixtures is None:
         return "unavailable", {"reason": "official MLB fixture feed unavailable"}
-    final = match_fixture(fixtures, fixture["matchup"], fixture["scheduled_at"])
+    # The live view omits cancelled fixtures. Keep that identity check while
+    # letting a confirmed cancellation become a verified research void.
+    outcomes = {
+        game_pk: dict(game, state="void") if (
+            game.get("state") == "postponed" and "cancel" in game.get("status", "").lower()
+        ) else game
+        for game_pk, game in fixtures.items()
+    }
+    final = match_fixture(outcomes, fixture["matchup"], fixture["scheduled_at"])
     if not final:
         return "unresolved", {"reason": "no unique official fixture or first-pitch evidence"}
     evidence = {key: final.get(key) for key in (
         "official_date", "scheduled_start", "first_pitch", "game_number", "doubleheader", "status"
     )}
     evidence["provider_event_id"] = str(final["game_pk"])
+    if final["state"] == "void":
+        return "void", evidence
     if final["state"] != "post" or final["status"] not in {"Final", "Game Over", "Completed Early"}:
         return "unresolved", evidence
     return "verified", {**evidence, "score_away": final["away"]["score"],

@@ -9,6 +9,8 @@ import time
 import pytest
 
 from history_store import connect, import_outcomes, ingest_board, ingest_quotes, paired_as_of, store_outcome
+from history_outcomes import resolve_mlb
+from mlb_fixtures import team_key
 
 
 def write_quotes(path, rows):
@@ -87,6 +89,21 @@ def test_nonfavorite_public_states_and_research_outcomes(tmp_path):
         assert import_outcomes(db, research) == 1
         assert import_outcomes(db, research) == 1
         assert db.execute("SELECT count(*) FROM outcomes").fetchone()[0] == 1
+
+
+def test_historical_mlb_cancellation_needs_unambiguous_fixture():
+    away, home = "Seattle Mariners", "Chicago Cubs"
+    start = "2026-07-02T17:00:00Z"
+    fixture = {"matchup": f"{away} @ {home}", "scheduled_at": start}
+    event = {
+        "game_pk": "1", "official_date": "2026-07-02", "scheduled_start": start,
+        "status": "Cancelled", "state": "postponed",
+        "away": {"aliases": [team_key(away)]}, "home": {"aliases": [team_key(home)]},
+    }
+    status, evidence = resolve_mlb(fixture, {"1": event})
+    assert (status, evidence["provider_event_id"]) == ("void", "1")
+    assert resolve_mlb(fixture, {"1": dict(event, status="Postponed")})[0] == "unresolved"
+    assert resolve_mlb(fixture, {"1": event, "2": dict(event, game_pk="2")})[0] == "unresolved"
 
 
 @pytest.mark.skipif(os.name != "posix", reason="Production compactor uses Linux flock.")
