@@ -236,6 +236,10 @@ def ingest_quotes(db, path, *, immutable=False, seconds=None):
             if len(quote_buffer) == 4000:
                 db.executemany(INSERT_QUOTES, quote_buffer)
                 quote_buffer.clear()
+                if immutable:
+                    # Keep consecutive board publications writable during large historical imports.
+                    # An interrupted source is retried and the quote key makes each batch idempotent.
+                    db.commit()
                 if seconds and time.monotonic() - enter > seconds:
                     raise TimeoutError(f"Quote ingest exceeded time budget: {path.name}")
         db.executemany(INSERT_QUOTES, quote_buffer)

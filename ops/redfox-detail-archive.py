@@ -27,7 +27,7 @@ def metadata(path):
     return st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns
 
 
-def archive_detail(source, destination, lock, *, retire=False):
+def archive_detail(source, destination, lock, *, retire=False, wait_seconds=0):
     original = metadata(source)
     temporary = destination.with_name(f".{destination.name}.{os.getpid()}.tmp")
     try:
@@ -58,10 +58,16 @@ def archive_detail(source, destination, lock, *, retire=False):
                 os.close(fd)
         if not retire:
             return "archived"
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return "busy"
+        deadline = time.monotonic() + wait_seconds
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return "busy"
+                time.sleep(min(2, remaining))
         try:
             # The same lock guards scheduled publication. A changed path is kept.
             if metadata(source) != original:
@@ -74,7 +80,7 @@ def archive_detail(source, destination, lock, *, retire=False):
         temporary.unlink(missing_ok=True)
 
 
-def maintain(root, public, runner_lock, *, days, limit, retire=False, now=None):
+def maintain(root, public, runner_lock, *, days, limit, retire=False, now=None, wait_seconds=0):
     origin = root / "data" / "anomaly_event_details"
     destination = public / "data" / "anomaly_event_details"
     destination.mkdir(parents=True, exist_ok=True, mode=0o755)
@@ -95,7 +101,10 @@ def maintain(root, public, runner_lock, *, days, limit, retire=False, now=None):
                 break
             result["scanned"] += 1
             result["processed_bytes"] += st.st_size
-            outcome = archive_detail(source, destination / f"{source.name}.gz", lock, retire=retire)
+            outcome = archive_detail(
+                source, destination / f"{source.name}.gz", lock,
+                retire=retire, wait_seconds=wait_seconds if result["scanned"] == 1 else 0,
+            )
             result[outcome] += 1
             if outcome == "retired":
                 result["reclaimed_bytes"] += st.st_size
@@ -111,9 +120,10 @@ def main():
     parser.add_argument("--days", type=int, default=7)
     parser.add_argument("--max-mib", type=int, default=192)
     parser.add_argument("--retire", action="store_true")
+    parser.add_argument("--wait-seconds", type=int, default=0)
     args = parser.parse_args()
     summary = maintain(args.root, args.public, args.runner_lock, days=args.days,
-                       limit=args.max_mib * 1024 * 1024, retire=args.retire)
+                       limit=args.max_mib * 1024 * 1024, retire=args.retire, wait_seconds=args.wait_seconds)
     print(json.dumps(summary, sort_keys=True))
     if summary["available_bytes"] < 10 * 1024**3:
         print("WARNING historical storage has less than 10 GiB free", flush=True)
