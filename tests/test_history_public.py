@@ -303,3 +303,22 @@ def test_expired_publication_budget_keeps_fresh_cached_capture(tmp_path):
         completed = build(db, tmp_path, output, tmp_path / "disabled", now)
         assert completed["games"] == 1 and not completed["deferred"]
         assert (output / "nfl--test.json").read_bytes() != old
+
+
+def test_delayed_board_keeps_only_the_identical_still_pregame_cached_quote(tmp_path):
+    now = datetime(2026, 11, 27, 20, tzinfo=timezone.utc)
+    data, output = tmp_path / "data", tmp_path / "public"
+    data.mkdir()
+    row = board_row(now) | {"kickoff_iso": utc(now + timedelta(hours=2))}
+    source = data / "anomaly_board.csv"
+    write_csv(source, row)
+    with connect(tmp_path / "db") as db:
+        build(db, tmp_path, output, tmp_path / "disabled", now)
+        path = output / "nfl--test.json"
+        original = path.read_bytes()
+        later = now + timedelta(minutes=40)
+        assert build(db, tmp_path, output, tmp_path / "disabled", later)["games"] == 1
+        assert path.read_bytes() == original
+        row["market_sides"] = row["market_sides"].replace("+6 (-105)", "+6 (-108)")
+        write_csv(source, row)
+        assert build(db, tmp_path, output, tmp_path / "disabled", later)["games"] == 0

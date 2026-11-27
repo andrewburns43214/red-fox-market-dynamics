@@ -171,9 +171,9 @@
       ${reason?`<p class="historic-note">${escape(reason)}</p>`:""}</section>`;
   }
 
-  function setupPanel(setup,side,market,frozen) {
+  function setupPanel(setup,side,market,frozen,stale) {
     const opposite=setup.sides.find(s=>s.index!==side.index);
-    return `<section class="historic-setup"><h3>${frozen?"Frozen pregame setup":"Current market setup"}</h3>
+    return `<section class="historic-setup"><h3>${frozen?"Frozen pregame setup":stale?"Last verified market setup":"Current market setup"}</h3>
       <dl><div><dt>Tickets</dt><dd>${pct(side.tickets)}</dd></div><div><dt>Money</dt><dd>${pct(side.money)}</dd></div>
       <div><dt>${market==="MONEYLINE"?"Price":"Line &amp; odds"}</dt><dd>${escape(quotePath(market,side))}</dd>
       <small>${escape(movement(market,side))}</small></div></dl>
@@ -259,14 +259,15 @@
     const focus=modal.contains(document.activeElement)?document.activeElement:null;
     modal.querySelector("[data-historic-context]").textContent=`${sports[payload.sport]} · ${payload.game}`;
     modal.querySelector("[data-historic-favorite]").innerHTML=side.favorite?'<img src="/assets/red-fox-favorite.png" alt="Red Fox Favorite">':"";
-    const stale=!payload.frozen&&(market===active.boardMarket&&Date.parse(active.boardObservation)>Date.parse(setup.observed)||Date.now()-Date.parse(setup.observed)>35*60000);
+    const delayedFeed=!payload.frozen&&Date.now()-Date.parse(setup.observed)>35*60000;
+    const stale=delayedFeed||(!payload.frozen&&market===active.boardMarket&&Date.parse(active.boardObservation)>Date.parse(setup.observed));
     const markets=Object.entries(labels).filter(([key])=>payload.markets[key]);
     body.innerHTML=`<div class="historic-controls">
       <div><span>${market==="TOTAL"?"Outcome":payload.sport==="ufc"?"Fighter":"Team"}</span><div class="historic-options">${setup.sides.map((s,i)=>control(s.name,i,"side",i===index)).join("")}</div></div>
       <div><span>Market</span><div class="historic-options">${markets.map(([key,label])=>control(label,key,"market",key===market)).join("")}</div></div></div>
       ${performance(result,side.comparison)}
-      ${stale?'<p class="historic-notice">Latest processed capture · a newer board observation may be pending.</p>':""}
-      <div class="historic-setup-grid">${setupPanel(setup,side,market,payload.frozen)}${factors(result)}</div>
+      ${stale?`<p class="historic-notice">${delayedFeed?"Board feed delayed. These comparisons use the last verified pregame capture shown on the board.":"Latest processed capture · a newer board observation may be pending."}</p>`:""}
+      <div class="historic-setup-grid">${setupPanel(setup,side,market,payload.frozen,stale)}${factors(result)}</div>
       ${examples(result,market)}
       <div class="historic-footer"><p>Includes Favorites and non-Favorites · ${payload.frozen?"Frozen":"Observed"} ${escape(when(setup.observed))}</p>
         ${support(setup,side,result,market,payload,markets)}</div>`;

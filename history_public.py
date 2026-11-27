@@ -679,11 +679,38 @@ def write(path, content):
     path.chmod(0o644)
 
 
-def current_markets(payload, now):
+def current_markets(db, group, payload, now, *, delayed_only=False):
     stamp = utc(now)
-    return [market for market, item in payload.get("markets", {}).items()
-            if not payload.get("frozen") and item["scheduled"] > stamp and
-            now - datetime.fromisoformat(item["observed"]) <= timedelta(minutes=35)]
+    if payload.get("frozen") or not payload.get("markets"):
+        return []
+    sport, event, game = (payload[key] for key in ("sport", "event", "game"))
+    selected = []
+    actual = None
+    checked = False
+    for market, setup in payload["markets"].items():
+        observed, scheduled = setup["observed"], setup["scheduled"]
+        if scheduled <= stamp or market not in group:
+            continue
+        if now - datetime.fromisoformat(observed) <= timedelta(minutes=35):
+            if not delayed_only:
+                selected.append(market)
+            continue
+        # During a board feed delay reuse only the exact quote users still see.
+        # Keep its original evidence and label its age in the popup.
+        if not checked:
+            actual = start_evidence(db, sport, event)
+            checked = True
+        board_row = group[market]
+        if (actual and actual <= stamp) or board_row["game"] != game:
+            continue
+        pair = published_pair(board_row, sport, market, scheduled, observed, _split_game(game))
+        fields = ("side", "line", "price", "open_line", "open_price", "tickets", "money")
+        if pair and pair[0] == observed and (
+            {tuple(side[key] for key in fields) for side in pair[1]} ==
+            {tuple(side[key] for key in fields) for side in setup["sides"]}
+        ):
+            selected.append(market)
+    return selected
 
 
 def usable_sides(payload, markets):
@@ -751,13 +778,20 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
         expired = not frozen and cutoff is not None and time.monotonic() >= cutoff
         if not frozen and (old.get("signature") == signature or expired):
             deferred += expired and old.get("signature") != signature
-            valid = current_markets(old, now)
+            valid = current_markets(db, group, old, now)
             if valid:
                 register(path, old, valid)
             if expired and old.get("signature") != signature:
                 pending[path.stem] = list(group)
             continue
         payload = render_fixture(db, history, key, group, now, frozen)
+        if not frozen:
+            delayed = current_markets(db, group, old, now, delayed_only=True)
+            if delayed and not payload["markets"]:
+                register(path, old, delayed)
+                continue
+            for market in delayed:
+                payload["markets"].setdefault(market, old["markets"][market])
         if not payload["markets"]:
             continue
         payload.update(signature=signature, generated=stamp)
