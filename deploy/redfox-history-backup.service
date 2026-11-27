@@ -1,0 +1,13 @@
+[Unit]
+Description=Back up Red Fox market history to an approved private repository
+ConditionPathExists=/etc/redfox-history-backup.env
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/red-fox-market-dynamics
+Nice=17
+IOSchedulingClass=idle
+UMask=0077
+EnvironmentFile=/etc/redfox-history-backup.env
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python ops/redfox-history-backup.py backup

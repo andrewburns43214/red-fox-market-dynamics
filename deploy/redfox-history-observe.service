@@ -1,0 +1,12 @@
+[Unit]
+Description=Archive published market evidence for all sports
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/red-fox-market-dynamics
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=45
+UMask=0077
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python history_store.py observe

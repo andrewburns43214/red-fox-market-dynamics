@@ -1,0 +1,15 @@
+[Unit]
+Description=Archive and index historical Red Fox data without blocking publication
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/red-fox-market-dynamics
+Nice=17
+IOSchedulingClass=idle
+TimeoutStartSec=1800
+UMask=0022
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python history_store.py hot
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python history_store.py archive --max-shards 256
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python history_store.py decisions
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python history_outcomes.py

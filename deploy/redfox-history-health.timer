@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily Red Fox history integrity and capacity check
+
+[Timer]
+OnCalendar=*-*-* 06:23:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

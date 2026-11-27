@@ -1,0 +1,11 @@
+[Unit]
+Description=Verify Red Fox archive checksums and capacity
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/red-fox-market-dynamics
+Nice=17
+IOSchedulingClass=idle
+UMask=0077
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python history_store.py health

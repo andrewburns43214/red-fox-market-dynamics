@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh the Red Fox history index and verify unsettled events
+
+[Timer]
+OnCalendar=*-*-* *:07,37:00
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

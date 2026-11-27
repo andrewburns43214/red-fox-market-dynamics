@@ -1,0 +1,9 @@
+[Unit]
+Description=Run Red Fox off-host backup daily
+
+[Timer]
+OnCalendar=*-*-* 04:34:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Compress expired Red Fox game-detail render copies
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/red-fox-market-dynamics
+Nice=17
+IOSchedulingClass=idle
+TimeoutStartSec=180
+UMask=0022
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python ops/redfox-detail-archive.py --retire

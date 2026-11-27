@@ -1,0 +1,10 @@
+[Unit]
+Description=Record changed Red Fox market evidence
+
+[Timer]
+OnCalendar=*-*-* *:*:10
+AccuracySec=5s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
