@@ -156,6 +156,38 @@ def test_owner_preview_uses_saved_selection_before_the_board_is_republished(tmp_
     assert not any(patch["favorite"] for patch in manual.owner_board_patches(tmp_path,NOW))
 
 
+def test_manual_handoff_preserves_saved_pair_and_repairs_single_side(tmp_path, server, monkeypatch):
+    board = seed(tmp_path, favorite=False)
+    monkeypatch.setattr(server, "check_pregame", lambda *_: fixture())
+    source = tmp_path / "snapshots.csv"
+    raw = pd.read_csv(source, dtype=str)
+    raw.loc[raw["side"].eq("Home -3"), "current_line"] = "Home -3 @ -115"
+    raw.to_csv(source, index=False)
+    offer = selection(tmp_path, "SPREAD", "Away")
+    assert commit(server, tmp_path, "add", 0, offer["token"])[0] == 200
+
+    frozen = manual.freeze_overrides(pd.DataFrame(), board, tmp_path, {}, {}, START)
+    record = active(frozen).iloc[0]
+    pair = manual.sides(record)
+    assert [(item["flagged_side"], item["current_line"]) for item in pair] == [
+        ("Away +3", "+3 (-105)"), ("Home -3", "-3 (-115)"),
+    ]
+    assert all(item["source_latest_at"] == offer["observed"] for item in pair)
+
+    # Legacy frozen rows stored the selected quote alone. Restore only the
+    # display pair from a verified saved capture, preserving every other field.
+    legacy = frozen.assign(market_sides=json.dumps(pair[:1]))
+    repaired = manual.freeze_overrides(legacy, board, tmp_path, {}, {}, START)
+    assert manual.sides(repaired.iloc[0]) == pair
+    pd.testing.assert_frame_equal(legacy.drop(columns="market_sides"), repaired.drop(columns="market_sides"))
+
+    saved = manual.decisions(tmp_path)[EVENT]
+    saved["row"]["market_sides"] = json.dumps([
+        pair[0], dict(pair[1], source_latest_at=NOW.isoformat()),
+    ])
+    assert manual.saved_entry_sides(saved) == pair[:1]
+
+
 def test_delayed_ncaab_manual_favorite_keeps_saved_quote_and_pinned_result(tmp_path, server, monkeypatch):
     import build_live_recent
 

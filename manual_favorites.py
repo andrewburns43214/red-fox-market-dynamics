@@ -81,6 +81,53 @@ def quote(market, name, value, observed):
                 observed=observed.isoformat(), token=token)
 
 
+def entry_market_side(q, context):
+    display = q["price"] if q["market"] == "MONEYLINE" else f'{q["line"]} ({q["price"]})'
+    return dict(context, flagged_side=q["label"], current_line=display, source_latest_at=q["observed"],
+                bets_pct=q.get("bets_pct"), money_pct=q.get("money_pct"))
+
+
+def matching_pair(market, pair):
+    if market == "TOTAL":
+        return len({q["line"] for q in pair}) == 1
+    if market == "SPREAD":
+        return sum(float(q["line"]) for q in pair) == 0
+    return True
+
+
+def saved_entry_sides(decision):
+    """Preserve a second side only when both quotes are from the saved capture."""
+    q, row = decision["quote"], decision["row"]
+    market, observed = q["market"], stamp(q["observed"])
+    entries = sides(row)
+    captured = {selected_side(market, side["flagged_side"]): side
+                for side in entries if isinstance(side, dict) and side.get("flagged_side")}
+    selected = entry_market_side(q, captured.get(q["side"], {}))
+    single = [selected]
+    if not observed or len(entries) != 2 or len(captured) != 2 or q["side"] not in captured:
+        return single
+    pair = {}
+    for identity, side in captured.items():
+        if stamp(side.get("source_latest_at")) != observed:
+            return single
+        name, value = side["flagged_side"], str(side.get("current_line", ""))
+        # Board values can omit the participant name before a spread or total.
+        start = re.match(r"^[+-]?\d+(?:\.\d+)?(?=\s+\()", value)
+        if start and market != "MONEYLINE":
+            if name.split()[-1] != start.group():
+                return single
+            value = name + value[start.end():]
+        item = quote(market, name, value, observed)
+        if not item:
+            return single
+        pair[identity] = item
+    if any(pair[q["side"]][field] != q[field] for field in ("label", "line", "price")):
+        return single
+    if not matching_pair(market, pair.values()):
+        return single
+    return [selected, next(side for identity, side in captured.items() if identity != q["side"])]
+
+
 def csv_rows(path):
     try:
         with Path(path).open(encoding="utf-8-sig", newline="") as stream:
@@ -145,12 +192,11 @@ def latest_quotes(data_dir, event_rows, now):
             if previous and previous != item:
                 conflicts = True
             found[item["side"]] = item
-        if not conflicts and found.keys() == expected:
-            if market == "TOTAL" and len({q["line"] for q in found.values()}) != 1:
-                continue
-            if market == "SPREAD" and sum(float(q["line"]) for q in found.values()) != 0:
-                continue
-            offer.update({q["token"]: (q, board) for q in found.values()})
+        if not conflicts and found.keys() == expected and matching_pair(market, found.values()):
+            context = {selected_side(market, side["flagged_side"]): side for side in sides(board)}
+            paired = [entry_market_side(item, context[item["side"]]) for item in found.values()]
+            captured_board = dict(board, market_sides=json.dumps(paired))
+            offer.update({q["token"]: (q, captured_board) for q in found.values()})
     return offer
 
 
@@ -416,6 +462,13 @@ def freeze_overrides(live, market_candidates, data_dir, bouts, notices, now):
             continue
         if str(row.get("manual_revision", "")) == str(decision["revision"]) and row.get("freeze_method") in {HANDOFF, ufc.HANDOFF}:
             already.add(scope(row))
+            current = sides(row)
+            q = decision["quote"]
+            if (q and row.get("market_display") == q["market"] and len(current) == 1
+                    and isinstance(current[0], dict) and current[0].get("flagged_side") == q["label"]):
+                pair = saved_entry_sides(decision)
+                if len(pair) == 2:
+                    result.at[index, "market_sides"] = json.dumps([current[0], pair[1]])
         elif row.get("game") == decision["game"] or row.get("score_provider_event_id") == decision["fixture"]["id"]:
             result.at[index, "red_fox_favorite"] = "false"
             result.at[index, "favorite_side"] = ""
@@ -441,12 +494,8 @@ def freeze_overrides(live, market_candidates, data_dir, bouts, notices, now):
         row = mark_selected(decision["row"], decision)
         # Freeze the exact saved number and price. Never reuse an automatic entry
         # or substitute a later quote for a number the owner explicitly saved.
-        captured_side = next((s for s in sides(row) if selected_side(q["market"], s.get("flagged_side", "")) == q["side"]), {})
-        entry_display = q["price"] if q["market"] == "MONEYLINE" else f'{q["line"]} ({q["price"]})'
         evidence = {ufc.PROOF: proof} if proof else {}
-        row.update(result_fields, market_sides=json.dumps([dict(captured_side, flagged_side=q["label"],
-                   current_line=entry_display, source_latest_at=q["observed"],
-                   bets_pct=q.get("bets_pct"), money_pct=q.get("money_pct"))]),
+        row.update(result_fields, market_sides=json.dumps(saved_entry_sides(decision)),
                    favorite_supporting_evidence=json.dumps(evidence), flagged_side=q["label"],
                    state_as_of_utc=q["observed"], final_pregame_state_at_utc=decision["saved_at"],
                    kickoff_iso=start.isoformat(), frozen_at_utc=now.isoformat(), freeze_method=method,
