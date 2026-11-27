@@ -16,6 +16,7 @@ import sqlite3
 import time
 
 SPORTS = {"nfl", "ncaaf", "nba", "ncaab", "nhl", "mlb", "ufc"}
+FREE_DISK_RESERVE = 15 * 1024**3
 PRICE = re.compile(r"(?:@\s*|\()([+-]\d{3,})\s*\)?$")
 HANDICAP = re.compile(r"\s([+-]?\d+(?:\.\d+)?)$")
 PICKEM = re.compile(r"\s(?:PK|PICK|PICK'EM)$", re.IGNORECASE)
@@ -347,7 +348,7 @@ def health(db, root, state):
     disk = shutil.disk_usage(root)
     summary = {"at": now_iso(), "disk_total": disk.total, "disk_available": disk.free,
                "source_files": len(shards), "index_bytes": (state / "history.sqlite3").stat().st_size,
-               "capacity_warning": disk.free < 15 * 1024**3}
+               "capacity_warning": disk.free < FREE_DISK_RESERVE}
     with atomic_text(state / "health.json", packed(summary)):
         pass
     return summary
@@ -360,6 +361,12 @@ def paired_as_of(db, sport, event, market, decision_at, since):
         SELECT * FROM quotes WHERE sport=? AND event_id=? AND market=?
           AND captured_at BETWEEN ? AND ?
           AND scheduled_at IS NOT NULL AND captured_at<scheduled_at
+          AND NOT EXISTS (
+            SELECT 1 FROM outcomes o WHERE o.sport=quotes.sport AND o.event_id=quotes.event_id
+              AND julianday(captured_at)>=julianday(COALESCE(
+                json_extract(o.evidence,'$.actual_start'),json_extract(o.evidence,'$.first_pitch')
+              ))
+          )
           AND (sport<>'ufc' OR julianday(captured_at)<(
             SELECT min(julianday(COALESCE(json_extract(o.evidence,'$.actual_start'),json_extract(o.evidence,'$.start'))))
             FROM outcomes o WHERE o.sport=quotes.sport AND o.event_id=quotes.event_id
@@ -424,12 +431,16 @@ def main():
     with connect(options.state) as db:
         if options.command == "archive":
             seen = 0
+            deferred = False
             for path in archive_sources(options.root, options.state):
+                if shutil.disk_usage(options.state).free < FREE_DISK_RESERVE:
+                    deferred = True
+                    break
                 if ingest_quotes(db, path, immutable=True):
                     seen += 1
                 if seen >= options.max_shards:
                     break
-            print(packed({"imported_shards": seen}))
+            print(packed({"imported_shards": seen, "capacity_deferred": deferred}))
         elif options.command == "observe":
             print(packed({"decision_changes": ingest_board(db, data / "anomaly_board.csv")}))
         elif options.command == "decisions":
@@ -439,7 +450,10 @@ def main():
                 counts["publication_transitions"] = ingest_coverage(db, data / "publication_coverage.sqlite3")
             print(packed(counts))
         elif options.command == "hot":
-            print(packed({"indexed_rows": ingest_quotes(db, data / "snapshots.csv")}))
+            if shutil.disk_usage(options.state).free < FREE_DISK_RESERVE:
+                print(packed({"indexed_rows": 0, "deferred": "disk reserve"}))
+            else:
+                print(packed({"indexed_rows": ingest_quotes(db, data / "snapshots.csv")}))
         elif options.command == "import-results":
             print(packed({"evidence_rows": import_outcomes(db, options.input)}))
         elif options.command == "health":

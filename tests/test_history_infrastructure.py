@@ -8,7 +8,7 @@ import time
 
 import pytest
 
-from history_store import connect, import_outcomes, ingest_board, ingest_quotes, paired_as_of
+from history_store import connect, import_outcomes, ingest_board, ingest_quotes, paired_as_of, store_outcome
 
 
 def write_quotes(path, rows):
@@ -47,6 +47,9 @@ def test_archive_deduplication_conflicts_and_as_of(tmp_path):
         assert [r["price"] for r in rows] == [-110, -110]
         assert [r["line"] for r in rows] == [3, -3]
         assert [r["open_line"] for r in rows] == [3.5, -3.5]
+        store_outcome(db, "nfl", "one", "fixture", "verified", {"actual_start": "2026-11-27T00:45:00Z"})
+        rows = paired_as_of(db, "nfl", "one", "SPREAD", "2026-11-27T01:00:00Z", early)
+        assert len(rows) == 2 and rows[0]["captured_at"].startswith("2026-11-27T00:30")
         conflicting = pair(early)[0] | {"current_line": "BUF Bills +3 @ -115"}
         write_quotes(plain, pair(early) + pair(late) + [conflicting])
         ingest_quotes(db, plain)

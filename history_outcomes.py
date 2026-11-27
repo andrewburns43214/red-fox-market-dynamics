@@ -7,7 +7,7 @@ from pathlib import Path
 
 from build_live_recent import fetch_scoreboard, game_key
 from history_store import connect, now_iso, packed, store_outcome
-from mlb_fixtures import match_fixture, read_context, timestamp
+from mlb_fixtures import NEW_YORK, match_fixture, read_context, timestamp
 from ufc_bout_integrity import cache_dir, match_bout, read_json
 
 
@@ -82,7 +82,10 @@ def collect(db, root, now, *, day_limit):
     local_sources = {"mlb": read_context(root / "data", now),
                      "ufc": read_json(cache_dir(root / "data") / "bouts.json").get("bouts")}
     for fixture in pending:
-        day = timestamp(fixture["scheduled_at"]).date()
+        start = timestamp(fixture["scheduled_at"])
+        if start is None:
+            continue
+        day = start.astimezone(NEW_YORK).date()
         sport = fixture["sport"]
         key = (sport, day)
         if sport not in local_sources and key not in by_day:
