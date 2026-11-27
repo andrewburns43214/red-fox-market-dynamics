@@ -7,6 +7,7 @@ User=root
 WorkingDirectory=/opt/red-fox-market-dynamics
 Nice=17
 CPUQuota=15%
+CPUWeight=1
 IOWeight=10
 IOSchedulingClass=idle
 TimeoutStartSec=3600
