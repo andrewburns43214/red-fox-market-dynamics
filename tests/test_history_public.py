@@ -253,3 +253,21 @@ def test_verified_result_enters_next_publication_without_new_board_capture(tmp_p
         build(db, tmp_path, output, tmp_path / "disabled", now + timedelta(minutes=2))
         assert colts_result()["graded"] == 1 and colts_result()["roi"] == 95.24
         assert colts_result()["match_list"][0][4] == -105
+
+
+def test_expired_publication_budget_keeps_fresh_cached_capture(tmp_path):
+    now = datetime(2026, 11, 27, 20, tzinfo=timezone.utc)
+    data, output = tmp_path / "data", tmp_path / "public"
+    data.mkdir()
+    row = board_row(now)
+    write_csv(data / "anomaly_board.csv", row)
+    with connect(tmp_path / "db") as db:
+        build(db, tmp_path, output, tmp_path / "disabled", now)
+        old = (output / "nfl--test.json").read_bytes()
+        write_csv(data / "anomaly_board.csv", row | {"favorite_side": ""})
+        partial = build(db, tmp_path, output, tmp_path / "disabled", now, budget=0)
+        assert partial["games"] == 1 and partial["deferred"] == 1
+        assert (output / "nfl--test.json").read_bytes() == old
+        completed = build(db, tmp_path, output, tmp_path / "disabled", now)
+        assert completed["games"] == 1 and not completed["deferred"]
+        assert (output / "nfl--test.json").read_bytes() != old

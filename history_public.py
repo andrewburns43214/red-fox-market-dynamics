@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import shutil
 import sqlite3
+import time
 
 from history_blocks import decode, encode, read_quotes
 from history_comparisons import (CONTEXT_VERSION, MARKETS, WINDOWS, aligned_game, delta, features,
@@ -649,7 +650,14 @@ def write(path, content):
     path.chmod(0o644)
 
 
-def build(db, root, output, control, now, *, preview=False, events=()):
+def current_markets(payload, now):
+    stamp = utc(now)
+    return [market for market, item in payload.get("markets", {}).items()
+            if not payload.get("frozen") and item["scheduled"] > stamp and
+            now - datetime.fromisoformat(item["observed"]) <= timedelta(minutes=35)]
+
+
+def build(db, root, output, control, now, *, preview=False, events=(), budget=None):
     if not preview:
         db.execute(FROZEN_SCHEMA)
     output.mkdir(parents=True, exist_ok=True, mode=0o755)
@@ -672,30 +680,33 @@ def build(db, root, output, control, now, *, preview=False, events=()):
     """).fetchone())
     keys = []
     available = {}
-    updated, frozen_count = 0, 0
-    for key in dict.fromkeys((*recent, *board)):
-        if events and key[1] not in events:
-            continue
+    updated, frozen_count, deferred = 0, 0, 0
+    cutoff = time.monotonic() + budget if budget is not None else None
+    paths = {key: output / f"{key[0]}--{key[1]}.json" for key in dict.fromkeys((*recent, *board))
+             if not events or key[1] in events}
+    cached = {key: json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+              for key, path in paths.items()}
+    # A slow cycle advances the oldest eligible fixtures first. Fresh
+    # cached captures remain in the manifest while their next build waits.
+    order = sorted(paths, key=lambda key: (key not in recent, cached[key].get("generated", ""), key))
+    for key in order:
         group = recent.get(key) or board[key]
         frozen = key in recent
-        path = output / f"{key[0]}--{key[1]}.json"
+        path, old = paths[key], cached[key]
         signature = capture_signature(group, revision)
         if frozen and not preview and (old := db.execute("SELECT payload FROM comparison_frozen WHERE (sport,event_id)=(?,?)",
                                          key).fetchone()):
             if not path.exists():
                 write(path, decode(old[0]))
-            else:
-                visible = json.loads(path.read_text(encoding="utf-8"))
-                if not visible.get("frozen"):
-                    write(path, decode(old[0]))
+            elif not cached[key].get("frozen"):
+                write(path, decode(old[0]))
             keys.append(path.stem)
             available[path.stem] = list(decode(old[0])["markets"])
             continue
-        old = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-        if old.get("signature") == signature and not frozen:
-            valid = [market for market, item in old["markets"].items()
-                     if now - datetime.fromisoformat(item["observed"]) <= timedelta(minutes=35)
-                     and item["scheduled"] > stamp]
+        expired = not frozen and cutoff is not None and time.monotonic() >= cutoff
+        if not frozen and (old.get("signature") == signature or expired):
+            deferred += expired and old.get("signature") != signature
+            valid = current_markets(old, now)
             if valid:
                 keys.append(path.stem)
                 available[path.stem] = valid
@@ -718,7 +729,7 @@ def build(db, root, output, control, now, *, preview=False, events=()):
     for path in output.glob("*--*.json"):
         if path.stem not in present and now.timestamp() - path.stat().st_mtime > 86400:
             path.unlink()
-    return {"games": len(keys), "updated": updated, "frozen": frozen_count}
+    return {"games": len(keys), "updated": updated, "frozen": frozen_count, "deferred": deferred}
 
 
 def main():
@@ -729,6 +740,7 @@ def main():
     parser.add_argument("--disable-file", type=Path, default=Path("/etc/redfox-history-comparisons.disabled"))
     parser.add_argument("--preview", action="store_true")
     parser.add_argument("--event", action="append", default=[])
+    parser.add_argument("--budget-seconds", type=int, default=235)
     args = parser.parse_args()
     if args.preview and args.output.resolve() == Path("/var/lib/redfox-history/public/comparisons"):
         parser.error("a preview needs an isolated --output directory")
@@ -737,7 +749,8 @@ def main():
     with sqlite3.connect(connection, timeout=20, uri=args.preview) as db:
         db.row_factory = sqlite3.Row
         print(packed(build(db, args.root, args.output, args.disable_file, datetime.now(timezone.utc),
-                           preview=args.preview, events=args.event)))
+                           preview=args.preview, events=args.event,
+                           budget=None if args.preview else args.budget_seconds)))
 
 
 if __name__ == "__main__":
