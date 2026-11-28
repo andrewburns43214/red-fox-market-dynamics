@@ -162,13 +162,88 @@
     return entries.length?entries:side.cross_market?[[side.cross_market.market,side.cross_market]]:[];
   }
 
-  function compactPeer(side, market) {
-    const entries=peers(side), peer=entries.find(([m])=>m===(market==="MONEYLINE"?"SPREAD":"MONEYLINE"))||entries[0];
-    if(!peer) return "Cross-market quote unavailable";
-    const [m,q]=peer;
-    const role=market==="TOTAL"&&side.context_reference?" · "+side.context_reference:"";
-    const desc=q.sustained_toward===true?"Support held":movement(m,q).replace(/^(Moneyline|Total) /,"");
-    return labels[m]+role+" "+(q.captured_at?quotePath(m,q)+" · ":"")+desc;
+  const totalSide = value => ({over:"Over",under:"Under"})[value];
+  const words = value => String(value||"").normalize("NFKD").replace(/\p{M}/gu,"")
+    .toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
+
+  function teamNames(game, known=[]) {
+    const participants=String(game||"").split(/ @ |\s+vs\.?\s+|\s+at\s+/i).map(name=>name.trim()).filter(Boolean);
+    const direct=new Map(known.filter(team=>team?.side&&team?.name).map(team=>[team.side,team.name]));
+    function display(identity) {
+      if(direct.has(identity)) return direct.get(identity);
+      const name=words(identity), exact=participants.find(team=>words(team)===name);
+      if(exact) return exact;
+      const last=name.split(" ").at(-1);
+      const sameSuffix=last.length>=3?participants.filter(team=>words(team).split(" ").at(-1)===last):[];
+      return sameSuffix.length===1?sameSuffix[0]:identity?.replace(/\b\p{L}/gu,char=>char.toUpperCase())||"";
+    }
+    function opponent(identity) {
+      const seen=display(identity), other=direct.has(identity)&&[...direct].find(([key])=>key!==identity);
+      return (other&&other[1]) || (participants.length===2&&participants.includes(seen)
+        ?participants.find(team=>team!==seen):"the opposing side");
+    }
+    return {display,opponent};
+  }
+
+  function observedMovement(m,q,teams) {
+    const priceOpen=implied(q.open_price), priceNow=implied(q.price);
+    const priceMove=priceOpen==null||priceNow==null?null:priceNow-priceOpen;
+    const lineMove=q.open_line==null||q.line==null?null:q.line-q.open_line;
+    const changed=m==="MONEYLINE"?q.path_direction_changes>0:q.path_direction_changes>0||q.path_turns?.length;
+    const priceTowards=delta=>m==="TOTAL"
+      ? totalSide(delta>0?q.side:q.side==="over"?"under":q.side==="under"?"over":"")||"the other total side"
+      : delta>0?teams.display(q.side)||"the quoted team":teams.opponent(q.side);
+    const points=value=>Math.abs(value).toFixed(2).replace(/\.?0+$/,"");
+    const pricePoints=value=>Math.abs(value)<.0001?"<0.01":points(100*value);
+    const priceFavor=priceMove?`${pricePoints(priceMove)} implied pts toward ${priceTowards(priceMove)}`:"";
+    const noPrice=priceOpen==null&&priceNow==null?"Price unavailable":priceOpen==null?"Opening price unavailable":"Observed price unavailable";
+    if(m==="MONEYLINE") {
+      return {text:priceMove==null?noPrice:priceFavor||(changed?"No net price move":"Price unchanged"),
+        unavailable:priceMove==null};
+    }
+    if(lineMove==null) {
+      return {text:priceFavor?`Line unavailable · price ${priceFavor}`:"Opening or observed line unavailable",unavailable:true};
+    }
+    if(lineMove) {
+      const target=m==="TOTAL"?(lineMove>0?"Over":"Under"):
+        (lineMove<0?teams.display(q.side)||"the quoted team":teams.opponent(q.side));
+      return {text:`${points(lineMove)} ${Math.abs(lineMove)===1?"pt":"pts"} toward ${target}`, price:priceFavor?`Price moved ${priceFavor}`:priceMove==null?noPrice:"Price unchanged"};
+    }
+    if(priceMove==null) return {text:`Line unchanged · ${noPrice.toLowerCase()}`,unavailable:true};
+    if(priceMove) return {text:`Line held · price ${priceFavor}`};
+    return {text:changed?"No net line or price move":"Line and price unchanged"};
+  }
+
+  function recordedTurns(m,q) {
+    const first=quote(m,q,true), last=quote(m,q,false);
+    const seen=new Set();
+    return (q.path_turns||[]).filter(turn=>{
+      const value=quote(m,turn,false), key=(turn.captured_at||"")+value;
+      if(value===first||value===last||seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function marketQuotes(primary,side,related,sport,teams) {
+    const markets=sport==="ufc"?["MONEYLINE"]:Object.keys(labels);
+    return markets.map(m=>{
+      const q=m===primary?side:related?.[m];
+      if(!q) return {m,primary:m===primary};
+      const ref=m==="TOTAL"?totalSide(q.side):teams.display(q.side);
+      return {m,q,ref,primary:m===primary,move:observedMovement(m,q,teams),turns:recordedTurns(m,q)};
+    });
+  }
+
+  function marketSummary(markets) {
+    return `<span class="historic-quote-strip">
+      ${markets.map(({m,q,ref,primary,move,turns})=>`<span class="historic-quote-cell${primary?" is-primary":""}" data-market-evidence="${m}">
+        <span class="historic-quote-label">${labels[m]}${ref?` <span>· ${escape(ref)}</span>`:""}</span>
+        ${q?`<span class="historic-quote-value"><b>${escape(quote(m,q,true))}</b> <span class="historic-arrow">→</span> <b>${escape(quote(m,q))}</b></span>
+        <span class="historic-quote-read"><span${move.unavailable?' class="historic-muted"':""}>${escape(move.text)}</span>
+          <span class="historic-quote-splits">${q.tickets==null&&q.money==null?"Splits unavailable":`${pct(q.tickets)} bets / ${pct(q.money)} money`}</span></span>
+        ${turns.length?`<span class="historic-quote-turn">Via ${escape(turns.map(turn=>m==="MONEYLINE"?odds(turn.price):m==="SPREAD"?signed(turn.line):turn.line??"—").join(" → "))}</span>`:""}`
+        :'<span class="historic-quote-missing">Pregame quote unavailable</span>'}</span>`).join("")}</span>`;
   }
 
   function peerDetails(side) {
@@ -204,14 +279,10 @@
       ${reason?`<p class="historic-note">${escape(reason)}</p>`:""}</section>`;
   }
 
-  function exampleRow(item,market,history=false) {
-    const grade={win:market==="SPREAD"?"Covered":"Won",loss:market==="SPREAD"?"Did not cover":"Lost",push:"Push"}[item.grade]||item.grade;
-    return `<span class="historic-example-date">${escape(when(item.date,false))}</span>
-      <span class="historic-example-team"><strong>${escape(item.game)}</strong><small>Graded ${escape(item.selection||item.side.side)}</small></span>
-      <span class="historic-example-quote">${escape(history?quotePath(market,item.side):quote(market,item.side))}
-        <small>${pct(item.side.tickets)} tickets / ${pct(item.side.money)} money${history?" · "+escape(movement(market,item.side)+path(item.side)):""}</small>
-        ${history?`<small class="historic-example-peer${peers(item.side).length?"":" historic-muted"}">${escape(compactPeer(item.side,market))}</small>`:""}</span>
-      <span class="historic-result ${item.grade==="win"?"positive":item.grade==="loss"?"negative":""}">${escape(grade)}</span>`;
+  function rowMarkets(item,market) {
+    const side=item.side;
+    const known=market!=="TOTAL"?[{side:side.side,name:item.selection},{side:item.opposite?.side,name:teamNames(item.game).display(item.opposite?.side)}]:[];
+    return marketQuotes(market,side,item.peers||side.game_context,item.sport||active.payload.sport,teamNames(item.game,known));
   }
 
   function examples(result,market) {
@@ -219,17 +290,19 @@
     if(!rows.length)return "";
     return `<section class="historic-examples"><h3>Archived comparison examples</h3>
       <p class="historic-note">This publication retained ${list.length} of ${result.graded} graded rows and detailed evidence for ${rows.length}. Its original record is preserved.</p>
-      ${rows.map(item=>`<details class="historic-example"><summary>${exampleRow(item,market,true)}</summary>
+      ${rows.map(item=>`<details class="historic-example historic-ledger-row"><summary>${exampleRow(item,market,rowMarkets(item,market))}</summary>
         <div class="historic-example-detail"><p>${escape(item.score||"Verified settlement")} · Captured ${escape(when(item.entry))}
         ${item.decision?" · Checkpoint "+escape(when(item.decision)):""}</p>
         <p>Open to observed ${escape(quotePath(market,item.side))} · ${escape(movement(market,item.side)+path(item.side))}</p>
-        ${peerDetails(item.side)}
+        ${marketsEvidence(rowMarkets(item,market),item.side.context,item.entry)}
+        ${!Object.keys(item.side.game_context||{}).length&&item.side.cross_market?peerDetails(item.side):""}
         ${item.matched.length?`<p><strong>Matched</strong> ${escape(item.matched.join(", "))}.</p>`:""}
         ${item.differences.length?`<p><strong>Varied</strong> ${escape(item.differences.join(", "))}.</p>`:""}</div></details>`).join("")}
       ${list.length>rows.length?`<details class="historic-all"><summary>${list.length===result.graded?
         "View all "+list.length+" graded matches":"View first "+list.length+" of "+result.graded+" graded matches"}</summary>
         <ul>${list.map(([date,game,selection,line,price,tickets,money,grade])=>
-          `<li>${exampleRow({date,game,selection,side:{line,price,tickets,money},grade},market)}</li>`).join("")}</ul></details>`:""}</section>`;
+          `<li class="historic-archive-row">${exampleRow({date,game,selection,grade},market,
+            rowMarkets({game,selection,side:{line,price,tickets,money}},market))}</li>`).join("")}</ul></details>`:""}</section>`;
   }
 
   const implied = value => value == null || Math.abs(value) < 100 ? null :
@@ -335,26 +408,28 @@
       low:decisive?100*Math.max(0,center-width):null, high:decisive?100*Math.min(1,center+width):null};
   }
 
-  function marketsEvidence(m,side,peers,context,reference,stamp) {
-    return `<div class="historic-market-evidence">${Object.keys(labels).map(name=>{
-      const q=name===m?side:peers?.[name], primary=name===m;
-      const role=primary?"Primary market":name==="TOTAL"?"Supporting · Over reference":
-        m==="TOTAL"&&reference?"Supporting · "+reference:"Supporting market";
+  function marketsEvidence(markets,context,stamp,opposite) {
+    return `<div class="historic-market-evidence">${markets.map(({m,q,ref,primary,move,turns})=>{
       const splitCap=q&&q.tickets===q.money&&(q.tickets===0||q.tickets===100);
       const capLabel=primary&&/split (risk|cap)/i.test([context?.data_badge,context?.context_chips].join(" "))
         ?" · source flagged a split cap":" · split cap unverified";
       return `<div class="historic-market-proof ${primary?"primary":""}">
-        <small>${escape(role)}</small><strong>${labels[name]}</strong>
-        ${q?`<b>${escape(quote(name,q,true)+" → "+quote(name,q))}</b><span>${escape(movement(name,q)+path(q))}</span>
-          <span>${escape(pct(q.tickets)+" tickets / "+pct(q.money)+" money"+(splitCap?capLabel:""))}</span>
+        <strong>${labels[m]}${ref?" · "+escape(ref):""}</strong>
+        ${q?`<b>${escape(quote(m,q,true)+" → "+quote(m,q))}</b><span>${escape(move.text)}</span>
+          ${move.price?`<span>${escape(move.price)}</span>`:""}
+          ${q.opening_tickets!=null||q.opening_money!=null?`<span>Opening splits ${opening(q.opening_tickets)} bets / ${opening(q.opening_money)} money</span>`:""}
+          <span>${escape(pct(q.tickets)+" bets / "+pct(q.money)+" money"+(splitCap?capLabel:""))}</span>
+          ${primary&&opposite&&(opposite.tickets!=null||opposite.money!=null)?`<span>Other side ${pct(opposite.tickets)} bets / ${pct(opposite.money)} money</span>`:""}
           ${q.captured_at&&Date.parse(q.captured_at)!==Date.parse(stamp)?`<span>${escape(when(q.captured_at))}</span>`:""}
           ${primary&&context?.data_badge?`<span>${escape(context.data_badge)}</span>`:""}
           ${!primary&&q.sustained_toward===true?"<span>Support held</span>":""}
-          ${q.path_turns?.length?`<details><summary>Intermediate quotes</summary><ul>${q.path_turns.map(turn=>
-            `<li>${escape(when(turn.captured_at)+" · "+quote(name,turn))}</li>`).join("")}</ul></details>`:""}
+          ${turns.length?`<details><summary>Recorded quote path</summary><ul>
+            <li>Open · ${escape(quote(m,q,true))}</li>
+            ${turns.map(turn=>`<li>${escape(when(turn.captured_at)+" · "+quote(m,turn))}</li>`).join("")}
+            <li>Observed · ${escape(quote(m,q))}</li></ul></details>`:""}
           ${q.trajectory==="retraced"&&q.path_retrace!=null?`<span>Gave back ${escape(
-            (name==="MONEYLINE"?q.path_retrace*100:q.path_retrace).toFixed(1)
-            +(name==="MONEYLINE"?" implied points":" line points"))}</span>`:""}
+            (m==="MONEYLINE"?q.path_retrace*100:q.path_retrace).toFixed(1)
+            +(m==="MONEYLINE"?" implied points":" line points"))}</span>`:""}
           ${q.path_direction_changes>0?`<span>${q.path_direction_changes} observed direction changes</span>`:""}`:
           '<span>Aligned pregame evidence unavailable</span>'}</div>`;
     }).join("")}</div>`;
@@ -372,24 +447,14 @@
     return notes;
   }
 
-  function ledgerRow(row, market, trial, flags, marks) {
-    const grade = {win:market==="SPREAD"?"Covered":"Won",loss:market==="SPREAD"?"Did not cover":"Lost",push:"Push"}[row.grade];
-    const roles = trial.role?.split(" → ") || [];
-    const role = roles[0]===roles[1] ? roles[0] : trial.role;
-    const primary = [role,trial.direction!=="Unknown"?trial.direction:""].filter(Boolean).join(" · ");
-    const comparison = marks[0] || (flags.role_move ? "Role and move match" : flags.direction ? "Same direction" : "");
-    const peer = {Agreement:"Peers agree",Disagreement:"Peers conflict",Neutral:"Peers neutral",Unavailable:"Peer quote unavailable"}[trial.cross];
+  function exampleRow(row, market, markets) {
+    const grade = {win:market==="SPREAD"?"Covered":"Won",loss:market==="SPREAD"?"Did not cover":"Lost",push:"Push"}[row.grade]||row.grade;
     return `<span class="historic-row-matchup">
         <strong>${escape(row.game)}</strong><small>${escape(row.selection)} · ${escape(when(row.date,false))}</small>
       </span>
-      <span class="historic-row-line">
-        <strong>${escape(quote(market,row.side,true))} <span class="historic-arrow">→</span> ${escape(quote(market,row.side))}</strong>
-        <small>${escape(pct(row.side.tickets))} bets · ${escape(pct(row.side.money))} money</small>
-      </span>
       <span class="historic-row-outcome"><span class="historic-result ${row.grade==="win"?"positive":row.grade==="loss"?"negative":""}">${escape(grade)}</span>
         <small class="historic-final-score">${escape(row.score||"Score unavailable")}</small></span>
-      <span class="historic-row-profile">${primary?escape(primary)+" · ":""}${comparison?`<b class="${marks.length?"historic-varied":""}">${escape(comparison)}</b> · `:""}
-        <span class="historic-muted">${escape(peer)}</span></span>`;
+      ${marketSummary(markets)}`;
   }
 
   const subsetGroups = {
@@ -433,15 +498,16 @@
         summary.low!=null?"95% win-rate interval "+percent(summary.low)+"–"+percent(summary.high):"",
         summary.n<30?"Limited sample":""
       ].filter(Boolean).join(" · ")}</p>
-      ${chosen.slice(start,start+10).map(({row,trial,flags})=>{
+      ${chosen.slice(start,start+10).map(({row,trial})=>{
         const marks=differences(trial,current), clock=row.actual_start||row.date;
         const mins=(Date.parse(clock)-Date.parse(row.entry))/60000;
-        return `<details class="historic-example historic-ledger-row"><summary>${ledgerRow(row,m,trial,flags,marks)}</summary>
+        const markets=rowMarkets(row,m);
+        return `<details class="historic-example historic-ledger-row"><summary>${exampleRow(row,m,markets)}</summary>
           <div class="historic-example-detail">
           <p><strong>${escape(row.selection)}</strong> · ${escape(minuteText(mins))} before ${row.actual_start?"verified start":"scheduled start"}</p>
           <p>Graded at ${escape(quote(m,row.side))} · ${escape(when(row.entry))}
             ${row.decision&&row.decision!==row.entry?" · Checkpoint "+escape(when(row.decision)):""}</p>
-          ${marketsEvidence(m,row.side,row.peers,row.context,row.reference,row.entry)}
+          ${marketsEvidence(markets,row.context,row.entry,row.opposite)}
           <div class="historic-why"><div><strong>Why included</strong>
           <p>Qualified for ${escape(cohorts[active.cohort])} at distance ${row.distance}. ${escape(row.matched.join(", "))}.</p></div>
           <div><strong>Compared with the current setup</strong><p>${escape([...marks,...row.differences].join(" · ")||"No large recorded difference in scored factors.")}</p>
@@ -500,29 +566,15 @@
     }).join("")}</div></section>`;
   }
 
-  function setupSummary(payload,setup,side,market,stale,current) {
-    const peer={Agreement:"Spread / moneyline agree",Disagreement:"Spread / moneyline conflict",
-      Neutral:"Spread / moneyline neutral",Unavailable:"Peer quote unavailable"}[current.cross];
+  function setupSummary(payload,setup,stale,markets) {
     return `<section class="historic-reference">
       <div class="historic-reference-head"><h3>${payload.frozen?"Frozen pregame setup":stale?"Last verified setup":"Current market setup"}</h3>
-        <span>${escape(when(setup.observed))}</span></div>
-      <div class="historic-setup-strip">
-        <div class="historic-setup-prices">
-          <span><small>Open</small><b>${escape(quote(market,side,true))}</b></span>
-          <span class="historic-arrow" aria-hidden="true">→</span>
-          <span><small>Observed</small><b>${escape(quote(market,side))}</b></span>
-        </div>
-        <div class="historic-setup-splits">
-          <span><small>Bets</small><b>${escape(pct(side.tickets))}</b></span>
-          <span><small>Money</small><b>${escape(pct(side.money))}</b></span>
-        </div>
-      </div>
-      <p class="historic-setup-context"><b>${escape(movement(market,side)+path(side))}</b> <span>${escape(
-        [current.role,peer,minuteText(setup.lead)+" to scheduled start"].filter(Boolean).join(" · "))}</span></p>
+        <span>${escape(when(setup.observed))} · ${escape(minuteText(setup.lead))} to start</span></div>
+      ${marketSummary(markets)}
     </section>`;
   }
 
-  function support(setup,side,result,market,payload) {
+  function support(setup,side,result,market,payload,quotes,opposite) {
     const source=side.context||{};
     const audits={ticket_only:"Recorded ticket-only breach",money_only:"Recorded money-only breach",both:"Recorded dual split breach"};
     const [openBand,moveBand]=breakdownBands(payload.sport,market), scale=market==="MONEYLINE"?100:1;
@@ -532,7 +584,7 @@
       <p>Opening splits ${opening(side.opening_tickets)} / ${opening(side.opening_money)} → ${pct(side.tickets)} / ${pct(side.money)}.
         ${source.data_badge?"Data quality "+escape(source.data_badge)+".":""}</p>
       <p>${[source.reaction,source.path,source.evidence_role,audits[side.split_audit?.split_breach],source.context_chips].filter(Boolean).map(escape).join(" · ")}</p>
-      ${marketsEvidence(market,side,side.game_context,side.context,side.context_reference,setup.observed)}
+      ${marketsEvidence(quotes,side.context,setup.observed,opposite)}
       ${!Object.keys(side.game_context||{}).length&&side.cross_market?peerDetails(side):""}
       <h3>Matching and coverage</h3>
       <p>${active.cohort==="broader"?"Broader matches relax cross-market agreement and price and split tolerances. This group includes closest matches.":
@@ -558,7 +610,9 @@
   function render() {
     const {payload,market,team,total,cohort}=active, modal=dialog(), setup=payload.markets[market], index=market==="TOTAL"?total:team;
     const side=setup.sides[index], result=side.comparison[cohort], body=modal.querySelector("[data-historic-body]");
-    const other=setup.sides[1-index], current=profile(payload.sport,market,side,other,side.game_context);
+    const other=setup.sides[1-index];
+    const namedTeams=market==="TOTAL"?(payload.markets.SPREAD||payload.markets.MONEYLINE)?.sides:[side,other];
+    const quotes=marketQuotes(market,side,side.game_context,payload.sport,teamNames(payload.game,namedTeams));
     const focus=modal.contains(document.activeElement)?document.activeElement:null;
     modal.querySelector("[data-historic-context]").textContent=`${sports[payload.sport]} · ${payload.game}`;
     modal.querySelector("[data-historic-favorite]").innerHTML=side.favorite?'<img src="/assets/red-fox-favorite.png" alt="Red Fox Favorite">':"";
@@ -569,9 +623,9 @@
       <div><span>${market==="TOTAL"?"Outcome":payload.sport==="ufc"?"Fighter":"Team"}</span><div class="historic-options">${setup.sides.map((s,i)=>control(s.name,i,"side",i===index)).join("")}</div></div></div>
       ${performance(result,side.comparison)}
       ${stale?`<p class="historic-notice">${delayedFeed?"Board feed delayed. These comparisons use the last verified pregame capture shown on the board.":"Latest processed capture · a newer board observation may be pending."}</p>`:""}
-      ${setupSummary(payload,setup,side,market,stale,current)}
+      ${setupSummary(payload,setup,stale,quotes)}
       ${marketRecords(payload,markets,market,team,total)}
-      <div class="historic-footer"><p>Favorites and non-Favorites</p>${support(setup,side,result,market,payload)}</div>
+      <div class="historic-footer"><p>Favorites and non-Favorites</p>${support(setup,side,result,market,payload,quotes,other)}</div>
       ${ledgerPanel(side.comparison.ledger,result,side,other,setup,market)}
     `;
     if(focus?.hasAttribute("data-historic-cohort"))body.querySelector("[data-historic-cohort]").focus({preventScroll:true});
