@@ -3,7 +3,7 @@ import gzip
 import json
 
 from history_evidence import EvidenceStore, Ledger
-from history_prospective import Study
+from history_prospective import Study, proof_roi
 from history_public import History
 from history_store import connect, store_outcome, utc
 import pytest
@@ -82,5 +82,38 @@ def test_prospective_receipt_keeps_original_quote_and_requires_verified_grade(tm
             summary = study.summary()["nfl SPREAD"]
             assert summary["closest"]["decisive"] == summary["no_vig"]["decisive"] == 1
             assert summary["closest"]["paired_brier_delta"] == 0
+    finally:
+        study.close()
+
+
+def test_historical_roi_sign_uses_fixed_receipts_and_paired_market_baseline(tmp_path):
+    old_proof = gzip.compress(json.dumps({
+        "rows":[{"grade":"loss","side":{"price":-110}}]*15,
+        "groups":{"closest":list(range(15)),"broader":list(range(15))},
+    }).encode())
+    assert proof_roi(old_proof)["closest"] == {"graded":15,"roi":-100}
+    study = Study(tmp_path/"study.sqlite3", tmp_path)
+    try:
+        methods = json.dumps({"no_vig":.5,"closest":.6,"broader":.6})
+        with study.db:
+            study.db.execute("INSERT INTO study_v1_proof VALUES (?,?)", ("old",old_proof))
+            for fixture, entry, proof, grade in (
+                ("positive", {"price":-110,"historical_roi":{"closest":{"graded":15,"roi":8.1}}}, None, "win"),
+                ("legacy", {"price":-110}, "old", "loss"),
+                ("push", {"price":-110,"historical_roi":{"closest":{"graded":15,"roi":8.1}}}, None, "push"),
+                ("sparse", {"price":-110,"historical_roi":{"closest":{"graded":14,"roi":12}}}, None, None),
+            ):
+                study.db.execute("""INSERT INTO study_v1(sport,fixture,market,entry,methods,ledger,grade)
+                                 VALUES ('nba',?,'SPREAD',?,?,?,?)""", (fixture,json.dumps(entry),methods,proof,grade))
+        result = study.historical_roi_review()["nba SPREAD"]["closest"]
+        assert result["negative"]["losses"] == 1
+        assert result["insufficient_history"]["captured"] == 1
+        assert result["insufficient_history"]["observed_roi"] is None
+        positive = result["positive"]
+        assert (positive["wins"],positive["pushes"]) == (1,1)
+        assert positive["expected_wins_no_vig"] == .5
+        assert positive["observed_roi"] == pytest.approx((100/110)/2)
+        assert positive["roi_minus_no_vig"] == pytest.approx((1+100/110)/4)
+        assert positive["mean_brier_difference"] == pytest.approx(.16-.25)
     finally:
         study.close()

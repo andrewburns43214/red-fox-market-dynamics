@@ -47,7 +47,8 @@ class Study:
         output = Path(self.db.execute("PRAGMA database_list").fetchone()[2]).with_suffix(".json")
         if output.exists() and now.timestamp()-output.stat().st_mtime < 3600:
             return
-        with atomic_text(output, packed({"as_of":utc(now),"version":1,"results":self.summary()})):
+        with atomic_text(output, packed({"as_of":utc(now),"version":1,"results":self.summary(),
+                                        "by_historical_roi":self.historical_roi_review()})):
             pass
         output.chmod(0o600)
 
@@ -91,7 +92,11 @@ class Study:
             receipt = {key: value for key, value in side.items() if key != "comparison"}
             receipt.update(game=game, participant_sides=[team["side"] for team in lanes],
                            paired_price=opposite["price"], verification_cutoff=setup.get("verified_by"),
-                           neighbor_counts=counts)
+                           neighbor_counts=counts, historical_roi={
+                               group: {"graded":report["graded"],"roi":report["roi"]}
+                               for group in ("closest","broader")
+                               if (report := side["comparison"].get(group)) and report["graded"]
+                           })
             with self.db:
                 if document:
                     self.db.execute("INSERT OR IGNORE INTO study_v1_proof VALUES (?,?)", (ref, document))
@@ -173,6 +178,69 @@ class Study:
                 item["mean_brier_difference"] = item["paired_brier_delta"]/n if n else None
                 item["quote_roi"] = item["quote_units"]/graded if graded else None
         return results
+
+    def historical_roi_review(self):
+        """Review the sign of the originally published cohort without changing its membership."""
+        results, legacy = {}, {}
+        for row in self.db.execute("SELECT sport,market,entry,methods,ledger,grade FROM study_v1"):
+            entry, methods = json.loads(row["entry"]), json.loads(row["methods"])
+            history_roi = entry.get("historical_roi")
+            if history_roi is None:
+                name = row["ledger"]
+                if name not in legacy:
+                    saved = self.db.execute("SELECT payload FROM study_v1_proof WHERE name=?", (name,)).fetchone()
+                    legacy[name] = proof_roi(saved[0]) if saved else {}
+                history_roi = legacy[name]
+
+            for group in ("closest","broader"):
+                sample = history_roi.get(group)
+                signed = sample.get("roi") if sample else None
+                bucket = ("insufficient_history" if signed is None or sample["graded"] < 15 else
+                          "positive" if signed > 0 else "negative" if signed < 0 else "flat")
+                key = row["sport"]+" "+row["market"]
+                result = results.setdefault(key, {}).setdefault(group, {}).setdefault(bucket, {
+                    "captured":0,"wins":0,"losses":0,"pushes":0,"graded":0,
+                    "units":0.0,"expected_units_no_vig":0.0,"expected_wins_no_vig":0.0,"brier_delta_sum":0.0,
+                })
+                result["captured"] += 1
+                outcome = row["grade"]
+                if outcome not in ("win","loss","push"):
+                    continue
+                result["graded"] += 1
+                result[{"win":"wins","loss":"losses","push":"pushes"}[outcome]] += 1
+                if outcome == "push":
+                    continue
+                fair = methods["no_vig"]
+                observed = outcome=="win"
+                payout = 1/implied(entry["price"])
+                result["units"] += payout*observed-1
+                result["expected_units_no_vig"] += payout*fair-1
+                result["expected_wins_no_vig"] += fair
+                result["brier_delta_sum"] += (methods[group]-observed)**2-(fair-observed)**2
+
+        for sport_market in results.values():
+            for group in sport_market.values():
+                for item in group.values():
+                    n = item["graded"]
+                    decisive = item["wins"]+item["losses"]
+                    item["observed_roi"] = item["units"]/n if n else None
+                    item["expected_roi_no_vig"] = item["expected_units_no_vig"]/n if n else None
+                    item["roi_minus_no_vig"] = (item["units"]-item["expected_units_no_vig"])/n if n else None
+                    item["mean_brier_difference"] = item["brier_delta_sum"]/decisive if decisive else None
+        return results
+
+
+def proof_roi(document):
+    """Use immutable publication evidence for receipts captured before the ROI field existed."""
+    ledger = json.loads(gzip.decompress(document))
+    result = {}
+    for group in ("closest","broader"):
+        rows = [ledger["rows"][i] for i in ledger["groups"][group]]
+        if rows:
+            units = sum(1/implied(row["side"]["price"])-1 if row["grade"]=="win" else
+                        -1 if row["grade"]=="loss" else 0 for row in rows)
+            result[group] = {"graded":len(rows),"roi":round(100*units/len(rows),2)}
+    return result
 
 
 def signature(market, side, opposite, peers):
