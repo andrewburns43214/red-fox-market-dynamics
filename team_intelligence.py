@@ -22,7 +22,7 @@ from history_comparisons import WINDOWS, grade, side_key
 from history_public import outcome_signature
 from history_store import FREE_DISK_RESERVE, atomic_text, latest_provider_outcomes, packed, utc
 from team_aliases import _split_game
-from team_independent_sources import independent_context
+from team_independent_sources import independent_context, updated_credentials
 from team_sport_context import baseball_profile_context, cfb_profile_context, nfl_profile_context, ufc_profile_context
 
 SPORTS = ("nfl", "ncaaf", "nba", "ncaab", "mlb", "nhl", "ufc")
@@ -466,9 +466,11 @@ def main():
     status_path = args.output / "status.json"
     old = json.loads(status_path.read_text(encoding="utf-8")) if status_path.exists() else {}
     status = old.get("sports",{})
-    order = [args.sport] if args.sport else sorted(SPORTS,key=lambda s: status.get(s,{}).get("checked",""))
+    new_credentials = set() if args.no_network else updated_credentials(status)
+    order = [args.sport] if args.sport else sorted(SPORTS,key=lambda s: (s not in new_credentials, status.get(s,{}).get("checked","")))
     targets = order if args.bootstrap else order[:1]
-    if not args.bootstrap and not args.sport and status.get(targets[0],{}).get("checked","") > utc(clock()-timedelta(hours=2)):
+    if (not args.bootstrap and not args.sport and targets[0] not in new_credentials
+            and status.get(targets[0],{}).get("checked","") > utc(clock()-timedelta(hours=2))):
         print('{"deferred":"team profiles current"}', flush=True)
         return
     now = utc(clock())

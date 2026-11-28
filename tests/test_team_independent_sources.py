@@ -1,3 +1,4 @@
+import os
 import unittest
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -7,7 +8,7 @@ from urllib.error import HTTPError
 
 from team_independent_sources import (
     Feed, FeedUnavailable, cached, career_recent, event_pairs, game_row, independent_context, load,
-    save, schedule, schedule_page, summarize, windows,
+    save, schedule, schedule_page, summarize, updated_credentials, windows,
 )
 
 
@@ -42,6 +43,13 @@ class IndependentSourcesTest(unittest.TestCase):
         self.assertEqual(result["rad-sports"]["error"], "not configured")
         self.assertFalse(transport.called)
         self.assertEqual(list(self.state.iterdir()), [self.keys])
+
+    def test_new_shared_credential_prioritizes_only_its_stale_sports(self):
+        self.feed("rad-sports")
+        os.utime(self.keys / "rad-sports", (NOW.timestamp(), NOW.timestamp()))
+        self.assertEqual(updated_credentials(
+            {"ncaaf": {"checked": (NOW+timedelta(seconds=1)).isoformat()},
+             "ncaab": {"checked": (NOW-timedelta(seconds=1)).isoformat()}}, self.keys), {"ncaab"})
 
     def test_shared_daily_monthly_limits_persist_across_processes(self):
         feed = self.feed("rad-sports")
@@ -118,6 +126,12 @@ class IndependentSourcesTest(unittest.TestCase):
                "homeTeam": "NJD", "awayTeam": "VAN", "homeScore": 5, "awayScore": 5, "gameState": "LIVE"}
         self.assertIsNone(game_row("nhl", 2026, row)["scores"])
         self.assertEqual(game_row("nhl", 2026, dict(row, gameState="OFF", homeScore=6))["scores"], [5,6])
+        feed.request.return_value = {"data":{"games":[row],"count":1}}
+        self.assertEqual(schedule_page(feed,"nhl",2026,date(2026,11,1),date(2026,11,30),None)[0], [row])
+        start = "2026-11-29T01:00:00Z"
+        nba = dict(nba_game(5, "2026-11-28", start), datetime="2026-11-29T01:00:00.000Z", period=0)
+        self.assertTrue(game_row("nba",2026,nba)["scheduled"])
+        self.assertFalse(game_row("nba",2026,dict(nba,period=1))["scheduled"])
 
     def test_independent_overlay_verifies_fixture_and_excludes_later_results(self):
         rows = [dict(game_row("nba", 2026, sample), as_of=PUBLIC_NOW) for sample in (

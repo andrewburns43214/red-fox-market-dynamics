@@ -64,6 +64,23 @@ class FeedUnavailable(Exception):
     pass
 
 
+def updated_credentials(status, key_directory=KEY_DIRECTORY):
+    installed = {}
+    for provider in LABELS:
+        try:
+            installed[provider] = (key_directory / provider).stat().st_mtime
+        except OSError:
+            continue
+    pending = set()
+    for sport, (provider, _) in PROVIDERS.items():
+        if provider not in installed:
+            continue
+        checked = status.get(sport, {}).get("checked")
+        if not checked or installed[provider] > datetime.fromisoformat(checked).timestamp():
+            pending.add(sport)
+    return pending
+
+
 class Feed:
     def __init__(self, state, provider, now, guard, network, key_directory):
         self.provider = provider
@@ -183,6 +200,8 @@ def game_row(sport, year, row):
         status = row["status"]
         scores = [row["visitor_team_score"], row["home_team_score"]] if status == "Final" else None
         scheduled = isinstance(status, str) and bool(re.search(r"\bET$|^Scheduled$", status, re.IGNORECASE))
+        if isinstance(status, str) and re.match(r"^\d{4}-\d{2}-\d{2}T", status):
+            scheduled = row.get("period") == 0 and utc_start(status) == start
     elif sport == "mlb":
         if row["season"] != year:
             raise ValueError("wrong MLB season")
@@ -244,7 +263,7 @@ def schedule_page(feed, sport, year, start, end, cursor):
     if sport == "nhl":
         payload = feed.request(url, {"league": "nhl", "season": f"{year}{year+1}", "game_type": "regular",
                                      "date_from": str(start), "date_to": str(end), "limit": 500}, cost=5)
-        return payload["games"], None, 499
+        return payload.get("data", payload)["games"], None, 499
     if sport == "ncaaf":
         return feed.request(url, {"year": year, "seasonType": "both", "classification": "fbs"}), None, 2500
     return feed.request(url, {"season": year+1, "startDateRange": f"{start}T00:00:00Z",
@@ -443,8 +462,12 @@ def cached(feed, state, name, url, params, decode, hours, *, cost=1, fighter=Fal
 
 
 def nhl_standings(payload):
+    data = payload.get("data", payload)
+    snapshot = data.get("snapshot_date")
+    if snapshot:
+        snapshot = str(date.fromisoformat(snapshot))
     table = {}
-    for row in payload["standings"]:
+    for row in data["standings"]:
         key = canonical(row.get("teamName") or NHL_NAMES[row["teamAbbrev"]], "nhl")
         fields = ("rank", "wins", "losses", "otLosses", "points", "gamesPlayed")
         if key in table or any(type(row[f]) is not int or row[f] < 0 for f in fields):
@@ -452,6 +475,7 @@ def nhl_standings(payload):
         if row["wins"] + row["losses"] + row["otLosses"] != row["gamesPlayed"]:
             raise ValueError("inconsistent standings")
         table[key] = {f: row[f] for f in fields}
+        table[key]["snapshot_date"] = str(date.fromisoformat(row["snapshotDate"])) if row.get("snapshotDate") else snapshot
         for field in ("corsiPct", "fenwickPct", "expectedGoalsFor", "expectedGoalsAgainst"):
             value = row.get(field)
             if type(value) in (int, float) and 0 <= value <= 10000:
@@ -618,7 +642,9 @@ def independent_context(state, fixtures, sport, now, guard, network, key_directo
         table = latest.get("data", {})
         if latest.get("at", "") >= utc(timestamp-timedelta(days=3)):
             for fixture in upcoming:
-                if all(k in table for k in fixture["keys"]) and fixture.get("sporting", {}).get("independent"):
+                cutoff = timestamp.astimezone(ET).date() - timedelta(days=3)
+                if (all((table.get(k, {}).get("snapshot_date") or "0000") >= str(cutoff) for k in fixture["keys"])
+                        and fixture.get("sporting", {}).get("independent")):
                     independent = fixture["sporting"]["independent"]
                     independent["standings"] = {k:table[k] for k in fixture["keys"]}
                     independent["standings_at"] = latest["at"]
