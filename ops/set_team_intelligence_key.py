@@ -6,6 +6,7 @@ import getpass
 import os
 from pathlib import Path
 import re
+import sys
 import tempfile
 import warnings
 
@@ -20,10 +21,12 @@ def main():
     args = parser.parse_args()
     if os.geteuid() != 0:
         parser.exit(1, "Run this command as root.\n")
+    if not sys.stdin.isatty():
+        parser.exit(1, "An interactive server terminal is required. No key was written.\n")
     try:
-        with open("/dev/tty", "r+", encoding="utf-8") as terminal, warnings.catch_warnings():
+        with warnings.catch_warnings():
             warnings.simplefilter("error", getpass.GetPassWarning)
-            key = getpass.getpass(f"Paste the {args.provider} API key: ", stream=terminal).strip()
+            key = getpass.getpass(f"Paste the {args.provider} API key: ").strip()
     except (OSError, EOFError, KeyboardInterrupt, getpass.GetPassWarning):
         parser.exit(1, "An interactive server terminal is required. No key was written.\n")
     if re.fullmatch(r"[A-Za-z0-9._~+/=-]{12,512}", key) is None:
