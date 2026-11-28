@@ -13,7 +13,7 @@ button.team-intelligence-name {
   cursor:pointer;
   overflow-wrap:anywhere;
   text-decoration-thickness: .075em;
-  text-underline-offset:3px;
+  text-underline-offset:1px;
 }
 @media (hover:hover) {
   button.team-intelligence-name:hover { text-decoration-line:underline; }
