@@ -62,7 +62,9 @@
     if (manifestState === "failed") return "Historical comparison updates are temporarily unavailable.";
     if (manifestState !== "ready") return "";
     const started = row.sport !== "ufc" && Date.parse(row.kickoff_iso) <= Date.now();
-    if (started && !frozenGames.has(key)) return "Verified pregame comparison for this market is unavailable.";
+    if (started && !frozenGames.has(key)) return available(row)
+      ? "The frozen pregame comparison is being prepared."
+      : "Verified pregame comparison for this market is unavailable.";
     const state = availability[key]?.[row.market_display]?.[index] || "source_limited";
     return {
       processing: "Historical comparisons for this market are waiting to be processed.",
@@ -347,6 +349,7 @@
           <span>${escape(pct(q.tickets)+" tickets / "+pct(q.money)+" money"+(splitCap?capLabel:""))}</span>
           ${q.captured_at&&Date.parse(q.captured_at)!==Date.parse(stamp)?`<span>${escape(when(q.captured_at))}</span>`:""}
           ${primary&&context?.data_badge?`<span>${escape(context.data_badge)}</span>`:""}
+          ${!primary&&q.sustained_toward===true?"<span>Support held</span>":""}
           ${q.path_turns?.length?`<details><summary>Intermediate quotes</summary><ul>${q.path_turns.map(turn=>
             `<li>${escape(when(turn.captured_at)+" · "+quote(name,turn))}</li>`).join("")}</ul></details>`:""}
           ${q.trajectory==="retraced"&&q.path_retrace!=null?`<span>Gave back ${escape(
