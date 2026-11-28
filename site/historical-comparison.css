@@ -107,7 +107,7 @@
 .historic-performance { background: #f7f7f3; }
 .historic-populations {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 125px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 105px), 1fr));
   gap: 6px;
   margin: 8px 0;
 }
@@ -128,7 +128,6 @@
 }
 .historic-populations button[aria-pressed="true"] { background: #eaf5ed; border-color: #6b9d82; }
 .historic-populations button span { font-size: 11px; color: #516061; }
-.historic-selected-population { font-size: 12px; font-weight: 700; margin-top: 8px; }
 .historic-advanced { display: block; margin: 5px 0; color: #505d5f; font-size: 12px; }
 .historic-advanced summary { width: fit-content; cursor: pointer; }
 .historic-advanced select { max-width: 100%; margin: 4px 0 0; }

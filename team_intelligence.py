@@ -18,8 +18,7 @@ from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 from history_blocks import decode
-from history_comparisons import WINDOWS, grade, side_key
-from history_public import outcome_signature
+from history_comparisons import WINDOWS, grade, outcome_signature, side_key
 from history_store import FREE_DISK_RESERVE, atomic_text, latest_provider_outcomes, packed, utc
 from team_aliases import _split_game
 from team_independent_sources import closing_ats, independent_context, updated_credentials

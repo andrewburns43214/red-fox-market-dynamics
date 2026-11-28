@@ -15,11 +15,11 @@ import time
 
 from history_blocks import decode, encode, read_quotes
 from history_comparisons import (ADDED_WINDOWS, CONTEXT_VERSION, MARKETS, WINDOWS, aligned_game, delta, features,
-                                 fixture_pairs, grade, implied, recorded_split_context, side_key)
+                                 fixture_pairs, grade, implied, outcome_signature, recorded_split_context, side_key)
 from history_evidence import EvidenceStore, Ledger, LEDGER_VERSION, MIN_HISTORY, priced_summary
 from history_scenarios import VERSION as SCENARIO_VERSION, partitions
 from history_store import FREE_DISK_RESERVE, SPORTS, atomic_text, digest, eligible_pairs, latest_provider_outcomes, number, packed, quote_part, start_evidence, utc
-from team_aliases import _split_game, normalize_team_name
+from team_aliases import _split_game
 from ufc_bout_integrity import fighter_key
 
 
@@ -436,22 +436,6 @@ def score_line(result):
         pairs = ((teams[0], result.get("score_away")), (teams[1], result.get("score_home")))
     if all(name and number(score) is not None for name, score in pairs):
         return " · ".join(f"{name} {number(score):g}" for name, score in pairs)
-    return None
-
-
-def outcome_signature(sport, state, evidence):
-    if state in {"push", "void"}:
-        return state
-    if sport == "ufc":
-        return fighter_key(evidence.get("winner") or "")
-    if evidence.get("score_a") is not None:
-        names = evidence.get("team_a"), evidence.get("team_b")
-        scores = evidence.get("score_a"), evidence.get("score_b")
-    else:
-        names = _split_game(evidence.get("matchup"))
-        scores = evidence.get("score_away"), evidence.get("score_home")
-    if all(names) and None not in (points := tuple(number(score) for score in scores)):
-        return tuple(sorted((normalize_team_name(name, sport), score) for name, score in zip(names, points)))
     return None
 
 

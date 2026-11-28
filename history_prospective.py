@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import sqlite3
 
-from history_comparisons import grade, implied, side_key
+from history_comparisons import grade, implied, outcome_signature, side_key
 from history_evidence import fair_probability, lead_minutes
 from history_store import packed, start_evidence, utc
 from history_team_evidence import TeamEvidence
@@ -113,8 +113,6 @@ class Study:
                     (*key, event, scheduled, observed, made, scheduled, packed(receipt), packed(forecasts), ref))
 
     def reconcile(self, history, now, limit=30):
-        from history_public import outcome_signature
-
         stamp = utc(now)
         due = self.db.execute("SELECT * FROM study_v1 WHERE grade IS NULL AND next_check < ? ORDER BY next_check LIMIT ?",
                               (stamp,limit)).fetchall()

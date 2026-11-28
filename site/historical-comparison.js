@@ -284,9 +284,7 @@
           "No priced, graded closest matches. Showing "+cohorts[active.cohort].toLowerCase()+"." : "");
     const updated=Boolean(report.comparison_version);
     const populations=updated?["best","related",...report.scenarios.map(item=>item.key)]:[];
-    return `<section class="historic-performance" aria-label="Similar market setups">
-      ${updated?`<div class="historic-performance-head"><h3>Similar market setups</h3></div>
-      <div class="historic-populations" role="group" aria-label="Historical populations">
+    const choices=updated?`<div class="historic-populations" role="group" aria-label="Historical populations">
         ${populations.map(key=>{
           const stats=report[key], selected=key===active.cohort;
           return `<button type="button" data-historic-action="population" data-value="${escape(key)}" aria-pressed="${selected}">
@@ -294,8 +292,9 @@
             <span>${stats.graded?escape(record(stats)+" · "+stats.graded+" graded"):"No graded matches"}${stats.roi==null?"":' · <b class="'+tone(stats.roi)+'">'+escape(signed(stats.roi))+'% ROI</b>'}</span></button>`;
         }).join("")}
       </div>
-      ${report.scenarios.length?'<p class="historic-note">Scenarios can share games with other populations.</p>':""}
-      <p class="historic-selected-population">${escape(groupLabel(report,active.cohort))}</p>`:`
+      ${report.scenarios.length?'<p class="historic-note">Scenarios can share games with other populations.</p>':""}`:marketChoices;
+    return `<section class="historic-performance" aria-label="Similar market setups">
+      ${updated?`<div class="historic-performance-head"><h3>${escape(groupLabel(report,active.cohort))}</h3></div>`:`
       <div class="historic-performance-head"><h3>Similar market setups</h3><label><span>Compare</span><select data-historic-cohort aria-label="Comparison group">
         ${Object.entries(cohorts).map(([key,name])=>`<option value="${key}"${active.cohort===key?" selected":""}>${name}</option>`).join("")}
       </select></label></div>
@@ -304,7 +303,7 @@
         ${tile("Win rate",pct(result?.win_rate))}
         ${tile("ROI",result?.roi==null?"—":signed(result.roi)+"%",result?.units==null?"":signed(result.units)+" units",tone(result?.roi))}
         ${tile("Avg. entry odds",odds(result?.odds),"","","historic-odds")}</div>
-      ${notice||reason?`<p class="historic-performance-note"><strong>${escape(notice)}</strong>${reason?` <span>${escape(reason)}</span>`:""}</p>`:""}${updated?"":marketChoices}</section>`;
+      ${notice||reason?`<p class="historic-performance-note"><strong>${escape(notice)}</strong>${reason?` <span>${escape(reason)}</span>`:""}</p>`:""}${choices}</section>`;
   }
 
   function rowMarkets(item,market) {
@@ -699,12 +698,13 @@
   }
 
   function marketRecords(payload,markets,market,team,total) {
+    const latest=payload.markets[market].sides[market==="TOTAL"?total:team].comparison.comparison_version;
     return `<nav class="historic-by-market" aria-label="Market and comparison records"><div>${markets.map(([key,label])=>{
       const side=payload.markets[key].sides[key==="TOTAL"?total:team];
       const labelText=label+(key==="TOTAL"?" · "+side.name:"");
       return `<button type="button" data-historic-action="market" data-value="${key}" aria-pressed="${key===market}">
         <strong>${escape(labelText)}</strong>
-        ${(side.comparison.comparison_version?["best","related"]:["closest","broader"]).map(group=>{
+        ${latest&&!side.comparison.comparison_version?'<span>Coverage unavailable</span>':(latest?["best","related"]:["closest","broader"]).map(group=>{
           const stats=side.comparison[group];
           return `<span title="${stats?.graded?escape(stats.graded+" graded · "+signed(stats.roi)+"% ROI"):"No graded matches"}">
             ${({closest:"Closest",broader:"Broader",best:"Best",related:"Related"})[group]} <b>${stats?.graded?escape(record(stats)):"—"}</b></span>`;

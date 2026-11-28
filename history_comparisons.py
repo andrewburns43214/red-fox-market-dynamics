@@ -366,6 +366,22 @@ def rebuild(db, now, limit, *, upgrade_only=False, upgrade_sport=None, budget=No
             "budget_deferred": len(queue) - processed}
 
 
+def outcome_signature(sport, state, evidence):
+    if state in {"push", "void"}:
+        return state
+    if sport == "ufc":
+        return fighter_key(evidence.get("winner") or "")
+    if evidence.get("score_a") is not None:
+        names = evidence.get("team_a"), evidence.get("team_b")
+        scores = evidence.get("score_a"), evidence.get("score_b")
+    else:
+        names = _split_game(evidence.get("matchup"))
+        scores = evidence.get("score_away"), evidence.get("score_home")
+    if all(names) and None not in (points := tuple(number(score) for score in scores)):
+        return tuple(sorted((normalize_team_name(name, sport), score) for name, score in zip(names, points)))
+    return None
+
+
 def grade(sport, market, side, state, result):
     if state in {"push", "void"}:
         return state
