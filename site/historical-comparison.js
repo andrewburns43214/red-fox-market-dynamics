@@ -196,7 +196,8 @@
       : delta>0?teams.display(q.side)||"the quoted team":teams.opponent(q.side);
     const points=value=>Math.abs(value).toFixed(2).replace(/\.?0+$/,"");
     const pricePoints=value=>Math.abs(value)<.0001?"<0.01":points(100*value);
-    const priceFavor=priceMove?`${pricePoints(priceMove)} implied pts toward ${priceTowards(priceMove)}`:"";
+    const priceTarget=priceMove?priceTowards(priceMove):"";
+    const priceFavor=priceMove?`${pricePoints(priceMove)} implied pts toward ${priceTarget}`:"";
     const noPrice=priceOpen==null&&priceNow==null?"Price unavailable":priceOpen==null?"Opening price unavailable":"Observed price unavailable";
     if(m==="MONEYLINE") {
       return {text:priceMove==null?noPrice:priceFavor||(changed?"No net price move":"Price unchanged"),
@@ -208,7 +209,9 @@
     if(lineMove) {
       const target=m==="TOTAL"?(lineMove>0?"Over":"Under"):
         (lineMove<0?teams.display(q.side)||"the quoted team":teams.opponent(q.side));
-      return {text:`${points(lineMove)} ${Math.abs(lineMove)===1?"pt":"pts"} toward ${target}`, price:priceFavor?`Price moved ${priceFavor}`:priceMove==null?noPrice:"Price unchanged"};
+      return {text:`Line moved ${points(lineMove)} ${Math.abs(lineMove)===1?"pt":"pts"} toward ${target}`,
+        price:priceFavor?`Juice moved ${priceFavor}`:priceMove==null?noPrice:"Juice unchanged",
+        showPrice:!priceFavor||priceTarget!==target};
     }
     if(priceMove==null) return {text:`Line unchanged · ${noPrice.toLowerCase()}`,unavailable:true};
     if(priceMove) return {text:`Line held · price ${priceFavor}`};
@@ -242,7 +245,9 @@
         <span class="historic-quote-label">${labels[m]}${ref?` <span>· ${escape(ref)}</span>`:""}</span>
         ${q?`<span class="historic-quote-value"><b>${escape(quote(m,q,true))}</b> <span class="historic-arrow">→</span> <b>${escape(quote(m,q))}</b></span>
         <span class="historic-quote-read"><span${move.unavailable?' class="historic-muted"':""}>${escape(move.text)}</span>
-          <span class="historic-quote-splits">${q.tickets==null&&q.money==null?"Splits unavailable":`${pct(q.tickets)} bets / ${pct(q.money)} money`}</span></span>
+          ${move.showPrice?`<span class="historic-quote-juice">${escape(move.price)}</span>`:""}
+          <span class="historic-quote-splits">${q.tickets==null&&q.money==null?"Splits unavailable":
+            `<b>${escape(pct(q.tickets))}</b> bets / <b>${escape(pct(q.money))}</b> money`}</span></span>
         ${turns.length?`<span class="historic-quote-turn">Via ${escape(turns.map(turn=>m==="MONEYLINE"?odds(turn.price):m==="SPREAD"?signed(turn.line):turn.line??"—").join(" → "))}</span>`:""}`
         :'<span class="historic-quote-missing">Pregame quote unavailable</span>'}</span>`).join("")}</span>`;
   }
@@ -416,20 +421,85 @@
       <summary>View quote observations</summary><div class="historic-raw-observations"></div></details>`;
   }
 
+  function archivedEvents(sport,game) {
+    const key=sport+"--"+game;
+    if(!observations.has(key)){
+      const path="/data/anomaly_event_details/"+encodeURIComponent(sport)+"--"+encodeURIComponent(game)+".json";
+      observations.set(key,window.redfoxAuthorizedFetch(path,{}, {required:false})
+        .then(async response=>{
+          const events=response.ok?await response.json():[];
+          return Array.isArray(events)?events.filter(event=>String(event.game_id)===game&&event.sport===sport):[];
+        }).catch(()=>[]));
+    }
+    return observations.get(key);
+  }
+
+  function archivedQuoteControl(fixture,markets,stamp) {
+    if(!fixture?.id||!stamp||markets.every(({q})=>q)) return "";
+    const shown=markets.find(({primary})=>primary);
+    const missing=markets.filter(({q})=>!q).map(({m})=>m);
+    const team=shown.m==="TOTAL"
+      ? markets.find(({m,ref})=>m!=="TOTAL"&&ref)?.ref||teamNames(fixture.game).display(fixture.reference)||
+        String(fixture.game||"").split(/ @ |\s+vs\.?\s+/i)[0]
+      : shown.ref;
+    return `<details class="historic-archive-quotes" data-historic-archive-quotes
+      data-sport="${escape(fixture.sport)}" data-game="${escape(fixture.id)}" data-team="${escape(team)}"
+      data-cutoff="${escape(stamp)}" data-missing="${missing.join(",")}" data-primary="${shown.m}"
+      data-selected="${escape(shown.ref)}" data-entry="${escape(quote(shown.m,shown.q))}">
+      <summary>Check archived quotes for unavailable markets</summary><div class="historic-archive-results"></div></details>`;
+  }
+
+  async function loadArchiveQuotes(control) {
+    if(!control.open||control.dataset.loaded) return;
+    control.dataset.loaded="true";
+    const pane=control.querySelector(".historic-archive-results");
+    const {sport,game,team,cutoff,missing,primary,selected,entry}=control.dataset;
+    pane.textContent="Checking the exact pregame capture?";
+    const events=await archivedEvents(sport,game);
+    const at=Date.parse(cutoff);
+    const identity=(event,m)=>window.marketSideIdentity(event,{market_display:m,sport});
+    const match=(row,m,name)=>identity(row,m)===identity({flagged_side:name},m);
+    const atCutoff=events.filter(row=>row.flagged_side&&Date.parse(row.timestamp)===at);
+    const pair=m=>atCutoff.filter(row=>row.market_display===m&&row.line_display);
+    const verifiedPair=rows=>rows.length===2&&identity(rows[0],rows[0].market_display)!==identity(rows[1],rows[1].market_display);
+    const number=value=>value===""||value==null||!Number.isFinite(Number(value))?null:Number(value);
+    const primaryPair=pair(primary);
+    const archiveEntry=primaryPair.find(row=>match(row,primary,selected));
+    if(!verifiedPair(primaryPair)||!archiveEntry||
+       (/[-+]?\d/.test(entry)&&line(primary,number(archiveEntry.line_value),number(archiveEntry.price_odds))!==entry)){
+      pane.textContent="The archived capture could not be verified against this comparison?s entry.";
+      return;
+    }
+    const results=missing.split(",").map(m=>{
+      const rows=pair(m);
+      const ref=m==="TOTAL"?"Over":team;
+      const observed=ref&&verifiedPair(rows)?rows.find(row=>match(row,m,ref)):null;
+      if(!observed) return {m};
+      const opening=events.filter(row=>row.market_display===m&&row.flagged_side&&match(row,m,ref)&&
+        (row.is_open===true||row.is_open==="true")&&Date.parse(row.timestamp)<=at&&row.line_display);
+      const op=opening.length===1?opening[0]:null;
+      const q={side:m==="TOTAL"?"over":ref,line:number(observed.line_value),price:number(observed.price_odds),
+        open_line:number(op?.line_value),open_price:number(op?.price_odds),
+        tickets:number(observed.bets_pct),money:number(observed.money_pct)};
+      const opponent=rows.find(row=>row!==observed);
+      const teams=teamNames("",[{side:ref,name:ref},{side:identity(opponent,m),name:opponent.flagged_side.replace(/\s[+-]\d+(?:\.\d+)?\s*$/,"")}]);
+      return {m,q,ref,move:observedMovement(m,q,teams),turns:[]};
+    });
+    if(!results.some(({q})=>q)){
+      pane.textContent="No verified paired quote was archived at this exact capture. The comparison still uses its original evidence.";
+      return;
+    }
+    pane.innerHTML=`<p>Quotes from the same pregame capture. Comparison results use the original published evidence.</p>${marketSummary(results)}`;
+  }
+
   async function loadObservations(control) {
     if(!control.open||control.dataset.loaded) return;
     control.dataset.loaded="true";
     const pane=control.querySelector(".historic-raw-observations");
     const {sport,game,market,side,cutoff}=control.dataset;
-    const key=sport+"--"+game;
     const through=Date.parse(cutoff);
     pane.textContent="Loading archived observations?";
-    if(!observations.has(key)){
-      const path="/data/anomaly_event_details/"+encodeURIComponent(sport)+"--"+encodeURIComponent(game)+".json";
-      observations.set(key,window.redfoxAuthorizedFetch(path,{}, {required:false})
-        .then(response=>response.ok?response.json():[]).catch(()=>[]));
-    }
-    const events=await observations.get(key);
+    const events=await archivedEvents(sport,game);
     const marketRow={market_display:market,sport};
     const identity=row=>window.marketSideIdentity(row,marketRow);
     const selected=identity({flagged_side:side});
@@ -473,7 +543,7 @@
             +(m==="MONEYLINE"?" implied points":" line points"))}</span>`:""}
           ${q.path_direction_changes>0?`<span>${q.path_direction_changes} observed direction changes</span>`:""}`:
           '<span>Aligned pregame evidence unavailable</span>'}</div>`;
-    }).join("")}</div>`;
+    }).join("")}</div>${archivedQuoteControl(fixture,markets,stamp)}`;
   }
 
   function differences(trial, current) {
@@ -714,6 +784,7 @@
     });
     modal.addEventListener("toggle", event => {
       if(event.target.matches("[data-historic-observations]")) loadObservations(event.target);
+      if(event.target.matches("[data-historic-archive-quotes]")) loadArchiveQuotes(event.target);
     }, true);
     modal.addEventListener("close", () => {
       observations.clear();

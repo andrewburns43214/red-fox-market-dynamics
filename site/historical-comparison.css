@@ -103,6 +103,8 @@
 .historic-reference .historic-quote-value { font-size: 16px; }
 .historic-quote-read { display: flex; flex-wrap: wrap; gap: 1px 8px; font-size: 11px; color: #314844; }
 .historic-quote-splits, .historic-quote-missing, .historic-quote-turn { font-size: 11px; color: #626c72; }
+.historic-quote-splits b { font-weight: 700; color: #253a36; font-variant-numeric: tabular-nums; }
+.historic-quote-juice { color: #52615e; }
 .historic-quote-turn { line-height: 1.12; }
 .historic-market-evidence {
   display: grid;
@@ -127,6 +129,9 @@
 .historic-market-proof summary, .historic-filter-method summary { cursor: pointer; }
 .historic-market-proof ul { margin: 4px 0 0; padding-left: 16px; }
 .historic-raw-observations { overflow: auto; max-height: 210px; margin-top: 5px; }
+.historic-archive-quotes { margin: 8px 0 0; font-size: 12px; color: #52615e; }
+.historic-archive-quotes summary { cursor: pointer; }
+.historic-archive-results { margin: 5px 0; }
 .historic-raw-observations table { width: 100%; border-collapse: collapse; white-space: nowrap; }
 .historic-raw-observations :is(th, td) { padding: 4px 6px; text-align: left; border-bottom: 1px solid #dce6e1; }
 .historic-filter-method { margin-top: 8px; }
