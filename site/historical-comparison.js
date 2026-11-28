@@ -409,10 +409,10 @@
       low:decisive?100*Math.max(0,center-width):null, high:decisive?100*Math.min(1,center+width):null};
   }
 
-  function observationControl(fixture,m,q,ref) {
-    if(!fixture?.id||!ref||!q.captured_at) return "";
+  function observationControl(fixture,m,ref,cutoff) {
+    if(!fixture?.id||!ref||!cutoff) return "";
     return `<details data-historic-observations data-sport="${escape(fixture.sport)}" data-game="${escape(fixture.id)}"
-      data-market="${m}" data-side="${escape(ref)}" data-cutoff="${escape(q.captured_at)}">
+      data-market="${m}" data-side="${escape(ref)}" data-cutoff="${escape(cutoff)}">
       <summary>View quote observations</summary><div class="historic-raw-observations"></div></details>`;
   }
 
@@ -467,7 +467,7 @@
             <li>Open · ${escape(quote(m,q,true))}</li>
             ${turns.map(turn=>`<li>${escape(when(turn.captured_at)+" · "+quote(m,turn))}</li>`).join("")}
             <li>Observed · ${escape(quote(m,q))}</li></ul></details>`:""}
-          ${observationControl(fixture,m,q,ref)}
+          ${observationControl(fixture,m,ref,q.captured_at||(primary?stamp:""))}
           ${q.trajectory==="retraced"&&q.path_retrace!=null?`<span>Gave back ${escape(
             (m==="MONEYLINE"?q.path_retrace*100:q.path_retrace).toFixed(1)
             +(m==="MONEYLINE"?" implied points":" line points"))}</span>`:""}
