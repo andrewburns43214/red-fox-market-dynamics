@@ -21,6 +21,9 @@ ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 NoNewPrivileges=true
-ReadWritePaths=/var/lib/redfox-team-intelligence
+# SQLite may need to recreate WAL coordination files even for mode=ro readers.
+# Keep the archive database itself read-only inside the service namespace.
+ReadWritePaths=/var/lib/redfox-team-intelligence /var/lib/redfox-history/private
+ReadOnlyPaths=/var/lib/redfox-history/private/history.sqlite3
 ExecCondition=/usr/bin/flock -sn /var/lock/redfox_run.lock /usr/bin/true
 ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python team_intelligence.py
