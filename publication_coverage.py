@@ -8,7 +8,7 @@ import sqlite3
 import uuid
 
 import pandas as pd
-from dk_discovery import inventory_html
+from dk_discovery import SUPPORTED_MARKETS, inventory_html
 
 KEYS = ["sport", "game_id", "market_display"]
 
@@ -146,10 +146,10 @@ class ScrapeCoverage:
 
     def finish(self, state):
         if state == "COMPLETE" and (not self.discovered or any(
-            not r.get("league_identified") or not r.get("identity_verified") or r.get("market_display") == "UNKNOWN"
+            not r.get("league_identified") or not r.get("identity_verified") or r.get("market_display") not in SUPPORTED_MARKETS
             for r in self.discovered.values())):
             state = "DISCOVERY_INCOMPLETE"
-        self.store.finish(self.run_id, state)
+        self.store.finish(self.run_id, state, "market_inventory_v2" if state == "COMPLETE" else "")
 
     def captured(self, state="COMPLETE", detail=""):
         self.store.finish(self.capture_run_id, state, detail)
@@ -222,6 +222,17 @@ class PublicationCoverage:
     def publish(self, board, board_path, window_filter):
         published = keys(board)
         inventory = list(self.store.inventory())
+        with self.store.connect() as db:
+            recent_cfb = db.execute("""SELECT run_id,state,started_at,finished_at,detail FROM runs
+                WHERE kind='SCRAPE' AND sport='ncaaf' AND state!='RUNNING'
+                ORDER BY started_at DESC LIMIT 2""").fetchall()
+        # Two complete, independently dated source inventories are required.
+        # A missing market on a partial scrape remains a capture problem.
+        cfb_absence_start = None
+        if len(recent_cfb) == 2 and all(state == "COMPLETE" and detail == "market_inventory_v2"
+                and self.now - pd.Timedelta(minutes=30) <= pd.Timestamp(started) <= pd.Timestamp(finished) <= self.now
+                for _, state, started, finished, detail in recent_cfb):
+            cfb_absence_start = pd.Timestamp(recent_cfb[-1][2])
         delayed_ncaab = {}
         if {"sport", "kickoff_iso", "state_as_of_utc"}.issubset(board.columns):
             for row in board.loc[board["sport"].eq("ncaab")].to_dict("records"):
@@ -285,6 +296,11 @@ class PublicationCoverage:
                 state = self.reasons.get(key, "STALE_CAPTURE" if key in self.last_captures else "CAPTURE_UNAVAILABLE")
                 if key in self.gate_ready:
                     state = "UNEXPLAINED_PUBLICATION_GAP"
+                elif cfb_absence_start is not None and key[0] == "ncaaf" and item.get("identity_verified") is True and state == "STALE_CAPTURE":
+                    captured = pd.to_datetime(self.last_captures.get(key, item.get("last_capture_at")), utc=True, errors="coerce")
+                    discovered = pd.to_datetime(item.get("last_discovered_at"), utc=True, errors="coerce")
+                    if pd.notna(captured) and captured < cfb_absence_start and (pd.isna(discovered) or discovered < cfb_absence_start):
+                        state = "SOURCE_MARKET_NOT_LISTED"
             record = {**item, "state": state, "in_window_scope": target,
                       "publication_eligible": key in self.gate_ready, "published": key in published,
                       "last_capture_at": self.last_captures.get(key, item.get("last_capture_at", "")),
@@ -292,6 +308,10 @@ class PublicationCoverage:
                       "publication_run_id": self.run_id, "as_of": self.now.isoformat()}
             if pd.notna(effective_kickoff) and effective_kickoff != kickoff:
                 record["publication_kickoff_iso"] = effective_kickoff.isoformat()
+            if state == "SOURCE_MARKET_NOT_LISTED" or "source_absence_runs" in item:
+                record["source_absence_runs"] = (
+                    ",".join(run for run, *_ in recent_cfb) if state == "SOURCE_MARKET_NOT_LISTED" else ""
+                )
             records.append(record)
         frame = pd.DataFrame(records)
         if not frame.empty:

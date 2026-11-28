@@ -46,6 +46,8 @@ def check(data_dir, now=None, max_age_minutes=25):
                 issues.append(f"{sport}:STALE_IN_WINDOW_MARKETS")
             if stats["excluded_by_reason"].get("CAPTURE_UNAVAILABLE", 0):
                 issues.append(f"{sport}:UNAVAILABLE_IN_WINDOW_MARKETS")
+            if stats["excluded_by_reason"].get("SOURCE_MARKET_NOT_LISTED", 0):
+                issues.append(f"{sport}:MARKETS_NOT_LISTED_BY_SOURCE")
         with sqlite3.connect((root / "publication_coverage.sqlite3").resolve().as_uri() + "?mode=ro", uri=True) as db:
             latest = db.execute("SELECT state,started_at FROM runs WHERE kind='PUBLICATION' ORDER BY started_at DESC LIMIT 1").fetchone()
             if latest and latest[0] == "PUBLICATION_FAILED":
@@ -68,6 +70,7 @@ def check(data_dir, now=None, max_age_minutes=25):
     # capture/publication cycle into a failed run.  The stale-age and
     # reconciliation checks above remain hard failures.
     warning_codes = {"RETAINED_SOURCE_MARKETS"}
+    warning_codes.update(issue for issue in issues if issue.endswith(":MARKETS_NOT_LISTED_BY_SOURCE"))
     summary["issues"] = issues
     summary["warnings"] = [issue for issue in issues if issue in warning_codes]
     return summary, not any(issue not in warning_codes for issue in issues)

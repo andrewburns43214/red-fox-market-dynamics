@@ -282,6 +282,63 @@ def test_stale_discovery_remains_durable_and_is_not_published(tmp_path):
     assert not stored["published"]
 
 
+def test_grouped_market_headings_refresh_kickoff_without_split_parser(tmp_path):
+    from dk_discovery import inventory_html
+
+    html = '''<select name="tb_eg"><option selected>NCAA Basketball</option></select>
+    <div class="tb-se"><div class="tb-se-title"><a href="/event/35095954">Tennessee @ Louisville</a>
+    <span>Fri 11/27 · 9:00 PM ET</span></div><div class="tb-se-head"><div>Selection</div><div>Odds</div></div>
+    <div class="tb-market-wrap"><div><div>Moneyline</div></div><div><div>Spread</div></div>
+    <div><div>Total</div></div></div></div>'''
+    now = pd.Timestamp("2026-11-28T00:04:27Z")
+    publication = PublicationCoverage(tmp_path, now)
+    board = inventory_html(html, "ncaab", now)
+    assert set(board.dk_start_iso) == {"2026-11-28T02:00:00+00:00"}
+    assert set(board.market_display) == {"MONEYLINE", "SPREAD", "TOTAL"}
+    for market in ("SPREAD", "TOTAL"):
+        publication.store.update([dict(sport="ncaab", game_id="35095954", market_display=market,
+                                       dk_start_iso="2026-11-27T17:00:00Z")], publication.run_id, "CAPTURED")
+    publication.store.update(board.to_dict("records"), publication.run_id, "DISCOVERED")
+    publication.gate_ready = keys(board)
+    path = tmp_path / "anomaly_board.csv"
+    board.to_csv(path, index=False)
+    result = publication.publish(board, path, filter_publication_eligible_markets)
+    assert result["publication_conflicts"] == 0
+    assert result["sports"]["ALL"]["published"] == 3
+
+
+def test_football_source_absence_needs_two_complete_inventory_runs(tmp_path):
+    publication = PublicationCoverage(tmp_path, NOW)
+    key = ("ncaaf", "123", "TOTAL")
+    market = dict(zip(("sport", "game_id", "market_display"), key)) | {
+        "dk_start_iso": KICK, "identity_verified": True, "last_discovered_at": "2026-09-05T17:30:00Z",
+    }
+    publication.store.update([market], publication.run_id, "DISCOVERED")
+    publication.last_captures[key] = "2026-09-05T17:35:00Z"
+    publication.reasons[key] = "STALE_CAPTURE"
+    path = tmp_path / "anomaly_board.csv"
+    path.write_text("sport,game_id,market_display\n")
+    earlier = publication.store.begin("SCRAPE", "ncaaf", "2026-09-05T17:42:00Z")
+    recent = publication.store.begin("SCRAPE", "ncaaf", "2026-09-05T17:52:00Z")
+    with publication.store.connect() as db:
+        db.executemany("UPDATE runs SET state=?, finished_at=?, detail=? WHERE run_id=?", (
+            ("COMPLETE", "2026-09-05T17:44:00Z", "market_inventory_v2", earlier),
+            ("PAGINATION_INCOMPLETE", "2026-09-05T17:54:00Z", "", recent),
+        ))
+    def exclusions():
+        report = publication.publish(pd.DataFrame(), path, filter_publication_eligible_markets)
+        return report["sports"]["ncaaf"]["excluded_by_reason"]
+
+    assert exclusions() == {"STALE_CAPTURE": 1}
+    with publication.store.connect() as db:
+        db.execute("UPDATE runs SET state='COMPLETE', detail='market_inventory_v2' WHERE run_id=?", (recent,))
+    assert exclusions() == {"SOURCE_MARKET_NOT_LISTED": 1}
+    row = publication.store.inventory()[0]
+    assert not row["published"] and set(row["source_absence_runs"].split(",")) == {earlier, recent}
+    publication.store.update([market | {"last_discovered_at": "2026-09-05T17:53:00Z"}], recent, "DISCOVERED")
+    assert exclusions() == {"STALE_CAPTURE": 1}
+
+
 def test_unparsed_raw_headers_and_interrupted_scrapes_survive(tmp_path):
     scrape = ScrapeCoverage(tmp_path, "ncaaf")
     scrape.page(1, "https://example.test/dk", header())

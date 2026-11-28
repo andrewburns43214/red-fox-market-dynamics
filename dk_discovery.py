@@ -2,7 +2,10 @@
 import re
 import pandas as pd
 from bs4 import BeautifulSoup
+from dk_headless import parse_dk_start_text_to_utc_iso
+
 HEADER_MARKETS = {"RUN LINE": "SPREAD", "PUCK LINE": "SPREAD"}
+SUPPORTED_MARKETS = {"SPREAD", "MONEYLINE", "TOTAL"}
 SPORT_LABELS = {
     "mlb": "mlb", "nfl": "nfl", "nfl preseason": "nfl",
     "national football league": "nfl", "nba": "nba", "nhl": "nhl",
@@ -52,24 +55,19 @@ def inventory_html(html, sport, observed_at, source=""):
         match = re.search(r"/event/(\d+)|eventId=(\d+)", href)
         gid = next((x for x in match.groups() if x), "") if match else ""
         game = anchor.get_text(" ", strip=True) if anchor else ""
-        time_text = " ".join(x.get_text(" ", strip=True) for x in section.select(".tb-se-title span"))
-        m = re.search(r"(\d{1,2})/(\d{1,2}),\s*(\d{1,2}):(\d{2})\s*(AM|PM)", time_text, re.I)
-        kickoff = ""
-        if m:
-            month, day, hour, minute = map(int, m.groups()[:4])
-            hour = hour % 12 + (12 if m.group(5).upper() == "PM" else 0)
-            year = now.year + int(now.month == 12 and month == 1)
-            try:
-                kickoff = pd.Timestamp(year=year, month=month, day=day, hour=hour, minute=minute,
-                                       tz="America/New_York").tz_convert("UTC").isoformat()
-            except ValueError:
-                pass
-        headers = section.select(".tb-se-head")
+        kickoff = next((parsed for span in section.select(".tb-se-title span")
+                        if (parsed := parse_dk_start_text_to_utc_iso(span.get_text(" ", strip=True), now))), "")
+        kickoff = pd.Timestamp(kickoff).isoformat() if kickoff else ""
+        # Current pages use a shared Selection/Odds/Handle/Bets header and
+        # give each actual market its own heading below it.
+        headers = section.select(".tb-market-wrap > div > div:first-child")
+        if not headers:
+            headers = [header.find("div") or header for header in section.select(".tb-se-head")]
         names = []
         for header in headers:
-            first = header.find("div")
-            name = (first or header).get_text(" ", strip=True).upper()
-            names.append(HEADER_MARKETS.get(name, name))
+            name = header.get_text(" ", strip=True).upper()
+            market = HEADER_MARKETS.get(name, name)
+            names.append(market if market in SUPPORTED_MARKETS else "UNKNOWN")
         for market in dict.fromkeys(names or ["UNKNOWN"]):
             out.append(dict(sport=sport, game_id=gid or f"UNKNOWN:{source}:{index}", game=game,
                             market_display=market, dk_start_iso=kickoff, source=source,
