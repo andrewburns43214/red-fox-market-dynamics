@@ -235,7 +235,7 @@ def cfb_profile_context(state, fixtures, now, guard, network):
     return {"cfb_elo": {**source_info(cache, covered), "at": as_of}}
 
 
-def retrosheet_year(raw, year):
+def retrosheet_year(raw, year, *, include_history=False):
     with ZipFile(io.BytesIO(raw)) as archive:
         member = next((name for name in archive.namelist() if name.lower() == f"gl{year}.txt"), "")
         if not member or archive.getinfo(member).file_size > 6_000_000:
@@ -243,7 +243,7 @@ def retrosheet_year(raw, year):
         body = archive.read(member)
     games = list(csv.reader(io.StringIO(body.decode("latin-1"))))
     teams = defaultdict(lambda: Counter())
-    seen = set()
+    seen, history = set(), []
     for row in games:
         if len(row) < 12 or row[3] not in MLB_CODES or row[6] not in MLB_CODES or not row[0].startswith(str(year)):
             raise ValueError("unexpected Retrosheet row")
@@ -252,6 +252,14 @@ def retrosheet_year(raw, year):
         if identity in seen or min(scores) < 0:
             raise ValueError("duplicate or invalid Retrosheet result")
         seen.add(identity)
+        if include_history:
+            stamp = datetime.strptime(row[0], "%Y%m%d").date().isoformat()
+            names = [MLB_CODES[row[3]], MLB_CODES[row[6]]]
+            history.append({
+                "uid": "retrosheet-" + "-".join(identity), "names": names,
+                "keys": [side_key(name, "mlb", "MONEYLINE") for name in names],
+                "date": stamp, "scores": list(scores), "venue": "home",
+            })
         for i, code in enumerate((row[3], row[6])):
             tally = teams[code]
             win = scores[i] > scores[1-i]
@@ -262,17 +270,29 @@ def retrosheet_year(raw, year):
                           ("home" if i else "away") + "_losses": int(loss)})
     if len(seen) != 2430 or len(teams) != 30 or any(team["games"] != 162 for team in teams.values()):
         raise ValueError("Retrosheet regular season is incomplete")
-    return {side_key(MLB_CODES[code],"mlb","MONEYLINE"): dict(tally) for code,tally in teams.items()}
+    totals = {side_key(MLB_CODES[code],"mlb","MONEYLINE"): dict(tally) for code,tally in teams.items()}
+    return {"teams": totals, "history": history} if include_history else totals
 
 
-def baseball_profile_context(state, now, guard, network):
+def baseball_profile_context(state, now, guard, network, *, market_history=None):
     year = datetime.fromisoformat(now).year
     candidates = [year,year-1] if datetime.fromisoformat(now).month >= 10 else [year-1]
     for value in candidates:
-        snapshot = saved_source(state / f"retrosheet-{value}.json", RETRO + f"gl{value}.zip",
-                                lambda raw: retrosheet_year(raw,value), guard, network, hours=168)
+        snapshot = saved_source(state / f"retrosheet-games-{value}.json", RETRO + f"gl{value}.zip",
+                                lambda raw: retrosheet_year(raw, value, include_history=True), guard, network, hours=168)
         if snapshot.get("data"):
-            return {"baseball": {"season": value, "teams": snapshot["data"], **source_info(snapshot,len(snapshot["data"]))}}
+            data = snapshot["data"]
+            if market_history is not None:
+                market_history.extend(data["history"])
+            return {"baseball": {"season": value, "teams": data["teams"], **source_info(snapshot, len(data["teams"]))}}
+        # Keep the already published season totals while the richer cache loads.
+        previous = state / f"retrosheet-{value}.json"
+        try:
+            cached = json.loads(previous.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            cached = {}
+        if cached.get("data"):
+            return {"baseball": {"season": value, "teams": cached["data"], **source_info(cached, len(cached["data"]))}}
     return {"baseball": {"error": "no_complete_season"}}
 
 

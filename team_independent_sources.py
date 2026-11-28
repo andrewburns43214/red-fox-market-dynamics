@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from history_comparisons import side_key
 from history_store import atomic_text, packed, utc
+from team_market_history import american_price, flat_units, match_key, quote_number, reference_quotes
 
 
 KEY_DIRECTORY = Path("/etc/redfox-team-intelligence/credentials")
@@ -368,26 +369,49 @@ def closing_ats(scores, home_line, source, *, home_favorite_positive=False):
             for grade, handicap in zip(grades, (-line, line))]
 
 
-def college_closes(payload, year):
+def college_closes(payload, year, sport="ncaaf"):
     if not isinstance(payload, list) or not payload:
         raise ValueError("empty closing lines response")
     games, conflicts = {}, set()
+    preferred = {"draftkings": "DraftKings", "fanduel": "FanDuel", "betmgm": "BetMGM",
+                 "caesars": "Caesars", "bovada": "Bovada"}
+    markets = ("spread", "overUnder", "awayMoneyline", "homeMoneyline")
+    provider = "CollegeFootballData" if sport == "ncaaf" else "CollegeBasketballData"
     for row in payload:
-        if row.get("season") != year:
+        if row.get("season") != year + (sport == "ncaab"):
             continue
         scores = [row.get("awayScore"), row.get("homeScore")]
         if any(type(score) is not int or not 0 <= score <= 400 for score in scores):
             continue
-        quotes = [quote for quote in row.get("lines", []) if quote.get("provider") == "DraftKings"]
-        if len(quotes) != 1:
+        books = defaultdict(list)
+        for quote in row.get("lines", []):
+            books[(quote.get("provider") or "").replace(" ", "").casefold()].append(quote)
+        full, book, label = 0, {}, ""
+        for key, name in preferred.items():
+            quotes = books.get(key, [])
+            if len(quotes) != 1:
+                continue
+            available = sum(quotes[0].get(market) is not None for market in markets)
+            if available > full:
+                full, book, label = available, quotes[0], name
+        if not full:
             continue
-        ats = closing_ats(scores, quotes[0].get("spread"), "DraftKings via CollegeFootballData")
-        if not ats:
-            continue
-        ident = provider_id(row["id"])
+        source = label + " via " + provider
+        # Overview retains its established, single-book ATS fallback.
+        dk = books.get("draftkings", [])
+        ats = closing_ats(scores, dk[0].get("spread"), "DraftKings via " + provider) if len(dk) == 1 else None
+        ident = provider_id(row["id" if sport == "ncaaf" else "gameId"])
         game = {"start": utc_start(row["startDate"]),
                 "ids": [provider_id(row[field]) for field in ("awayTeamId", "homeTeamId")],
-                "scores": scores, "ats": ats}
+                "scores": scores, "ats": ats or [None, None]}
+        if row.get("awayTeam") and row.get("homeTeam"):
+            game["names"] = [row["awayTeam"], row["homeTeam"]]
+            game["keys"] = [canonical(name, sport) for name in game["names"]]
+        # The college feeds provide the spread/total numbers and moneyline prices.
+        home, opened = quote_number(book.get("spread")), quote_number(book.get("spreadOpen"))
+        game["lines"] = {"spread": [(None if opened is None else -opened, None if home is None else -home), (opened, home)],
+                         "total": [(book.get("overUnderOpen"), book.get("overUnder"))] * 2,
+                         "money": [book.get("awayMoneyline"), book.get("homeMoneyline")], "source": source}
         if ident in games and games[ident] != game:
             conflicts.add(ident)
         games[ident] = game
@@ -482,7 +506,7 @@ def summarize(rows, fixtures, now, status, provider, closing_lines=None):
                     item = {"opponent": row["names"][1-side], "opponent_key": opponent,
                             "at": str(game_date), "scores": scores, "venue": venue}
                     closing = (closing_lines or {}).get(row["id"])
-                    if closing and all(closing[k] == row[k] for k in ("start", "ids", "scores")):
+                    if closing and closing["ats"][side] and all(closing[k] == row[k] for k in ("start", "ids", "scores")):
                         item["ats"] = closing["ats"][side]
                     recent.append(item)
             sites = {}
@@ -627,7 +651,8 @@ def career_recent(payload):
                 or row.get("status") not in {"win", "loss", "draw", "no_contest"}):
             continue
         when = date.fromisoformat(row["date"][:10])
-        opponent = (row.get("opponent") or {}).get("name") or row.get("opponent_name")
+        opponent_data = row.get("opponent")
+        opponent = (opponent_data.get("name") if isinstance(opponent_data, dict) else opponent_data) or row.get("opponent_name")
         if not opponent:
             continue
         key = str(when), canonical(opponent, "ufc")
@@ -637,11 +662,14 @@ def career_recent(payload):
             method = row.get("method")
             if isinstance(method, str) and 0 < len(method.strip()) <= 100:
                 item["method"] = method.strip()
+            fight = row.get("fight_id") or row.get("id")
+            if fight and IDENTIFIER.fullmatch(str(fight)):
+                item["fight_id"] = str(fight)
             result.append(item)
-    return sorted(result, key=lambda item: item["date"], reverse=True)[:8]
+    return sorted(result, key=lambda item: item["date"], reverse=True)
 
 
-def ufc_context(feed, state, fixtures):
+def ufc_context(feed, state, fixtures, market_history=None):
     url = PROVIDERS["ufc"][1]
     calendar = cached(feed, state, "ufc-calendar", url+"/events", {"org":"ufc","status":"upcoming","limit":12},
                       event_cards, 48)
@@ -667,8 +695,11 @@ def ufc_context(feed, state, fixtures):
             targets[fixture["start"], tuple(fixture["keys"])] = fixture, matches[0]
     covered = 0
     matched_ids = dict.fromkeys(ident for _, matchup in targets.values() for ident in matchup.values())
-    histories = {ident: cached(feed, state, f"ufc-history-{ident}", url+f"/fighters/{ident}/history", {},
+    histories = {ident: cached(feed, state, f"ufc-career-{ident}", url+f"/fighters/{ident}/history", {},
                                career_recent, 24*30, fighter=True) for ident in matched_ids}
+    for ident, history in histories.items():
+        if not history.get("data"):
+            histories[ident] = load(state / f"ufc-history-{ident}.json")
     profiles = {}
     for ident, history in histories.items():
         profile = load(state / f"ufc-profile-{ident}.json")
@@ -676,6 +707,7 @@ def ufc_context(feed, state, fixtures):
             profile = cached(feed, state, f"ufc-profile-{ident}", url+f"/fighters/{ident}", {},
                              lambda payload: career_profile(payload, ident), 24*30, fighter=True)
         profiles[ident] = profile
+    recorded, ambiguous = {}, set()
     for fixture, matchup in targets.values():
         fighters = {}
         for key, ident in matchup.items():
@@ -687,35 +719,267 @@ def ufc_context(feed, state, fixtures):
                 continue
             if current or recent:
                 fighters[key] = {**current, "recent": recent[:5]}
+            if market_history is not None:
+                for row in recent:
+                    other = canonical(row["opponent"], "ufc")
+                    if not other or other == key:
+                        continue
+                    bout = row["date"], tuple(sorted((key, other)))
+                    winner = {"win": key, "loss": other}.get(row["result"])
+                    game = {"uid": "ufc-source-" + "-".join((bout[0], *bout[1])), "keys": [key, other],
+                            "names": [fixture["names"][fixture["keys"].index(key)], row["opponent"]],
+                            "date": row["date"], "winner": winner, "result": row["result"], "method": row.get("method")}
+                    if bout in recorded and (recorded[bout]["winner"] != winner or
+                            (winner is None and recorded[bout]["result"] != game["result"])):
+                        ambiguous.add(bout)
+                    recorded.setdefault(bout, game)
         if fighters:
             fixture.setdefault("sporting", {})["ufc_independent"] = fighters
             covered += 1
+    if market_history is not None:
+        market_history.extend(game for bout, game in recorded.items() if bout not in ambiguous)
     return {"at": calendar.get("at"), "coverage": covered,
             "error": calendar.get("error", "" if feed.key else "not configured")}
 
 
-def independent_context(state, fixtures, sport, now, guard, network, key_directory=KEY_DIRECTORY):
+def market_schedule(state, sport, now, closing):
+    """Project completed games from every season already in the schedule cache."""
+    patterns = {"ncaaf": ("cfbd-closing-spreads-*.json", "cfbd-market-lines-*.json"),
+                "ncaab": ("cbb-market-lines-*.json",)}
+    cached_quotes = {ident: row for pattern in patterns.get(sport, ()) for path in state.glob(pattern)
+                     for ident, row in load(path).get("data", {}).items()}
+    closing = cached_quotes | closing
+    rows = {}
+    for path in state.glob(f"games-{sport}-*.json"):
+        for shard in load(path).values():
+            for ident, row in shard.get("rows", {}).items():
+                if row.get("scores") is not None and row["start"] < now:
+                    rows[ident] = row
+    identities, aliases = defaultdict(set), defaultdict(set)
+    for row in rows.values():
+        for key, ident in zip(row["keys"], row["ids"]):
+            identities[key].add(ident)
+            aliases[ident].add(key)
+    games = []
+    for ident, row in rows.items():
+        if any(len(identities[key]) != 1 or len(aliases[p]) != 1 for key, p in zip(row["keys"], row["ids"])):
+            continue
+        game = {k: row[k] for k in ("keys", "names", "start", "scores", "venue")}
+        game["uid"] = f"{sport}-source-{ident}"
+        reference = closing.get(ident, {})
+        if reference.get("lines") and all(reference[k] == row[k] for k in ("start", "ids", "scores")):
+            game["quotes"] = reference_quotes(sport, game, **reference["lines"])
+        elif reference.get("ats") and all(reference[k] == row[k] for k in ("start", "ids", "scores")):
+            game["quotes"] = {"SPREAD": {key: quote for key, quote in zip(game["keys"], reference["ats"]) if quote}}
+        if sport == "nhl":
+            game["date"] = datetime.fromisoformat(row["start"]).astimezone(ET).date().isoformat()
+        game["provider_id"] = ident
+        games.append(game)
+    for ident, reference in closing.items():
+        if ident in rows or not reference.get("keys") or not reference.get("lines") or reference["start"] >= now:
+            continue
+        game = {field: reference[field] for field in ("keys", "names", "scores", "start")}
+        game["uid"] = f"{sport}-reference-{ident}"
+        game["reference_only"] = True
+        game["quotes"] = reference_quotes(sport, game, **reference["lines"])
+        games.append(game)
+    return games
+
+
+def college_market_lines(state, sport, year, feed):
+    if sport == "ncaaf":
+        snapshot = cached(feed, state, f"cfbd-market-lines-{year}", "https://api.collegefootballdata.com/lines",
+                          {"year": year}, lambda payload: college_closes(payload, year), 24, optional=True)
+        return snapshot.get("data") or load(state / f"cfbd-closing-spreads-{year}.json").get("data", {})
+    if sport != "ncaab":
+        return {}
+    today = feed.now.astimezone(ET).date()
+    shards = [(start, end, load(state / f"cbb-market-lines-{year}-{start}.json"))
+              for start, end in windows(sport, year) if start <= today]
+    due = [(start, end) for start, end, snapshot in shards if snapshot.get("next", 0) <= feed.now.timestamp()]
+    combined = {key: row for _, _, snapshot in shards for key, row in snapshot.get("data", {}).items()}
+    if due:
+        start, end = max(due)
+        snapshot = cached(feed, state, f"cbb-market-lines-{year}-{start}", "https://api.collegebasketballdata.com/lines",
+                          {"season": year+1, "startDateRange": f"{start}T00:00:00Z",
+                           "endDateRange": f"{end+timedelta(days=1)}T00:00:00Z"},
+                          lambda payload: college_closes(payload, year, sport), 24 if end >= today else 24*14, optional=True)
+        combined.update(snapshot.get("data", {}))
+    return combined
+
+
+def puck_market_quotes(payload, game):
+    payload = payload.get("data", payload)
+    names = [NHL_NAMES.get(payload.get(field)) for field in ("away_team", "home_team")]
+    if (str(payload.get("game_id")) != game["provider_id"] or payload.get("game_date") != game["date"]
+            or not all(names) or [canonical(name, "nhl") for name in names] != game["keys"]):
+        raise ValueError("unverified hockey odds identity")
+    points = defaultdict(list)
+    for row in payload.get("odds", []):
+        if row.get("bookmaker") == "draftkings":
+            points[row.get("snapshotType")].append(row)
+    if len(points["closing"]) != 1:
+        return {}
+    observed = points["closing"][0]
+    opened = points["opening"][0] if len(points["opening"]) == 1 else {}
+    sides = ("Away", "Home")
+    return reference_quotes(
+        "nhl", game, "DraftKings via PuckAPI",
+        spread=tuple((opened.get("spread"+side), observed.get("spread"+side)) for side in sides),
+        total=((opened.get("total"), observed.get("total")),)*2,
+        money=tuple(observed.get("ml"+side) for side in sides),
+        open_money=tuple(opened.get("ml"+side) for side in sides),
+        spread_price=tuple(observed.get("spread"+side+"Odds") for side in sides),
+        open_spread_price=tuple(opened.get("spread"+side+"Odds") for side in sides),
+        total_price=(observed.get("totalOverOdds"), observed.get("totalUnderOdds")),
+        open_total_price=(opened.get("totalOverOdds"), opened.get("totalUnderOdds")),
+    )
+
+
+def puck_backfill(state, feed, games, archived_markets):
+    # At most one 10-credit lookup every two days. The ordinary schedule
+    # continues to share the existing daily and monthly provider limits.
+    caches = {path.stem.removeprefix("nhl-market-"): path for path in state.glob("nhl-market-*.json")}
+    if max((path.stat().st_mtime for path in caches.values()), default=0) <= feed.now.timestamp()-48*3600:
+        candidates = [g for g in games if g["provider_id"] not in caches and len(archived_markets.get(match_key(g), ())) < 3]
+        if candidates:
+            game = max(candidates, key=lambda g: g["start"])
+            ident = game["provider_id"]
+            snapshot = cached(feed, state, f"nhl-market-{ident}", "https://mcp.puckapi.com/v1/get_odds",
+                              {"game_id": ident, "bookmaker": "draftkings"},
+                              lambda response: {"scores": game["scores"], "keys": game["keys"],
+                                                "date": game["date"], "quotes": puck_market_quotes(response, game)},
+                              24*30, cost=10, optional=True)
+            if snapshot.get("data", {}).get("quotes"):
+                game["quotes"] = snapshot["data"]["quotes"]
+    for game in games:
+        path = caches.get(game["provider_id"])
+        if path:
+            saved = load(path).get("data", {})
+            if saved.get("quotes") and all(saved[field] == game[field] for field in ("scores", "keys", "date")):
+                game["quotes"] = saved["quotes"]
+
+
+def completed_ufc_cards(payload):
+    return [{"id": provider_id(row["id"]), "start": utc_start(row["starts_at"])}
+            for row in payload["data"] if row.get("status") == "completed" and row.get("org") == "ufc"]
+
+
+def ufc_market_card(payload, event):
+    card = payload["data"]
+    if (provider_id(card["id"]) != event["id"] or card.get("org") != "ufc" or card.get("status") != "completed"
+            or utc_start(card["starts_at"]) != event["start"]):
+        raise ValueError("unverified UFC card identity")
+    date_of_card = datetime.fromisoformat(event["start"]).astimezone(ET).date().isoformat()
+    games = {}
+    for bout in card["card"]:
+        if bout.get("status") not in {"completed", "no_contest"} or bout.get("sport") != "mma":
+            continue
+        fighters = [bout.get(k) or {} for k in ("fighter_a", "fighter_b")]
+        if not all(fighter.get("name") and fighter.get("id") for fighter in fighters):
+            continue
+        names = [fighter["name"] for fighter in fighters]
+        keys = [canonical(name, "ufc") for name in names]
+        if len(set(keys)) != 2:
+            continue
+        result = bout.get("result") or {}
+        result = result if isinstance(result, dict) else {}
+        winner_id = str(bout.get("winner_fighter_id") or result.get("winner_fighter_id") or "")
+        winner = next((key for key, f in zip(keys, fighters) if str(f["id"]) == winner_id), None)
+        method = bout.get("method") or result.get("method")
+        finish = "no_contest" if bout["status"] == "no_contest" else "draw" if "draw" in str(method).lower() else None
+        if not winner and not finish:
+            continue
+        ident = provider_id(bout.get("id") or bout.get("fight_id"))
+        if ident in games:
+            raise ValueError("duplicate completed UFC bout")
+        games[ident] = {"uid": f"ufc-card-{ident}", "keys": keys, "names": names, "date": date_of_card,
+                        "winner": winner, "method": method, "result": finish}
+    return games
+
+
+def ufc_market_prices(payload, games):
+    quotes = {}
+    for bout in payload["data"]["fights"]:
+        ident = str(bout.get("fight_id"))
+        game = games.get(ident)
+        if ident in quotes or not game or bout.get("status") != "completed":
+            continue
+        corners = [canonical((bout.get(side) or {}).get("name") or "", "ufc") for side in ("fighter_a", "fighter_b")]
+        if corners != game["keys"]:
+            continue
+        closing, opening = bout.get("closing") or {}, bout.get("opening") or {}
+        sides = {}
+        for key, corner in zip(corners, ("a", "b")):
+            price = american_price((closing.get(corner) or {}).get("american"))
+            if price is None:
+                continue
+            result = ("win" if game["winner"] == key else "loss") if game.get("winner") else None
+            sides[key] = {"price": price, "open_price": american_price((opening.get(corner) or {}).get("american")),
+                          "grade": result, "units": flat_units(result, price), "source": "UFCalendar consensus"}
+        if sides:
+            quotes[ident] = {"MONEYLINE": sides}
+    return quotes
+
+
+def ufc_completed_backfill(state, feed):
+    base = PROVIDERS["ufc"][1]
+    caches = list(state.glob("ufc-market-card-*.json"))
+    if max((p.stat().st_mtime for p in caches), default=0) <= feed.now.timestamp()-96*3600 and feed.remaining:
+        catalog = cached(feed, state, "ufc-market-completed", base+"/events",
+                         {"org": "ufc", "status": "completed", "limit": 50},
+                         completed_ufc_cards, 24*7, optional=True)
+        candidates = [card for card in catalog.get("data", [])
+                      if card["start"] < utc(feed.now-timedelta(days=3))
+                      and not (state / f'ufc-market-card-{card["id"]}.json').exists()]
+        if candidates:
+            card = max(candidates, key=lambda event: event["start"])
+            ident = card["id"]
+            path = state / f"ufc-market-card-{ident}.json"
+            summary = cached(feed, state, path.stem, base+f"/events/{ident}", {},
+                             lambda response: ufc_market_card(response, card), 24*30, optional=True)
+            if summary.get("data"):
+                cached(feed, state, f"ufc-market-odds-{ident}", base+f"/events/{ident}/odds", {},
+                       lambda response: ufc_market_prices(response, summary["data"]), 24*30, optional=True)
+                caches.append(path)
+    games = []
+    for path in caches:
+        ident = path.stem.removeprefix("ufc-market-card-")
+        quotes = load(state / f"ufc-market-odds-{ident}.json").get("data", {})
+        for fight, game in load(path).get("data", {}).items():
+            if fight in quotes:
+                game["quotes"] = quotes[fight]
+            games.append(game)
+    return games
+
+
+def independent_context(state, fixtures, sport, now, guard, network, key_directory=KEY_DIRECTORY, *,
+                        market_history=None, archived_markets=None):
     if sport not in PROVIDERS:
         return {}
     timestamp = datetime.fromisoformat(now)
     upcoming = [r for r in fixtures.values() if r["start"] > now and r.get("markets")]
     provider = PROVIDERS[sport][0]
     feed = Feed(state, provider, timestamp, guard, network, key_directory)
-    if not upcoming:
-        return {provider: {"coverage": 0, "error": "no upcoming market matchups"}}
-    if not feed.key:
-        return {provider: {"coverage": 0, "error": "not configured"}}
+    if not upcoming or not feed.key:
+        if market_history is not None:
+            completed = ufc_completed_backfill(state, feed) if sport == "ufc" else market_schedule(state, sport, now, {})
+            if sport == "nhl":
+                puck_backfill(state, feed, completed, archived_markets or {})
+            market_history.extend(completed)
+        error = "not configured" if upcoming else "no upcoming market matchups"
+        return {provider: {"coverage": 0, "error": error}}
     if sport == "ufc":
-        return {provider: ufc_context(feed, state, upcoming)}
+        status = ufc_context(feed, state, upcoming, market_history)
+        if market_history is not None:
+            market_history[:0] = ufc_completed_backfill(state, feed)
+        return {provider: status}
     upcoming.sort(key=lambda fixture: fixture["start"])
     year = upcoming[0]["season"]
     upcoming = [r for r in upcoming if r["season"] == year]
     rows, status = schedule(feed, state, sport, year)
-    closing = {}
-    if sport == "ncaaf" and rows:
-        closing = cached(feed, state, f"cfbd-closing-spreads-{year}", "https://api.collegefootballdata.com/lines",
-                         {"year": year}, lambda payload: college_closes(payload, year), 24, optional=True)
-    covered = summarize(rows, upcoming, now, status, provider, closing.get("data"))
+    closing = college_market_lines(state, sport, year, feed) if rows else {}
+    covered = summarize(rows, upcoming, now, status, provider, closing if sport == "ncaaf" else None)
     if sport == "nhl":
         latest = cached(feed, state, "nhl-standings", "https://mcp.puckapi.com/v1/get_standings",
                         {"league": "nhl"}, nhl_standings, 16, cost=2)
@@ -728,4 +992,9 @@ def independent_context(state, fixtures, sport, now, guard, network, key_directo
                     independent = fixture["sporting"]["independent"]
                     independent["standings"] = {k:table[k] for k in fixture["keys"]}
                     independent["standings_at"] = latest["at"]
+    if market_history is not None:
+        completed = market_schedule(state, sport, now, closing)
+        if sport == "nhl":
+            puck_backfill(state, feed, completed, archived_markets or {})
+        market_history.extend(completed)
     return {provider: {**status, "fixture_coverage": covered}}

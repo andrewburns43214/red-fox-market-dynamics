@@ -75,6 +75,8 @@
       if (tiAction === "tab") state.tab = tiValue;
       if (tiAction === "market") state.market = tiValue;
       if (tiAction === "total") state.total = tiValue;
+      if (tiAction === "history-more") state.historyLimit = (state.historyLimit || 24) + 24;
+      if (["team","tab","market","total"].includes(tiAction)) state.historyLimit = 24;
       render(tiAction, tiValue);
       if (tiAction === "team" || tiAction === "tab") dialog.querySelector(".ti-body").scrollTop = 0;
     });
@@ -687,43 +689,90 @@
     return html + '</section>';
   }
 
+  function historyGames(team) {
+    const {snapshot,fixture} = state, extra = snapshot.market_history?.games || [];
+    const cutoff = Math.min(Date.parse(fixture.start),Date.parse(snapshot.generated));
+    const dayBefore = dateKey.format(new Date(cutoff));
+    return [...(snapshot.teams[team]||[]).map(id=>snapshot.games[id]),
+      ...extra.filter(game=>game.keys.includes(team))].filter(game=>
+        game.date ? game.date<dayBefore : Date.parse(game.start)<cutoff
+      ).sort((a,b)=>(b.date||b.start).localeCompare(a.date||a.start));
+  }
+
+  function historyQuote(game, market, subject) {
+    const archived = game.quotes?.[market]?.[subject] ?? game.history_quotes?.[market]?.[subject];
+    const reference = state.snapshot.market_history?.quotes?.[game.uid]?.[market]?.[subject];
+    if (archived?.grade && Number.isFinite(reference?.units) && !Number.isFinite(archived.units)
+        && (market==="MONEYLINE" || archived.line===reference.line)) return reference;
+    if (archived?.grade || !reference) return archived;
+    return reference.grade || !archived ? reference : archived;
+  }
+
+  function historyGrade(game, market, subject, quote) {
+    if (quote?.grade) return quote.grade;
+    if (market !== "MONEYLINE" || game.history_moneyline_ungraded) return "";
+    if (game.winner) return game.winner===subject?"win":"loss";
+    const finish = result(game,subject);
+    return ({Win:"win",Loss:"loss",Tie:state.snapshot.sport==="nfl"?"push":""})[finish] || "";
+  }
+
   function historical(games, team) {
     const {market,snapshot,total} = state;
     const subject = market === "TOTAL" ? total : team;
-    const sample = games.filter(game=>game.quotes?.[market]?.[subject]).slice(0,12);
+    const entries = historyGames(team).map(game=>{
+      const quote = historyQuote(game,market,subject);
+      return {game,quote,grade:historyGrade(game,market,subject,quote)};
+    });
     const counts = {win:0,loss:0,push:0};
-    let net = 0;
-    for (const game of sample) {
-      const quote = game.quotes[market][subject];
-      counts[quote.grade]++;
-      net += quote.units;
+    let net = 0, graded = 0, priced = 0;
+    for (const {quote,grade} of entries) {
+      if (!Object.hasOwn(counts,grade)) continue;
+      counts[grade]++;
+      graded++;
+      if (Number.isFinite(quote?.units)) {
+        net += quote.units;
+        priced++;
+      }
     }
     const tone = net>0?"positive":net<0?"negative":"";
-    const performance = sample.length ? facts([
-      [sample.length,"Graded games"],[[counts.win,counts.loss,counts.push].join("–"),"Market record"],
-      [signed(net,2)+"u","Net units",tone],[signed(100*net/sample.length,1)+"%","ROI",tone]
-    ]) + (sample.length<=5?note("Small sample · Up to 12 recent verified pregame quotes."):"")
-      : note("No graded games at a verified pregame price.");
-    const rows = sample.map(game => {
-      const quote = game.quotes[market][subject];
+    const performance = graded ? facts([
+      [graded,"Graded games"],[[counts.win,counts.loss,counts.push].join("–"),"Market record"],
+      [priced?signed(net,2)+"u":"—","Net units",tone],
+      [priced?signed(100*net/priced,1)+"%":"—",priced!==graded?"ROI · "+priced+" priced":"ROI",tone]
+    ]) : note("No graded games for this market.");
+    const limit = state.historyLimit || 24;
+    const rows = entries.slice(0,limit).map(({game,quote,grade})=>{
       const primary = market==="TOTAL" ? (total==="over"?"Over":"Under") : game.names[game.keys.indexOf(team)];
       const opponent = game.names[1-game.keys.indexOf(team)];
       const score = market==="TOTAL" && game.scores
         ? game.names.map((name,i)=>name+" "+game.scores[i]).join(" · ") : scoreAgainst(game,team);
-      const move = movementText(market,quote,primary,game.names);
+      const move = quote ? movementText(market,quote,primary,game.names) : "";
+      const showQuote = q => market==="MONEYLINE" ? Number.isFinite(q?.price) : Number.isFinite(q?.line)||Number.isFinite(q?.price);
+      const initial = {line:quote?.open_line,price:quote?.open_price};
+      const line = !showQuote(quote)&&showQuote(initial) ? "Open "+quoteText(market,initial.line,initial.price)
+        : [initial,quote].filter(showQuote).map(q=>quoteText(market,q.line,q.price)).join(" → ");
+      const splits = quote && (Number.isFinite(quote.tickets)||Number.isFinite(quote.money))
+        ? pct(quote.tickets)+" bets · "+pct(quote.money)+" money" : "";
+      const gameDate = game.date ? when(game.date+"T12:00:00Z") : when(game.start);
+      const venue = market==="TOTAL"?primary:game.venue==="neutral"?"Neutral site":
+        game.venue==="home"?(game.keys[0]===team?"Away":"Home"):"";
+      const finish = grade ? grade==="void"?"Void":marketResult(market,grade,total) :
+        ({draw:"Draw",no_contest:"No contest"})[game.result] || (market==="MONEYLINE"?"":"Ungraded");
       return '<article class="ti-game-evidence"><div class="ti-history-top"><div><strong>'
-        +markup(market==="TOTAL"?game.names.join(" @ "):opponent)+'</strong><small>'+markup(when(game.start)+" · "+(market==="TOTAL"?primary:
-          game.venue==="neutral"?"Neutral site":game.venue==="home"?(game.keys[0]===team?"Away":"Home"):"Verified pregame"))+'</small></div>'
-        +badge(marketResult(market,quote.grade,total),quote.grade)+'</div>'
-        +'<div class="ti-history-numbers"><div><strong>'+markup(quoteText(market,quote.open_line,quote.open_price)
-          +" → "+quoteText(market,quote.line,quote.price))+'</strong>'+(move?'<small>'+markup(move)+'</small>':"")
-        +'</div><div><strong>'+pct(quote.tickets)+' bets · '+pct(quote.money)+' money</strong>'
-        +(score?'<small>'+markup("Final "+score)+'</small>':"")+'</div></div>'
-        +observationDetails(game,market,primary,quote)+'</article>';
+        +markup(market==="TOTAL"?game.names.join(" @ "):opponent)+'</strong><small>'+markup([gameDate,venue].filter(Boolean).join(" · "))
+        +'</small></div>'+(finish?badge(finish,grade):"")+'</div>'
+        +'<div class="ti-history-numbers"><div>'+(line?'<strong title="'+markup(quote?.source || "Red Fox pregame quote")+'">'+markup(line)+'</strong>'
+          :'<small>'+markup(market==="MONEYLINE"?"Price unavailable":"Line unavailable")+'</small>')
+        +(move?'<small>'+markup(move)+'</small>':"")+'</div><div>'
+        +(splits?'<strong>'+markup(splits)+'</strong>':"")
+        +(score||game.method?'<small>'+markup(score?"Final "+score:game.method)+'</small>':"")+'</div></div>'
+        +((quote?.at || game.history_quotes?.[market]?.[subject]?.at)
+          ?observationDetails(game,market,primary,quote?.at?quote:game.history_quotes[market][subject]):"")+'</article>';
     }).join("");
     const official = officialHistory(games,market,team,total);
-    const gamesContent = rows ? (market!=="TOTAL"&&snapshot.sport!=="ufc"?note("Scores show the selected team first."):"")+rows
-      : note("Supporting games will appear when graded quotes are available.");
+    const more = entries.length>limit ? '<button type="button" class="ti-older-observations" data-ti-action="history-more" data-ti-value="more">Show more games</button>' : "";
+    const gamesContent = rows ? (market!=="TOTAL"&&snapshot.sport!=="ufc"?note("Scores show the selected team first."):"")+rows+more
+      : note("No completed games available.");
     return panel("Historical performance",marketControls(true)+performance)+panel("Historical games",gamesContent+official);
   }
 
@@ -817,10 +866,13 @@
         ?note("Strength of schedule counts each opponent once. Opponent records exclude games against the selected team and include only results available before this matchup. Ties count as half a win."):"")
       +(externalAts.size?note("ATS uses the Red Fox pregame quote where available. Closing-line fallbacks are labeled at the result and sourced from "+[...externalAts].join(", ")+"."):"")
       +(issues.length?'<p class="ti-note">Result checks</p><ul class="ti-source-list">'+[...new Set(issues)].map(issue=>'<li>'+markup(issue)+'</li>').join("")+'</ul>':"")
-      +note("Historical ROI uses one unit risked per graded game at its verified pregame checkpoint. The checkpoint may precede the closing quote.");
+      +note(tab==="markets" ? "Historical ROI uses one unit risked per graded game with a verified price."
+        : "Historical ROI uses one unit risked per graded game at its verified pregame checkpoint. The checkpoint may precede the closing quote.");
     const age = Date.now()-Date.parse(snapshot.generated);
     const stale = age > 4*3600000 || views.some(v=>v.independent && Date.now()-Date.parse(v.independent.at)>2*day);
-    const credit = views.some(v=>v.selectedBaseball || (tab==="stats" && v.baseball)) ? '<p class="ti-attribution">The information used here was obtained free of charge from and is copyrighted by '
+    const usesRetrosheet = tab==="markets" && snapshot.market_history?.games?.some(game=>
+      game.uid.startsWith("retrosheet-") && views.some(view=>game.keys.includes(view.key)));
+    const credit = usesRetrosheet || views.some(v=>v.selectedBaseball || (tab==="stats" && v.baseball)) ? '<p class="ti-attribution">The information used here was obtained free of charge from and is copyrighted by '
       +'<a href="https://www.retrosheet.org/gamelogs/">Retrosheet</a>. Interested parties may contact Retrosheet at www.retrosheet.org.</p>' : "";
     return '<footer class="ti-source">'+(stale?note("Last available snapshot · "+when(snapshot.generated,et)+" ET"):"")
       +credit+expansion("Sources and methodology",details)+'</footer>';

@@ -23,11 +23,13 @@ from history_public import outcome_signature
 from history_store import FREE_DISK_RESERVE, atomic_text, latest_provider_outcomes, packed, utc
 from team_aliases import _split_game
 from team_independent_sources import closing_ats, independent_context, updated_credentials
+from team_market_history import american_price, flat_units, match_key, merge_market_history, quote_number, reference_quotes, sportsbook_history
 from team_sport_context import baseball_profile_context, cfb_profile_context, nfl_profile_context, ufc_profile_context
 
 SPORTS = ("nfl", "ncaaf", "nba", "ncaab", "mlb", "nhl", "ufc")
 MARKETS = ("SPREAD", "MONEYLINE", "TOTAL")
 CLOSING_ATS_REVISION = 1
+MARKET_HISTORY_REVISION = 1
 NFL_URL = "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv"
 ET = ZoneInfo("America/New_York")
 TOKEN = re.compile(r"[A-Za-z0-9_.%+-]{1,90}\Z")
@@ -97,7 +99,7 @@ def number(value):
 def nfl_schedule(cache, seconds, permit_network):
     path = cache / "nflverse.json"
     stored = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-    current_schema = not stored.get("games") or ("codes" in stored["games"][0] and stored.get("spread_schema") == CLOSING_ATS_REVISION)
+    current_schema = not stored.get("games") or stored.get("market_history_schema") == MARKET_HISTORY_REVISION
     if not permit_network or (current_schema and (clock().timestamp() - stored.get("checked", 0)) < 10800):
         return stored
     try:
@@ -120,7 +122,7 @@ def nfl_schedule(cache, seconds, permit_network):
             if len(games) < 300:
                 raise ValueError("nflverse two-season result coverage is unexpectedly small")
             stored = dict(games=games, etag=response.headers.get("ETag"), source_at=utc(clock()),
-                          checked=clock().timestamp(), spread_schema=CLOSING_ATS_REVISION, error="")
+                          checked=clock().timestamp(), market_history_schema=MARKET_HISTORY_REVISION, error="")
     except (OSError, ValueError, EOFError) as error:
         if isinstance(error, HTTPError) and error.code == 304:
             stored["source_at"] = utc(clock())
@@ -152,12 +154,21 @@ def nfl_game(row):
     game_type = row.get("game_type")
     if game_type not in {"REG", "WC", "DIV", "CON", "SB"}:
         return None
-    return dict(uid=row["game_id"], provider=row["espn"], start=tip, names=names,
+    game = dict(uid=row["game_id"], provider=row["espn"], start=tip, names=names,
                 codes=[row.get("away_team"), row.get("home_team")], week=number(row.get("week")),
                 keys=[side_key(n, "nfl", "MONEYLINE") for n in names],
                 scores=score if None not in score else None, season=year, stage=game_type,
                 venue="neutral" if row.get("location") == "Neutral" else "home" if row.get("location") == "Home" else "",
                 source="nflverse", ats=ats)
+    if game["scores"] and str(row.get("espn") or "").isdigit():
+        spread, total = quote_number(row.get("spread_line")), quote_number(row.get("total_line"))
+        game["reference_quotes"] = reference_quotes(
+            "nfl", game, "nflverse", spread=((None, spread), (None, -spread)) if spread is not None else (),
+            total=((None, total),) * 2,
+            money=(row.get("away_moneyline"), row.get("home_moneyline")),
+            spread_price=(row.get("away_spread_odds"), row.get("home_spread_odds")),
+            total_price=(row.get("over_odds"), row.get("under_odds")))
+    return game
 
 
 def published_rows(root, sport):
@@ -309,12 +320,13 @@ def nfl_merge(archive, external, mappings, now):
     return merged, invalid
 
 
-def graded_quotes(db, sport, match, market, receipt):
+def graded_quotes(db, sport, match, market, receipt, *, history=False):
     event = match.get("vendor")
     if not event or not receipt:
         return {}
     market_start = match.get("market_start", match["start"])
     limit = min(match.get("actual") or market_start, market_start)
+    evidence_without_prices = {}
     for stamp, checkpoint, scheduled, raw in db.execute(
         f"""SELECT entry_at, decision_at, scheduled_at, evidence FROM comparison_windows
             WHERE sport=? AND market=? AND minutes IN ({",".join("?" for _ in WINDOWS)})
@@ -334,20 +346,23 @@ def graded_quotes(db, sport, match, market, receipt):
             continue
         prices = {}
         for q in sides:
-            price = q.get("price")
-            if price is None or abs(price) < 100:
+            price = american_price(q.get("price")) if history else q.get("price")
+            if not history and (price is None or abs(price) < 100):
                 continue
             result = grade(sport, market, q, *receipt)
-            if result not in {"win", "loss", "push"}:
+            if not history and not (result in {"win", "loss", "push"}):
                 continue
-            net = (100 / abs(price) if price < 0 else price / 100) if result == "win" else -1 if result == "loss" else 0
-            prices[q["side"]] = dict(at=stamp, checkpoint=checkpoint, grade=result, units=round(net, 6),
-                                    **{f: q.get(f) for f in ("line", "price", "open_line", "open_price", "tickets",
-                                                             "money", "line_toward", "price_toward_implied",
-                                                             "path_retrace", "path_direction_changes")})
+            quote = dict(at=stamp, checkpoint=checkpoint, grade=result, units=flat_units(result, price), price=price,
+                         **{f: q.get(f) for f in ("line", "open_line", "open_price", "tickets", "money",
+                                                "line_toward", "price_toward_implied", "path_retrace",
+                                                "path_direction_changes")})
+            if price is not None and result in {"win", "loss", "push"}:
+                prices[q["side"]] = quote
+            elif history and (price is not None or quote["line"] is not None):
+                evidence_without_prices.setdefault(q["side"], quote)
         if prices:
-            return prices
-    return {}
+            return evidence_without_prices | prices
+    return evidence_without_prices
 
 
 def favorites(root, sport):
@@ -390,6 +405,7 @@ def build(root, db, sport, external, now, guard, source_state, permit_network):
     if sport == "nfl":
         games, mismatch = nfl_merge(games,external,mappings,now)
         invalid.update(mismatch)
+    blocked_catalog = [fixture for event, fixture in catalog.items() if event in invalid]
     catalog = {k:v for k,v in catalog.items() if k not in invalid}
     teams = defaultdict(list)
     for event, match in sorted(games.items(), key=lambda kv:kv[1]["start"], reverse=True):
@@ -403,29 +419,58 @@ def build(root, db, sport, external, now, guard, source_state, permit_network):
     for match in games.values():
         if match.get("vendor") in official:
             match["favorites"] = official[match["vendor"]]
-    for i, event in enumerate(recent_ids):
+    for i, (event, match) in enumerate(games.items()):
         if i % 25 == 0 and not guard():
             raise TimeoutError("publisher priority")
-        match = games[event]
         r = known.get(match.get("vendor"), {}).get("_receipt")
-        match["quotes"] = {}
+        if event in recent_ids:
+            match["quotes"] = {}
+        if not r or match.get("vendor") in invalid:
+            continue
+        if sport == "mlb" and r[1].get("moneyline_gradeable") is False:
+            match["history_moneyline_ungraded"] = True
         for m in (("MONEYLINE",) if sport == "ufc" else MARKETS):
-            available = graded_quotes(db,sport,match,m,r)
-            if available:
+            available = graded_quotes(db, sport, match, m, r) if event in recent_ids else {}
+            if available and len(available) == 2:
                 match["quotes"][m] = available
+            else:
+                # Keep the original recent-results projection intact. Older and
+                # partially priced evidence is used only in Market History.
+                if available:
+                    match["quotes"][m] = available
+                history = graded_quotes(db, sport, match, m, r, history=True)
+                if history:
+                    match.setdefault("history_quotes", {})[m] = history
     sporting = {}
+    independent_games, baseball_games = [], []
     if sport == "nfl":
         sporting = nfl_profile_context(source_state, catalog, games, external, now, guard, permit_network)
     elif sport == "ncaaf":
         sporting = cfb_profile_context(source_state, catalog, now, guard, permit_network)
     elif sport == "mlb":
-        sporting = baseball_profile_context(source_state, now, guard, permit_network)
+        sporting = baseball_profile_context(source_state, now, guard, permit_network, market_history=baseball_games)
     elif sport == "ufc":
         receipts = [outcome["_receipt"][1] for outcome in known.values() if "_receipt" in outcome]
         sporting = ufc_profile_context(source_state, receipts, catalog, guard, permit_network)
     if guard():
-        sporting.update(independent_context(source_state, catalog, sport, now, guard, permit_network))
+        archived_markets = {
+            match_key(match): set(match.get("quotes", {})) | set(match.get("history_quotes", {}))
+            for match in games.values()
+        } if sport == "nhl" else None
+        sporting.update(independent_context(source_state, catalog, sport, now, guard, permit_network,
+                                           market_history=independent_games, archived_markets=archived_markets))
+    history = merge_market_history(
+        (match for match in games.values() if match.get("vendor") not in invalid),
+        (independent_games, baseball_games),
+        sport=sport, blocked=blocked_catalog,
+    )
+    sportsbook_history(root / "data" / "l1_sharp.csv", sport,
+                       (match for match in games.values() if match.get("vendor") not in invalid), history, guard)
     for match in games.values():
+        if sport == "nfl" and match.get("reference_quotes"):
+            patches = history["quotes"].setdefault(match["uid"], {})
+            for market, sides in match.pop("reference_quotes").items():
+                patches.setdefault(market, {}).update(sides)
         match.pop("provider", None)
         match.pop("_receipt", None)
     regular = defaultdict(list)
@@ -436,13 +481,14 @@ def build(root, db, sport, external, now, guard, source_state, permit_network):
     complete = sorted(year for year, schedule in regular.items()
                       if len({match["uid"] for match in schedule}) == 272
                       and all(match["scores"] or match["start"] > past for match in schedule))
-    return dict(version=1,sport=sport,generated=now,fixtures=catalog,teams=teams,games=games,sporting=sporting,
+    return dict(version=1,sport=sport,generated=now,fixtures=catalog,teams=teams,games=games,sporting=sporting,market_history=history,
                 sources={"nflverse":{"url":"https://github.com/nflverse/nflverse-data/releases/tag/schedules",
                                      "at":external.get("source_at"),"error":external.get("error",""),
                                      "complete_regular_schedules":complete if not mismatch else []}
                          if sport=="nfl" else {}},
                 diagnostics=dict(fixtures=len(catalog), active=len(rows), active_unmapped=len(invalid.intersection(rows)), unmapped=len(invalid),
-                                 completed=len(games),market_games=sum(bool(m.get("quotes")) for m in games.values())))
+                                 completed=len(games),market_games=sum(bool(m.get("quotes")) for m in games.values()),
+                                 history_added=len(history["games"]), history_reference=len(history["quotes"])))
 
 
 def main():
@@ -472,9 +518,11 @@ def main():
     new_credentials = set() if args.no_network else updated_credentials(status)
     needs_ats_metadata = {sport for sport in ("ncaaf", "nfl")
                           if status.get(sport, {}).get("closing_ats_revision") != CLOSING_ATS_REVISION}
-    due = new_credentials | needs_ats_metadata
+    needs_market_history = {sport for sport in SPORTS
+                            if status.get(sport, {}).get("market_history_revision") != MARKET_HISTORY_REVISION}
+    due = new_credentials | needs_ats_metadata | needs_market_history
     order = [args.sport] if args.sport else sorted(
-        SPORTS, key=lambda sport: (sport not in new_credentials, sport not in needs_ats_metadata,
+        SPORTS, key=lambda sport: (sport not in due, sport not in new_credentials, sport not in needs_ats_metadata,
                                    status.get(sport, {}).get("checked", "")))
     targets = order if args.bootstrap else order[:1]
     if (not args.bootstrap and not args.sport and targets[0] not in due
@@ -510,6 +558,7 @@ def main():
                 }
                 if sport in {"ncaaf", "nfl"}:
                     status[sport]["closing_ats_revision"] = CLOSING_ATS_REVISION
+                status[sport]["market_history_revision"] = MARKET_HISTORY_REVISION
                 atomic(status_path,{"version":1,"sports":status})
                 print(packed({"sport":sport,**status[sport]}),flush=True)
             except TimeoutError:
