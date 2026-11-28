@@ -5324,6 +5324,12 @@ function renderGameDetail(){
   html+='<section style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px">'+sideToggle;
   const comparisonStatus=window.redfoxHistory?.status(r,state.sideIndex);
   if(comparisonStatus) html+='<p class="detail-comparison-status">'+escHtml(comparisonStatus)+'</p>';
+  if(!state.frozenPregame&&r.red_fox_favorite!=='true'&&String(r.data_badge).toUpperCase()!=='RETAINED'){
+    const sport=String(r.sport).toLowerCase();
+    const removal=sport==='nba'&&r.favorite_review_state==='applied_removal'?r.favorite_review_reason:
+      sport==='nhl'&&r.favorite_late_invalidated==='true'?(r.favorite_review_reason||r.favorite_late_invalidated_reason):'';
+    if(removal) html+='<p class="detail-comparison-status"><strong>Favorite removed.</strong> '+escHtml(removal)+'</p>';
+  }
   html+='<div class="detail-current-read"><div><div class="detail-current-line">'+escHtml(selected.current_line||'--')+'</div>'+(currentMovement?'<div class="detail-current-movement">'+currentMovement+'</div>':'')+'<div class="detail-current-splits"><span>'+escHtml(detailPct(selected.bets_pct,'Bets'))+'</span><span>'+escHtml(detailPct(selected.money_pct,'Money'))+'</span></div></div><div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">'+signals.map(anomalyBadge).join('')+'</div></div>';
   if(state.historyLoading) html+='<div class="detail-history-loading" role="status">Loading market trajectory and observation history…</div>';
   html+=movementChart(detailRows,r.market_display,state.selectedJourneyTimestamp,selected.flagged_side||sideLabel(selected,r));

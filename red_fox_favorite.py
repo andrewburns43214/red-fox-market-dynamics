@@ -558,7 +558,7 @@ def update_favorite_tracking(
             replacement_removed = official_nhl_favorite(prior) and _truthy(row.get("favorite_late_invalidated"))
             pilot_reason = row.get("_nba_removal_explanation")
             if replacement_removed:
-                review_reason = str(row.get("favorite_late_invalidated_reason", "")).strip()
+                review_reason = review_reason or str(row.get("favorite_late_invalidated_reason", "")).strip()
                 gate_reason = review_reason
             elif nba_public_favorite(prior) and isinstance(pilot_reason, str):
                 gate_reason = pilot_reason

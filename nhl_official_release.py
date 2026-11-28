@@ -8,7 +8,7 @@ from favorite_nhl_goalies import _atomic, paper_dir, read_league_cache
 from nhl_paper_release import index_schedule, record_paper, stamp, team
 from nhl_release_config import (OFFICIAL_FLAGS, OFFICIAL_HANDOFF, OFFICIAL_VERSIONS,
                                 enabled, official_nhl_favorite, official_start, switches)
-from nhl_release_policy import handoff_issue
+from nhl_release_policy import PUBLIC, PUBLIC_MIN_MONEY, PUBLIC_MIN_TICKETS, handoff_issue
 from performance_ledger import _read_csv
 from red_fox_favorite import _late_invalidate_favorite, _sides, _snapshot_id, _truthy
 
@@ -81,6 +81,35 @@ def _selected(game):
     return game["lanes"].get(game.get("selected_lane"), {})
 
 
+def _removal_explanation(game, state):
+    reason = state["removed"]
+    entry = state.get("entry") or {}
+    event = next((event for event in reversed(game.get("events", []))
+                  if event.get("stage") == "removed" and event.get("reason") == reason
+                  and event.get("lane") == state["pathway"]
+                  and (event.get("quote") or {}).get("side") == entry.get("side")), {})
+    quote = event.get("quote") or {}
+    # The existing decision has already been made. Expand a combined split
+    # reason using the exact event quote, never a quote captured after removal.
+    if state["pathway"] == PUBLIC and reason.startswith("Public tickets below"):
+        breaches = []
+        for label, value, minimum in (
+            ("tickets", quote.get("bets"), PUBLIC_MIN_TICKETS),
+            ("money", quote.get("money"), PUBLIC_MIN_MONEY),
+        ):
+            if value is not None and value < minimum:
+                breaches.append(f"{value:g}% {label}, below {minimum}%")
+        if breaches:
+            return "Moneyline split failed at " + " and ".join(breaches) + "."
+    if reason == "Market data was not Clean.":
+        badge = ((event.get("decision_evidence") or {}).get("quotes", {}).get("MONEYLINE") or {}).get("data_badge")
+        if badge and badge.casefold() != "clean":
+            return f"Moneyline data failed the quality check ({badge})."
+    if reason == "Movement retraced toward the opener.":
+        return "Moneyline movement retraced toward the opener."
+    return reason
+
+
 def publish_official(board, selections, at):
     """Set ordinary Favorite fields after the legacy visibility pass."""
     if not selections or board.empty:
@@ -95,6 +124,8 @@ def publish_official(board, selections, at):
         state = _selected(game)
         if state.get("removed"):
             _late_invalidate_favorite(board, index, state["removed"], at)
+            board.at[index, "favorite_review_state"] = "applied_removal"
+            board.at[index, "favorite_review_reason"] = _removal_explanation(game, state)
             continue
         if game.get("finalized"):
             continue
