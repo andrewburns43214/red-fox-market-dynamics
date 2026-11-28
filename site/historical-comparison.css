@@ -126,6 +126,9 @@
 .historic-filter-method, .historic-ledger-pages { color: #526064; font-size: 12px; }
 .historic-market-proof summary, .historic-filter-method summary { cursor: pointer; }
 .historic-market-proof ul { margin: 4px 0 0; padding-left: 16px; }
+.historic-raw-observations { overflow: auto; max-height: 210px; margin-top: 5px; }
+.historic-raw-observations table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+.historic-raw-observations :is(th, td) { padding: 4px 6px; text-align: left; border-bottom: 1px solid #dce6e1; }
 .historic-filter-method { margin-top: 8px; }
 .historic-filter-method p { margin: 5px 0; }
 .historic-ledger-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap; }

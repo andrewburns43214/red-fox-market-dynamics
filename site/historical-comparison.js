@@ -28,6 +28,7 @@
     : `${Math.max(0, Math.round(value))} min`;
   let manifest = {}, availability = {}, pending = {}, payloads = {}, frozenGames = new Set();
   let manifestHash = "", manifestState = "", active = null, request = 0, lastButton = null;
+  const observations = new Map();
   const dialog = () => document.getElementById("historical-comparison");
   const authorized = (url) => window.redfoxAuthorizedFetch(url, {cache: "no-store"});
   const defaultCohort = report => Object.keys(cohorts).find(group => report[group]?.graded > 0) || "closest";
@@ -408,7 +409,46 @@
       low:decisive?100*Math.max(0,center-width):null, high:decisive?100*Math.min(1,center+width):null};
   }
 
-  function marketsEvidence(markets,context,stamp,opposite) {
+  function observationControl(fixture,m,q,ref) {
+    if(!fixture?.id||!ref||!q.captured_at) return "";
+    return `<details data-historic-observations data-sport="${escape(fixture.sport)}" data-game="${escape(fixture.id)}"
+      data-market="${m}" data-side="${escape(ref)}" data-cutoff="${escape(q.captured_at)}">
+      <summary>View quote observations</summary><div class="historic-raw-observations"></div></details>`;
+  }
+
+  async function loadObservations(control) {
+    if(!control.open||control.dataset.loaded) return;
+    control.dataset.loaded="true";
+    const pane=control.querySelector(".historic-raw-observations");
+    const {sport,game,market,side,cutoff}=control.dataset;
+    const key=sport+"--"+game;
+    const through=Date.parse(cutoff);
+    pane.textContent="Loading archived observations?";
+    if(!observations.has(key)){
+      const path="/data/anomaly_event_details/"+encodeURIComponent(sport)+"--"+encodeURIComponent(game)+".json";
+      observations.set(key,window.redfoxAuthorizedFetch(path,{}, {required:false})
+        .then(response=>response.ok?response.json():[]).catch(()=>[]));
+    }
+    const events=await observations.get(key);
+    const marketRow={market_display:market,sport};
+    const identity=row=>window.marketSideIdentity(row,marketRow);
+    const selected=identity({flagged_side:side});
+    const rows=Array.isArray(events)?events.filter(event=>String(event.game_id)===game&&event.sport===sport&&
+      event.market_display===market&&event.flagged_side&&identity(event)===selected&&Date.parse(event.timestamp)<=through):[];
+    if(!rows.some(row=>Date.parse(row.timestamp)===through)){
+      pane.textContent="Archived observations for this quote are unavailable.";
+      return;
+    }
+    const formatTime=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",month:"short",day:"numeric",
+      hour:"numeric",minute:"2-digit"});
+    const split=value=>pct(value===""?null:value);
+    rows.sort((left,right)=>Date.parse(right.timestamp)-Date.parse(left.timestamp));
+    pane.innerHTML=`<table><thead><tr><th scope="col">Time (ET)</th><th scope="col">Quote</th><th scope="col">Bets</th><th scope="col">Money</th></tr></thead>
+      <tbody>${rows.map(row=>`<tr><td>${escape(formatTime.format(new Date(row.timestamp)))}</td><td>${escape(row.line_display||"?")}</td>
+      <td>${escape(split(row.bets_pct))}</td><td>${escape(split(row.money_pct))}</td></tr>`).join("")}</tbody></table>`;
+  }
+
+  function marketsEvidence(markets,context,stamp,opposite,fixture) {
     return `<div class="historic-market-evidence">${markets.map(({m,q,ref,primary,move,turns})=>{
       const splitCap=q&&q.tickets===q.money&&(q.tickets===0||q.tickets===100);
       const capLabel=primary&&/split (risk|cap)/i.test([context?.data_badge,context?.context_chips].join(" "))
@@ -427,6 +467,7 @@
             <li>Open · ${escape(quote(m,q,true))}</li>
             ${turns.map(turn=>`<li>${escape(when(turn.captured_at)+" · "+quote(m,turn))}</li>`).join("")}
             <li>Observed · ${escape(quote(m,q))}</li></ul></details>`:""}
+          ${observationControl(fixture,m,q,ref)}
           ${q.trajectory==="retraced"&&q.path_retrace!=null?`<span>Gave back ${escape(
             (m==="MONEYLINE"?q.path_retrace*100:q.path_retrace).toFixed(1)
             +(m==="MONEYLINE"?" implied points":" line points"))}</span>`:""}
@@ -507,7 +548,7 @@
           <p><strong>${escape(row.selection)}</strong> · ${escape(minuteText(mins))} before ${row.actual_start?"verified start":"scheduled start"}</p>
           <p>Graded at ${escape(quote(m,row.side))} · ${escape(when(row.entry))}
             ${row.decision&&row.decision!==row.entry?" · Checkpoint "+escape(when(row.decision)):""}</p>
-          ${marketsEvidence(markets,row.context,row.entry,row.opposite)}
+          ${marketsEvidence(markets,row.context,row.entry,row.opposite,row)}
           <div class="historic-why"><div><strong>Why included</strong>
           <p>Qualified for ${escape(cohorts[active.cohort])} at distance ${row.distance}. ${escape(row.matched.join(", "))}.</p></div>
           <div><strong>Compared with the current setup</strong><p>${escape([...marks,...row.differences].join(" · ")||"No large recorded difference in scored factors.")}</p>
@@ -584,7 +625,7 @@
       <p>Opening splits ${opening(side.opening_tickets)} / ${opening(side.opening_money)} → ${pct(side.tickets)} / ${pct(side.money)}.
         ${source.data_badge?"Data quality "+escape(source.data_badge)+".":""}</p>
       <p>${[source.reaction,source.path,source.evidence_role,audits[side.split_audit?.split_breach],source.context_chips].filter(Boolean).map(escape).join(" · ")}</p>
-      ${marketsEvidence(quotes,side.context,setup.observed,opposite)}
+      ${marketsEvidence(quotes,side.context,setup.observed,opposite,{id:payload.event,sport:payload.sport})}
       ${!Object.keys(side.game_context||{}).length&&side.cross_market?peerDetails(side):""}
       <h3>Matching and coverage</h3>
       <p>${active.cohort==="broader"?"Broader matches relax cross-market agreement and price and split tolerances. This group includes closest matches.":
@@ -671,7 +712,11 @@
       active.page=0;
       render();
     });
+    modal.addEventListener("toggle", event => {
+      if(event.target.matches("[data-historic-observations]")) loadObservations(event.target);
+    }, true);
     modal.addEventListener("close", () => {
+      observations.clear();
       request++;
       active = null;
       lastButton?.focus({preventScroll: true});
