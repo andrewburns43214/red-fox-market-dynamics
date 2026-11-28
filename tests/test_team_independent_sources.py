@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError
 
 from team_independent_sources import (
-    Feed, FeedUnavailable, cached, career_recent, event_pairs, game_row, independent_context, load,
-    save, schedule, schedule_page, summarize, updated_credentials, windows,
+    Feed, FeedUnavailable, cached, career_recent, closing_ats, college_closes, event_pairs, game_row, independent_context, load,
+    save, schedule, schedule_page, schedule_strength, summarize, updated_credentials, windows,
 )
 
 
@@ -151,6 +151,44 @@ class IndependentSourcesTest(unittest.TestCase):
         fixture.pop("sporting")
         self.assertEqual(summarize(rows+[dict(rows[2], id="9")], [fixture], PUBLIC_NOW, status, "balldontlie"), 0)
         self.assertNotIn("sporting", fixture)
+
+    def test_reference_spread_must_match_exact_provider_fixture_and_score(self):
+        first = dict(game_row("nba", 2026, nba_game(1, "2026-11-21")), as_of=PUBLIC_NOW)
+        upcoming = dict(game_row("nba", 2026, nba_game(2, "2026-11-28", "7:00 pm ET")), as_of=PUBLIC_NOW)
+        fixture = {"keys": first["keys"], "start": "2026-11-29T00:00:00+00:00"}
+        status = {"at": PUBLIC_NOW, "partitions": 1, "expected_partitions": 9}
+        closing = {k: first[k] for k in ("start", "ids", "scores")}
+        closing["ats"] = closing_ats(first["scores"], -10, "Test closing line")
+        for quotes, expected in ((closing, "push"), (dict(closing, scores=[91, 111]), None),
+                                 (dict(closing, ids=["3", "2"]), None)):
+            summarize([first, upcoming], [fixture], PUBLIC_NOW, status, "balldontlie", {"1": quotes})
+            result = fixture["sporting"]["independent"]["teams"]["boston celtics"]["recent"][0]
+            self.assertEqual(result.get("ats", {}).get("grade"), expected)
+
+    def test_schedule_strength_counts_each_opponent_once_and_matches_available_results(self):
+        repeats = [{"keys": ["rice", "army"], "scores": [28, 21]}] * 2
+        sample = [
+            {"keys": ["opponent", "army"], "scores": [21, 28], "start": "2026-11-20"},
+            {"keys": ["rice", "army"], "scores": [28, 21], "start": "2026-11-20"},
+            {"keys": ["opponent", "army"], "scores": [28, 21], "start": "2026-11-20"},
+            {"keys": ["opponent", "army"], "scores": [17, 17], "start": "2026-11-20"},
+            {"keys": ["opponent", "army"], "scores": [10, 42], "start": "2026-11-28"},
+        ]
+        self.assertEqual(schedule_strength(repeats, "rice", {"army": sample}, "2026-11-28"),
+                         {"record": [1, 1, 1], "win_pct": 0.5})
+
+    def test_closing_spread_preserves_push_and_excludes_opening_only_quotes(self):
+        game = {"id": 42, "awayTeamId": 1, "homeTeamId": 2, "startDate": "2026-11-20T17:00:00Z",
+                "season": 2026, "awayScore": 24, "homeScore": 27,
+                "lines": [{"provider": "DraftKings", "spread": -3, "spreadOpen": -2.5}]}
+        closes = college_closes([game], 2026)
+        self.assertEqual([r["grade"] for r in closes["42"]["ats"]], ["push", "push"])
+        self.assertEqual([r["line"] for r in closes["42"]["ats"]], [3, -3])
+        self.assertEqual([r["grade"] for r in closing_ats([24, 27], -3.5, "nflverse")], ["win", "loss"])
+        self.assertIsNone(closing_ats([24, 27], None, "nflverse"))
+        opening_only = dict(game, id=43, lines=[{"provider": "DraftKings", "spreadOpen": -2.5}])
+        self.assertNotIn("43", college_closes([game, opening_only], 2026))
+        self.assertNotIn("42", college_closes([game, dict(game, homeScore=30)], 2026))
 
     def test_ufc_card_requires_live_pairing_and_only_professional_history(self):
         sides = {"fighter_a":{"id":1, "name":"Jane Doe"}, "fighter_b":{"id":2, "name":"Jill Smith"}}

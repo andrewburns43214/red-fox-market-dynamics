@@ -10,7 +10,7 @@ from team_sport_context import (
     cfb_elo, cfb_profile_context, fighter_identities, nfl_availability, nfl_efficiency,
     nfl_profile_context, wikidata_fighters,
 )
-from team_intelligence import graded_quotes, identities, nfl_merge, published_rows, season, valid_outcomes
+from team_intelligence import clock, graded_quotes, identities, nfl_game, nfl_merge, published_rows, season, valid_outcomes
 
 
 class SportingDataTest(unittest.TestCase):
@@ -189,6 +189,17 @@ class TeamIntelligenceTest(unittest.TestCase):
         outcomes, conflicts, _ = valid_outcomes(self.db, "mlb", catalog, self.start)
         self.assertEqual(set(outcomes), set(catalog))
         self.assertEqual(conflicts, set())
+
+    def test_nfl_closing_spread_uses_feed_sign_and_only_graded_fixtures(self):
+        year = clock().year
+        row = {"season": str(year), "game_id": f"{year}_12_KC_BUF", "espn": "401123456",
+               "gameday": f"{year}-11-29", "gametime": "16:25", "week": "12", "game_type": "REG",
+               "away_team": "KC", "home_team": "BUF", "away_score": "21",
+               "home_score": "24", "spread_line": "3.5"}
+        ats = nfl_game(row)["ats"]
+        self.assertEqual([(r["grade"], r["line"]) for r in ats], [("win", 3.5), ("loss", -3.5)])
+        self.assertIsNone(nfl_game(dict(row, home_score=""))["ats"])
+        self.assertIsNone(nfl_game(dict(row, espn=""))["ats"])
 
     def test_nfl_exact_fixture_links_market_history_and_counts_one_score(self):
         names, keys = identities("KC Chiefs @ BUF Bills", "nfl")

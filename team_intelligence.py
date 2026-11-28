@@ -22,11 +22,12 @@ from history_comparisons import WINDOWS, grade, side_key
 from history_public import outcome_signature
 from history_store import FREE_DISK_RESERVE, atomic_text, latest_provider_outcomes, packed, utc
 from team_aliases import _split_game
-from team_independent_sources import independent_context, updated_credentials
+from team_independent_sources import closing_ats, independent_context, updated_credentials
 from team_sport_context import baseball_profile_context, cfb_profile_context, nfl_profile_context, ufc_profile_context
 
 SPORTS = ("nfl", "ncaaf", "nba", "ncaab", "mlb", "nhl", "ufc")
 MARKETS = ("SPREAD", "MONEYLINE", "TOTAL")
+CLOSING_ATS_REVISION = 1
 NFL_URL = "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv"
 ET = ZoneInfo("America/New_York")
 TOKEN = re.compile(r"[A-Za-z0-9_.%+-]{1,90}\Z")
@@ -96,7 +97,7 @@ def number(value):
 def nfl_schedule(cache, seconds, permit_network):
     path = cache / "nflverse.json"
     stored = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-    current_schema = not stored.get("games") or "codes" in stored["games"][0]
+    current_schema = not stored.get("games") or ("codes" in stored["games"][0] and stored.get("spread_schema") == CLOSING_ATS_REVISION)
     if not permit_network or (current_schema and (clock().timestamp() - stored.get("checked", 0)) < 10800):
         return stored
     try:
@@ -119,7 +120,7 @@ def nfl_schedule(cache, seconds, permit_network):
             if len(games) < 300:
                 raise ValueError("nflverse two-season result coverage is unexpectedly small")
             stored = dict(games=games, etag=response.headers.get("ETag"), source_at=utc(clock()),
-                          checked=clock().timestamp(), error="")
+                          checked=clock().timestamp(), spread_schema=CLOSING_ATS_REVISION, error="")
     except (OSError, ValueError, EOFError) as error:
         if isinstance(error, HTTPError) and error.code == 304:
             stored["source_at"] = utc(clock())
@@ -146,6 +147,8 @@ def nfl_game(row):
     except ValueError:
         return None
     score = [number(row.get(field)) for field in ("away_score", "home_score")]
+    ats = closing_ats(score, row.get("spread_line"), "nflverse", home_favorite_positive=True) if (
+        None not in score and str(row.get("espn") or "").isdigit()) else None
     game_type = row.get("game_type")
     if game_type not in {"REG", "WC", "DIV", "CON", "SB"}:
         return None
@@ -154,7 +157,7 @@ def nfl_game(row):
                 keys=[side_key(n, "nfl", "MONEYLINE") for n in names],
                 scores=score if None not in score else None, season=year, stage=game_type,
                 venue="neutral" if row.get("location") == "Neutral" else "home" if row.get("location") == "Home" else "",
-                source="nflverse")
+                source="nflverse", ats=ats)
 
 
 def published_rows(root, sport):
@@ -467,9 +470,14 @@ def main():
     old = json.loads(status_path.read_text(encoding="utf-8")) if status_path.exists() else {}
     status = old.get("sports",{})
     new_credentials = set() if args.no_network else updated_credentials(status)
-    order = [args.sport] if args.sport else sorted(SPORTS,key=lambda s: (s not in new_credentials, status.get(s,{}).get("checked","")))
+    needs_ats_metadata = {sport for sport in ("ncaaf", "nfl")
+                          if status.get(sport, {}).get("closing_ats_revision") != CLOSING_ATS_REVISION}
+    due = new_credentials | needs_ats_metadata
+    order = [args.sport] if args.sport else sorted(
+        SPORTS, key=lambda sport: (sport not in new_credentials, sport not in needs_ats_metadata,
+                                   status.get(sport, {}).get("checked", "")))
     targets = order if args.bootstrap else order[:1]
-    if (not args.bootstrap and not args.sport and targets[0] not in new_credentials
+    if (not args.bootstrap and not args.sport and targets[0] not in due
             and status.get(targets[0],{}).get("checked","") > utc(clock()-timedelta(hours=2))):
         print('{"deferred":"team profiles current"}', flush=True)
         return
@@ -500,6 +508,8 @@ def main():
                                         if field in value}
                                  for name,value in profile["sporting"].items() if name != "fighters"},
                 }
+                if sport in {"ncaaf", "nfl"}:
+                    status[sport]["closing_ats_revision"] = CLOSING_ATS_REVISION
                 atomic(status_path,{"version":1,"sports":status})
                 print(packed({"sport":sport,**status[sport]}),flush=True)
             except TimeoutError:

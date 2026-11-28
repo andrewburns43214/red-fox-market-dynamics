@@ -153,10 +153,11 @@ button.team-intelligence-name:focus-visible { outline:2px solid #bd3d32; outline
 .team-intelligence .ti-results-table th:nth-child(3) { width:18%; }
 .team-intelligence .ti-results-table th:nth-child(4) { width:13%; }
 .team-intelligence .ti-results-table th:nth-child(5) { width:15%; }
+.team-intelligence .ti-results-table .ti-ats-line { display:block; color:var(--ti-muted); font-size:10px; }
 .team-intelligence .ti-results-table td:nth-child(3) { font-weight:650; }
 .team-intelligence .ti-market-table th:first-child { width:33%; }
 .team-intelligence .ti-market-table th:last-child { width:23%; }
-.team-intelligence .ti-market-table .ti-market-movement td { padding-top:0; font-size:11px; color:var(--ti-muted); text-align:left; }
+.team-intelligence .ti-market-table .ti-market-movement td { padding:6px 6px 8px; vertical-align:middle; font-size:11px; color:var(--ti-muted); text-align:left; }
 .team-intelligence .ti-market-table:has(.ti-market-movement) tr:has(+ .ti-market-movement) > * { border-bottom:0; }
 .team-intelligence .ti-market-controls { margin-bottom:6px; }
 .team-intelligence .ti-quote-row, .team-intelligence .ti-history-top { display:flex; justify-content:space-between; align-items:start; min-width:0; gap:6px; }

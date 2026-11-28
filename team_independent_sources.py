@@ -4,6 +4,7 @@ from calendar import monthrange
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 import json
+import math
 from pathlib import Path
 import re
 from urllib.error import HTTPError
@@ -98,7 +99,7 @@ class Feed:
         self.usage = load(self.path)
         self.remaining = 4
 
-    def request(self, url, params, *, cost=1, fighter=False):
+    def request(self, url, params, *, cost=1, fighter=False, optional=False):
         if not self.key:
             raise FeedUnavailable("not configured")
         if not self.network or not self.guard() or not self.remaining:
@@ -135,7 +136,7 @@ class Feed:
                     raise ValueError("oversized response")
                 return json.loads(data)
         except HTTPError as error:
-            if error.code in (401, 403, 429) or error.code >= 500:
+            if error.code == 429 or (not optional and (error.code in (401, 403) or error.code >= 500)):
                 delay = 2 * 3600 if error.code in (401, 403) else 900
                 retry = error.headers.get("Retry-After", "")
                 if retry.isdecimal():
@@ -349,7 +350,67 @@ def record(rows, key):
     return counts
 
 
-def summarize(rows, fixtures, now, status, provider):
+def closing_ats(scores, home_line, source, *, home_favorite_positive=False):
+    if not scores or home_line is None or type(home_line) is bool:
+        return None
+    try:
+        line = float(home_line)
+        if home_favorite_positive:
+            line = -line
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(line) or abs(line) > 100 or not (line * 2).is_integer():
+        return None
+    away, home = scores
+    adjusted = home - away + line
+    grades = ("loss", "win") if adjusted > 0 else ("win", "loss") if adjusted < 0 else ("push", "push")
+    return [{"grade": grade, "line": handicap, "source": source}
+            for grade, handicap in zip(grades, (-line, line))]
+
+
+def college_closes(payload, year):
+    if not isinstance(payload, list) or not payload:
+        raise ValueError("empty closing lines response")
+    games, conflicts = {}, set()
+    for row in payload:
+        if row.get("season") != year:
+            continue
+        scores = [row.get("awayScore"), row.get("homeScore")]
+        if any(type(score) is not int or not 0 <= score <= 400 for score in scores):
+            continue
+        quotes = [quote for quote in row.get("lines", []) if quote.get("provider") == "DraftKings"]
+        if len(quotes) != 1:
+            continue
+        ats = closing_ats(scores, quotes[0].get("spread"), "DraftKings via CollegeFootballData")
+        if not ats:
+            continue
+        ident = provider_id(row["id"])
+        game = {"start": utc_start(row["startDate"]),
+                "ids": [provider_id(row[field]) for field in ("awayTeamId", "homeTeamId")],
+                "scores": scores, "ats": ats}
+        if ident in games and games[ident] != game:
+            conflicts.add(ident)
+        games[ident] = game
+    if not games:
+        raise ValueError("closing lines coverage unavailable")
+    return {key: game for key, game in games.items() if key not in conflicts}
+
+
+def schedule_strength(games, team, grouped, before):
+    opponents = {next(key for key in game["keys"] if key != team) for game in games}
+    wins = losses = ties = 0
+    for opponent in opponents:
+        sample = [row for row in grouped[opponent] if row["scores"] is not None and team not in row["keys"]
+                  and row["start"] < before]
+        won, lost, tied = record(sample, opponent)
+        wins += won
+        losses += lost
+        ties += tied
+    total = wins + losses + ties
+    return {"record": [wins, losses, ties], "win_pct": round((wins + ties / 2) / total, 4)} if total else None
+
+
+def summarize(rows, fixtures, now, status, provider, closing_lines=None):
     as_of = status["at"]
     if not as_of:
         return 0
@@ -385,6 +446,7 @@ def summarize(rows, fixtures, now, status, provider):
                 outcomes[key].update({"points": 1 if scored > allowed else 0.5 if scored == allowed else 0, "games": 1})
     cutoff = utc(datetime.fromisoformat(now) - timedelta(days=7))
     total = 0
+    strengths_by_team = {}
     for fixture in fixtures:
         keys = fixture["keys"]
         start = datetime.fromisoformat(fixture["start"]).astimezone(ET).date()
@@ -417,15 +479,23 @@ def summarize(rows, fixtures, now, status, provider):
                 if i < 5:
                     game_date = datetime.fromisoformat(row["start"]).astimezone(ET).date()
                     venue = ("home" if side else "away") if row["venue"] == "home" else row["venue"]
-                    recent.append({"opponent": row["names"][1-side], "opponent_key": opponent,
-                                   "at": str(game_date), "scores": scores, "venue": venue})
+                    item = {"opponent": row["names"][1-side], "opponent_key": opponent,
+                            "at": str(game_date), "scores": scores, "venue": venue}
+                    closing = (closing_lines or {}).get(row["id"])
+                    if closing and all(closing[k] == row[k] for k in ("start", "ids", "scores")):
+                        item["ats"] = closing["ats"][side]
+                    recent.append(item)
             sites = {}
             for label, side in (("home", 1), ("away", 0), ("neutral", None)):
                 at_site = [r for r in games if (r["venue"] == "neutral" if side is None else
                            r["venue"] != "neutral" and r["keys"][side] == key)]
                 if at_site:
                     sites[label] = record(at_site, key)
-            teams[key] = {"games": len(games), "record": record(games, key),
+            strength_key = (key, start)
+            if strength_key not in strengths_by_team:
+                local_midnight = datetime.combine(start, datetime.min.time(), ET)
+                strengths_by_team[strength_key] = schedule_strength(games, key, grouped, min(now, utc(local_midnight)))
+            teams[key] = {"schedule_strength": strengths_by_team[strength_key], "games": len(games), "record": record(games, key),
                           "scored": round(sum(s[0] for s in sums)/len(games), 2),
                           "allowed": round(sum(s[1] for s in sums)/len(games), 2),
                           "recent": recent, "sites": sites,
@@ -444,21 +514,21 @@ def summarize(rows, fixtures, now, status, provider):
     return total
 
 
-def cached(feed, state, name, url, params, decode, hours, *, cost=1, fighter=False):
+def cached(feed, state, name, url, params, decode, hours, *, cost=1, fighter=False, optional=False):
     path = state / (name + ".json")
     stored = load(path)
     now = feed.now.timestamp()
     if not feed.key or stored.get("next", 0) > now:
         return stored
     try:
-        response = feed.request(url, params, cost=cost, fighter=fighter)
+        response = feed.request(url, params, cost=cost, fighter=fighter, optional=optional)
         stored = {"data": decode(response), "at": utc(feed.now), "next": now + hours * 3600}
     except FeedUnavailable as issue:
         if str(issue) in {"deferred", "budget deferred", "provider backoff"}:
             return stored
-        stored.update(error=str(issue), next=now+3600)
+        stored.update(error=str(issue), next=now+(hours if optional else 1)*3600)
     except (TypeError, ValueError, KeyError, AttributeError, IndexError):
-        stored.update(error="schema or coverage validation", next=now+3600)
+        stored.update(error="schema or coverage validation", next=now+(hours if optional else 1)*3600)
     save(path, stored)
     return stored
 
@@ -641,7 +711,11 @@ def independent_context(state, fixtures, sport, now, guard, network, key_directo
     year = upcoming[0]["season"]
     upcoming = [r for r in upcoming if r["season"] == year]
     rows, status = schedule(feed, state, sport, year)
-    covered = summarize(rows, upcoming, now, status, provider)
+    closing = {}
+    if sport == "ncaaf" and rows:
+        closing = cached(feed, state, f"cfbd-closing-spreads-{year}", "https://api.collegefootballdata.com/lines",
+                         {"year": year}, lambda payload: college_closes(payload, year), 24, optional=True)
+    covered = summarize(rows, upcoming, now, status, provider, closing.get("data"))
     if sport == "nhl":
         latest = cached(feed, state, "nhl-standings", "https://mcp.puckapi.com/v1/get_standings",
                         {"league": "nhl"}, nhl_standings, 16, cost=2)

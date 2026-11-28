@@ -164,16 +164,16 @@
       const data = new Map();
       for (const [key,games] of opponents) {
         games.sort((a,b) => b.start.localeCompare(a.start));
-        const quality = games.map(game => {
-          const opponent = game.keys.find(other => other !== key);
-          const sample = (opponents.get(opponent) || []).filter(row => !row.keys.includes(key));
-          const points = sample.reduce((sum,row) => sum + ({Win:1,Tie:0.5,Loss:0}[result(row,opponent)] || 0),0);
-          return {game,total:sample.length,pct:sample.length ? points / sample.length : null};
-        });
-        const average = rows => rows.length && rows.every(row => row.pct != null)
-          ? rows.reduce((sum,row) => sum+row.pct,0)/rows.length : null;
-        const strong = quality.filter(row => row.pct != null && row.pct >= 0.5).map(row => row.game);
-        const weak = quality.filter(row => row.pct != null && row.pct < 0.5).map(row => row.game);
+        const faced = new Set(games.map(game=>game.keys.find(other=>other!==key)));
+        const record = [0,0,0];
+        for (const opponent of faced) {
+          for (const game of opponents.get(opponent) || []) {
+            if (game.keys.includes(key)) continue;
+            const index = {Win:0,Loss:1,Tie:2}[result(game,opponent)];
+            if (index!==undefined) record[index]++;
+          }
+        }
+        const sampleSize = record.reduce((sum,count)=>sum+count,0);
         const stats = games.map(game => {
           const values = game.sporting?.efficiency;
           const other = game.keys.find(value => value !== key);
@@ -185,9 +185,8 @@
           return plays && complete.length === stats.length
             ? complete.reduce((sum,row) => sum + row[index][numerator],0)/plays : null;
         };
-        const winPct = games.reduce((sum,game)=>sum + ({Win:1,Tie:0.5,Loss:0}[result(game,key)] || 0),0) / games.length;
-        data.set(key,{sos:average(quality), recentSos:average(quality.slice(0,5)), winPct, strong:form(strong,key),
-          weak:form(weak,key), games:games.length, epa:efficiency(0,"epa","plays"),
+        data.set(key,{opponentRecord:sampleSize?record:null, opponentWinPct:sampleSize?(record[0]+record[2]/2)/sampleSize:null,
+          games:games.length, epa:efficiency(0,"epa","plays"),
           allowedEpa:efficiency(1,"epa","plays"), epaGames:stats.length,
           passEpa:efficiency(0,"pass_epa","dropbacks"), passAllowed:efficiency(1,"pass_epa","dropbacks"),
           rushEpa:efficiency(0,"rush_epa","rushes"), rushAllowed:efficiency(1,"rush_epa","rushes"),
@@ -198,8 +197,6 @@
         const rank = field => all.length === 32 && Number.isFinite(item[field]) && all.every(other => Number.isFinite(other[field]))
           ? 1 + all.filter(other => field === "allowedEpa" ? other[field] < item[field]-1e-8 : other[field] > item[field]+1e-8).length
           : null;
-        item.sosRank = rank("sos");
-        item.winPctRank = rank("winPct");
         if (all.every(row => row.epaGames === row.games)) {
           item.epaRank = rank("epa");
           item.defRank = rank("allowedEpa");
@@ -251,7 +248,7 @@
     return observed <= now && now - observed <= 7 * day && now < Date.parse(fixture.start) ? source : null;
   }
 
-  function currentCfbElo() {
+  function currentFbsRanking() {
     const { fixture } = state;
     const source = fixture.sporting?.cfb_elo;
     const now = Date.now(), observed = Date.parse(source?.at);
@@ -280,7 +277,7 @@
         aliases:new Set([game.names[other],game.keys[other]].map(identity)),
         venue:fights ? "" : game.venue === "neutral" ? "Neutral" : game.venue === "home" ? (side ? "Home" : "Away") : "",
         scores:game.scores?.length === 2 ? [game.scores[side],game.scores[other]] : null,
-        outcome:result(game,key), ats:game.quotes?.SPREAD?.[key]?.grade};
+        outcome:result(game,key), ats:game.quotes?.SPREAD?.[key] || game.ats?.[side]};
     });
     const issues = [], verified = new Set();
     for (const row of independent || []) {
@@ -298,6 +295,7 @@
       if (agreement.length === 1) {
         agreement[0].method = row.method;
         agreement[0].venue ||= venue;
+        agreement[0].ats ||= row.ats;
         verified.add(agreement[0]);
       } else if (candidates.length || sameDay.length) {
         // With no shared event ID, an unresolved same-day match cannot safely add a second result.
@@ -307,7 +305,7 @@
         issues.push({date,opponent:row.opponent, conflict, external:scores?.join("–") || outcome,
           archive:conflict ? candidates[0].scores?.join("–") || candidates[0].outcome : ""});
       } else {
-        results.push({date, opponent:row.opponent, scores, outcome, method:row.method,
+        results.push({date, opponent:row.opponent, scores, outcome, method:row.method, ats:row.ats,
           venue, aliases, independent:true});
       }
     }
@@ -367,12 +365,12 @@
     const view = {key, name:fixture.names[fixture.keys.indexOf(key)], games, results, issues, recent, fights, fighter, year, record,
       complete:official, sites, designated: !!(closedBaseball || preferred && !preferred.venue_verified),
       standings, baseball, selectedBaseball:closedBaseball, streak, days, dateOnly:first&&!first.start,
-      nfl, source, independent, elo:currentCfbElo()?.teams[key], eloField:currentCfbElo()?.field,
+      nfl, source, independent, ranking:currentFbsRanking()?.teams[key], rankingSize:currentFbsRanking()?.field,
       height:fighter?.height_inches ? fighter.height_inches+" in" : snapshot.sporting?.fighters?.[key]?.height_cm
         ? display(snapshot.sporting.fighters[key].height_cm,0)+" cm" : "",
       coverage:conflict ? "Sources disagree on a recent result. Using verified archive totals."
-        : standings && year.games<standings.gamesPlayed ? "Scoring sample · "+year.games+" of "+standings.gamesPlayed+" games"
-        : official ? "" : year.games ? "Partial season · "+year.games+" verified results" : "Season results unavailable"};
+        : standings && year.games<standings.gamesPlayed ? "Scoring sample covers "+year.games+" of "+standings.gamesPlayed+" games"
+        : official ? "" : year.games ? "Season summary covers "+year.games+" available games" : "Season results unavailable"};
     state.views.set(key,view);
     return view;
   }
@@ -383,7 +381,6 @@
     .map(([value,label,tone])=>fact(value,label,tone)).join("")+'</div>';
   const expansion = (label,content) => '<details class="ti-more"><summary>'+markup(label)+'</summary>'+content+'</details>';
   const valueCell = value => '<td>'+markup(value ?? "—")+'</td>';
-  const sampleCell = (value,n,label="games") => Number.isFinite(value) ? display(value)+" ("+n+" "+label+")" : "—";
 
   function resultsTable(rows, fights) {
     const abbreviated = {Win:"W",Loss:"L",Tie:"T",Draw:"D","No contest":"NC"};
@@ -392,17 +389,21 @@
       +rows.map(row=>'<tr>'+valueCell(when(row.date,shortDate))+'<th scope="row">'+markup(row.opponent)
       +(row.venue?' <small>'+markup(row.venue)+'</small>':"")+'</th>'+valueCell(fights ? row.method : row.scores?.join("–"))
       +'<td>'+(row.outcome?badge(abbreviated[row.outcome]||row.outcome,row.outcome.toLowerCase()):"—")+'</td>'
-      +(fights?"":'<td>'+(row.ats?badge(({win:"Cover",loss:"No cover",push:"Push"})[row.ats]||row.ats,"ats-"+row.ats):"—")+'</td>')+'</tr>').join("")
+      +(fights?"":'<td>'+(row.ats?.grade
+        ? '<span title="'+markup((row.ats.source || "Red Fox pregame quote")+" · "+quoteText("SPREAD",row.ats.line,row.ats.price))+'">'
+          +badge(({win:"Cover",loss:"No cover",push:"Push"})[row.ats.grade]||row.ats.grade,"ats-"+row.ats.grade)+'</span>'
+          +(row.ats.source?'<small class="ti-ats-line">'+markup(quoteText("SPREAD",row.ats.line))+'</small>':"")
+        :'<span class="ti-note">No line</span>')+'</td>')+'</tr>').join("")
       +'</tbody></table>';
   }
 
   function overview(view) {
-    const {key,fights,results,record,coverage,year,recent,streak,standings,fighter,elo} = view;
+    const {key,fights,results,record,year,recent,streak,standings,fighter,ranking} = view;
     const summary = fights ? [[fighterRecord(fighter,"pro_mma"),"Professional MMA"],[fighterRecord(fighter,"ufc"),"UFC record"],
       [recent.record,"Recent form"],[streak,"Current streak"]] : [
-      [record,standings?"Season record · W–L–OTL":view.complete?"Season record":"Verified record"],
+      [record,standings?"Season record · W–L–OTL":view.complete?"Season record":"Record"],
       [recent.record,results.length>=5?"Last five":"Recent record"],[streak,"Current streak"],[signed(margin(year),1),course()+" margin / game"],
-      [standings?ordinal(standings.rank):elo?ordinal(elo.rank):null,standings?"League standing":"FBS Elo rank"],
+      [standings?ordinal(standings.rank):ordinal(ranking?.rank),standings?"League standing":"FBS rank"],
       [view.sites.home,view.designated?"Designated home":"Home"],[view.sites.away,view.designated?"Designated away":"Away"]
     ];
     const recentContent = results.length ? (fights ? "" : note("Score is shown with the selected team first."))
@@ -410,7 +411,7 @@
       +(results.length>5?expansion("View all results ("+results.length+")",resultsTable(results.slice(5),fights)):"")
       : note(fights?"No verified bouts for this profile.":"No verified results for this profile.");
     return panel(fights?"Fighter snapshot":"Season snapshot",facts(summary)
-      +(fights ? (!fighter?.records?.pro_mma ? note("Career record unavailable.") : "") : coverage?note(coverage):""),"ti-overview")
+      +(fights&&!fighter?.records?.pro_mma?note("Career record unavailable."):""),"ti-overview")
       +panel(fights?"Recent fights":"Recent results",recentContent)
       +availability(key);
   }
@@ -424,16 +425,13 @@
     metric("Designated away record",v=>v.designated ? v.sites.away : "—"),
     metric("Neutral-site record",v=>v.sites.neutral),
   ];
+  const opponentRate = v=>v.source?.schedule_strength?.win_pct ?? v.nfl.opponentWinPct;
+  const fbsRank = v=>v.ranking ? ordinal(v.ranking.rank)+" of "+v.rankingSize : "—";
   const opponentMetrics = [
-    metric("Opponent win percentage",v=>numberWithRank(v.nfl.sos,v.nfl.sosRank,opponentPct)),
-    metric("Recent opponent win percentage",v=>opponentPct(v.nfl.recentSos)),
-    metric("League win percentage",v=>numberWithRank(v.nfl.winPct,v.nfl.winPctRank,opponentPct)),
-    metric("Record vs .500 or better",v=>v.nfl.strong?.record),
-    metric("Record vs below .500",v=>v.nfl.weak?.record),
-    metric("Pregame opponent win percentage",v=>v.source?.opponent_win_games ? opponentPct(v.source.opponent_win_pct)+" ("+v.source.opponent_win_games+" games)" : "—"),
-    metric("Mean opponent Elo before each game",v=>v.source?.rated_games ? sampleCell(v.source.opponent_elo,v.source.rated_games) : "—"),
-    metric("FBS Elo rating",v=>display(v.elo?.rating)),
-    metric("FBS Elo rank",v=>v.elo?ordinal(v.elo.rank)+" of "+v.eloField:"—")
+    metric("Opponents’ combined record",v=>recordText(v.source?.schedule_strength?.record || v.nfl.opponentRecord)),
+    metric("Opponent win percentage",v=>opponentPct(opponentRate(v))),
+    metric("Pregame opponent win percentage",v=>v.source?.schedule_strength || v.nfl.opponentRecord
+      ? "—" : opponentPct(v.source?.opponent_win_pct))
   ];
   const epa = (value,rank) => numberWithRank(value,rank,n=>signed(n,3));
   const offenseMetrics = [
@@ -495,11 +493,11 @@
       metric("Scoring margin / game",r=>signed(margin(r),1))];
     const performance = tableGroups(["Season",view.results.length>=5?"Last five":"Recent"],[["",metricRows(scoringRows,[year,recent])]]);
     const schedule = tableGroups(["Season"],[["Venues",metricRows(venueMetrics,[view])],
-      ["Opponent quality",metricRows(opponentMetrics,[view])]]);
+      ["Strength of schedule",metricRows(opponentMetrics,[view])],["Team ranking",metricRows([metric("FBS rank",fbsRank)],[view])]]);
     const advanced = tableGroups(["Season"],[["Offense",metricRows(offenseMetrics,[view])],
       ["Defense",metricRows(defenseMetrics,[view])],["Hockey",metricRows(hockeyMetrics,[view])]]);
-    return (performance?panel("Scoring and recent form",performance+(view.coverage?note(view.coverage):"")):"")
-      +(schedule?panel("Schedule and opponent quality",schedule):"")
+    return (performance?panel("Scoring and recent form",performance):"")
+      +(schedule?panel(view.ranking?"Schedule and ranking":"Schedule",schedule):"")
       +(advanced?panel(state.snapshot.sport==="nhl"?"Standings and shot quality":"Team efficiency",advanced
         +(nfl.epaGames?note(nfl.epaGames+" matched box scores"):"")):"")
       +retrospective(view)
@@ -664,10 +662,10 @@
         control(value==="over"?"Over":"Under","total",value,value===total)).join(""):"")+'</div>';
   }
 
-  function selectedMatchup(compared = false) {
+  function selectedMatchup() {
     const {fixture,market} = state;
     const current = fixture.markets?.[market];
-    let html = '<section class="ti-panel ti-current">' + heading("Current market")+marketControls(!compared);
+    let html = '<section class="ti-panel ti-current">' + heading("Current market")+marketControls(false);
     if (current?.length) {
       html += '<table class="ti-data-table ti-market-table"><thead><tr><th scope="col">Side</th><th scope="col">Open</th>'
         +'<th scope="col">Observed</th><th scope="col">Bets / Money</th></tr></thead><tbody>' + current.map(row => {
@@ -726,7 +724,7 @@
     const official = officialHistory(games,market,team,total);
     const gamesContent = rows ? (market!=="TOTAL"&&snapshot.sport!=="ufc"?note("Scores show the selected team first."):"")+rows
       : note("Supporting games will appear when graded quotes are available.");
-    return selectedMatchup()+panel("Historical performance",performance)+panel("Historical games",gamesContent+official);
+    return panel("Historical performance",marketControls(true)+performance)+panel("Historical games",gamesContent+official);
   }
 
   function compare() {
@@ -740,16 +738,16 @@
       metric("Recent form",v=>v.recent.record)
     ] : [
       metric(sides.every(v=>v.complete)?"Season record":"Record",v=>v.record),
-      metric("Coverage",v=>v.coverage),
       metric(matchSamples.every(n=>n===5)?"Last-five record":"Recent record",v=>v.recent.record),
       metric("Streak",v=>v.streak),
       metric(scoring("scored / game"),v=>display(v.year.scored)),
       metric(scoring("allowed / game"),v=>display(v.year.allowed)),
       metric("Scoring margin / game",v=>signed(margin(v.year),1)),
+      metric("FBS rank",fbsRank),
     ];
     const table = tableGroups(sides.map(v=>v.name),[
       [fights?"Record and form":"Season and recent form",metricRows(formRows,sides)],
-      ["Schedule and opponent quality",metricRows(opponentMetrics,sides)],
+      ["Strength of schedule",metricRows(opponentMetrics,sides)],
       ["Offense",metricRows(offenseMetrics,sides)],
       ["Defense",metricRows(defenseMetrics,sides)],
       ["Standings and shot quality",metricRows(hockeyMetrics,sides)],
@@ -759,13 +757,11 @@
     const reports = sides.map(v=>availability(v.key,v.name)).filter(Boolean);
     const [a,b] = sides, observations = [];
     const add = (label,text) => observations.push('<li><strong>'+markup(label)+'</strong><span>'+markup(text)+'</span></li>');
-    if (a.elo && b.elo) add("Team strength",a.name+" ranks "+ordinal(a.elo.rank)+" in FBS Elo. "+b.name+" ranks "+ordinal(b.elo.rank)+".");
-    if (sides.every(v=>v.source?.rated_games && Number.isFinite(v.source.opponent_elo))) {
-      const harder = a.source.opponent_elo >= b.source.opponent_elo ? a : b, other = harder===a ? b : a;
-      if (harder.source.opponent_elo>other.source.opponent_elo) add("Opponent quality",harder.name+" faced higher-rated opponents on average.");
-    } else if (sides.every(v=>Number.isFinite(v.nfl.sos)) && Math.abs(a.nfl.sos-b.nfl.sos)>=0.04) {
-      const harder = a.nfl.sos>b.nfl.sos ? a : b;
-      add("Opponent quality",harder.name+" faced opponents with the higher average win percentage.");
+    const [aRate,bRate] = sides.map(opponentRate);
+    if (Number.isFinite(aRate) && Number.isFinite(bRate) && Math.abs(aRate-bRate)>=0.04) {
+      const higher = aRate > bRate ? a : b, lower = higher===a ? b : a;
+      add("Strength of schedule",higher.name+"’s opponents had a "+opponentPct(opponentRate(higher))+
+        " win rate, compared with "+opponentPct(opponentRate(lower))+" for "+lower.name+".");
     }
     if (sides.every(v=>v.nfl.epaGames>=5 && Number.isFinite(v.nfl.epa))) {
       const better = a.nfl.epa>=b.nfl.epa ? a : b, other = better===a ? b : a;
@@ -788,7 +784,7 @@
     return (table ? panel(fights?"Fighter comparison":"Team comparison",table,"ti-matchup-panel") : "")
       +(insights||reports.length ? panel("What matters in this matchup",insights
         +(reports.length?expansion("Reported availability",'<div class="ti-paired-panels">'+reports.join("")+'</div>'):""),"ti-what-matters"):"")
-      +selectedMatchup(true);
+      +selectedMatchup();
   }
 
   function sourceFooter(views) {
@@ -798,7 +794,7 @@
       ...views.filter(v=>v.independent).map(v=>[v.independent.provider,v.independent.at]),
       ...views.filter(v=>v.standings && v.independent?.standings_at).map(v=>[v.independent.provider+" standings",v.independent.standings_at]),
       ...views.some(v=>v.fighter)?[["UFCalendar",snapshot.sporting?.ufcalendar?.at]]:[],
-      ...views.some(v=>v.elo)?[["College Football Digest",currentCfbElo()?.at]]:[],
+      ...views.some(v=>v.ranking)?[["College Football Digest",currentFbsRanking()?.at]]:[],
       ...snapshot.sources.nflverse?.at?[["nflverse schedule",snapshot.sources.nflverse.at]]:[],
       ...snapshot.sporting?.nfl_team_stats?.at?[["nflverse box scores",snapshot.sporting.nfl_team_stats.at]]:[],
       ...snapshot.sporting?.nfl_availability?.at?[["nflverse availability",snapshot.sporting.nfl_availability.at]]:[],
@@ -806,15 +802,20 @@
       ...views.filter(v=>v.baseball).map(v=>["Retrosheet "+v.baseball.season,v.baseball.at]),
     ]);
     const list = Array.from(provenance,([name,stamp])=>'<li>'+markup(name)+(stamp?' <small>'+markup(when(stamp,et)+" ET")+'</small>':"")+'</li>').join("");
+    const externalAts = new Set(views.flatMap(v=>v.results.map(row=>row.ats?.source).filter(Boolean)));
     const issues = views.flatMap(v=>v.issues.map(issue=>v.name+" vs "+issue.opponent+" · "+when(issue.date,shortDate)
       +(issue.conflict ? " · Archive "+issue.archive+" / provider "+issue.external : " · Same-day fixture could not be matched")));
+    const coverage = views.filter(v=>v.coverage).map(v=>note(v.name+" · "+v.coverage)).join("");
     const epaSamples = views.filter(v=>v.nfl.epaGames).map(v=>v.name+" "+v.nfl.epaGames);
-    const details = '<ul class="ti-source-list">'+list+'</ul>'
-      +(views.some(v=>v.elo)?'<p class="ti-note"><a href="https://collegefootballdigest.com/developers#what-we-serve">College Football Digest</a> Elo uses CollegeFootballData.com results. <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></p>':"")
-      +(snapshot.sport==="nfl"?note("Opponent win percentage excludes games against the selected team. Ties count as half a win. EPA means expected points added. Dropbacks use pass attempts plus sacks. EPA uses matched box scores without adjusting for opponents."
+    const details = '<ul class="ti-source-list">'+list+'</ul>'+coverage
+      +(views.some(v=>v.ranking)?'<p class="ti-note"><a href="https://collegefootballdigest.com/developers#what-we-serve">College Football Digest</a> supplies the FBS power ranking using CollegeFootballData.com results. <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></p>':"")
+      +(snapshot.sport==="nfl"?note("EPA means expected points added. Dropbacks use pass attempts plus sacks. EPA uses matched box scores without adjusting for opponents."
         + (epaSamples.length ? " Matched box scores: "+epaSamples.join(", ")+ "." : "")):"")
       +(snapshot.sport==="ufc"?note("Professional and UFC records have different scopes. Days between starts are approximate for date-only results."):"")
-      +(views.some(v=>v.source)?note("Season samples use completed source games. Recent results merge only verified date, opponent and outcome matches. Pregame opponent metrics use the ratings or records available at each game."):"")
+      +(views.some(v=>v.source)?note("Recent results merge only verified date, opponent and outcome matches."):"")
+      +(views.some(v=>v.source?.schedule_strength?.record || v.nfl.opponentRecord)
+        ?note("Strength of schedule counts each opponent once. Opponent records exclude games against the selected team and include only results available before this matchup. Ties count as half a win."):"")
+      +(externalAts.size?note("ATS uses the Red Fox pregame quote where available. Closing-line fallbacks are labeled at the result and sourced from "+[...externalAts].join(", ")+"."):"")
       +(issues.length?'<p class="ti-note">Result checks</p><ul class="ti-source-list">'+[...new Set(issues)].map(issue=>'<li>'+markup(issue)+'</li>').join("")+'</ul>':"")
       +note("Historical ROI uses one unit risked per graded game at its verified pregame checkpoint. The checkpoint may precede the closing quote.");
     const age = Date.now()-Date.parse(snapshot.generated);

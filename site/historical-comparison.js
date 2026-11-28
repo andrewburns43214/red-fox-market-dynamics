@@ -278,10 +278,11 @@
         result.matched?"Matched quotes need a verified outcome and entry price to count.":"No comparable games in this group."):
         active.cohort!=="closest"&&!report.closest?.graded?
           "No priced, graded closest matches. Showing "+cohorts[active.cohort].toLowerCase()+"." : "");
-    return `<section class="historic-performance" aria-label="Historical performance">
-      <div class="historic-performance-head"><h3>Historical performance</h3><label><span>Compare</span><select data-historic-cohort aria-label="Comparison group">
+    return `<section class="historic-performance" aria-label="Similar market setups">
+      <div class="historic-performance-head"><h3>Similar market setups</h3><label><span>Compare</span><select data-historic-cohort aria-label="Comparison group">
         ${Object.entries(cohorts).map(([key,name])=>`<option value="${key}"${active.cohort===key?" selected":""}>${name}</option>`).join("")}
       </select></label></div>
+      <p class="historic-note">Past games across teams with similar lines, prices, and betting splits.</p>
       <div class="historic-metrics">${tile("Record",result?.graded?record(result):"—",(result?.graded||0)+" graded")}
         ${tile("Win rate",pct(result?.win_rate))}
         ${tile("ROI",result?.roi==null?"—":signed(result.roi)+"%",result?.units==null?"":signed(result.units)+" units",tone(result?.roi))}
