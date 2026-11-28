@@ -13,7 +13,9 @@ CPUQuota=12%
 IOSchedulingClass=idle
 IOWeight=5
 MemoryMax=175M
-TimeoutStartSec=60
+# Full historical coverage can take over a minute at the existing CPU cap.
+# The publisher lock is checked throughout collection and market processing.
+TimeoutStartSec=90
 UMask=0022
 ProtectSystem=strict
 ProtectHome=true
