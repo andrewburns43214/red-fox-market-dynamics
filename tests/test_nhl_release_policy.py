@@ -166,7 +166,7 @@ def test_official_nhl_board_kickoff_and_single_settlement(tmp_path, monkeypatch,
     for minutes, selected_price in ((80, "-120"), (65, "-120"), (49, "-120"), (25, "-125"), (6, "-125")):
         clock = kickoff - pd.Timedelta(minutes=minutes)
         source = clock.isoformat()
-        bets = 75 if not closing_pass and minutes <= 25 else 80
+        bets = 75 if not closing_pass and minutes == 25 else 80
         chosen = side("Away", f"Away @ {selected_price}", bets, 55, source)
         rival = side("Home", "Home @ +105", 100-bets, 45, source)
         # The displayed market leader can be the opposite team. The official
@@ -176,10 +176,13 @@ def test_official_nhl_board_kickoff_and_single_settlement(tmp_path, monkeypatch,
         classified = pd.DataFrame([market])
         selections = release.capture_official(classified, history, {}, data, observed=clock)
         raw = apply_red_fox_favorites(classified, as_of=clock)
-        published = update_favorite_tracking(raw, data, as_of=clock, nhl_selections=selections)
+        published = update_favorite_tracking(raw, data, as_of=clock, nhl_selections=selections,
+            deferred_markets={("nba", "retained", "MONEYLINE")}, unavailable_sports={"nba"})
         picked = published.iloc[0]
         if minutes in (80, 65) or (not closing_pass and minutes <= 25):
             assert picked.red_fox_favorite == "false"
+            if not closing_pass and minutes <= 25:
+                assert picked.favorite_review_reason == "Moneyline split failed at 75% tickets, below 80%."
         else:
             assert picked.red_fox_favorite == "true"
             assert picked.favorite_side == "Away"

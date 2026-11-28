@@ -1,4 +1,4 @@
-﻿import json
+import json
 
 import pandas as pd
 import pytest
@@ -129,7 +129,8 @@ def test_nba_removal_reports_selected_moneyline_retrace_after_two_captures(tmp_p
             quotes = json.loads(raw.at[1, "market_sides"])
             next(quote for quote in quotes if quote["flagged_side"] == "Home")["return_toward_open"] = True
             raw.at[1, "market_sides"] = json.dumps(quotes)
-        board = update_favorite_tracking(raw, tmp_path, as_of=now, nba_config=(True, True))
+        board = update_favorite_tracking(raw, tmp_path, as_of=now, nba_config=(True, True),
+            deferred_markets={("nhl", "retained", "MONEYLINE")}, unavailable_sports={"nhl"})
         if minute == 20:
             assert is_favorite(board, 1)
             assert board.iloc[1].favorite_review_state == "pending_removal"
@@ -141,3 +142,9 @@ def test_nba_removal_reports_selected_moneyline_retrace_after_two_captures(tmp_p
     assert tracked.transition_reason == board.iloc[1].favorite_review_reason
     assert evidence["original_qualification"]["first_qualified_line"] == "-122"
     assert evidence["quotes"]["MONEYLINE"]["current_line"] == "-121"
+
+    for now, expected in (("2026-11-24T22:40:00Z", False), ("2026-11-24T22:50:00Z", True)):
+        board = update_favorite_tracking(fixture(now), tmp_path, as_of=now, nba_config=(True, True),
+            deferred_markets={("nhl", "retained", "MONEYLINE")}, unavailable_sports={"nhl"})
+        assert is_favorite(board, 1) == expected
+    assert board.iloc[1].favorite_side == "Home"
