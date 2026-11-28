@@ -144,6 +144,10 @@ class IndependentSourcesTest(unittest.TestCase):
         independent = fixture["sporting"]["independent"]
         self.assertEqual(independent["teams"]["boston celtics"]["record"], [2,0,0])
         self.assertEqual(independent["teams"]["boston celtics"]["opponent_win_games"], 1)
+        self.assertEqual(independent["teams"]["boston celtics"]["recent"][0], {
+            "opponent": "Chicago Bulls", "opponent_key": "chicago bulls", "at": "2026-11-21",
+            "scores": [101, 91], "venue": None,
+        })
         fixture.pop("sporting")
         self.assertEqual(summarize(rows+[dict(rows[2], id="9")], [fixture], PUBLIC_NOW, status, "balldontlie"), 0)
         self.assertNotIn("sporting", fixture)
@@ -155,6 +159,6 @@ class IndependentSourcesTest(unittest.TestCase):
                                                                 dict(sport="mma", status="confirmed", **sides)]}}, "7")
         self.assertEqual(card["bouts"], [{"janedoe":"1", "jillsmith":"2"}])
         entry = {"date":"2026-01-02", "opponent_name":"Opposing Fighter", "status":"win",
-                 "competition_level":"pro", "sport":"mma"}
+                 "competition_level":"pro", "sport":"mma", "method":"Decision"}
         recent = career_recent({"data":[entry, entry, dict(entry, competition_level="amateur", date="2026-11-24")]})
-        self.assertEqual(recent, [{"date":"2026-01-02", "opponent":"Opposing Fighter","result":"win"}])
+        self.assertEqual(recent, [{"date":"2026-01-02", "opponent":"Opposing Fighter","result":"win","method":"Decision"}])

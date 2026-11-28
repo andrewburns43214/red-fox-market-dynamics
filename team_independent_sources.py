@@ -416,7 +416,9 @@ def summarize(rows, fixtures, now, status, provider):
                     win_rates.append(rate)
                 if i < 5:
                     game_date = datetime.fromisoformat(row["start"]).astimezone(ET).date()
-                    recent.append({"opponent": row["names"][1-side], "at": str(game_date), "scores": scores})
+                    venue = ("home" if side else "away") if row["venue"] == "home" else row["venue"]
+                    recent.append({"opponent": row["names"][1-side], "opponent_key": opponent,
+                                   "at": str(game_date), "scores": scores, "venue": venue})
             sites = {}
             for label, side in (("home", 1), ("away", 0), ("neutral", None)):
                 at_site = [r for r in games if (r["venue"] == "neutral" if side is None else
@@ -561,7 +563,11 @@ def career_recent(payload):
         key = str(when), canonical(opponent, "ufc")
         if key not in seen:
             seen.add(key)
-            result.append({"date": str(when), "opponent": opponent, "result": row["status"]})
+            item = {"date": str(when), "opponent": opponent, "result": row["status"]}
+            method = row.get("method")
+            if isinstance(method, str) and 0 < len(method.strip()) <= 100:
+                item["method"] = method.strip()
+            result.append(item)
     return sorted(result, key=lambda item: item["date"], reverse=True)[:8]
 
 
