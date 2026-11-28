@@ -19,8 +19,8 @@
 <script src="/manual-favorites.js?v=3" defer></script>
 <link rel="stylesheet" href="/historical-comparison.css?v=9">
 <script src="/historical-comparison.js?v=12" defer></script>
-<link rel="stylesheet" href="/team-intelligence.css?v=1">
-<script src="/team-intelligence.js?v=1" defer></script>
+<link rel="stylesheet" href="/team-intelligence.css?v=2">
+<script src="/team-intelligence.js?v=2" defer></script>
 <script>
 // Keep the server-side access cookie aligned with the signed-in Supabase session.
 (function () {
@@ -2802,7 +2802,7 @@ function sideSignals(side){
 function teamIntelligenceName(row,index,name){
   const text=escHtml(name), game=String(row.game||'');
   if(!row.game_id||!row.sport||game.split(/\s+@\s+|\s+vs?\.?\s+/i).length!==2) return text;
-  return '<button type="button" class="team-intelligence-name" data-team-intelligence data-team="'+index+'" data-game="'+escHtml(game)+'" data-fixture="'+escHtml(row.game_id)+'" data-start="'+escHtml(row.kickoff_iso)+'" data-sport="'+escHtml(row.sport)+'" data-market="'+escHtml(row.market_display)+'" aria-label="Team Intelligence for '+text+'" title="Team Intelligence">'+text+'</button>';
+  return '<button type="button" class="team-intelligence-name" data-team-intelligence aria-haspopup="dialog" aria-expanded="false" data-team="'+index+'" data-game="'+escHtml(game)+'" data-fixture="'+escHtml(row.game_id)+'" data-start="'+escHtml(row.kickoff_iso)+'" data-sport="'+escHtml(row.sport)+'" data-market="'+escHtml(row.market_display)+'" aria-label="Team Intelligence for '+text+'" title="Team Intelligence">'+text+'</button>';
 }
 function teamIntelligenceMatch(row){
   const game=String(row.game||''), parts=game.split(/(\s+@\s+|\s+vs?\.?\s+)/i);

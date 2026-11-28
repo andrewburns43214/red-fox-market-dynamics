@@ -6,7 +6,67 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from history_blocks import encode
+from team_sport_context import fighter_identities, nfl_availability, nfl_efficiency, nfl_profile_context, wikidata_fighters
 from team_intelligence import graded_quotes, identities, nfl_merge, published_rows, season, valid_outcomes
+
+
+class SportingDataTest(unittest.TestCase):
+    def test_efficiency_requires_unique_opponents_and_uses_attempts_sacks_and_carries(self):
+        raw = (
+            "game_id,team,opponent_team,season_type,attempts,sacks_suffered,carries,passing_epa,rushing_epa\n"
+            "game,A,B,REG,20,2,22,2.25,-1.5\n"
+            "game,B,A,REG,21,4,20,3.0,0.0\n"
+            "duplicated,A,B,REG,20,2,22,1.0,1.0\n"
+            "duplicated,A,B,REG,20,2,22,1.0,1.0\n"
+            "duplicated,B,A,REG,20,2,22,1.0,1.0\n"
+        ).encode("utf-8")
+        data = nfl_efficiency(raw)
+        self.assertEqual(data["game"]["A"], {"opponent":"B","plays":44,"epa":.75})
+        self.assertNotIn("duplicated",data)
+
+    def test_practice_absence_is_preserved_separately_from_game_status(self):
+        raw = (
+            "season,season_type,week,team,gsis_id,full_name,position,report_primary_injury,report_status,practice_primary_injury,practice_status\n"
+            "2026,REG,12,WAS,a,A Player,WR,,,Ankle,Did Not Participate In Practice\n"
+            "2026,REG,12,WAS,b,B Player,CB,Calf,Out,Calf,Did Not Participate In Practice\n"
+            "2026,REG,12,WAS,c,C Player,FS,,,Elbow,Full Participation in Practice\n"
+        ).encode("utf-8")
+        results = nfl_availability(raw)["2026:12:WAS"]
+        self.assertEqual([(r["name"],r["status"]) for r in results],
+                         [("B Player","Out"),("A Player","Did not practice")])
+
+    def test_nfl_supplements_require_exact_score_fixture_mapping(self):
+        with TemporaryDirectory() as directory:
+            state = Path(directory)
+            (state/"nfl-team-stats-2026.json").write_text(json.dumps({"data":{"game":{
+                "WAS":{"opponent":"ARI","epa":2,"plays":40}, "ARI":{"opponent":"WAS","epa":-3,"plays":45},
+            }}}))
+            at = "2026-11-27T18:00:00.000000+00:00"
+            (state/"nfl-availability-2026.json").write_text(json.dumps({"source_at":at,
+                "data":{"2026:12:WAS":[{"name":"A Player","status":"Out"}]}}))
+            keys = ["washington commanders","arizona cardinals"]
+            start = "2026-11-29T21:25:00.000000+00:00"
+            schedule = {"games":[dict(keys=keys,stage="REG",start=start,codes=["WAS","ARI"],week=12,season=2026)]}
+            fixtures = {"correct":{"keys":keys,"start":start},"postponed":{"keys":keys,"start":"2026-12-02T21:25:00.000000+00:00"}}
+            games = {"game":{"uid":"game","source":"nflverse","codes":["WAS","ARI"],"keys":keys},
+                     "similar":{"uid":"similar","source":"nflverse","codes":["WAS","ARI"],"keys":keys}}
+            nfl_profile_context(state, fixtures, games, schedule, "2026-11-28T02:00:00.000000+00:00", lambda:True, False)
+            self.assertEqual(games["game"]["sporting"]["efficiency"][keys[0]]["epa"],2)
+            self.assertNotIn("sporting",games["similar"])
+            self.assertEqual(fixtures["correct"]["sporting"]["availability"][keys[0]][0]["status"],"Out")
+            self.assertNotIn("sporting",fixtures["postponed"])
+
+    def test_fighter_ids_and_measurements_require_unambiguous_evidence(self):
+        receipts = [
+            {"source":"verified_research_ufc","names":["Fighter One","Fighter Two"],"athlete_ids":["12345","23456"]},
+            {"source":"verified_research_ufc","names":["Different Fighter","Fighter Three"],"athlete_ids":["12345","34567"]},
+        ]
+        self.assertNotIn("12345",fighter_identities(receipts).values())
+        def binding(id,item,amount,unit):
+            return {name:{"value":value} for name,value in zip(("espn","item","height","unit"),(id,item,amount,unit))}
+        raw = json.dumps({"results":{"bindings":[binding("23456","Q1","1.80","Q11573"),binding("34567","Q2","1.75","Q11573"),
+                                                   binding("34567","Q2","1.78","Q11573")]}}).encode()
+        self.assertEqual(wikidata_fighters(raw),{"23456":{"item":"Q1","height_cm":180.0}})
 
 
 class TeamIntelligenceTest(unittest.TestCase):

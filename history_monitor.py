@@ -136,6 +136,16 @@ def alerts(root, private, state, now, free):
                 messages["team_intelligence_mapping"] = "Team Intelligence reported an unusual number of identity conflicts. Inspect its private health manifest."
         if stale or failed("redfox-team-intelligence.service"):
             messages["team_intelligence"] = "Team Intelligence worker failed or snapshots are missing or stale for " + (", ".join(stale) or "a worker run") + "."
+        failed_sources = []
+        for status in coverage.values():
+            for name, source in status.get("sporting", {}).items():
+                if source.get("error") and (not source.get("at") or
+                        now - datetime.fromisoformat(source["at"]).timestamp() > 72 * 3600):
+                    failed_sources.append(name.replace("_"," "))
+        if failed_sources:
+            messages["team_intelligence_supplemental_sources"] = (
+                "Optional Team Intelligence sporting data sources require attention: " + ", ".join(sorted(failed_sources)) + "."
+            )
         nfl = coverage.get("nfl", {})
         if nfl.get("source_error") and nfl.get("source_at"):
             if now - datetime.fromisoformat(nfl["source_at"]).timestamp() > 48 * 3600:

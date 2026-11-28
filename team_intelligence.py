@@ -22,6 +22,7 @@ from history_comparisons import WINDOWS, grade, side_key
 from history_public import outcome_signature
 from history_store import FREE_DISK_RESERVE, atomic_text, latest_provider_outcomes, packed, utc
 from team_aliases import _split_game
+from team_sport_context import baseball_profile_context, nfl_profile_context, ufc_profile_context
 
 SPORTS = ("nfl", "ncaaf", "nba", "ncaab", "mlb", "nhl", "ufc")
 MARKETS = ("SPREAD", "MONEYLINE", "TOTAL")
@@ -94,11 +95,12 @@ def number(value):
 def nfl_schedule(cache, seconds, permit_network):
     path = cache / "nflverse.json"
     stored = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-    if not permit_network or (clock().timestamp() - stored.get("checked", 0)) < 10800:
+    current_schema = not stored.get("games") or "codes" in stored["games"][0]
+    if not permit_network or (current_schema and (clock().timestamp() - stored.get("checked", 0)) < 10800):
         return stored
     try:
         headers = {"User-Agent": "RedFox-Team-Intelligence/1", "Accept-Encoding": "gzip"}
-        if stored.get("etag"):
+        if current_schema and stored.get("etag"):
             headers["If-None-Match"] = stored["etag"]
         with urlopen(Request(NFL_URL, headers=headers), timeout=seconds) as response:
             body = response.read(6_000_001)
@@ -147,6 +149,7 @@ def nfl_game(row):
     if game_type not in {"REG", "WC", "DIV", "CON", "SB"}:
         return None
     return dict(uid=row["game_id"], provider=row["espn"], start=tip, names=names,
+                codes=[row.get("away_team"), row.get("home_team")], week=number(row.get("week")),
                 keys=[side_key(n, "nfl", "MONEYLINE") for n in names],
                 scores=score if None not in score else None, season=year, stage=game_type,
                 venue="neutral" if row.get("location") == "Neutral" else "home" if row.get("location") == "Home" else "",
@@ -357,7 +360,7 @@ def favorites(root, sport):
     return result
 
 
-def build(root, db, sport, external, now, guard):
+def build(root, db, sport, external, now, guard, source_state, permit_network):
     rows = published_rows(root, sport)
     catalog, invalid = {}, set()
     for row in db.execute("SELECT event_id,matchup,scheduled_at FROM fixtures WHERE sport=?", (sport,)):
@@ -406,6 +409,14 @@ def build(root, db, sport, external, now, guard):
             available = graded_quotes(db,sport,match,m,r)
             if available:
                 match["quotes"][m] = available
+    sporting = {}
+    if sport == "nfl":
+        sporting = nfl_profile_context(source_state, catalog, games, external, now, guard, permit_network)
+    elif sport == "mlb":
+        sporting = baseball_profile_context(source_state, now, guard, permit_network)
+    elif sport == "ufc":
+        receipts = [outcome["_receipt"][1] for outcome in known.values() if "_receipt" in outcome]
+        sporting = ufc_profile_context(source_state, receipts, catalog, guard, permit_network)
     for match in games.values():
         match.pop("provider", None)
         match.pop("_receipt", None)
@@ -417,7 +428,7 @@ def build(root, db, sport, external, now, guard):
     complete = sorted(year for year, schedule in regular.items()
                       if len({match["uid"] for match in schedule}) == 272
                       and all(match["scores"] or match["start"] > past for match in schedule))
-    return dict(version=1,sport=sport,generated=now,fixtures=catalog,teams=teams,games=games,
+    return dict(version=1,sport=sport,generated=now,fixtures=catalog,teams=teams,games=games,sporting=sporting,
                 sources={"nflverse":{"url":"https://github.com/nflverse/nflverse-data/releases/tag/schedules",
                                      "at":external.get("source_at"),"error":external.get("error",""),
                                      "complete_regular_schedules":complete if not mismatch else []}
@@ -467,7 +478,7 @@ def main():
                 ext = nfl_schedule(args.state, 5, not args.no_network) if sport == "nfl" else {}
                 if not guard():
                     break
-                profile = build(args.root,db,sport,ext,now,guard)
+                profile = build(args.root, db, sport, ext, now, guard, args.state, not args.no_network)
                 if not guard():
                     break
                 if profile["diagnostics"]["fixtures"] == 0:
@@ -477,6 +488,8 @@ def main():
                     "checked": now, "source_error": ext.get("error", ""), "source_at": ext.get("source_at"),
                     "bytes": (args.output / (sport+".json")).stat().st_size,
                     "seconds": round(time.monotonic() - started, 2),
+                    "sporting": {name: {field:value.get(field) for field in ("at","checked","error","coverage")}
+                                 for name,value in profile["sporting"].items() if name != "fighters"},
                 }
                 atomic(status_path,{"version":1,"sports":status})
                 print(packed({"sport":sport,**status[sport]}),flush=True)
