@@ -785,6 +785,8 @@ def _refresh(coverage):
     if nba_config[1]:
         try:
             from nba_legacy_shadow import record_legacy
+
+            nba_raw = board.loc[board["sport"].eq("nba")].copy() if "sport" in board else board.iloc[:0].copy()
             legacy_board = record_legacy(board, DATA, newest_snapshot, deferred_markets=deferred,
                                          unavailable_sports=unavailable_sports)
         except Exception as exc:

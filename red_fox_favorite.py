@@ -484,11 +484,14 @@ def update_favorite_tracking(
             started_frozen_keys.add(tuple(str(frozen.get(column, "")) for column in keys))
     previous = {}
     first_entries = {}
+    removal_entries = {}
     if not history.empty:
         ordered = history.sort_values("recorded_at", kind="mergesort")
         for _, prior in ordered.iterrows():
             key = tuple(str(prior.get(column, "")) for column in keys)
             previous[key] = prior
+            if key[0] in {"nba", "nhl"} and prior.get("favorite_state") == "qualified":
+                removal_entries.setdefault((*key, *_favorite_review_identity(prior)), prior)
             if (key[2] == "SPREAD" and prior.get("favorite_state") == "qualified"
                     and prior.get("recorded_at") == prior.get("first_qualified_at")):
                 identity = _favorite_review_identity(prior)
@@ -552,11 +555,24 @@ def update_favorite_tracking(
                 rejection = ""
             review_reason = str(row.get("favorite_review_reason", "")).strip()
             gate_reason = str(row.get("_favorite_gate_reason", "")).strip()
+            replacement_removed = official_nhl_favorite(prior) and _truthy(row.get("favorite_late_invalidated"))
+            pilot_reason = row.get("_nba_removal_explanation")
+            if replacement_removed:
+                review_reason = str(row.get("favorite_late_invalidated_reason", "")).strip()
+                gate_reason = review_reason
+            elif nba_public_favorite(prior) and isinstance(pilot_reason, str):
+                gate_reason = pilot_reason
             if gate_reason and gate_reason.lower() != "nan":
                 review_reason = " | ".join(dict.fromkeys(filter(None, (review_reason, gate_reason))))
             if removal_games is None:
                 removal_games = matchup_rows(board)
             decision_evidence = capture(row, prior, removal_games.get(key[:2]), phase="removal")
+            if replacement_removed or (nba_public_favorite(prior) and isinstance(pilot_reason, str)):
+                decision_evidence["gate_reason"] = gate_reason
+            if sport in {"nba", "nhl"}:
+                original = removal_entries[(*key, *_favorite_review_identity(prior))]
+                decision_evidence["original_qualification"] = _removal_research_quote(original)
+                decision_evidence["previous_qualification"] = _removal_research_quote(prior)
             record.update(
                 recorded_at=at,
                 favorite_state="not_qualified",
@@ -601,10 +617,18 @@ def update_favorite_tracking(
         "_visibility_restored", "_favorite_legacy_qualified", "_favorite_legacy_side",
         "_favorite_legacy_reason", "_ncaaf_move_gate_passed",
         "_ncaaf_market_move_status", "_ncaaf_decision_reason", "_favorite_gate_reason",
-        "_nba_release_mismatch",
+        "_nba_release_mismatch", "_nba_removal_explanation",
         "_nhl_paused_cohort", "_nhl_paused_side", "_nhl_paused_pathway", "_nhl_paused_version",
         "_ufc_integrity", "_ufc_market_proof",
     ], errors="ignore")
+
+
+def _removal_research_quote(record: pd.Series) -> dict:
+    return {field: record.get(field, "") for field in (
+        "recorded_at", "source_observed_at", "entry_observed_at", "first_qualified_line",
+        "open_line", "current_line", "bets_pct", "money_pct", "reaction", "path",
+        "whipsaw_state", "cross_market_state", "supporting_evidence", "snapshot_id",
+    )}
 
 
 def _apply_manual_favorite_inclusions(frame: pd.DataFrame, at: str) -> pd.DataFrame:
@@ -1143,9 +1167,13 @@ def _apply_visibility_lock(
             elif not raw_favorite and active:
                 hard, _, reason = _material_removal(row, source)
                 confirmed = _review_confirmed(reviews, key, "removal", now, source, observed_row=row)
+                diagnosis = row.get("_nba_removal_explanation")
+                diagnosis = diagnosis if nba_public_favorite(source) and isinstance(diagnosis, str) else ""
                 if hard or confirmed:
                     if confirmed:
                         reason = _latest_review_reason(reviews, key) or reason
+                    if diagnosis and not hard:
+                        reason = diagnosis
                     _clear_favorite(result, index, reason)
                     _set_review(result, index, "applied_removal", reason, at)
                     review_records.append(_review_record(row, at, "applied", "removal", reason, identity_row=source))
@@ -1155,6 +1183,8 @@ def _apply_visibility_lock(
                         if identity[0] in {"ufc", "nhl"}
                         else "Favorite failed one capture; awaiting a second consecutive nonqualifying scrape."
                     ) or "Favorite failed one capture; awaiting a second consecutive nonqualifying scrape."
+                    if diagnosis:
+                        reason = diagnosis + " Awaiting a second consecutive nonqualifying scrape."
                     _restore_favorite(result, index, source)
                     result.at[index, "favorite_reason"] = "Favorite held through a single nonqualifying capture."
                     _set_review(result, index, "pending_removal", reason, at)
@@ -2292,39 +2322,74 @@ def _cfb_spread_decision(row: pd.Series, game: pd.DataFrame, history: pd.DataFra
     return candidates[0] if len(candidates) == 1 else None
 
 
-def _nba_public_selection(game: pd.DataFrame, now: pd.Timestamp) -> tuple | None:
+def _nba_public_selection(game: pd.DataFrame, now: pd.Timestamp, *, failures: dict | None = None) -> tuple | None:
+    def diagnose(team: str, reason: str) -> None:
+        if failures is not None:
+            failures.setdefault(team, reason)
     # The verified replay vetoes a raw legacy Favorite before any hold switch
     # is applied. A hypothetical legacy promotion is not needed for this veto.
-    if game["red_fox_favorite"].eq("true").any() or game["market_display"].eq("SPREAD").sum() != 1:
+    if game["red_fox_favorite"].eq("true").any():
+        diagnose("", "The NBA moneyline pathway was blocked by a raw legacy Favorite.")
+        return None
+    if game["market_display"].eq("SPREAD").sum() != 1:
+        diagnose("", "A unique paired spread market was unavailable.")
         return None
     if _nba_cross_mismatch(game):
+        diagnose("", "A verified spread and moneyline contradiction appeared.")
         return None
     for index, row in game.loc[game["market_display"].eq("MONEYLINE")].iterrows():
         support = _side_identity(row.get("supported_side"))
         for side in _sides(row):
             name = side["flagged_side"]
-            if support and support != _side_identity(name):
+            team = _side_identity(name)
+            if support and support != team:
+                diagnose(team, "Moneyline support switched to the opponent.")
                 continue
             price = _line_value(side.get("current_line"), "MONEYLINE")
-            if price is None or not -165 <= price <= -100 or not _base_quality(side):
+            if price is None or not -165 <= price <= -100:
+                diagnose(team, "Moneyline price unavailable." if price is None else
+                         f"Moneyline price {price:+g} is outside the eligible range of ?165 to ?100.")
+                continue
+            failure = _quality_failure(side)
+            if failure:
+                diagnose(team, "Moneyline " + failure[0].lower() + failure[1:])
                 continue
             bets, money = _number(side.get("bets_pct")), _number(side.get("money_pct"))
             if bets is None or money is None or bets < NBA_PUBLIC_MIN_TICKETS or money < NBA_PUBLIC_MIN_MONEY:
+                if bets is None or money is None:
+                    diagnose(team, "Moneyline ticket or money percentage unavailable.")
+                else:
+                    breaches = []
+                    if bets < NBA_PUBLIC_MIN_TICKETS:
+                        breaches.append(f"{bets:g}% tickets, below {NBA_PUBLIC_MIN_TICKETS}%")
+                    if money < NBA_PUBLIC_MIN_MONEY:
+                        breaches.append(f"{money:g}% money, below {NBA_PUBLIC_MIN_MONEY}%")
+                    diagnose(team, "Moneyline split failed at " + " and ".join(breaches) + ".")
                 continue
             spread = _matching_market_side(game, "SPREAD", name)
-            if not spread or not _base_quality(spread):
+            if not spread:
+                diagnose(team, "The selected team?s spread quote was unavailable.")
+                continue
+            failure = _quality_failure(spread)
+            if failure:
+                diagnose(team, "Paired spread " + failure[0].lower() + failure[1:])
                 continue
             number = _line_value(spread.get("current_line"), "SPREAD")
             if number is None or not -4 <= number <= 0:
+                diagnose(team, "Spread number unavailable." if number is None else
+                         f"Spread {number:+g} is outside the eligible range of ?4 to 0.")
                 continue
             opened = _line_value(side.get("open_line"), "MONEYLINE")
             if opened is None or opened == 0:
+                diagnose(team, "The opening moneyline price was unavailable.")
                 continue
             movement = _american_implied_probability(price) - _american_implied_probability(opened)
             if not -2.5 < movement < 2.5:
+                diagnose(team, f"Moneyline moved {movement:+.2f} implied percentage points from open, outside the neutral range.")
                 continue
             observed = pd.to_datetime(side.get("source_latest_at"), errors="coerce", utc=True)
             if pd.isna(observed) or observed > now:
+                diagnose(team, "The selected moneyline quote had no valid source time.")
                 continue
             evidence = {key: side.get(key, "") for key in ("current_line", "open_line", "bets_pct", "money_pct", "reaction", "path")}
             evidence.update(spread=number, spread_source_observed_at=spread.get("source_latest_at", ""),
@@ -2372,8 +2437,16 @@ def _apply_nba_release(current: pd.DataFrame, tracking: pd.DataFrame, at: str,
             current.loc[game.index, "_nba_release_mismatch"] = "true"
         if not (pilot_enabled or active_pilot) or (first is not None and not first_pilot):
             continue
-        pick = _nba_public_selection(game, now)
+        failures = {} if active_pilot else None
+        pick = _nba_public_selection(game, now, failures=failures)
         if not pick:
+            if failures is not None:
+                for state in active:
+                    if nba_public_favorite(state):
+                        team = _side_identity(state["favorite_side"])
+                        failure = failures.get(team) or failures.get("")
+                        if failure:
+                            current.loc[game.index[game["market_display"].eq("MONEYLINE")], "_nba_removal_explanation"] = failure
             continue
         index, name, evidence = pick
         row = game.loc[index]

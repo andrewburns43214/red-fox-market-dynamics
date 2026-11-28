@@ -197,6 +197,16 @@ def capture(row, identity, game_rows, *, phase, closing_add=False, market_availa
               "gate_reason": str(row.get("_favorite_gate_reason", "") or ""),
               "market_decision_reason": str(row.get("favorite_reason", "") or ""),
               "outcome_lookup": outcome}
+    if sport in {"nba", "nhl"} and phase == "removal":
+        result["split_breach_margins"] = [
+            {"market": checked, "field": field, "observed": value, "limit": bound,
+             "operator": operator, "percentage_points": direction * (value - bound)}
+            for checked, *bounds in checks
+            for field, limits in zip(SPLIT_FIELDS, bounds)
+            if (value := (quotes.get(checked) or {}).get("bets_pct" if field == "tickets" else "money_pct")) is not None
+            for bound, direction, operator in zip(limits, (-1, 1), ("minimum", "maximum"))
+            if bound is not None and direction * (value - bound) > 0
+        ]
     if not pathway:
         result["split_breach"] = "unavailable"
     if proof:

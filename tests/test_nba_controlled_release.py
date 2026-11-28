@@ -1,4 +1,4 @@
-import json
+﻿import json
 
 import pandas as pd
 import pytest
@@ -120,3 +120,24 @@ def test_nba_public_release_hard_contradiction_blocks_handoff(tmp_path):
     read = lambda name: pd.read_csv(tmp_path/name, dtype=str, keep_default_na=False)
     assert favorite_handoff_states(read("red_fox_favorite_freeze_candidates.csv"), pd.Timestamp("2026-11-25T01:04:00Z"),
                                     read("red_fox_favorite_tracking.csv"), raw).empty
+
+def test_nba_removal_reports_selected_moneyline_retrace_after_two_captures(tmp_path):
+    for minute in (0, 10, 20, 30):
+        now = f"2026-11-24T22:{minute:02d}:00Z"
+        raw = fixture(now, price=-121 if minute >= 20 else -122)
+        if minute >= 20:
+            quotes = json.loads(raw.at[1, "market_sides"])
+            next(quote for quote in quotes if quote["flagged_side"] == "Home")["return_toward_open"] = True
+            raw.at[1, "market_sides"] = json.dumps(quotes)
+        board = update_favorite_tracking(raw, tmp_path, as_of=now, nba_config=(True, True))
+        if minute == 20:
+            assert is_favorite(board, 1)
+            assert board.iloc[1].favorite_review_state == "pending_removal"
+            assert "Moneyline movement retraced toward the opener." in board.iloc[1].favorite_review_reason
+    assert not is_favorite(board, 1)
+    assert board.iloc[1].favorite_review_reason == "Moneyline movement retraced toward the opener."
+    tracked = pd.read_csv(tmp_path/"red_fox_favorite_tracking.csv", dtype=str, keep_default_na=False).iloc[-1]
+    evidence = json.loads(tracked.decision_evidence)
+    assert tracked.transition_reason == board.iloc[1].favorite_review_reason
+    assert evidence["original_qualification"]["first_qualified_line"] == "-122"
+    assert evidence["quotes"]["MONEYLINE"]["current_line"] == "-121"
