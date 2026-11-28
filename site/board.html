@@ -19,6 +19,8 @@
 <script src="/manual-favorites.js?v=3" defer></script>
 <link rel="stylesheet" href="/historical-comparison.css?v=9">
 <script src="/historical-comparison.js?v=12" defer></script>
+<link rel="stylesheet" href="/team-intelligence.css?v=1">
+<script src="/team-intelligence.js?v=1" defer></script>
 <script>
 // Keep the server-side access cookie aligned with the signed-in Supabase session.
 (function () {
@@ -2797,6 +2799,15 @@ function sideSignals(side){
       return true;
     });
 }
+function teamIntelligenceName(row,index,name){
+  const text=escHtml(name), game=String(row.game||'');
+  if(!row.game_id||!row.sport||game.split(/\s+@\s+|\s+vs?\.?\s+/i).length!==2) return text;
+  return '<button type="button" class="team-intelligence-name" data-team-intelligence data-team="'+index+'" data-game="'+escHtml(game)+'" data-fixture="'+escHtml(row.game_id)+'" data-start="'+escHtml(row.kickoff_iso)+'" data-sport="'+escHtml(row.sport)+'" data-market="'+escHtml(row.market_display)+'" aria-label="Team Intelligence for '+text+'" title="Team Intelligence">'+text+'</button>';
+}
+function teamIntelligenceMatch(row){
+  const game=String(row.game||''), parts=game.split(/(\s+@\s+|\s+vs?\.?\s+)/i);
+  return parts.length===3?teamIntelligenceName(row,0,parts[0])+escHtml(parts[1])+teamIntelligenceName(row,1,parts[2]):escHtml(game||'—');
+}
 function gameLanes(r){
   const game=String(r.game||'');
   const separator=game.includes(' @ ')?' @ ':game.match(/\s+vs\s+/i)?.[0]||' @ ';
@@ -2807,9 +2818,10 @@ function gameLanes(r){
   const favoriteSide=favorite&&['SPREAD','MONEYLINE'].includes(String(r.market_display||'').toUpperCase())
     ?marketSideIdentity({flagged_side:r.favorite_side},r):'';
   const awayIdentity=away.trim().toLowerCase(), homeIdentity=home.trim().toLowerCase();
-  const teamName=(name,identity)=>{
-    if(!favoriteSide||identity!==favoriteSide||awayIdentity===homeIdentity) return '<span class="game-lane-name">'+escHtml(name)+'</span>';
-    return '<span class="game-lane-name is-favorite-side"><span class="game-lane-team-text">'+escHtml(name)+'</span><span class="game-lane-favorite-icon" role="img" aria-label="Red Fox Favorite" title="Red Fox Favorite"></span></span>';
+  const teamName=(name,identity,index)=>{
+    const label=teamIntelligenceName(r,index,name);
+    if(!favoriteSide||identity!==favoriteSide||awayIdentity===homeIdentity) return '<span class="game-lane-name">'+label+'</span>';
+    return '<span class="game-lane-name is-favorite-side"><span class="game-lane-team-text">'+label+'</span><span class="game-lane-favorite-icon" role="img" aria-label="Red Fox Favorite" title="Red Fox Favorite"></span></span>';
   };
   const mismatch=hasCrossMarketMismatch(r), split=hasCrossMarketSplit(r), crossMarket=mismatch||split, hasHeader=favorite||crossMarket;
   const header=hasHeader?'<div class="game-favorite-header'+(crossMarket?' has-cross-market':'')+'"><span class="game-sport">'+spChip(r.sport)+'</span>'+(favorite?favoriteBadge('',r):'')+(mismatch?crossMarketMismatchBadge():split?crossMarketSplitBadge():'')+'</div>':'';
@@ -2818,9 +2830,9 @@ function gameLanes(r){
   const retainedNote=retained?'<span class="retained-market-note">RETAINED · Last verified '+escHtml(et(r.state_as_of_utc||r.source_latest_at))+' ET</span>':'';
   const withHistory=!!home;
   const laneName=(name,identity,index)=>withHistory
-    ?'<span class="history-lane">'+teamName(name,identity)+(window.redfoxHistory?.button(r,index,
+    ?'<span class="history-lane">'+teamName(name,identity,index)+(window.redfoxHistory?.button(r,index,
       r.market_display==='TOTAL'?(index===0?'Over':'Under'):name)||'')+'</span>'
-    :teamName(name,identity);
+    :teamName(name,identity,index);
   return '<div class="two-side-cell two-side-game'+(favorite?' is-favorite':'')+(withHistory?' has-history':'')+'">'
     +'<span class="game-name" style="display:none">'+escHtml(game)+'</span>'
     +header
@@ -3063,7 +3075,7 @@ function openMobileDestination(destination,button){
   const sheet=document.getElementById('mobile-sheet'), title=document.getElementById('mobile-sheet-title'), body=document.getElementById('mobile-sheet-body'); if(!sheet||!title||!body)return;
   if(destination==='saved'){
     title.textContent='Saved Games'; const items=[...document.querySelectorAll('#saved-games .saved-item')];
-    body.innerHTML=items.length?'<div class="mobile-sheet-list">'+items.map((item,index)=>{const label=item.querySelector('.saved-label')?.textContent||'Saved market';return '<div class="mobile-saved-row"><button class="mobile-saved-open" type="button" data-saved-open="'+index+'">'+escHtml(label)+'</button><button class="mobile-saved-remove" type="button" data-saved-remove="'+index+'" aria-label="Remove '+escHtml(label)+' from Saved Games" title="Remove from Saved Games">×</button></div>';}).join('')+'</div>':'<p class="mobile-sheet-empty">Save a market from the board to keep its drilldown close at hand.</p>';
+    body.innerHTML=items.length?'<div class="mobile-sheet-list">'+items.map((item,index)=>{const label=item.dataset.savedLabel||'Saved market', names=item.querySelector('.saved-team-names')?.innerHTML||'';return '<div class="mobile-saved-row"><div class="mobile-saved-profile"><span class="mobile-saved-team-links">'+names+'</span><button class="mobile-saved-open" type="button" data-saved-open="'+index+'" aria-label="Open game detail for '+escHtml(label)+'">'+escHtml(item.querySelector('.saved-label')?.textContent||label)+'</button></div><button class="mobile-saved-remove" type="button" data-saved-remove="'+index+'" aria-label="Remove '+escHtml(label)+' from Saved Games" title="Remove from Saved Games">×</button></div>';}).join('')+'</div>':'<p class="mobile-sheet-empty">Save a market from the board to keep its drilldown close at hand.</p>';
     body.querySelectorAll('[data-saved-open]').forEach(node=>node.onclick=()=>{ const source=items[Number(node.dataset.savedOpen)]?.querySelector('.saved-label'); if(source)source.click(); closeMobileSheet(); });
     body.querySelectorAll('[data-saved-remove]').forEach(node=>node.onclick=()=>{ const source=items[Number(node.dataset.savedRemove)]?.querySelector('.saved-remove'); if(source)source.click(); openMobileDestination('saved',button); });
   } else {
@@ -3197,7 +3209,7 @@ function liveGameCard(game){
   const primary=[...markets].sort((a,b)=>Number(isRedFoxFavorite(b))-Number(isRedFoxFavorite(a))||frozenFavoriteRank(a)-frozenFavoriteRank(b)||boardRank(a)-boardRank(b))[0]||first;
   const primaryIndex=allLiveRecent.indexOf(primary), primarySide=JSON.stringify(primary.flagged_side||'').replace(/"/g,'&quot;');
   const openLabel='Open '+String(first.game||'game')+' drill-in';
-  return `<article class="live-game-card" tabindex="0" data-live-game-key="${key}" onclick="openLiveRecentCard(${primaryIndex},${primarySide},event)" onkeydown="openLiveRecentCard(${primaryIndex},${primarySide},event)" aria-label="${escHtml(openLabel)}" title="${escHtml(openLabel)}"><div class="live-game-top"><div class="live-game-heading"><div class="live-game-badges">${spChip(first.sport)}${favorite}</div><div class="live-game-name">${escHtml(first.game||'--')}</div><div class="live-status">${escHtml(status)}</div></div><div class="live-game-score-actions"><div class="live-score">${escHtml(score)}</div><button class="live-save" type="button" aria-label="${escHtml(saveLabel)}" title="${escHtml(saveLabel)}" aria-pressed="${game.saved}" onclick="toggleSavedLiveGame(${JSON.stringify(game.key).replace(/"/g,'&quot;')},event)">${game.saved?'★':'☆'}</button></div></div><div class="live-freeze">Frozen pregame record</div>${liveMarketSections(markets).map(function(section){return `<section class="live-market-section"><div class="live-market-type">${escHtml(section.market)}</div>${section.sides.map(item=>liveMarketComparisonRow(section,item)).join('')}</section>`;}).join('')}</article>`;
+  return `<article class="live-game-card" tabindex="0" data-live-game-key="${key}" onclick="openLiveRecentCard(${primaryIndex},${primarySide},event)" onkeydown="openLiveRecentCard(${primaryIndex},${primarySide},event)" aria-label="${escHtml(openLabel)}" title="${escHtml(openLabel)}"><div class="live-game-top"><div class="live-game-heading"><div class="live-game-badges">${spChip(first.sport)}${favorite}</div><div class="live-game-name">${teamIntelligenceMatch(first)}</div><div class="live-status">${escHtml(status)}</div></div><div class="live-game-score-actions"><div class="live-score">${escHtml(score)}</div><button class="live-save" type="button" aria-label="${escHtml(saveLabel)}" title="${escHtml(saveLabel)}" aria-pressed="${game.saved}" onclick="toggleSavedLiveGame(${JSON.stringify(game.key).replace(/"/g,'&quot;')},event)">${game.saved?'★':'☆'}</button></div></div><div class="live-freeze">Frozen pregame record</div>${liveMarketSections(markets).map(function(section){return `<section class="live-market-section"><div class="live-market-type">${escHtml(section.market)}</div>${section.sides.map(item=>liveMarketComparisonRow(section,item)).join('')}</section>`;}).join('')}</article>`;
 }
 function renderLiveRecent(){
   const grid=document.getElementById('live-recent-grid'); if(!grid)return;
@@ -3564,7 +3576,7 @@ function renderScheduleCoverage(rows){
   const target=document.getElementById('schedule-coverage'); if(!target)return;
   target.hidden=!rows.length;
   if(!rows.length){target.innerHTML='';return;}
-  target.innerHTML='<h3>Scheduled games awaiting verified markets</h3><p>These games are on the schedule. Market reads appear when complete, verified betting observations arrive.</p><div class="schedule-coverage-grid">'+rows.map(row=>'<div class="schedule-coverage-game"><strong>'+escHtml(row.game)+'</strong><span>'+escHtml(sportLabel(row.sport))+' · '+escHtml(etT(row.kickoff_iso))+'</span></div>').join('')+'</div>';
+  target.innerHTML='<h3>Scheduled games awaiting verified markets</h3><p>These games are on the schedule. Market reads appear when complete, verified betting observations arrive.</p><div class="schedule-coverage-grid">'+rows.map(row=>'<div class="schedule-coverage-game"><strong>'+teamIntelligenceMatch(row)+'</strong><span>'+escHtml(sportLabel(row.sport))+' · '+escHtml(etT(row.kickoff_iso))+'</span></div>').join('')+'</div>';
 }
 function renderBoard(resetPage=true){
   const tbody=document.getElementById('tbody');
@@ -5361,7 +5373,7 @@ function renderGameDetail(){
       ?'<footer class="detail-quality detail-quality-clean"><span class="detail-quality-label">Data Quality</span>'+dataBadge(detailQuality)+'</footer>'
       :'<section class="detail-quality detail-quality-warning"><h3>Data Quality</h3>'+dataBadge(detailQuality)+'</section>';
   html+='</div></section>'+qualityFooter+'</div>';
-  document.getElementById('drill-title').textContent=r.game||'Game Detail';
+  document.getElementById('drill-title').innerHTML=r.game?teamIntelligenceMatch(r):'Game Detail';
   document.getElementById('drill-tbl').innerHTML='<tr><td style="padding:0">'+html+'</td></tr>';
   document.getElementById('drill-export').style.display='none';
   document.querySelector('#drill-overlay .drill-modal').classList.add('game-detail-modal');
@@ -5947,18 +5959,21 @@ setInterval(refreshLiveRecentScores, 60000);
   let savedSignature=null;
   try { saved=JSON.parse(localStorage.getItem(savedKey)||'[]'); } catch (_) { saved=[]; }
   if(!Array.isArray(saved)) saved=[];
-  const keyFor=row=>String(row.game||'').trim()+' | '+String(row.market_display||'').trim();
+  const oldKey=row=>String(row.game||'').trim()+' | '+String(row.market_display||'').trim();
+  const keyFor=row=>row.game_id?[row.sport,row.game_id,row.market_display].join(' | '):oldKey(row);
+  const matchesSaved=(item,row)=>item.id===keyFor(row)||(!item.teamProfile&&item.id===oldKey(row));
   const labelFor=row=>String(row.game||'').trim()+' · '+String(row.market_display||'').trim();
-  window.isSavedGame=function(rows){ return (rows||[]).some(row=>saved.some(item=>item.id===keyFor(row))); };
+  const savedItem=row=>({id:keyFor(row),label:labelFor(row),teamProfile:{game:row.game,game_id:row.game_id,sport:row.sport,kickoff_iso:row.kickoff_iso,market_display:row.market_display}});
+  window.isSavedGame=function(rows){ return (rows||[]).some(row=>saved.some(item=>matchesSaved(item,row))); };
   window.toggleSavedLiveGame=function(gameKey,event){
     event?.stopPropagation();
     const rows=(allLiveRecent||[]).filter(row=>liveGameKey(row)===gameKey); if(!rows.length)return;
-    const ids=new Set(rows.map(keyFor)), present=saved.some(item=>ids.has(item.id));
-    if(present) saved=saved.filter(item=>!ids.has(item.id));
+    const matches=item=>rows.some(row=>matchesSaved(item,row)), present=saved.some(matches);
+    if(present) saved=saved.filter(item=>!matches(item));
     else {
       const favoriteRows=rows.filter(isRedFoxFavorite).sort((a,b)=>frozenFavoriteRank(a)-frozenFavoriteRank(b));
       const row=favoriteRows[0]||[...rows].sort((a,b)=>boardRank(a)-boardRank(b))[0];
-      saved=[{id:keyFor(row),label:labelFor(row)},...saved];
+      saved=[savedItem(row),...saved];
     }
     persist(); renderSaved(); renderLiveRecent();
   };
@@ -5966,6 +5981,22 @@ setInterval(refreshLiveRecentScores, 60000);
   function renderSaved(){
     const host=document.getElementById('saved-games'),count=document.getElementById('saved-count');
     if(!host||!count)return;
+    if(saved.some(item=>!item.teamProfile||item.id!==keyFor(item.teamProfile))){
+      const markets=[...(allDash||[]),...(allLiveRecent||[])];
+      let enriched=false;
+      saved=saved.map(item=>{
+        if(item.teamProfile){
+          if(item.id===keyFor(item.teamProfile))return item;
+          enriched=true;
+          return {...item,id:keyFor(item.teamProfile)};
+        }
+        const matches=markets.filter(row=>oldKey(row)===item.id);
+        if(!matches.length||new Set(matches.map(row=>row.game_id)).size!==1)return item;
+        enriched=true;
+        return savedItem(matches[0]);
+      });
+      if(enriched)persist();
+    }
     const signature=JSON.stringify(saved);
     if(signature===savedSignature)return;
     savedSignature=signature;
@@ -5974,8 +6005,13 @@ setInterval(refreshLiveRecentScores, 60000);
     if(!saved.length){host.innerHTML='<div class="saved-empty">Save a market to return to its evidence.</div>';return;}
     saved.forEach(item=>{
       const row=document.createElement('div');row.className='saved-item';
-      row.innerHTML='<span class="star" aria-hidden="true">★</span><button type="button" class="saved-label"></button><button type="button" class="saved-remove" aria-label="Remove saved market">×</button>';
-      const open=row.querySelector('.saved-label');open.textContent=item.label;open.onclick=()=>{const market=[...(window._boardRows||[]),...(allLiveRecent||[])].find(r=>keyFor(r)===item.id);if(market)openGameDetail(market)};
+      const names=item.teamProfile?teamIntelligenceMatch(item.teamProfile):'';
+      row.dataset.savedLabel=item.label;
+      row.innerHTML='<span class="star" aria-hidden="true">★</span><div class="saved-team-links"><span class="saved-team-names">'+names+'</span><button type="button" class="saved-label"></button></div><button type="button" class="saved-remove" aria-label="Remove saved market">×</button>';
+      const open=row.querySelector('.saved-label');
+      open.textContent=names?item.teamProfile.market_display:item.label;
+      open.setAttribute('aria-label','Open game detail for '+item.label);
+      open.onclick=()=>{const market=[...(allDash||[]),...(allLiveRecent||[])].find(r=>matchesSaved(item,r));if(market)openGameDetail(market)};
       row.querySelector('.saved-remove').onclick=()=>{saved=saved.filter(x=>x.id!==item.id);persist();renderSaved();if(tabId==='live-recent')renderLiveRecent();else if(boardSortMode==='SAVED')renderBoard(false);else decorateRows();};
       host.append(row);
     });
@@ -5984,10 +6020,11 @@ setInterval(refreshLiveRecentScores, 60000);
     document.querySelectorAll('#tbody tr').forEach((tr,index)=>{
       const market=(window._boardRows||[])[index],cell=tr.querySelector('td');
       if(!market||!cell||cell.querySelector('.production-save'))return;
-      const id=keyFor(market),button=document.createElement('button');
-      button.type='button';button.className='production-save';button.title='Save '+labelFor(market);button.textContent=saved.some(x=>x.id===id)?'★':'☆';
+      const matches=item=>matchesSaved(item,market),button=document.createElement('button');
+      button.type='button';button.className='production-save';button.title='Save '+labelFor(market);button.textContent=saved.some(matches)?'★':'☆';
+      button.dataset.savedKey=keyFor(market);
       button.style.cssText='border:0;background:transparent;color:#e34d45;cursor:pointer;font-size:14px';
-      button.onclick=event=>{event.stopPropagation();const present=saved.some(x=>x.id===id);saved=present?saved.filter(x=>x.id!==id):[{id,label:labelFor(market)},...saved];persist();renderSaved();if(boardSortMode==='SAVED')renderBoard(false);else document.querySelectorAll('.production-save').forEach(node=>{if(node.title===button.title)node.textContent=present?'☆':'★'});};
+      button.onclick=event=>{event.stopPropagation();const present=saved.some(matches);saved=present?saved.filter(x=>!matches(x)):[savedItem(market),...saved];persist();renderSaved();if(boardSortMode==='SAVED')renderBoard(false);else document.querySelectorAll('.production-save').forEach(node=>{if(node.dataset.savedKey===button.dataset.savedKey)node.textContent=present?'☆':'★'});};
       cell.append(button);
     });
   }

@@ -121,6 +121,27 @@ def alerts(root, private, state, now, free):
         failed("redfox-history-public.service") or age(manifest, now) > 45 * 60
     ):
         messages["comparisons"] = "Historical comparison processing is failing or has stopped updating its publication index."
+    if command("systemctl", "is-enabled", "redfox-team-intelligence.timer").strip() == "enabled":
+        team_status = Path("/var/lib/redfox-team-intelligence/public/status.json")
+        try:
+            coverage = json.loads(team_status.read_text(encoding="utf-8"))["sports"]
+        except (OSError, ValueError, KeyError):
+            coverage = {}
+        stale = []
+        for sport in ("nfl", "ncaaf", "nba", "ncaab", "mlb", "nhl", "ufc"):
+            status = coverage.get(sport, {})
+            if age(team_status.with_name(sport + ".json"), now) > 4 * 3600 or not status.get("fixtures") or not status.get("completed"):
+                stale.append(sport.upper())
+            if status.get("active_unmapped", 0) >= max(3, status.get("active", 0) // 5):
+                messages["team_intelligence_mapping"] = "Team Intelligence reported an unusual number of identity conflicts. Inspect its private health manifest."
+        if stale or failed("redfox-team-intelligence.service"):
+            messages["team_intelligence"] = "Team Intelligence worker failed or snapshots are missing or stale for " + (", ".join(stale) or "a worker run") + "."
+        nfl = coverage.get("nfl", {})
+        if nfl.get("source_error") and nfl.get("source_at"):
+            if now - datetime.fromisoformat(nfl["source_at"]).timestamp() > 48 * 3600:
+                messages["team_intelligence_source"] = "The Team Intelligence NFL season source has not been verified in 48 hours."
+        elif nfl.get("checked") and not nfl.get("source_at"):
+            messages["team_intelligence_source"] = "The Team Intelligence NFL season source could not be collected."
     backup_enabled = command("systemctl", "is-enabled", "redfox-history-backup.timer").strip() == "enabled"
     if backup_enabled:
         if (not Path("/etc/redfox-history-backup.env").is_file() or failed("redfox-history-backup.service") or

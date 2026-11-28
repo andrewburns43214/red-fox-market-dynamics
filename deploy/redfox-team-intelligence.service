@@ -1,0 +1,24 @@
+[Unit]
+Description=Refresh verified Red Fox Team Intelligence
+ConditionPathExists=/var/lib/redfox-history/private/history.sqlite3
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/red-fox-market-dynamics
+Environment=PYTHONDONTWRITEBYTECODE=1
+Nice=19
+CPUWeight=5
+CPUQuota=12%
+IOSchedulingClass=idle
+IOWeight=5
+MemoryMax=175M
+TimeoutStartSec=60
+UMask=0022
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/redfox-team-intelligence
+ExecCondition=/usr/bin/flock -sn /var/lock/redfox_run.lock /usr/bin/true
+ExecStart=/opt/red-fox-market-dynamics/.venv/bin/python team_intelligence.py
