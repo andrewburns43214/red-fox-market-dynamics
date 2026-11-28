@@ -13,6 +13,7 @@ from history_comparisons import implied
 
 COHORTS = ("closest", "broader", "cross")
 LEDGER_VERSION = 1
+MIN_HISTORY = 15
 _QUOTE_FIELDS = (
     "side", "open_line", "open_price", "line", "price", "tickets", "money", "opening_tickets",
     "opening_money", "line_toward", "price_toward_implied", "trajectory", "path_turns",
@@ -43,6 +44,18 @@ def row_evidence(row, side, selection, grade, final_score, factors, distance):
     }
 
 
+def priced_summary(grades, payouts):
+    count = len(grades)
+    win, loss, push = (grades.count(grade) for grade in ("win", "loss", "push"))
+    units = sum(payout - 1 if grade == "win" else -1 if grade == "loss" else 0
+                for grade, payout in zip(grades, payouts))
+    decimal = sum(payouts) / count if count else None
+    return {"graded": count, "win": win, "loss": loss, "push": push,
+            "win_rate": round(100 * win / (win + loss), 1) if win + loss else None,
+            "units": round(units, 2) if count else None, "roi": round(100 * units / count, 2) if count else None,
+            "odds": round((decimal - 1) * 100 if decimal >= 2 else -100 / (decimal - 1)) if decimal else None}
+
+
 class Ledger:
     def __init__(self):
         self.rows = []
@@ -55,6 +68,16 @@ class Ledger:
             self.identities[key] = len(self.rows)
             self.rows.append(row_evidence(row, side, selection, grade, final_score, factors, distance))
         self.groups[group].append(self.identities[key])
+
+    def add_population(self, group, members):
+        """New display populations reuse the broader pool's already verified entries."""
+        self.groups[group] = members
+        rows = [self.rows[i] for i in members]
+        payouts = [1 / implied(row["side"]["price"]) for row in rows]
+        count = len(rows)
+        return {"matched": count, **priced_summary([row["grade"] for row in rows], payouts),
+                "void": 0, "unresolved": 0, "missing_price": 0,
+                "status": "available" if count >= MIN_HISTORY else "limited" if count else "none"}
 
     def publish(self, store, query, sport, event, market, setup, reports):
         if not self.rows:

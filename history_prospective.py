@@ -10,6 +10,7 @@ import sqlite3
 from history_comparisons import grade, implied, side_key
 from history_evidence import fair_probability, lead_minutes
 from history_store import packed, start_evidence, utc
+from history_team_evidence import TeamEvidence
 from team_aliases import _split_game
 
 
@@ -31,12 +32,13 @@ CREATE TABLE IF NOT EXISTS study_v1_provider (
 
 
 class Study:
-    def __init__(self, path, output):
+    def __init__(self, path, output, team_directory="/var/lib/redfox-team-intelligence/public"):
         self.db = sqlite3.connect(path, timeout=2)
         Path(path).chmod(0o600)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
         self.output = Path(output)
+        self.team_evidence = TeamEvidence(team_directory)
 
     def close(self):
         self.db.close()
@@ -92,11 +94,16 @@ class Study:
             receipt = {key: value for key, value in side.items() if key != "comparison"}
             receipt.update(game=game, participant_sides=[team["side"] for team in lanes],
                            paired_price=opposite["price"], verification_cutoff=setup.get("verified_by"),
+                           scenario_definitions={item["key"]: item["label"]
+                                                 for item in side["comparison"].get("scenarios", ())},
                            neighbor_counts=counts, historical_roi={
                                group: {"graded":report["graded"],"roi":report["roi"]}
-                               for group in ("closest","broader")
+                               for group in ("closest", "broader", "best", "related",
+                                             *(item["key"] for item in side["comparison"].get("scenarios", ())))
                                if (report := side["comparison"].get(group)) and report["graded"]
                            })
+            if team_context := self.team_evidence.capture(sport, event, observed, scheduled):
+                receipt["team_intelligence"] = team_context
             with self.db:
                 if document:
                     self.db.execute("INSERT OR IGNORE INTO study_v1_proof VALUES (?,?)", (ref, document))
@@ -192,13 +199,15 @@ class Study:
                     legacy[name] = proof_roi(saved[0]) if saved else {}
                 history_roi = legacy[name]
 
-            for group in ("closest","broader"):
+            for group in ("closest", "broader", *(group for group in history_roi if group not in ("closest", "broader"))):
                 sample = history_roi.get(group)
                 signed = sample.get("roi") if sample else None
                 bucket = ("insufficient_history" if signed is None or sample["graded"] < 15 else
                           "positive" if signed > 0 else "negative" if signed < 0 else "flat")
                 key = row["sport"]+" "+row["market"]
-                result = results.setdefault(key, {}).setdefault(group, {}).setdefault(bucket, {
+                group_label = entry.get("scenario_definitions", {}).get(group)
+                population = f"{group}: {group_label}" if group_label else group
+                result = results.setdefault(key, {}).setdefault(population, {}).setdefault(bucket, {
                     "captured":0,"wins":0,"losses":0,"pushes":0,"graded":0,
                     "units":0.0,"expected_units_no_vig":0.0,"expected_wins_no_vig":0.0,"brier_delta_sum":0.0,
                 })
@@ -216,7 +225,7 @@ class Study:
                 result["units"] += payout*observed-1
                 result["expected_units_no_vig"] += payout*fair-1
                 result["expected_wins_no_vig"] += fair
-                result["brier_delta_sum"] += (methods[group]-observed)**2-(fair-observed)**2
+                result["brier_delta_sum"] += (methods.get(group, fair)-observed)**2-(fair-observed)**2
 
         for sport_market in results.values():
             for group in sport_market.values():
@@ -272,8 +281,11 @@ def forecast(fair, document, market, side, opposite):
     counts = {}
     ledger = json.loads(gzip.decompress(document)) if document else {"rows":[], "groups":{}}
     primary, context = signature(market,side,opposite,side.get("game_context",{}))
-    for recipe, cohort in (("closest","closest"),("broader","broader"),
-                           ("same_role_direction","broader"),("same_joint_context","broader")):
+    recipes = [("closest", "closest"), ("broader", "broader"),
+               ("same_role_direction", "broader"), ("same_joint_context", "broader")]
+    if "best" in ledger["groups"]:
+        recipes.append(("best", "best"))
+    for recipe, cohort in recipes:
         residuals = []
         for index in ledger["groups"].get(cohort, []):
             row = ledger["rows"][index]

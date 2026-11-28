@@ -16,7 +16,8 @@ import time
 from history_blocks import decode, encode, read_quotes
 from history_comparisons import (ADDED_WINDOWS, CONTEXT_VERSION, MARKETS, WINDOWS, aligned_game, delta, features,
                                  fixture_pairs, grade, implied, recorded_split_context, side_key)
-from history_evidence import EvidenceStore, Ledger, LEDGER_VERSION
+from history_evidence import EvidenceStore, Ledger, LEDGER_VERSION, MIN_HISTORY, priced_summary
+from history_scenarios import VERSION as SCENARIO_VERSION, partitions
 from history_store import FREE_DISK_RESERVE, SPORTS, atomic_text, digest, eligible_pairs, latest_provider_outcomes, number, packed, quote_part, start_evidence, utc
 from team_aliases import _split_game, normalize_team_name
 from ufc_bout_integrity import fighter_key
@@ -26,7 +27,6 @@ KEY = re.compile(r"[A-Za-z0-9_-]{1,75}\Z")
 MARKET_LABELS = {"SPREAD": "Spread", "MONEYLINE": "Moneyline", "TOTAL": "Total"}
 CROSS = {"nfl": ("ncaaf",), "ncaaf": ("nfl",), "nba": ("ncaab",), "ncaab": ("nba",)}
 KEY_NUMBERS = {"nfl": (3, 7, 10, 14), "ncaaf": (3, 7, 10, 14), "nhl": (1.5,), "mlb": (1.5,)}
-MIN_HISTORY = 15
 FROZEN_SCHEMA = """
 CREATE TABLE IF NOT EXISTS comparison_frozen(
     sport TEXT NOT NULL, event_id TEXT NOT NULL, frozen_at TEXT NOT NULL, payload BLOB NOT NULL,
@@ -456,9 +456,10 @@ def outcome_signature(sport, state, evidence):
 
 
 class History:
-    def __init__(self, db, evidence_store=None):
+    def __init__(self, db, evidence_store=None, *, descriptive=True):
         self.db = db
         self.evidence_store = evidence_store
+        self.descriptive = descriptive
         self.slots = {}
         self.results = {}
         self.score_lines = {}
@@ -594,12 +595,6 @@ class History:
                     "score": final_score,
                     "matched": [label for _, label in common[:4]], "differences": [label for _, label in differences[:3]],
                 })
-        counts = {key: grades.count(key) for key in ("win", "loss", "push")}
-        units = sum(o - 1 if g == "win" else -1 if g == "loss" else 0 for g, o in zip(grades, odds))
-        decimal = sum(odds) / len(odds) if odds else None
-        average = None if decimal is None else round(
-            (decimal - 1) * 100 if decimal >= 2 else -100 / (decimal - 1)
-        )
         labels = defaultdict(list)
         for factors in groups:
             for label, d, _ in factors:
@@ -613,13 +608,9 @@ class History:
                 matches.append(label)
             elif agreement < .50:
                 differences.append(label)
-        decisive = counts["win"] + counts["loss"]
-        return {"matched": len(groups), "graded": len(grades), **counts, "void": void,
+        return {"matched": len(groups), **priced_summary(grades, odds), "void": void,
                 "unresolved": unresolved, "missing_price": missing_price,
-                "win_rate": round(100 * counts["win"] / decisive, 1) if decisive else None,
-                "odds": average, "line": round(sum(numbers) / len(numbers), 2) if numbers else None,
-                "units": round(units, 2) if grades else None,
-                "roi": round(units * 100 / len(grades), 2) if grades else None,
+                "line": round(sum(numbers) / len(numbers), 2) if numbers else None,
                 "matches": matches, "differences": differences, "examples": exemplars, "match_list": match_list,
                 "status": "none" if not groups else "limited" if len(grades) < MIN_HISTORY else "available"}
 
@@ -647,6 +638,9 @@ class History:
         pending = since is None and window in ADDED_WINDOWS and self.checkpoint_pending(sport, market, before)
         reports = {"closest": closest, "broader": broader, "cross": cross, "since": since,
                    "pending": pending, "cross_sports": sorted({item[2]["sport"] for item in related})}
+        if ledger is not None and self.descriptive and (
+                opposite := next((side for side in setup.get("sides", ()) if side["side"] != query["side"]), None)):
+            partitions(ledger, reports, sport, market, query, opposite)
         if ledger is not None and (name := ledger.publish(self.evidence_store, query, sport, event, market, setup, reports)):
             reports["ledger"] = name
         return reports
@@ -791,7 +785,7 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
     revision = tuple(db.execute("""
         SELECT (SELECT count(*) FROM comparison_windows), (SELECT max(observed_at) FROM outcomes),
         (SELECT value FROM jobs WHERE name='comparison_generation')
-    """).fetchone()) + (LEDGER_VERSION,)
+    """).fetchone()) + (LEDGER_VERSION, SCENARIO_VERSION)
     keys = []
     available = {}
     masks = {}
@@ -854,7 +848,14 @@ def build(db, root, output, control, now, *, preview=False, events=(), budget=No
         ).fetchone()):
             payload = decode(stored[0])
             if group.keys() - payload["markets"].keys():
-                additional = render_fixture(db, history, key, group, now, True, append_to=payload["markets"])["markets"]
+                # Keep newly added coverage on a legacy frozen fixture on its original methodology.
+                if not any(side["comparison"].get("comparison_version")
+                           for entry in payload["markets"].values() for side in entry["sides"]):
+                    history.descriptive = False
+                try:
+                    additional = render_fixture(db, history, key, group, now, True, append_to=payload["markets"])["markets"]
+                finally:
+                    history.descriptive = True
                 if additional:
                     payload["markets"].update(additional)
                     with db:

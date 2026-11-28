@@ -31,7 +31,10 @@
   const observations = new Map();
   const dialog = () => document.getElementById("historical-comparison");
   const authorized = (url) => window.redfoxAuthorizedFetch(url, {cache: "no-store"});
-  const defaultCohort = report => Object.keys(cohorts).find(group => report[group]?.graded > 0) || "closest";
+  const defaultCohort = report => report.comparison_version ? "best" :
+    Object.keys(cohorts).find(group => report[group]?.graded > 0) || "closest";
+  const groupLabel = (report, key) => ({best:"Best historical matches", related:"Related historical matches",
+    ...cohorts})[key] || report.scenarios?.find(item=>item.key===key)?.label || "Historical games";
 
   async function refreshManifest() {
     let current = {};
@@ -247,6 +250,7 @@
         <span class="historic-quote-label">${labels[m]}${ref?` <span>${escape(ref)}</span>`:""}</span>
         <span class="historic-quote-value"><b>${escape(quote(m,q,true))}</b> <span class="historic-arrow">→</span> <b>${escape(quote(m,q))}</b></span>
         <span class="historic-quote-splits">${q.tickets==null&&q.money==null?"Splits unavailable":
+          q.tickets===q.money&&(q.tickets===0||q.tickets===100)?"Splits unverified":
           `<b>${escape(pct(q.tickets))}</b> bets · <b>${escape(pct(q.money))}</b> money`}</span>
         <span class="historic-quote-read${move.unavailable?" historic-muted":""}">
           ${escape(move.text)}${move.showPrice?` <span>· ${escape(move.price)}</span>`:""}
@@ -273,21 +277,34 @@
     const notice=!result?.graded?(report.reason?"Source coverage":report.pending?"Backfill pending":
       result?.matched?"Unverified results":!result&&active.cohort==="cross"?"Unavailable":"Insufficient sample")
       :result.status==="limited"?"Limited sample":"";
-    const reason=report.reason||(!result?"Cross-sport context is unavailable for this market.":
+    const reason=result?.reason||report.reason||(!result?"Cross-sport context is unavailable for this market.":
       !result.graded?(report.pending?"Historical captures are still being indexed for this decision window.":
         result.matched?"Matched quotes need a verified outcome and entry price to count.":"No comparable games in this group."):
-        active.cohort!=="closest"&&!report.closest?.graded?
+        !report.comparison_version&&active.cohort!=="closest"&&!report.closest?.graded?
           "No priced, graded closest matches. Showing "+cohorts[active.cohort].toLowerCase()+"." : "");
+    const updated=Boolean(report.comparison_version);
+    const populations=updated?["best","related",...report.scenarios.map(item=>item.key)]:[];
     return `<section class="historic-performance" aria-label="Similar market setups">
+      ${updated?`<div class="historic-performance-head"><h3>Similar market setups</h3></div>
+      <div class="historic-populations" role="group" aria-label="Historical populations">
+        ${populations.map(key=>{
+          const stats=report[key], selected=key===active.cohort;
+          return `<button type="button" data-historic-action="population" data-value="${escape(key)}" aria-pressed="${selected}">
+            <strong>${escape(groupLabel(report,key))}</strong>
+            <span>${stats.graded?escape(record(stats)+" · "+stats.graded+" graded"):"No graded matches"}${stats.roi==null?"":' · <b class="'+tone(stats.roi)+'">'+escape(signed(stats.roi))+'% ROI</b>'}</span></button>`;
+        }).join("")}
+      </div>
+      ${report.scenarios.length?'<p class="historic-note">Scenarios can share games with other populations.</p>':""}
+      <p class="historic-selected-population">${escape(groupLabel(report,active.cohort))}</p>`:`
       <div class="historic-performance-head"><h3>Similar market setups</h3><label><span>Compare</span><select data-historic-cohort aria-label="Comparison group">
         ${Object.entries(cohorts).map(([key,name])=>`<option value="${key}"${active.cohort===key?" selected":""}>${name}</option>`).join("")}
       </select></label></div>
-      <p class="historic-note">Past games across teams with similar lines, prices, and betting splits.</p>
+      <p class="historic-note">Past games across teams with similar lines, prices, and betting splits.</p>`}
       <div class="historic-metrics">${tile("Record",result?.graded?record(result):"—",(result?.graded||0)+" graded")}
         ${tile("Win rate",pct(result?.win_rate))}
         ${tile("ROI",result?.roi==null?"—":signed(result.roi)+"%",result?.units==null?"":signed(result.units)+" units",tone(result?.roi))}
         ${tile("Avg. entry odds",odds(result?.odds),"","","historic-odds")}</div>
-      ${notice||reason?`<p class="historic-performance-note"><strong>${escape(notice)}</strong>${reason?` <span>${escape(reason)}</span>`:""}</p>`:""}${marketChoices}</section>`;
+      ${notice||reason?`<p class="historic-performance-note"><strong>${escape(notice)}</strong>${reason?` <span>${escape(reason)}</span>`:""}</p>`:""}${updated?"":marketChoices}</section>`;
   }
 
   function rowMarkets(item,market) {
@@ -343,7 +360,7 @@
   }
   function keyTransitions(sport,m,q) {
     if(m!=="SPREAD" || q.open_line==null || q.line==null || q.open_line===q.line) return [];
-    const keys=["nfl","ncaaf"].includes(sport)?[3,7,10,14]:["nhl","mlb"].includes(sport)?[1.5]:[];
+    const keys=["nfl","ncaaf"].includes(sport)?[3,4,6,7,10,14]:["nhl","mlb"].includes(sport)?[1.5]:[];
     return keys.flatMap(k=>[k,-k].flatMap(n=> q.open_line===n?["Off "+signed(n)]:
       q.line===n?["Onto "+signed(n)]:Math.min(q.open_line,q.line)<n&&n<Math.max(q.open_line,q.line)?["Through "+signed(n)]:[]));
   }
@@ -604,14 +621,15 @@
     const start=active.page*10;
     const units=summary.units.toFixed(2), percent=x=>x==null?"—":x.toFixed(1)+"%";
     return `<section class="historic-examples historic-ledger">
-      <div class="historic-ledger-head"><h3>Historical games</h3><label>Filter games
+      <div class="historic-ledger-head"><h3>Supporting historical games</h3></div>
+        <details class="historic-advanced" data-historic-filters${active.subset!=="all"?" open":""}><summary>Filter games</summary>
         <select data-historic-subset aria-label="Filter historical games">
           ${available.filter(([key])=>key==="all").map(option).join("")}
           ${Object.entries(subsetGroups).map(([name,keys])=>{
             const options=available.filter(([key])=>keys.includes(key)).map(option).join("");
             return options?`<optgroup label="${name}">${options}</optgroup>`:"";
           }).join("")}
-        </select></label></div>
+        </select></details>
       ${active.subset!=="all"?`<div class="historic-metrics historic-subset-row">
         ${tile("Record",record(summary),summary.n+" of "+result.graded+" graded")}
         ${tile("Win rate",percent(summary.winRate))}${tile("ROI",percent(summary.roi),signed(+units)+" units",tone(summary.roi))}
@@ -627,7 +645,7 @@
             ${row.decision&&row.decision!==row.entry?" · Checkpoint "+escape(when(row.decision)):""}</p>
           ${marketsEvidence(markets,row.context,row.entry,row.opposite,row)}
           <details class="historic-why"><summary>Matching details</summary><div><strong>Why included</strong>
-          <p>Qualified for ${escape(cohorts[active.cohort])} at distance ${row.distance}. ${escape(row.matched.join(", "))}.</p></div>
+          <p>Included in ${escape(groupLabel(side.comparison,active.cohort))}. Weighted distance ${row.distance}. ${escape(row.matched.join(", "))}.</p></div>
           <div><strong>Compared with the current setup</strong><p>${escape([...marks,...row.differences].join(" · ")||"No large recorded difference in scored factors.")}</p>
           <p>${escape("Current "+(current.role||"role unavailable")+" / "+current.direction+" · "+pct(side.tickets)+" / "+pct(side.money)+
             " · Example "+(trial.role||"role unavailable")+" / "+trial.direction+" · "+pct(row.side.tickets)+" / "+pct(row.side.money))}</p></div></details>
@@ -686,10 +704,10 @@
       const labelText=label+(key==="TOTAL"?" · "+side.name:"");
       return `<button type="button" data-historic-action="market" data-value="${key}" aria-pressed="${key===market}">
         <strong>${escape(labelText)}</strong>
-        ${["closest","broader"].map(group=>{
+        ${(side.comparison.comparison_version?["best","related"]:["closest","broader"]).map(group=>{
           const stats=side.comparison[group];
           return `<span title="${stats?.graded?escape(stats.graded+" graded · "+signed(stats.roi)+"% ROI"):"No graded matches"}">
-            ${group==="closest"?"Closest":"Broader"} <b>${stats?.graded?escape(record(stats)):"—"}</b></span>`;
+            ${({closest:"Closest",broader:"Broader",best:"Best",related:"Related"})[group]} <b>${stats?.graded?escape(record(stats)):"—"}</b></span>`;
         }).join("")}</button>`;
     }).join("")}</div></nav>`;
   }
@@ -699,7 +717,7 @@
       <div class="historic-reference-head"><h3>${payload.frozen?"Frozen pregame setup":stale?"Last verified setup":"Current market setup"}</h3>
         <span>${escape(when(setup.observed))} · ${escape(minuteText(setup.lead))} to start</span></div>
       ${marketSummary(markets)}
-      <div class="historic-footer">${detail}</div>
+      ${detail?`<div class="historic-footer">${detail}</div>`:""}
     </section>`;
   }
 
@@ -715,9 +733,13 @@
       ${!Object.keys(side.game_context||{}).length&&side.cross_market?peerDetails(side):""}
       <h3>Matching and coverage</h3>
       <p>Includes Favorites and non-Favorites.</p>
-      <p>${active.cohort==="broader"?"Broader matches relax cross-market agreement and price and split tolerances. This group includes closest matches.":
+      ${side.comparison.comparison_version?`<p>Best matches use the same sport, market and decision window with comparable openers, prices, team roles and movement. Related matches have wider differences. Scenarios can overlap either population.</p>
+        <label class="historic-advanced">Original comparison groups
+          <select data-historic-cohort aria-label="Original comparison groups"><option value="">Select a group</option>
+          ${Object.entries(cohorts).filter(([key])=>side.comparison[key]).map(([key,name])=>`<option value="${key}"${active.cohort===key?" selected":""}>${escape(name)}</option>`).join("")}</select>
+        </label>`:`<p>${active.cohort==="broader"?"Broader matches relax cross-market agreement and price and split tolerances. This group includes closest matches.":
         active.cohort==="cross"?"Cross-sport context compares normalized moneyline prices and movement within football or basketball.":
-        "Closest matches prioritize the selected market’s direction, split positioning, entry quote and decision timing."}</p>
+        "Closest matches prioritize the selected market’s direction, split positioning, entry quote and decision timing."}</p>`}
       ${payload.frozen && !payload.context_version ? `<p>This snapshot keeps its original frozen comparison. Available supporting market evidence varies by capture.</p>` : `<p>Secondary quotes must be at or before the selected capture and within 20 minutes. Missing context is unscored. Totals use the opening favorite for team-market context.</p>`}
       ${side.comparison.since?`<p>Coverage for this market and checkpoint since ${escape(side.comparison.since)}.</p>`:""}
       ${result?`<p>${result.matched} matched · ${result.graded} priced and graded · ${result.unresolved} unresolved · ${result.missing_price} missing prices · ${result.void} void.
@@ -748,12 +770,16 @@
     const stale=delayedFeed||(!payload.frozen&&market===active.boardMarket&&Date.parse(active.boardObservation)>Date.parse(setup.observed));
     const markets=Object.entries(labels).filter(([key])=>payload.markets[key]);
     const detailsOpen=body.querySelector(".historic-support")?.open;
+    const marketChoices=marketRecords(payload,markets,market,team,total);
+    const evidence=performance(result,side.comparison,marketChoices);
+    const details=support(setup,side,result,market,payload,quotes,other);
+    const setupPanel=setupSummary(payload,setup,stale,quotes,side.comparison.comparison_version?"":details);
     body.innerHTML=`<div class="historic-controls">
       <div><span>${market==="TOTAL"?"Outcome":payload.sport==="ufc"?"Fighter":"Team"}</span><div class="historic-options">${setup.sides.map((s,i)=>control(s.name,i,"side",i===index)).join("")}</div></div></div>
-      ${performance(result,side.comparison,marketRecords(payload,markets,market,team,total))}
       ${stale?`<p class="historic-notice">${delayedFeed?"Board feed delayed. These comparisons use the last verified pregame capture shown on the board.":"Latest processed capture · a newer board observation may be pending."}</p>`:""}
-      ${setupSummary(payload,setup,stale,quotes,support(setup,side,result,market,payload,quotes,other))}
+      ${side.comparison.comparison_version?marketChoices+setupPanel+evidence:evidence+setupPanel}
       <div data-historic-game-list>${ledgerPanel(side.comparison.ledger,result,side,other,setup,market)}</div>
+      ${side.comparison.comparison_version?details:""}
     `;
     if(detailsOpen)body.querySelector(".historic-support").open=true;
     if(focus?.hasAttribute("data-historic-cohort"))body.querySelector("[data-historic-cohort]").focus({preventScroll:true});
@@ -780,6 +806,14 @@
       const picked = event.target.closest("[data-historic-action]");
       if (!picked || !active) return;
       const {historicAction, value} = picked.dataset;
+      if (historicAction === "population") {
+        active.cohort=value;
+        active.page=0;
+        active.subset="all";
+        render();
+        modal.querySelector(`[data-historic-action="population"][data-value="${value}"]`)?.focus({preventScroll:true});
+        return;
+      }
       if (historicAction === "market") {
         active.market = value;
       } else active[active.market === "TOTAL" ? "total" : "team"] = Number(value);
@@ -792,7 +826,8 @@
     modal.addEventListener("change", event => {
       if(!active)return;
       if(event.target.matches("[data-historic-cohort]")) {
-        active.cohort=event.target.value;
+        const side=active.payload.markets[active.market].sides[active.market==="TOTAL"?active.total:active.team];
+        active.cohort=event.target.value||defaultCohort(side.comparison);
         active.subset="all";
       } else if(event.target.matches("[data-historic-subset]")) active.subset=event.target.value;
       else return;
