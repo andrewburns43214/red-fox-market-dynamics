@@ -194,6 +194,23 @@ def published_rows(root, sport):
     return by_event
 
 
+def outcome_identity(sport, event, fixture, item):
+    source, status, provider, _, evidence = item
+    if status != "verified":
+        return None
+    if provider:
+        return str(provider)
+    # School box scores can be verified by an official event URL without a
+    # scoreboard provider ID. The stored verified receipt must bind it to this fixture.
+    if (sport == "ncaaf" and source == "verified_research_ncaaf"
+            and evidence.get("research_provenance") == "school_athletics_official_final"
+            and evidence.get("event_id") == event and utc(evidence.get("fixture_scheduled_at")) == fixture["start"]):
+        url = urlsplit(evidence.get("url") or "")
+        if url.scheme == "https" and url.hostname and "/boxscore/" in url.path:
+            return url.hostname + url.path.rstrip("/")
+    return None
+
+
 def valid_outcomes(db, sport, catalog, now):
     groups = defaultdict(list)
     for r in db.execute("""SELECT * FROM outcomes WHERE sport=? AND observed_at<=?
@@ -202,16 +219,16 @@ def valid_outcomes(db, sport, catalog, now):
             groups[r["event_id"]].append((r["source"],r["status"],r["provider_event_id"],r["observed_at"],json.loads(r["evidence"])))
     result, conflicts, providers = {}, set(), {}
     for event, rows in groups.items():
-        verified = [x for x in latest_provider_outcomes(rows, now) if x[1] == "verified" and x[2]]
+        fx = catalog[event]
+        verified = [x for x in latest_provider_outcomes(rows, now) if outcome_identity(sport, event, fx, x)]
         if not verified:
             continue
-        fx = catalog[event]
         signatures = {outcome_signature(sport, x[1], x[4]) for x in verified}
         if len(signatures) != 1 or None in signatures:
             conflicts.add(event)
             continue
         chosen = max(verified, key=lambda x: (x[0].startswith("espn_exact"), x[3]))
-        source, status, provider, stamp, raw = chosen
+        source, status, _, stamp, raw = chosen
         final = next(iter(signatures))
         if sport == "ufc":
             _, confirmed = identities(raw.get("matchup"), sport)
@@ -227,12 +244,13 @@ def valid_outcomes(db, sport, catalog, now):
             outcome = dict(scores=[int(scores[k]) for k in fx["keys"]])
         if not fx["start"] or fx["start"] >= now:
             continue
-        outcome.update(uid=event, vendor=event, provider=provider, start=fx["start"], keys=fx["keys"],
-                       names=fx["names"], source=source, source_at=stamp, season=fx["season"], stage="", venue="")
+        outcome.update(uid=event, vendor=event, provider=outcome_identity(sport, event, fx, chosen),
+                       start=fx["start"], keys=fx["keys"], names=fx["names"], source=source, source_at=stamp,
+                       season=fx["season"], stage="", venue="", _receipt=(status, raw))
         result[event] = outcome
         # nflverse supplies ESPN identifiers, so never join via another namespace.
         for item in verified:
-            if item[0].startswith("espn") or (sport == "nfl" and espn_nfl_receipt(item)):
+            if item[2] and (item[0].startswith("espn") or (sport == "nfl" and espn_nfl_receipt(item))):
                 providers.setdefault(item[2], []).append(event)
     by_provider = {}
     for event, outcome in result.items():
@@ -374,13 +392,6 @@ def build(root, db, sport, external, now, guard):
     # Grade only the initial recent evidence set. Browser expansion beyond it
     # can still show completed scores without warming the entire quote archive.
     recent_ids = {event for team in teams.values() for event in team[:12]}
-    evidence = db.execute("""SELECT event_id,source,provider_event_id,evidence FROM outcomes
-                             WHERE sport=? AND status='verified' AND observed_at<=?
-                             ORDER BY observed_at DESC,digest""", (sport,now))
-    receipts = {}
-    for event, source, provider, raw in evidence:
-        if event in known and provider == known[event]["provider"] and source == known[event]["source"]:
-            receipts.setdefault(event, ("verified",json.loads(raw)))
     official = favorites(root,sport)
     for match in games.values():
         if match.get("vendor") in official:
@@ -389,7 +400,7 @@ def build(root, db, sport, external, now, guard):
         if i % 25 == 0 and not guard():
             raise TimeoutError("publisher priority")
         match = games[event]
-        r = receipts.get(match.get("vendor"))
+        r = known.get(match.get("vendor"), {}).get("_receipt")
         match["quotes"] = {}
         for m in (("MONEYLINE",) if sport == "ufc" else MARKETS):
             available = graded_quotes(db,sport,match,m,r)
@@ -397,6 +408,7 @@ def build(root, db, sport, external, now, guard):
                 match["quotes"][m] = available
     for match in games.values():
         match.pop("provider", None)
+        match.pop("_receipt", None)
     regular = defaultdict(list)
     for match in external.get("games", []):
         if match["stage"] == "REG":

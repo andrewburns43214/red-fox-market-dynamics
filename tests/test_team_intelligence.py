@@ -56,8 +56,8 @@ class TeamIntelligenceTest(unittest.TestCase):
         self.assertEqual(graded_quotes(self.db, "nfl", match, "SPREAD", ("verified", outcome)), {})
 
     def test_replacement_fighter_cannot_inherit_completed_bout(self):
-        names, keys = identities("JosÃ© Aldo vs Rob Font", "ufc")
-        raw = {"matchup": "JosÃ© Aldo vs Marlon Vera", "winner": "josealdo", "actual_start": self.start}
+        names, keys = identities("JosÃƒÂ© Aldo vs Rob Font", "ufc")
+        raw = {"matchup": "JosÃƒÂ© Aldo vs Marlon Vera", "winner": "josealdo", "actual_start": self.start}
         catalog = {"fixture": {"start": self.start, "keys": keys, "names": names, "season": 2026}}
         self.db.execute("INSERT INTO outcomes VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                         ("ufc", "fixture", "verified_research_ufc", "verified", "bout", self.start, "hash", json.dumps(raw)))
@@ -92,6 +92,21 @@ class TeamIntelligenceTest(unittest.TestCase):
         self.assertEqual(conflicts, set())
         merged, _ = nfl_merge({"fixture": archived}, external, {}, after)
         self.assertNotIn("vendor", merged["nflverse"])
+
+    def test_official_school_box_score_requires_exact_fixture_timing(self):
+        names, keys = identities("New Mexico State @ Hawaii", "ncaaf")
+        catalog = {"fixture": {"start": self.start, "keys": keys, "names": names, "season": 2026}}
+        raw = {"matchup": " @ ".join(names), "score_away": 19, "score_home": 29, "event_id": "fixture",
+               "fixture_scheduled_at": self.start, "research_provenance": "school_athletics_official_final",
+               "url": "https://school.test/sports/football/stats/2026/new-mexico-state/boxscore/31550"}
+        self.db.execute("INSERT INTO outcomes VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        ("ncaaf", "fixture", "verified_research_ncaaf", "verified", None, self.start, "hash", json.dumps(raw)))
+        now = "2026-11-30T21:25:00.000000+00:00"
+        results, _, _ = valid_outcomes(self.db, "ncaaf", catalog, now)
+        self.assertEqual(results["fixture"]["scores"], [19, 29])
+        catalog["fixture"]["start"] = self.checkpoint
+        results, _, _ = valid_outcomes(self.db, "ncaaf", catalog, now)
+        self.assertEqual(results, {})
 
     def test_small_published_handoff_disagreement_uses_frozen_cutoff(self):
         with TemporaryDirectory() as directory:
