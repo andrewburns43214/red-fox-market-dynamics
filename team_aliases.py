@@ -10,6 +10,7 @@ Single source of truth for:
 - normalize_team_name(): full normalization pipeline
 - _split_game(): "Away @ Home" -> (away, home) tuple
 """
+from functools import lru_cache
 import re
 
 
@@ -147,6 +148,7 @@ NCAAB_MASCOTS = {
 _MASCOTS_SORTED = sorted(NCAAB_MASCOTS, key=len, reverse=True)
 
 
+@lru_cache(maxsize=8192)
 def _strip_mascot(name: str) -> str:
     """
     Strip trailing mascot from Odds-API style college names.

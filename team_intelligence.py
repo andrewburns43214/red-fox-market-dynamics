@@ -520,9 +520,20 @@ def main():
                           if status.get(sport, {}).get("closing_ats_revision") != CLOSING_ATS_REVISION}
     needs_market_history = {sport for sport in SPORTS
                             if status.get(sport, {}).get("market_history_revision") != MARKET_HISTORY_REVISION}
+    attempt_path = args.state / "market-history-refresh-attempts.json"
+    attempts = {}
+    if needs_market_history and attempt_path.exists():
+        try:
+            saved = json.loads(attempt_path.read_text(encoding="utf-8"))
+            if isinstance(saved, dict):
+                attempts = {sport: stamp for sport, stamp in saved.items() if sport in SPORTS and isinstance(stamp, str)}
+        except (OSError, ValueError):
+            pass
     due = new_credentials | needs_ats_metadata | needs_market_history
     order = [args.sport] if args.sport else sorted(
-        SPORTS, key=lambda sport: (sport not in due, sport not in new_credentials, sport not in needs_ats_metadata,
+        SPORTS, key=lambda sport: (sport not in due, sport in needs_market_history and sport in attempts,
+                                   sport not in new_credentials, sport not in needs_ats_metadata,
+                                   attempts.get(sport, "") if sport in needs_market_history else "",
                                    status.get(sport, {}).get("checked", "")))
     targets = order if args.bootstrap else order[:1]
     if (not args.bootstrap and not args.sport and targets[0] not in due
@@ -536,6 +547,11 @@ def main():
         for sport in targets:
             if not guard():
                 break
+            if not args.bootstrap and sport in needs_market_history:
+                # An interrupted rollout sport should be retried after the other
+                # pending sports have had a chance to refresh.
+                attempts[sport] = now
+                atomic(attempt_path, attempts)
             started = time.monotonic()
             try:
                 ext = nfl_schedule(args.state, 5, not args.no_network) if sport == "nfl" else {}
