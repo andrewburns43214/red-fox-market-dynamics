@@ -22,7 +22,8 @@ from history_comparisons import WINDOWS, grade, side_key
 from history_public import outcome_signature
 from history_store import FREE_DISK_RESERVE, atomic_text, latest_provider_outcomes, packed, utc
 from team_aliases import _split_game
-from team_sport_context import baseball_profile_context, nfl_profile_context, ufc_profile_context
+from team_independent_sources import independent_context
+from team_sport_context import baseball_profile_context, cfb_profile_context, nfl_profile_context, ufc_profile_context
 
 SPORTS = ("nfl", "ncaaf", "nba", "ncaab", "mlb", "nhl", "ufc")
 MARKETS = ("SPREAD", "MONEYLINE", "TOTAL")
@@ -412,11 +413,15 @@ def build(root, db, sport, external, now, guard, source_state, permit_network):
     sporting = {}
     if sport == "nfl":
         sporting = nfl_profile_context(source_state, catalog, games, external, now, guard, permit_network)
+    elif sport == "ncaaf":
+        sporting = cfb_profile_context(source_state, catalog, now, guard, permit_network)
     elif sport == "mlb":
         sporting = baseball_profile_context(source_state, now, guard, permit_network)
     elif sport == "ufc":
         receipts = [outcome["_receipt"][1] for outcome in known.values() if "_receipt" in outcome]
         sporting = ufc_profile_context(source_state, receipts, catalog, guard, permit_network)
+    if guard():
+        sporting.update(independent_context(source_state, catalog, sport, now, guard, permit_network))
     for match in games.values():
         match.pop("provider", None)
         match.pop("_receipt", None)
@@ -488,7 +493,9 @@ def main():
                     "checked": now, "source_error": ext.get("error", ""), "source_at": ext.get("source_at"),
                     "bytes": (args.output / (sport+".json")).stat().st_size,
                     "seconds": round(time.monotonic() - started, 2),
-                    "sporting": {name: {field:value.get(field) for field in ("at","checked","error","coverage")}
+                    "sporting": {name: {field:value[field] for field in
+                                        ("at","checked","error","coverage","partitions","expected_partitions","fixture_coverage")
+                                        if field in value}
                                  for name,value in profile["sporting"].items() if name != "fighters"},
                 }
                 atomic(status_path,{"version":1,"sports":status})

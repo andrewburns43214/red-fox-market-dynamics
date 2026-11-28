@@ -6,11 +6,62 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from history_blocks import encode
-from team_sport_context import fighter_identities, nfl_availability, nfl_efficiency, nfl_profile_context, wikidata_fighters
+from team_sport_context import (
+    cfb_elo, cfb_profile_context, fighter_identities, nfl_availability, nfl_efficiency,
+    nfl_profile_context, wikidata_fighters,
+)
 from team_intelligence import graded_quotes, identities, nfl_merge, published_rows, season, valid_outcomes
 
 
 class SportingDataTest(unittest.TestCase):
+    def test_cfb_ratings_require_unambiguous_fbs_identity(self):
+        def rating(name, slug, identity, rank, classification="fbs"):
+            return {"team": {"school": name, "slug": slug, "id": identity},
+                    "fbs_rank": rank, "rating": 1500, "classification": classification}
+
+        teams = [rating("Miami", "miami", 2, 1), rating("Miami (OH)", "miami-oh", 3, 2),
+                 rating("UL Monroe", "ul-monroe", 4, 3), rating("FCS team", "fcs-team", 5, None, "fcs")]
+        payload = {
+            "data": {"season": 2026, "week": None, "teams": teams},
+            "meta": {"as_of": "2026-11-27T11:05:50Z", "truncated": False},
+            "attribution": [{"license_url": "https://creativecommons.org/licenses/by/4.0/"}],
+        }
+        data = cfb_elo(json.dumps(payload).encode(), 2026)
+        self.assertEqual({key: row["rank"] for key, row in data["teams"].items()},
+                         {"miami": 1, "miami oh": 2, "ulm": 3})
+        teams.append(rating("Miami", "another-miami", 6, 1))
+        with self.assertRaises(ValueError):
+            cfb_elo(json.dumps(payload).encode(), 2026)
+
+    def test_cfb_ratings_are_only_exposed_for_two_verified_upcoming_participants(self):
+        now = "2026-11-28T02:00:00.000000+00:00"
+        at = "2026-11-27T11:05:50.000000+00:00"
+        future = "2026-11-28T19:00:00.000000+00:00"
+        data = {"as_of": at, "teams": {"army": {"rank": 1, "rating": 1526.9},
+                                        "rice": {"rank": 2, "rating": 1334.2}}}
+        with TemporaryDirectory() as directory:
+            state = Path(directory)
+            cache = state / "cfb-digest-elo-2026.json"
+            cache.write_text(json.dumps({"data": data}), encoding="utf-8")
+            matchup = {"season": 2026, "keys": ["army", "rice"], "start": future, "markets": {"SPREAD": [{}]}}
+            fixtures = {
+                "upcoming": dict(matchup),
+                "completed": dict(matchup, start="2026-11-27T01:00:00.000000+00:00"),
+                "unknown": dict(matchup, keys=["army", "other"]),
+                "unpublished": dict(matchup, markets={}),
+            }
+            status = cfb_profile_context(state, fixtures, now, lambda: True, False)
+            self.assertEqual(status["cfb_elo"]["coverage"], 1)
+            self.assertEqual(fixtures["upcoming"]["sporting"]["cfb_elo"]["at"], at)
+            self.assertFalse(any("sporting" in fixtures[key] for key in ("completed", "unknown", "unpublished")))
+            for ineligible_stamp in ("2026-11-24T00:00:00.000000+00:00", "2026-11-28T03:00:00.000000+00:00"):
+                with self.subTest(ineligible_stamp=ineligible_stamp):
+                    cache.write_text(json.dumps({"data": dict(data, as_of=ineligible_stamp)}), encoding="utf-8")
+                    fixture = dict(matchup)
+                    status = cfb_profile_context(state, {"game": fixture}, now, lambda: True, False)
+                    self.assertEqual(status["cfb_elo"]["coverage"], 0)
+                    self.assertNotIn("sporting", fixture)
+
     def test_efficiency_requires_unique_opponents_and_uses_attempts_sacks_and_carries(self):
         raw = (
             "game_id,team,opponent_team,season_type,attempts,sacks_suffered,carries,passing_epa,rushing_epa\n"
@@ -21,7 +72,8 @@ class SportingDataTest(unittest.TestCase):
             "duplicated,B,A,REG,20,2,22,1.0,1.0\n"
         ).encode("utf-8")
         data = nfl_efficiency(raw)
-        self.assertEqual(data["game"]["A"], {"opponent":"B","plays":44,"epa":.75})
+        self.assertEqual(data["game"]["A"], {"opponent":"B","plays":44,"epa":.75,
+                         "dropbacks":22,"pass_epa":2.25,"rushes":22,"rush_epa":-1.5,"sacks":2})
         self.assertNotIn("duplicated",data)
 
     def test_practice_absence_is_preserved_separately_from_game_status(self):

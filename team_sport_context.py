@@ -19,6 +19,7 @@ from history_store import atomic_text, packed, utc
 NFL_RELEASE = "https://github.com/nflverse/nflverse-data/releases/download/"
 RETRO = "https://www.retrosheet.org/gamelogs/"
 WIKI = "https://query.wikidata.org/sparql"
+CFB_ELO_URL = "https://collegefootballdigest.com/api/v1/elo/"
 AGENT = "RedFox-Team-Intelligence/2 (+https://redfoxmi.com)"
 MLB_CODES = dict(zip(
     "ANA ARI ATH ATL BAL BOS CHA CHN CIN CLE COL DET HOU KCA LAN MIA MIL MIN NYA NYN PHI PIT SDN SEA SFN SLN TBA TEX TOR WAS".split(),
@@ -80,15 +81,19 @@ def nfl_efficiency(raw):
         if row["season_type"] != "REG" or not row["game_id"]:
             continue
         try:
-            plays = sum(int(float(row[k])) for k in ("attempts", "sacks_suffered", "carries"))
-            epa = sum(float(row[k]) for k in ("passing_epa", "rushing_epa"))
+            attempts, sacks, rushes = (int(float(row[k])) for k in ("attempts", "sacks_suffered", "carries"))
+            pass_epa, rush_epa = (float(row[k]) for k in ("passing_epa", "rushing_epa"))
         except (ValueError, OverflowError):
             continue
+        plays = attempts + sacks + rushes
+        epa = pass_epa + rush_epa
         target = stats[row["game_id"]]
         if row["team"] in target:
             invalid.add(row["game_id"])
-        if 0 < plays < 160 and math.isfinite(epa) and abs(epa) <= 200:
-            target[row["team"]] = {"opponent": row["opponent_team"], "plays": plays, "epa": round(epa, 4)}
+        if 0 < plays < 160 and min(attempts, sacks, rushes) >= 0 and math.isfinite(epa) and abs(epa) <= 200:
+            target[row["team"]] = {"opponent": row["opponent_team"], "plays": plays, "epa": round(epa, 4),
+                                   "dropbacks": attempts+sacks, "pass_epa": round(pass_epa, 4),
+                                   "rushes": rushes, "rush_epa": round(rush_epa, 4), "sacks": sacks}
     return {key: value for key, value in stats.items() if len(value) == 2 and key not in invalid}
 
 
@@ -125,9 +130,13 @@ def nfl_availability(raw):
 def nfl_profile_context(state, fixtures, games, schedule, now, guard, network):
     date = datetime.fromisoformat(now)
     season = date.year - (date.month <= 2)
-    metrics = saved_source(state / ("nfl-team-stats-" + str(season) + ".json"),
-                           NFL_RELEASE + f"stats_team/stats_team_week_{season}.csv",
-                           nfl_efficiency, guard, network, hours=6)
+    stats_url = NFL_RELEASE + f"stats_team/stats_team_week_{season}.csv"
+    metrics = saved_source(state / f"nfl-team-stats-v2-{season}.json",
+                           stats_url, nfl_efficiency, guard, network, hours=6)
+    if not metrics.get("data"):
+        prior = saved_source(state / f"nfl-team-stats-{season}.json", stats_url,
+                             nfl_efficiency, guard, False, hours=6)
+        metrics = {**metrics, **{k:prior[k] for k in ("data","source_at") if k in prior}}
     injuries = saved_source(state / ("nfl-availability-" + str(season) + ".json"),
                             NFL_RELEASE + f"injuries/injuries_{season}.csv",
                             nfl_availability, guard, network, hours=2)
@@ -168,6 +177,62 @@ def nfl_profile_context(state, fixtures, games, schedule, now, guard, network):
 def source_info(snapshot, count):
     return {"at": snapshot.get("source_at"), "checked": snapshot.get("checked"), "error": snapshot.get("error", ""),
             "coverage": count}
+
+
+def cfb_elo(raw, season):
+    envelope = json.loads(raw)
+    if not isinstance(envelope, dict):
+        raise ValueError("unexpected CollegeFootballDigest response")
+    data, meta, attribution = (envelope.get(field) for field in ("data", "meta", "attribution"))
+    license_url = "https://creativecommons.org/licenses/by/4.0/"
+    if (not isinstance(data, dict) or not isinstance(meta, dict) or not isinstance(attribution, list)
+            or data.get("season") != season or data.get("week", False) is not None
+            or meta.get("truncated") is not False or not isinstance(meta.get("as_of"), str)
+            or not isinstance(data.get("teams"), list)
+            or not any(isinstance(row, dict) and row.get("license_url") == license_url for row in attribution)):
+        raise ValueError("unexpected CollegeFootballDigest ratings envelope")
+    as_of = datetime.fromisoformat(meta["as_of"].replace("Z", "+00:00"))
+    if as_of.tzinfo is None:
+        raise ValueError("ratings timestamp requires a time zone")
+    teams, ids = {}, set()
+    for row in data["teams"]:
+        if not isinstance(row, dict):
+            raise ValueError("invalid CollegeFootballDigest row")
+        if row["classification"] != "fbs":
+            continue
+        team = row.get("team")
+        if not isinstance(team, dict) or not isinstance(team.get("school"), str) or type(team.get("id")) is not int:
+            raise ValueError("invalid CollegeFootballDigest team")
+        key = side_key("ULM" if team.get("slug") == "ul-monroe" else team["school"], "ncaaf", "MONEYLINE")
+        provider_id = team["id"]
+        rank, rating = row["fbs_rank"], row["rating"]
+        if (not key or key in teams or provider_id in ids or type(rank) is not int or rank < 1
+                or type(rating) not in (int, float) or not 0 < rating < 10000):
+            raise ValueError("invalid or ambiguous CollegeFootballDigest team")
+        teams[key] = {"rank": rank, "rating": rating}
+        ids.add(provider_id)
+    if not teams or max(item["rank"] for item in teams.values()) > len(teams):
+        raise ValueError("inconsistent CollegeFootballDigest ranks")
+    return {"as_of": utc(as_of), "teams": teams}
+
+
+def cfb_profile_context(state, fixtures, now, guard, network):
+    timestamp = datetime.fromisoformat(now)
+    season = timestamp.year - (timestamp.month <= 2)
+    cache = saved_source(state / f"cfb-digest-elo-{season}.json", CFB_ELO_URL + str(season),
+                         lambda raw: cfb_elo(raw, season), guard, network, hours=24)
+    data = cache.get("data") or {}
+    as_of = data.get("as_of")
+    teams = data.get("teams", {})
+    covered = 0
+    if as_of and timedelta(0) <= timestamp - datetime.fromisoformat(as_of) <= timedelta(hours=48):
+        for fixture in fixtures.values():
+            if (fixture.get("season") == season and fixture.get("markets") and fixture["start"] > now
+                    and all(key in teams for key in fixture["keys"])):
+                fixture["sporting"] = {"cfb_elo": {"at": as_of, "field": len(teams),
+                                                    "teams": {key: teams[key] for key in fixture["keys"]}}}
+                covered += 1
+    return {"cfb_elo": {**source_info(cache, covered), "at": as_of}}
 
 
 def retrosheet_year(raw, year):

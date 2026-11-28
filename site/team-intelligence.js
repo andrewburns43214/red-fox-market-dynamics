@@ -193,13 +193,19 @@
           const other = game.keys.find(value => value !== key);
           return values?.[key] && values?.[other] ? [values[key],values[other]] : null;
         }).filter(Boolean);
-        const epa = index => {
-          const plays = stats.reduce((sum,row) => sum + row[index].plays,0);
-          return plays ? stats.reduce((sum,row) => sum + row[index].epa,0)/plays : null;
+        const efficiency = (index, numerator, denominator) => {
+          const complete = stats.filter(row=>Number.isFinite(row[index][numerator]) && Number.isFinite(row[index][denominator]));
+          const plays = complete.reduce((sum,row) => sum + row[index][denominator],0);
+          return plays && complete.length === stats.length
+            ? complete.reduce((sum,row) => sum + row[index][numerator],0)/plays : null;
         };
         const winPct = games.reduce((sum,game)=>sum + ({Win:1,Tie:0.5,Loss:0}[result(game,key)] || 0),0) / games.length;
         data.set(key,{sos:average(quality), recentSos:average(quality.slice(0,5)), winPct, strong:form(strong,key),
-          weak:form(weak,key), games:games.length, epa:epa(0), allowedEpa:epa(1), epaGames:stats.length});
+          weak:form(weak,key), games:games.length, epa:efficiency(0,"epa","plays"),
+          allowedEpa:efficiency(1,"epa","plays"), epaGames:stats.length,
+          passEpa:efficiency(0,"pass_epa","dropbacks"), passAllowed:efficiency(1,"pass_epa","dropbacks"),
+          rushEpa:efficiency(0,"rush_epa","rushes"), rushAllowed:efficiency(1,"rush_epa","rushes"),
+          sackRate:efficiency(0,"sacks","dropbacks"), sackMade:efficiency(1,"sacks","dropbacks")});
       }
       const all = [...data.values()];
       for (const item of all) {
@@ -263,6 +269,59 @@
     }).join("") + '</div>';
   }
 
+  function independentSource() {
+    const { fixture } = state;
+    const source = fixture.sporting?.independent;
+    return source && Date.now() < Date.parse(fixture.start) && Date.parse(source.at) <= Date.now()
+      && Date.now() - Date.parse(source.at) <= 7 * day ? source : null;
+  }
+
+  const independentRecord = record => record ? record.slice(0, record[2] ? 3 : 2).join("–") : "—";
+
+  function independentOverview(team) {
+    const source = independentSource();
+    const row = source?.teams[team];
+    if (!row) return "";
+    const table = source.standings?.[team];
+    const record = table ? [table.wins,table.losses,table.otLosses].join("–") : independentRecord(row.record);
+    return '<section class="ti-panel">' + heading("Independent season results")
+      + '<div class="ti-facts">' + fact(record,table ? "W–L–OTL" : "Record · "+row.games+" verified games")
+      + fact(signed(row.scored-row.allowed,1),course()+" margin / game")
+      + (table ? fact(table.points,"Standings points")+fact("#"+table.rank,"League rank") : '')
+      + '</div><div class="ti-list ti-recent-list">' + row.recent.map(item => {
+        const outcome = item.scores[0] > item.scores[1] ? "Win" : item.scores[0] < item.scores[1] ? "Loss" : "Tie";
+        return '<div class="ti-score-row"><div><strong>' + markup(item.opponent) + '</strong><small>' + markup(item.at)
+          + '</small></div><strong class="ti-score-value">' + markup(item.scores.join("–"))
+          + '</strong><div class="ti-row-results">' + badge(outcome,outcome.toLowerCase()) + '</div></div>';
+      }).join("") + '</div>' + note(source.provider+" · Scores show the selected team first. Fixture checked "+when(source.at,et)+" ET."
+        +(source.partitions < source.expected_partitions ? " Earlier or future fixtures may still be syncing." : ""))
+      + '</section>';
+  }
+
+  function independentFighter(team) {
+    if (Date.now() >= Date.parse(state.fixture.start)) return null;
+    return state.fixture.sporting?.ufc_independent?.[team] || null;
+  }
+
+  function fighterRecord(fighter, scope) {
+    const record = fighter?.records?.[scope];
+    if (!record) return "—";
+    const noContest = fighter.records[scope+"_nc"];
+    return record.join("–") + (noContest ? " · "+noContest+" NC" : "");
+  }
+
+  function fighterOverview(team) {
+    const fighter = independentFighter(team);
+    if (!fighter) return "";
+    return '<section class="ti-panel">' + heading("Independent fighter history")
+      + '<div class="ti-facts">'+fact(fighterRecord(fighter,"pro_mma"),"Professional MMA")+fact(fighterRecord(fighter,"ufc"),"UFC")
+      + (fighter.reach_inches ? fact(fighter.reach_inches+" in","Reach") : "") + (fighter.stance ? fact(fighter.stance,"Stance") : "")
+      + '</div><div class="ti-list ti-recent-list">'+fighter.recent.map(row =>
+        '<div class="ti-score-row"><div><strong>'+markup(row.opponent)+'</strong><small>'+markup(row.date)
+        +'</small></div><strong class="ti-score-value">'+markup(row.result.replace("_"," "))+'</strong></div>').join("")
+      + '</div>'+note("UFCalendar · Professional history and UFC record are separate.")+'</section>';
+  }
+
   function overview(games, team) {
     const summary = seasonDetails(games, team);
     const {scope,year,last,recent,margin} = summary;
@@ -275,7 +334,7 @@
       + fact(summary.streak, "Current streak") + (fight ? fact(year.games, "Verified bouts") : fact(signed(margin,1), course() + " margin / game"))
       + '</div></section>';
     if (!scope.league) html += note(fight
-      ? "These are verified Red Fox bouts. Complete career and UFC records are unavailable."
+      ? "These results come from the verified Red Fox archive."
       : "Archive coverage varies by team. Results count includes " + year.games + " verified games in this period.");
     if (scope.league && (summary.home.games || summary.away.games)) {
       html += '<div class="ti-quick-stats">' + fact(summary.home.record,"Home · " + summary.home.games)
@@ -289,7 +348,7 @@
     if (games.length > 5) {
       html += '<details class="ti-more"><summary>View all ' + games.length + ' results</summary><div data-ti-more></div></details>';
     }
-    return html + '</section>';
+    return (fight ? fighterOverview(team) : independentOverview(team)) + html + '</section>';
   }
 
   function baseballSeason(team) {
@@ -310,6 +369,20 @@
       + '<a href="https://www.retrosheet.org/gamelogs/">Retrosheet</a>. Interested parties may contact Retrosheet at retrosheet.org.</p></section>';
   }
 
+  function currentCfbElo() {
+    const source = state.fixture.sporting?.cfb_elo;
+    const cutoff = Date.parse(state.fixture.start);
+    const now = Date.now();
+    const observed = Date.parse(source?.at);
+    return source && now < cutoff && observed <= now && now - observed <= 48 * 3600000 ? source : null;
+  }
+
+  function cfbEloCredit(source) {
+    return '<p class="ti-note">Ratings as of ' + markup(when(source.at, et))
+      + ' ET · <a href="https://collegefootballdigest.com/developers#what-we-serve">CollegeFootballDigest</a>'
+      + ' · Computed from CollegeFootballData.com results · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></p>';
+  }
+
   function teamStats(games, team) {
     const {scope,year,recent,margin,home,away} = seasonDetails(games,team);
     const context = nflContext(team,scope);
@@ -322,7 +395,7 @@
         html += '<div class="ti-quick-stats">' + fact(display(profile.height_cm,0) + " cm", "Published height") + '</div>'
           + '<p class="ti-note">Fighter identity and height from <a href="https://www.wikidata.org/wiki/' + markup(profile.item) + '">Wikidata</a>.</p>';
       }
-      return html + note("Complete career record, reach, stance and fight-level striking and grappling metrics are unavailable.") + '</section>';
+      return html + '</section>' + fighterOverview(team);
     }
     const scoring = course();
     html += '<div class="ti-facts">'
@@ -346,9 +419,36 @@
         + fact(context.weak?.record || "—","Against opponents below .500") + '</div></section>';
       if (context.epaGames) html += '<section class="ti-panel">' + heading("NFL offensive and defensive efficiency")
         + '<div class="ti-facts">' + fact(numberWithRank(context.epa,context.epaRank,value=>signed(value,3)),"Offense EPA / play · higher")
-        + fact(numberWithRank(context.allowedEpa,context.defRank,value=>signed(value,3)),"Defense EPA allowed / play · lower") + '</div>'
-        + note(context.epaGames + " matched nflverse box scores. EPA per play uses pass attempts, sacks and rushing attempts.") + '</section>';
-    } else html += note("Verified league standings, strength of schedule and opponent-adjusted efficiency are unavailable for this profile.");
+        + fact(numberWithRank(context.allowedEpa,context.defRank,value=>signed(value,3)),"Defense EPA allowed / play · lower")
+        + (context.passEpa == null ? "" : fact(signed(context.passEpa,3),"Passing EPA / dropback")
+          + fact(signed(context.passAllowed,3),"Passing EPA allowed / dropback")
+          + fact(signed(context.rushEpa,3),"Rushing EPA / rush") + fact(signed(context.rushAllowed,3),"Rushing EPA allowed / rush")
+          + fact(opponentPct(context.sackRate),"Sacks allowed / dropback")) + '</div>'
+        + note(context.epaGames + " matched nflverse box scores. Dropbacks are pass attempts plus sacks.") + '</section>';
+    }
+    const independent = independentSource();
+    const coverage = independent?.teams[team];
+    if (coverage) {
+      const table = independent.standings?.[team];
+      html += '<section class="ti-panel">'+heading("Independent team context")+'<div class="ti-facts">'
+        + fact(display(coverage.scored),course()+" scored / game")+fact(display(coverage.allowed),course()+" allowed / game")
+        + Object.entries(coverage.sites).map(([site,record])=>fact(independentRecord(record),
+          (coverage.venue_verified ? "" : "Designated ")+site+" record")).join("")
+        + (coverage.rated_games ? fact(display(coverage.opponent_elo,0),"Mean pregame opponent Elo · "+coverage.rated_games+"/"+coverage.games) : "")
+        + (!coverage.rated_games && coverage.opponent_win_games ? fact(opponentPct(coverage.opponent_win_pct),
+          "Mean pregame opponent win % · "+coverage.opponent_win_games+"/"+coverage.games) : "")
+        + (table?.corsiPct != null ? fact(display(table.corsiPct,1)+"%","5-on-5 Corsi") : "")
+        + (table?.expectedGoalsFor != null ? fact(display(table.expectedGoalsFor,1),"Expected goals for") : "")
+        + (table?.expectedGoalsAgainst != null ? fact(display(table.expectedGoalsAgainst,1),"Expected goals against") : "")
+        + '</div>'+note(independent.provider+" · "+coverage.games+" verified results")+'</section>';
+    } else if (!scope.league) html += note("Verified league standings and schedule strength are unavailable for this profile.");
+    const elo = currentCfbElo();
+    if (elo?.teams[team]) {
+      const rating = elo.teams[team];
+      html += '<section class="ti-panel">' + heading("Independent opponent context") + '<div class="ti-facts">'
+        + fact(display(rating.rating,1), "Results-based Elo")
+        + fact(rating.rank+" of "+elo.field, "FBS Elo rank") + '</div>' + cfbEloCredit(elo) + '</section>';
+    }
     if (state.snapshot.sport === "mlb") html += baseballSeason(team);
     return html;
   }
@@ -588,6 +688,12 @@
           + two("Recent opponent win %",s=>s.context.recentSos == null ? "—" : opponentPct(s.context.recentSos));
         if (sides.some(s=>s.context.epaGames)) html += two("Offense EPA / play ↑",s=>numberWithRank(s.context.epa,s.context.epaRank,value=>signed(value,3)))
           + two("Defense EPA allowed / play ↓",s=>numberWithRank(s.context.allowedEpa,s.context.defRank,value=>signed(value,3)));
+        if (sides.some(s=>s.context.passEpa != null)) html += two("Passing EPA / dropback",s=>signed(s.context.passEpa,3))
+          + two("Passing EPA allowed / dropback",s=>signed(s.context.passAllowed,3))
+          + two("Rushing EPA / rush",s=>signed(s.context.rushEpa,3))
+          + two("Rushing EPA allowed / rush",s=>signed(s.context.rushAllowed,3))
+          + two("Sacks allowed / defensive sacks",s=>s.context.sackRate == null ? "—"
+            : opponentPct(s.context.sackRate)+" / "+opponentPct(s.context.sackMade));
       }
     }
     const baseball = snapshot.sporting?.baseball;
@@ -598,9 +704,35 @@
       });
     }
     const fighters = snapshot.sporting?.fighters;
+    const independent = independentSource();
+    if (!fight && independent) {
+      html += two(independent.provider+" record",s=>{
+        const table = independent.standings?.[s.key];
+        return table ? [table.wins,table.losses,table.otLosses].join("–")
+          : independentRecord(independent.teams[s.key]?.record);
+      }) + two("Independent scoring margin",s=>{
+        const row = independent.teams[s.key];
+        return row ? signed(row.scored-row.allowed,1)+" · "+row.games+" games" : "—";
+      });
+      if (sides.some(s=>independent.teams[s.key]?.rated_games)) html += two("Mean pregame opponent Elo",s=>{
+        const row = independent.teams[s.key];
+        return row?.rated_games ? display(row.opponent_elo,0)+" · "+row.rated_games+"/"+row.games : "—";
+      });
+    }
+    if (fight && sides.some(s=>independentFighter(s.key))) {
+      html += two("Professional MMA record",s=>fighterRecord(independentFighter(s.key),"pro_mma"))
+        + two("UFC record",s=>fighterRecord(independentFighter(s.key),"ufc"))
+        + two("Reach",s=>independentFighter(s.key)?.reach_inches ? independentFighter(s.key).reach_inches+" in" : "—")
+        + two("Stance",s=>independentFighter(s.key)?.stance || "—");
+    }
     if (fight && fighters && sides.some(side=>fighters[side.key])) {
       html += two("Published height",side=>fighters[side.key] ? display(fighters[side.key].height_cm,0)+" cm" : "—");
     }
+    const elo = currentCfbElo();
+    if (elo) html += two("Results-based FBS Elo",s=>{
+      const rating = elo.teams[s.key];
+      return rating ? display(rating.rating,1)+" · #"+rating.rank+" of "+elo.field : "—";
+    });
     html += two(fight?"Days since verified bout":"Days between starts",s=>s.days==null?"—":display(s.days,1));
     if (state.market !== "TOTAL") html += two(marketLabel(state.market)+" historical ROI",s=>s.market);
     html += '</tbody></table></section>';
@@ -616,6 +748,14 @@
     }
     const [a,b] = sides;
     const notes = [];
+    if (elo?.teams[a.key] && elo.teams[b.key]) {
+      const gap = elo.teams[a.key].rating - elo.teams[b.key].rating;
+      if (gap) {
+        const higher = gap > 0 ? a : b;
+        notes.push(higher.name+" has a "+display(Math.abs(gap),1)
+          +" point edge in results-based Elo. This rating summarizes game results and opponent quality. Unit matchups, player availability and venue need separate evidence.");
+      }
+    }
     const advanced = sides.every(s=>s.context.epaGames>=5);
     if (advanced) {
       const gap = a.context.epa - b.context.epa;
@@ -623,6 +763,13 @@
       if (Math.abs(gap)>=0.03) notes.push(stronger.name+" generated "+display(Math.abs(gap),3)
         +" more expected points per offensive play across "+stronger.context.epaGames+" verified box scores. "
         +other.name+" allowed "+signed(other.context.allowedEpa,3)+" EPA per play across "+other.context.epaGames+" games.");
+      if (stronger.context.passEpa != null && other.context.passAllowed != null
+          && stronger.context.rushEpa != null && other.context.rushAllowed != null) {
+        notes.push(stronger.name+" averaged "+signed(stronger.context.passEpa,3)
+          +" EPA per dropback and "+signed(stronger.context.rushEpa,3)+" per rush. "
+          +other.name+" allowed "+signed(other.context.passAllowed,3)+" per dropback and "
+          +signed(other.context.rushAllowed,3)+" per rush.");
+      }
       if (a.context.sos != null && b.context.sos != null && Math.abs(a.context.sos-b.context.sos)>=0.04) {
         const harder = a.context.sos > b.context.sos ? a : b;
         notes.push(harder.name+" faced the stronger opponent record by the schedule measure. EPA here is unadjusted for opposition.");
@@ -639,7 +786,8 @@
     const support = notes.length ? notes.map(note).join("") : note(fight
       ? "Verified bout results and time between starts are available. Fighter style and opponent quality are unverified."
       : "There is insufficient verified opponent or efficiency evidence to identify a material matchup difference.");
-    return '<section class="ti-panel ti-what-matters">' + heading("What matters in this matchup") + support + '</section>' + html;
+    return '<section class="ti-panel ti-what-matters">' + heading("What matters in this matchup")
+      + support + (elo ? cfbEloCredit(elo) : '') + '</section>' + html;
   }
 
   function render(action, value) {
